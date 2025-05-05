@@ -611,13 +611,13 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         )
       )
     )
-    val entity = Entity("type", "name", attributes)
+    val entity = Entity("name", "type", attributes)
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
     val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
 
     val expected = Map(
-      AttributeEntityReference("name", "type") ->
+      AttributeEntityReference("type", "name") ->
         Seq(
           AttributeEntityReference("refTypeA", "refName1"),
           AttributeEntityReference("refTypeB", "refName2"),

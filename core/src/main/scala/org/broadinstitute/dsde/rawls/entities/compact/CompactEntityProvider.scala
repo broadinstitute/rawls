@@ -159,8 +159,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
       } yield savedEntityRecord.toEntity
     }
-    withWorkspaceLastModified(createFuture)
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(createFuture)
 
     createFuture
   }
