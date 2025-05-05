@@ -3,14 +3,23 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeEntityReference,
+  AttributeName,
+  Entity,
+  EntityColumnFilter,
+  EntityQuery,
+  FilterOperators,
+  SortDirections
+}
+import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
-
+import slick.sql.SqlStreamingAction
 import spray.json._
 
 import java.util.UUID
+import scala.concurrent.ExecutionContext
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -23,6 +32,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
+  implicit val executionContext: ExecutionContext = driverComponent.executionContext
+
   // read a json column from the db and translate into a JsValue
   implicit val GetJsValueResult: GetResult[JsValue] = GetResult(r => r.nextString().parseJson)
 
@@ -32,8 +43,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       pp.setString(v.compactPrint)
   }
 
-  // select id, name, entity_type, workspace_id, record_version, deleted, deleted_date, attributes
-  // into a JsonEntityRecord
+  private val basicCompactEntitySelect =
+    "select id, name, entity_type, workspace_id, record_version, deleted, attributes"
+
+  // matches basicCompactEntitySelect
   implicit val getJsonEntityRecord: GetResult[CompactEntityRecord] =
     GetResult(r => CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
@@ -48,6 +61,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
     GetResult(r => EntityTypeAndCount(r.<<, r.<<))
+
+  private val fromEntityWhereNotDeleted = "from ENTITY e where e.deleted = 0"
 
   /**
     * Insert a single entity to the db.
@@ -68,17 +83,15 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: single row constant; fully indexed by idx_entity_type_name`
     */
-  def getEntity(workspaceId: UUID, entityType: String, entityName: String): ReadAction[Option[CompactEntityRecord]] = {
-    val selectStatement: SQLActionBuilder =
-      sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
-              from ENTITY
-              where workspace_id = $workspaceId
-              and entity_type = $entityType
-              and name = $entityName
-              and deleted = 0;"""
+  def getEntity(workspaceId: UUID, entityType: String, entityName: String): ReadAction[Option[CompactEntityRecord]] =
+    uniqueResult(singleEntityQuery(workspaceId, entityType, entityName).as[CompactEntityRecord])
 
-    uniqueResult(selectStatement.as[CompactEntityRecord])
-  }
+  private def singleEntityQuery(workspaceId: UUID, entityType: String, entityName: String) =
+    sql"""#$basicCompactEntitySelect
+          #$fromEntityWhereNotDeleted
+          and workspace_id = $workspaceId
+          and entity_type = $entityType
+          and name = $entityName"""
 
   /** Given a set of entity references, return the ids being referenced.
     * Ignores deleted entities.
@@ -110,9 +123,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       // build the overall query
       val query = concatSqlActions(
         sql"""select id
-               from ENTITY
-               where workspace_id = $workspaceId
-               and deleted = 0
+               #$fromEntityWhereNotDeleted
+               and workspace_id = $workspaceId
                and ( """,
         reduceSqlActionsWithDelim(clauses.toSeq, sql" or "),
         sql""" );"""
@@ -201,6 +213,156 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       FROM ENTITY_KEYS
       WHERE workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
+
+  def countEntities(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
+    sql"""select count(*) #$fromEntityWhereNotDeleted
+              and e.entity_type = $entityType
+              and e.workspace_id = $workspaceId
+       """
+      .as[Int]
+      .map(_.head)
+
+  def countEntitiesWithColumnFilter(workspaceId: UUID,
+                                    entityType: String,
+                                    columnFilter: EntityColumnFilter
+  ): ReadWriteAction[Int] =
+    // CAST, JSON_UNQUOTE and JSON_EXTRACT are used to handle strings and numbers and do a case insensitive comparison
+    sql"""select count(*) #$fromEntityWhereNotDeleted
+              and e.entity_type = $entityType
+              and e.workspace_id = $workspaceId
+              and CAST(JSON_UNQUOTE(JSON_EXTRACT(e.attributes,
+                ${slickAttributePath(columnFilter.attributeName)})) AS CHAR) = ${columnFilter.term}
+       """
+      .as[Int]
+      .map(_.head)
+
+  def countEntitiesWithFilterTerms(workspaceId: UUID,
+                                   entityType: String,
+                                   entityQuery: EntityQuery
+  ): ReadWriteAction[Int] =
+    concatSqlActions(
+      sql"""select count(*)
+            #$fromEntityWhereNotDeleted
+            and e.entity_type = $entityType
+            and e.workspace_id = $workspaceId
+       """,
+      buildFilterConditions(entityQuery)
+    )
+      .as[Int]
+      .map(_.head)
+
+  private def buildFilterConditions(entityQuery: EntityQuery) = {
+    val filterClauses = entityQuery.filterTermsList.map { filterTerm =>
+      sql"""JSON_SEARCH(e.attributes, 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
+    }
+    concatSqlActions(
+      sql" and (",
+      reduceSqlActionsWithDelim(filterClauses, sql" #${FilterOperators.toSql(entityQuery.filterOperator)} "),
+      sql")"
+    )
+  }
+
+  private def entityResultGetterWithFieldsFilter(entityQuery: EntityQuery) =
+    entityQuery.fields.fields match {
+      case Some(fields) =>
+        // this special GetResult instance is the only way I found to filter the fields and keep this a streaming result
+        val desiredFields = fields.map(AttributeName.fromDelimitedName)
+        val getResultFilteringFields =
+          GetResult(r => CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, keepOnlyFields(r.<<, desiredFields)))
+        getResultFilteringFields
+      case _ => getJsonEntityRecord
+    }
+
+  def queryEntitiesWithFilterTermsSortByName(workspaceId: UUID,
+                                             entityType: String,
+                                             entityQuery: EntityQuery
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+    concatSqlActions(
+      sql"""#$basicCompactEntitySelect
+            #$fromEntityWhereNotDeleted
+            and e.entity_type = $entityType
+            and e.workspace_id = $workspaceId
+       """,
+      buildFilterConditions(entityQuery),
+      sql""" order by name #${SortDirections.toSql(entityQuery.sortDirection)}
+              limit ${entityQuery.pageSize} offset ${entityQuery.offset}"""
+    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+
+  def queryEntitiesWithFilterTermsSortByAttribute(workspaceId: UUID,
+                                                  entityType: String,
+                                                  entityQuery: EntityQuery
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+    concatSqlActions(
+      sql"""#$basicCompactEntitySelect,
+            JSON_EXTRACT(e.attributes, ${slickAttributePath(entityQuery.sortField)}) as sort_field,
+            JSON_LENGTH(JSON_EXTRACT(e.attributes, ${slickAttributePath(entityQuery.sortField)})) as sort_length
+            #$fromEntityWhereNotDeleted
+            and e.entity_type = $entityType
+            and e.workspace_id = $workspaceId
+         """,
+      buildFilterConditions(entityQuery),
+      sql""" order by sort_length, sort_field #${SortDirections.toSql(entityQuery.sortDirection)}
+                limit ${entityQuery.pageSize} offset ${entityQuery.offset}"""
+    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+
+  def queryEntitiesWithColumnFilterSortByName(workspaceId: UUID,
+                                              entityType: String,
+                                              entityQuery: EntityQuery,
+                                              columnFilter: EntityColumnFilter
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+
+    sql"""#$basicCompactEntitySelect
+          #$fromEntityWhereNotDeleted
+          and e.entity_type = $entityType
+          and e.workspace_id = $workspaceId
+          and CAST(JSON_UNQUOTE(JSON_EXTRACT(e.attributes,
+            ${slickAttributePath(columnFilter.attributeName)})) AS CHAR) = ${columnFilter.term}
+          order by name #${SortDirections.toSql(entityQuery.sortDirection)}
+          limit ${entityQuery.pageSize} offset ${entityQuery.offset}"""
+      .as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+
+  def queryEntitiesWithColumnFilterSortByAttribute(workspaceId: UUID,
+                                                   entityType: String,
+                                                   entityQuery: EntityQuery,
+                                                   columnFilter: EntityColumnFilter
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+    sql"""#$basicCompactEntitySelect,
+          JSON_EXTRACT(e.attributes, ${slickAttributePath(entityQuery.sortField)}) as sort_field,
+          JSON_LENGTH(JSON_EXTRACT(e.attributes, ${slickAttributePath(entityQuery.sortField)})) as sort_length
+          #$fromEntityWhereNotDeleted
+          and e.entity_type = $entityType
+          and e.workspace_id = $workspaceId
+          and CAST(JSON_UNQUOTE(JSON_EXTRACT(e.attributes,
+            ${slickAttributePath(columnFilter.attributeName)})) AS CHAR) = ${columnFilter.term}
+          order by sort_length, sort_field #${SortDirections.toSql(entityQuery.sortDirection)}
+          limit ${entityQuery.pageSize} offset ${entityQuery.offset}"""
+      .as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+
+  def queryEntitiesWithNoFilterSortByName(workspaceId: UUID,
+                                          entityType: String,
+                                          entityQuery: EntityQuery
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+    sql"""#$basicCompactEntitySelect
+          #$fromEntityWhereNotDeleted
+          and e.entity_type = $entityType
+          and e.workspace_id = $workspaceId
+          order by name #${SortDirections.toSql(entityQuery.sortDirection)}
+          limit ${entityQuery.pageSize} offset ${entityQuery.offset}"""
+      .as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+
+  def queryEntitiesWithNoFilterSortByAttribute(workspaceId: UUID,
+                                               entityType: String,
+                                               entityQuery: EntityQuery
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+    sql"""#$basicCompactEntitySelect,
+          JSON_EXTRACT(e.attributes, ${slickAttributePath(entityQuery.sortField)}) as sort_field,
+          JSON_LENGTH(JSON_EXTRACT(e.attributes, ${slickAttributePath(entityQuery.sortField)})) as sort_length
+          #$fromEntityWhereNotDeleted
+          and e.entity_type = $entityType
+          and e.workspace_id = $workspaceId
+          order by sort_length, sort_field #${SortDirections.toSql(entityQuery.sortDirection)}
+          limit ${entityQuery.pageSize} offset ${entityQuery.offset}"""
+      .as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
 
   // ====================================================================================================
   //  testing helpers

@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, EntityTypeAndCount, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
-import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
+import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -35,8 +35,11 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-import slick.dbio.DBIO
+import slick.dbio.{DBIO, Effect}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
+import slick.jdbc.{ResultSetConcurrency, ResultSetType}
+import slick.jdbc.TransactionIsolation.ReadCommitted
+import slick.sql.SqlStreamingAction
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -56,6 +59,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   override def entityStoreId: Option[String] = None // unused
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
+  val workspaceContext = requestArguments.workspace
 
   override def batchUpdateEntities(
     entityUpdates: Seq[AttributeUpdateOperations.EntityUpdateDefinition],
@@ -178,10 +182,142 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
                              parentContext: RawlsRequestContext
   ): Future[EntityQueryResponse] = ???
 
+  /**
+   * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
+   * This method returns fully materialized metadata (row counts, page size, etc) as EntityQueryResultMetadata, and
+   * also returns a streaming Source of Entity objects. We avoid materializing the full set of Entity objects for
+   * performance and memory reasons.
+   *
+   * @param entityType the type of entities to return in the result set
+   * @param query criteria for filtering and paginating the result set
+   * @param parentContext tracing context into which this method will add traces
+   * @return a tuple of 1) the fully materialized metadata, and 2) a streaming Source of Entity objects
+   */
   override def queryEntitiesSource(entityType: String,
-                                   query: EntityQuery,
-                                   parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = ???
+                                   entityQuery: EntityQuery,
+                                   parentContext: RawlsRequestContext = requestArguments.ctx
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
+    case class CountAndSource(count: Int, source: Source[CompactEntityRecord, _])
+
+    val idAttributeName =
+      AttributeName(AttributeName.defaultNamespace, entityType + Attributable.entityIdAttributeSuffix)
+
+    // there are 7 cases
+    // 1. filterTerms is defined and sortField is name
+    // 2. filterTerms is defined and sortField is not name
+    // 3. columnFilter is defined and attributeName is idAttributeName (should have 0 or 1 results)
+    // 4. columnFilter is defined and attributeName is not idAttributeName and sortField is name
+    // 5. columnFilter is defined and attributeName is not idAttributeName and sortField is not name
+    // 6. no filterTerms and no columnFilter and sortField is name
+    // 7. no filterTerms and no columnFilter and sortField is not name
+    // cases 1 & 2 have the same query to count filtered results
+    // cases 4 & 5 have the same query to count filtered results
+    // cases 6 & 7 have the same query to count results which is also used to populate unfilteredCount
+    val filteredCountAndSourceF: Future[CountAndSource] =
+      if (entityQuery.filterTerms.isDefined) {
+        repository.dataSource
+          .inTransaction(ReadCommitted) { _ =>
+            repository.queries.countEntitiesWithFilterTerms(workspaceId, entityType, entityQuery)
+          }
+          .map { count =>
+            val source = if (entityQuery.sortField == Attributable.nameReservedAttribute) {
+              // case 1
+              repository.queries.queryEntitiesWithFilterTermsSortByName(workspaceId, entityType, entityQuery)
+            } else {
+              // case 2
+              repository.queries.queryEntitiesWithFilterTermsSortByAttribute(workspaceId, entityType, entityQuery)
+            }
+            CountAndSource(count, streamQuery(source))
+          }
+      } else if (entityQuery.columnFilter.exists(_.attributeName == idAttributeName)) {
+        val entityName = entityQuery.columnFilter.get.term
+        repository.dataSource.inTransaction(ReadCommitted) { _ =>
+          // case 3
+          repository.queries.getEntity(workspaceId, entityType, entityName)
+        } map {
+          case Some(entityRec) => CountAndSource(1, Source.single(entityRec))
+          case None            => CountAndSource(0, Source.empty)
+        }
+      } else if (entityQuery.columnFilter.isDefined) {
+        val columnFilter = entityQuery.columnFilter.get
+        repository.dataSource
+          .inTransaction(ReadCommitted) { _ =>
+            repository.queries.countEntitiesWithColumnFilter(workspaceId, entityType, columnFilter)
+          }
+          .map { count =>
+            val source = if (entityQuery.sortField == Attributable.nameReservedAttribute) {
+              // case 4
+              repository.queries.queryEntitiesWithColumnFilterSortByName(workspaceId,
+                                                                         entityType,
+                                                                         entityQuery,
+                                                                         columnFilter
+              )
+            } else {
+              // case 5
+              repository.queries.queryEntitiesWithColumnFilterSortByAttribute(workspaceId,
+                                                                              entityType,
+                                                                              entityQuery,
+                                                                              columnFilter
+              )
+            }
+            CountAndSource(count, streamQuery(source))
+          }
+      } else {
+        repository.dataSource
+          .inTransaction(ReadCommitted) { _ =>
+            repository.queries.countEntities(workspaceId, entityType)
+          }
+          .map { count =>
+            val source = if (entityQuery.sortField == Attributable.nameReservedAttribute) {
+              // case 6
+              repository.queries.queryEntitiesWithNoFilterSortByName(workspaceId, entityType, entityQuery)
+            } else {
+              // case 7
+              repository.queries.queryEntitiesWithNoFilterSortByAttribute(workspaceId, entityType, entityQuery)
+            }
+            CountAndSource(count, streamQuery(source))
+          }
+      }
+
+    val unfilteredCountF = if (entityQuery.columnFilter.isEmpty && entityQuery.filterTerms.isEmpty) {
+      // if there is no filter then the unfiltered count is the same as the filtered count
+      filteredCountAndSourceF.map(_.count)
+    } else {
+      repository.dataSource.inTransaction(ReadCommitted) { _ =>
+        repository.queries.countEntities(workspaceId, entityType)
+      }
+    }
+
+    for {
+      filteredCountAndSource <- filteredCountAndSourceF
+      unfilteredCount <- unfilteredCountF
+    } yield {
+      val pageCount: Int = Math.ceil(filteredCountAndSource.count.toFloat / entityQuery.pageSize).toInt
+      if (filteredCountAndSource.count > 0 && entityQuery.page > pageCount) {
+        throw new DataEntityException(
+          code = StatusCodes.BadRequest,
+          message = s"requested page ${entityQuery.page} is greater than the number of pages $pageCount"
+        )
+      }
+      (EntityQueryResultMetadata(unfilteredCount, filteredCountAndSource.count, pageCount),
+       filteredCountAndSource.source.map(_.toEntity)
+      )
+    }
+  }
+
+  private def streamQuery(query: SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Effect.Read]) = {
+    import repository.dataSource.dataAccess.driver.api._
+    Source.fromPublisher(
+      repository.dataSource.database.stream(
+        query.transactionally
+          .withTransactionIsolation(ReadCommitted)
+          .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                                   rsConcurrency = ResultSetConcurrency.ReadOnly,
+                                   fetchSize = repository.dataSource.fetchSize
+          )
+      )
+    )
+  }
 
   override def renameAttribute(entityType: String,
                                oldAttributeName: AttributeName,
