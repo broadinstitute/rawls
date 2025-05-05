@@ -3,9 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
@@ -72,50 +70,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     parentContext: RawlsRequestContext
   ): Future[Source[Entity, _]] = ???
 
-  def insertBatch(batch: Seq[Entity]): ReadWriteAction[Seq[Entity]] =
-    for {
-      // batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
-      // has a reference to another entity in the same batch.
-      _ <- repository.queries.batchCreateEntities(workspaceId, batch)
-
-      // find all references within this batch
-      allReferences = findAllReferences(batch)
-
-      // generate a combined list of entity type/name pairs for both sources and targets
-      lookupCriteria: Set[AttributeEntityReference] = allReferences.keys.toSet ++ allReferences.values.flatten.toSet
-
-      // look up the ids for these
-      foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
-
-      _ = if (foundIds.size != lookupCriteria.size) {
-        // calculate what could not be found
-        val notFoundRefs = lookupCriteria diff foundIds.map(_.toAttributeEntityReference).toSet
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.BadRequest,
-            "Could not resolve some entity references",
-            notFoundRefs.map { missingRef =>
-              ErrorReport(s"${missingRef.entityType} ${missingRef.entityName} not found", Seq.empty)
-            }.toSeq
-          )
-        )
-      }
-
-      // build a lookup table for the ids we found
-      idLookup: Map[AttributeEntityReference, Long] = foundIds.map { rec =>
-        rec.toAttributeEntityReference -> rec.id
-      }.toMap
-
-      // rehydrate the looked-up ids into source and targets (from_id, to_id)
-      referencesToInsert: Set[(Long, Set[Long])] = allReferences.map { case (from, tos) =>
-        val toIds = tos.map(idLookup).toSet
-        (idLookup(from), toIds)
-      }.toSet
-      // insert the references into the ENTITY_REFS table.
-      _ <- repository.queries.upsertReferences(referencesToInsert)
-    } yield batch
-
-  // TODO CORE-427: unit tests
   override def batchUpsertEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
@@ -147,13 +101,18 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       .runWith(Sink.seq)
       .map(DBIO.sequence(_))
 
-    // convert the Future[ReadWriteAction] to a Source[Entity]
-    val executedSource: Source[Seq[Entity], _] = Source.futureSource(batchActionsF.map { dbAction =>
+    // convert the Future[ReadWriteAction] to a Source[Entity]. Note that since all the
+    // ReadWriteActions are fused via DBIO.sequence above, there is only one action to execute
+    // inside a transaction.
+    val dbResultsSource: Source[Seq[Entity], _] = Source.futureSource(batchActionsF.map { dbAction =>
       Source.future(repository.dataSource.inTransaction(_ => dbAction).map(_.flatten))
     })
 
-    // ignore
-    val ignoredResults: Future[Done] = executedSource.runWith(Sink.ignore)
+    //  finally, run the Source. Ignore the results from the db; they are not necessary.
+    val ignoredResults: Future[Done] = dbResultsSource.runWith(Sink.ignore)
+
+    // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(ignoredResults)
 
     // TODO CORE-427: do we need to return results at all, beyond success/failure???
     // and return
@@ -200,8 +159,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
       } yield savedEntityRecord.toEntity
     }
-    // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
     withWorkspaceLastModified(createFuture)
+    // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
 
     createFuture
   }
@@ -381,5 +340,66 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   // approximate the byte size of this entity by looking at the character length of its JSONized attributes
   private def calculateEntitySize(entity: Entity): Int =
     CompactEntitySerialization.toSql(entity.attributes).compactPrint.length
+
+  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Seq[Entity]] =
+    for {
+      // batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
+      // has a reference to another entity in the same batch.
+      _ <- repository.queries.batchCreateEntities(workspaceId, batch)
+
+      // find all requested references within this batch
+      allReferences = findAllReferences(batch)
+
+      // generate a combined list of entity type/name pairs for both reference sources and targets
+      lookupCriteria: Set[AttributeEntityReference] = allReferences.keys.toSet ++ allReferences.values.flatten.toSet
+
+      // look up the ids for both reference sources and targets
+      foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
+
+      // did we find all the reference sources and targets?
+      _ = if (foundIds.size != lookupCriteria.size) {
+        // here's what the query actually returned; turn this into a Set
+        val actuallyFound = foundIds.map(_.toAttributeEntityReference).toSet
+
+        // did we find all the reference targets?
+        val notFoundReferenceTargets = allReferences.values.flatten.toSet diff actuallyFound
+        if (notFoundReferenceTargets.nonEmpty)
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              "Could not resolve some entity references",
+              notFoundReferenceTargets.map { missingRef =>
+                ErrorReport(s"${missingRef.entityType} ${missingRef.entityName} not found", Seq.empty)
+              }.toSeq
+            )
+          )
+
+        // did we find all the reference sources? This should never happen, but let's be defensive
+        val notFoundReferenceSources = allReferences.keys.toSet diff actuallyFound
+        if (notFoundReferenceSources.nonEmpty)
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              "Could not resolve some entity reference sources",
+              notFoundReferenceSources.map { missingRef =>
+                ErrorReport(s"${missingRef.entityType} ${missingRef.entityName} not found", Seq.empty)
+              }.toSeq
+            )
+          )
+      }
+
+      // build a lookup table for the ids we found
+      idLookup: Map[AttributeEntityReference, Long] = foundIds.map { rec =>
+        rec.toAttributeEntityReference -> rec.id
+      }.toMap
+
+      // rehydrate the looked-up ids into sources and targets (from_id, to_id)
+      referencesToInsert: Set[(Long, Set[Long])] = allReferences.map { case (from, tos) =>
+        val toIds = tos.map(idLookup).toSet
+        (idLookup(from), toIds)
+      }.toSet
+      // insert the references into the ENTITY_REFS table.
+      _ <- repository.queries.upsertReferences(referencesToInsert)
+    } yield batch
 
 }

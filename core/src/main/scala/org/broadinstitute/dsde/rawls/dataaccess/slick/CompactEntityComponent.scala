@@ -54,9 +54,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
     *
-    * `execution plan: ???`
+    * `execution plan: multiple-row insert`
     */
-  // TODO CORE-427: execution plan
   def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity]): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
@@ -99,9 +98,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   /** Given a set of entity type/name pairs, return the ids for those pairs.
     *
-    * `execution plan: ???`
+    * `execution plan: index range scan on idx_entity_type_name`
     */
-  // TODO CORE-427: execution plan
   def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
     // short-circuit
     if (refs.isEmpty) {

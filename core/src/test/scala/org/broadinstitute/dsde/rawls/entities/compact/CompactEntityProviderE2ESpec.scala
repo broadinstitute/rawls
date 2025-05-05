@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 
+import java.sql.SQLIntegrityConstraintViolationException
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -51,7 +52,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
   // removing attributes or creating attribute lists. Those batch upsert features rely on
   // AttributeSuppport.applyOperationsToEntity, which is tested elsewhere.
 
-  it should "create entities when asked" in withMinimalTestDatabase { _ =>
+  it should "create entities" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
 
     val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
@@ -72,7 +73,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataAfter("typeB").count shouldBe 1
   }
 
-  it should "create entities with internal references" in withMinimalTestDatabase { dataSource =>
+  it should "create entities with references" in withMinimalTestDatabase { dataSource =>
     val provider = defaultProvider()
 
     val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
@@ -170,6 +171,34 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataAfter.size shouldBe 1
     metadataAfter.keys should contain theSameElementsAs Seq("typeA")
     metadataAfter("typeA").count shouldBe 1000
+  }
+
+  it should "roll back all writes, even across batches, on error" in withMinimalTestDatabase { _ =>
+    val repository = new CompactEntityRepository(slickDataSource)
+    val config = CompactEntityProviderConfig(maxSqlBatchSizeBytes = 1) // should execute one update per batch
+
+    val provider = new CompactEntityProvider(defaultEntityRequestArguments, repository, config)(ec, system)
+
+    // the fourth update in this list will conflict with the first update
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition("name2", "typeA", Seq()),
+      EntityUpdateDefinition("name3", "typeA", Seq()),
+      EntityUpdateDefinition("name1", "typeA", Seq())
+    )
+
+    // no entities should exist before the batchUpsert
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    // perform the batchUpsert
+    intercept[SQLIntegrityConstraintViolationException] {
+      Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    }
+
+    // everything should be rolled back; no entities should exist after the upsert
+    val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataAfter shouldBe empty
   }
 
   // ====================================================================================================
