@@ -96,7 +96,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
 
-  /** Given a set of entity type/name pairs, return the ids for those pairs.
+  /** Given a set of entity type/name pairs, return the CompactEntityRefRecord for those pairs.
+    * The CompactEntityRefRecord includes the internal database id for these entities.
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
