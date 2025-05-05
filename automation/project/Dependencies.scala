@@ -72,4 +72,9 @@ object Dependencies {
     dataRepoJersey,
     workspaceManager
   )
+
+  val transitiveDependencyOverrides = Seq(
+    // override cats-parse to address conflicting dependency versions for scala-uri
+    "org.typelevel" %% "cats-parse" % "1.1.0"
+  )
 }
