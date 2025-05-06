@@ -139,27 +139,32 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
 
   override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] =
     repository.dataSource.inTransaction { _ =>
-      for {
-        entities: Seq[CompactEntityRecord] <- repository.queries.getEntitiesOfType(workspaceId, entityType)
-        entityIds = entities.map(_.id).toSet
-        // check if any of these entities are referenced by someone else
-        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
-        referencingEntityTypes: Seq[String] = referencingEntities
-          .groupBy(_.entityType)
-          .keys
-          .filterNot(_ == entityType)
-          .toSeq
-        // Since we're removing all entities of entityType, we only need to check whether there are any other types included
-        _ = if (referencingEntityTypes.size > 0) {
-          throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
+      repository.queries.getEntitiesOfType(workspaceId, entityType).flatMap { entities =>
+        if (entities.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          val entityIds = entities.map(_.id).toSet
+          for {
+            // check if any of these entities are referenced by someone else
+            referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
+            referencingEntityTypes: Seq[String] = referencingEntities
+              .groupBy(_.entityType)
+              .keys
+              .filterNot(_ == entityType)
+              .toSeq
+            // Since we're removing all entities of entityType, we only need to check whether there are any other types included
+            _ = if (referencingEntityTypes.size > 0) {
+              throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
+            }
+            // remove all references from these entities
+            _ <- repository.queries.deleteAllReferences(entityIds)
+            res <- repository.queries.batchHide(
+              workspaceId,
+              entities.map(entity => AttributeEntityReference(entity.entityType, entity.name))
+            )
+          } yield res.sum
         }
-        // remove all references from these entities
-        _ <- repository.queries.deleteAllReferences(entityIds)
-        res <- repository.queries.batchHide(
-          workspaceId,
-          entities.map(entity => AttributeEntityReference(entity.entityType, entity.name))
-        )
-      } yield res.sum
+      }
     }
 
   override def deleteEntityAttributes(entityType: String,

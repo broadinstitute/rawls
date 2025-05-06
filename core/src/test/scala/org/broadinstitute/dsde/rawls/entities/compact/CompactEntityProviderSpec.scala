@@ -740,6 +740,26 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     )
   }
 
+  it should "do nothing and return success if no such entities exist" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencingEntities(any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferences(any())).thenReturn(DBIO.successful(1))
+    when(
+      mockQuery.getEntitiesOfType(any[UUID], any())
+    )
+      .thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.batchHide(any(), any())).thenReturn(DBIO.successful(Seq(1)))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    Await.result(provider.deleteEntitiesOfType("type", defaultRequestContext), atMost)
+
+    verify(mockQuery, times(0)).getReferencingEntities(any())
+    verify(mockQuery, times(0)).deleteAllReferences(any())
+    verify(mockQuery, times(0)).batchHide(any(), any())
+  }
+
   "deleteEntityAttributes" should "have tests" is pending
 
   behavior of "entityTypeMetadata"
