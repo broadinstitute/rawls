@@ -8,13 +8,14 @@ import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.MonitoredSubmissionException
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, SubmissionStatuses, WorkflowStatuses, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 
@@ -54,20 +55,23 @@ object SubmissionSupervisor {
             datasource: DataSourceAccess,
             samDAO: SamDAO,
             googleServicesDAO: GoogleServicesDAO,
+            entityService: RawlsRequestContext => EntityService,
             notificationDAO: NotificationDAO,
             submissionMonitorConfig: SubmissionMonitorConfig,
             entityQueryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
-      new SubmissionSupervisor(executionServiceCluster,
-                               datasource,
-                               samDAO,
-                               googleServicesDAO,
-                               notificationDAO,
-                               submissionMonitorConfig,
-                               entityQueryTimeout,
-                               workbenchMetricBaseName
+      new SubmissionSupervisor(
+        executionServiceCluster,
+        datasource,
+        samDAO,
+        googleServicesDAO,
+        entityService,
+        notificationDAO,
+        submissionMonitorConfig,
+        entityQueryTimeout,
+        workbenchMetricBaseName
       )
     )
 }
@@ -84,6 +88,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: DataSourceAccess,
                            samDAO: SamDAO,
                            googleServicesDAO: GoogleServicesDAO,
+                           entityService: RawlsRequestContext => EntityService,
                            notificationDAO: NotificationDAO,
                            submissionMonitorConfig: SubmissionMonitorConfig,
                            entityQueryTimeout: Duration,
@@ -193,6 +198,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           googleServicesDAO,
           notificationDAO,
           executionServiceCluster,
+          entityService,
           submissionMonitorConfig,
           entityQueryTimeout,
           workbenchMetricBaseName,

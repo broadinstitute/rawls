@@ -5,14 +5,13 @@ import akka.pattern._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import io.opentelemetry.api.common.AttributeKey
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.expressions.{
   BoundOutputExpression,
   OutputExpression,
@@ -29,32 +28,30 @@ import org.broadinstitute.dsde.rawls.model.Attributable.{attributeCount, safePri
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   setTraceSpanAttribute,
   traceDBIOWithParent,
   traceFuture,
   traceFutureWithParent
 }
+import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.Notifications.{
   AbortedSubmissionNotification,
   FailedSubmissionNotification,
   Notification,
   SuccessfulSubmissionNotification
 }
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
 
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
+import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
-import spray.json._
-
-import scala.math.BigDecimal.RoundingMode
 
 /**
  * Created by dvoet on 6/26/15.
@@ -67,6 +64,7 @@ object SubmissionMonitorActor {
             googleServicesDAO: GoogleServicesDAO,
             notificationDAO: NotificationDAO,
             executionServiceCluster: ExecutionServiceCluster,
+            entityService: RawlsRequestContext => EntityService,
             config: SubmissionMonitorConfig,
             queryTimeout: Duration,
             workbenchMetricBaseName: String,
@@ -81,6 +79,7 @@ object SubmissionMonitorActor {
         googleServicesDAO,
         notificationDAO,
         executionServiceCluster,
+        entityService,
         config,
         queryTimeout,
         workbenchMetricBaseName,
@@ -125,6 +124,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val googleServicesDAO: GoogleServicesDAO,
                              val notificationDAO: NotificationDAO,
                              val executionServiceCluster: ExecutionServiceCluster,
+                             val entityService: RawlsRequestContext => EntityService,
                              val config: SubmissionMonitorConfig,
                              val queryTimeout: Duration,
                              override val workbenchMetricBaseName: String,
@@ -188,6 +188,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val googleServicesDAO: GoogleServicesDAO
   val notificationDAO: NotificationDAO
   val executionServiceCluster: ExecutionServiceCluster
+  val entityService: RawlsRequestContext => EntityService
   val config: SubmissionMonitorConfig
   val queryTimeout: Duration
   val perWorkflowCostCap: Option[BigDecimal]
@@ -434,9 +435,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         */
       def processMultipleWorkflows(
         workflowGroup: Seq[(WorkflowRecord, Option[ExecutionServiceOutputs])],
-        tracingLabel: String
+        tracingLabel: String,
+        petRequestContext: RawlsRequestContext
       ) =
-        traceFutureWithParent(tracingLabel, rootContext) { innerContext =>
+        traceFutureWithParent(tracingLabel, petRequestContext) { innerContext =>
           setTraceSpanAttribute(innerContext,
                                 AttributeKey.longKey("numWorkflows"),
                                 java.lang.Long.valueOf(workflowGroup.size)
@@ -449,10 +451,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
 
       for {
+        // construct request context for pet service account needed to save outputs via EntityService
+        petRequestContext <- getPetRequestContext(rootContext)
         // process all the workflows that do NOT have outputs
-        _ <- processMultipleWorkflows(noOutputs, "workflowsWithoutOutputs")
+        _ <- processMultipleWorkflows(noOutputs, "workflowsWithoutOutputs", petRequestContext)
         // then, process all the workflows that DO have outputs
-        _ <- processMultipleWorkflows(yesOutputs, "workflowsWithOutputs")
+        _ <- processMultipleWorkflows(yesOutputs, "workflowsWithOutputs", petRequestContext)
         // finally, after processing all workflows, check if the submission as a whole
         // can be completed
         statusCheckComplete <- datasource.inTransaction { dataAccess =>
@@ -479,7 +483,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private def processWorkflow(workflowRec: WorkflowRecord,
                               execServiceOutputsOption: Option[ExecutionServiceOutputs],
-                              tracingContext: RawlsTracingContext
+                              petRequestContext: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
   ) =
@@ -496,7 +500,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         (execServiceOutputsOption match {
           case Some(execServiceOutputs) =>
             // this workflow has Cromwell outputs. Persist those outputs.
-            handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, tracingContext)
+            handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, petRequestContext) flatMap { updates => }
           case None => DBIO.successful(())
         }).flatMap { _ =>
           for {
@@ -658,14 +662,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
                     dataAccess: DataAccess,
-                    tracingContext: RawlsTracingContext
+                    petRequestContext: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
   ): ReadWriteAction[Unit] =
     if (workflowsWithOutputs.isEmpty) {
       DBIO.successful(())
     } else {
-      traceDBIOWithParent("handleOutputs", tracingContext) { rootSpan =>
+      traceDBIOWithParent("handleOutputs", petRequestContext) { rootSpan =>
         setTraceSpanAttribute(rootSpan, AttributeKey.stringKey("submissionId"), submissionId.toString)
         setTraceSpanAttribute(rootSpan,
                               AttributeKey.longKey("numWorkflowsWithOutputs"),
@@ -677,8 +681,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           workspace <- traceDBIOWithParent("getWorkspace", rootSpan)(_ => getWorkspace(dataAccess)).map(
             _.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found"))
           )
-          entitiesById <- traceDBIOWithParent("listWorkflowEntitiesById", rootSpan)(_ =>
-            listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
+          entitiesById <- traceDBIOWithParent("listWorkflowEntitiesById", rootSpan)(childSpan =>
+            listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess, childSpan)
           )
           outputExpressionMap <- traceDBIOWithParent("listMethodConfigOutputsForSubmission", rootSpan)(_ =>
             listMethodConfigOutputsForSubmission(dataAccess)
@@ -733,7 +737,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def listWorkflowEntitiesById(workspace: Workspace,
                                workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
-                               dataAccess: DataAccess
+                               dataAccess: DataAccess,
+                               ctx: RawlsRequestContext
   )(implicit executionContext: ExecutionContext): ReadAction[scala.collection.Map[Long, Entity]] = {
     // Note that we can't look up entities for workflows that didn't run on entities (obviously), so they get dropped here.
     // Those are handled in handle/attachOutputs.
@@ -742,7 +747,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // yank out of Seq[(Long, Option[Entity])] and into Seq[(Long, Entity)]
     val entityIds = workflowsWithEntities.flatMap { case (workflowRec, outputs) => workflowRec.workflowEntityId }
 
-    dataAccess.entityQuery.getEntities(workspace.workspaceIdAsUUID, entityIds).map(_.toMap)
+    entityService(ctx).listWorkflowEntities(dataAccess, workspace, entityIds)
   }
 
   def saveWorkspace(
@@ -766,9 +771,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     updatedEntitiesAndWorkspace: Seq[
       Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]
     ],
-    tracingContext: RawlsTracingContext
+    petRequestContext: RawlsRequestContext
   )(implicit executionContext: ExecutionContext) =
-    traceDBIOWithParent("saveEntities", tracingContext) { span =>
+    traceDBIOWithParent("saveEntities", petRequestContext) { span =>
       val entityUpdates = updatedEntitiesAndWorkspace.collect {
         case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate
       }
@@ -787,12 +792,25 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           }
 
           // save
-          dataAccess.entityQuery
-            .save(workspace, updatedEntities)
-            .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
+          entityService(petRequestContext).saveWorkflowOutputEntities(dataAccess, workspace, updatedEntities)
         }
       }
     }
+
+  private def getPetRequestContext(tracingContext: RawlsTracingContext)(implicit
+    executionContext: ExecutionContext
+  ): Future[RawlsRequestContext] =
+    for {
+      (workspace, submission) <- datasource.inTransaction { dataAccess =>
+        for {
+          workspaceOpt <- dataAccess.workspaceQuery.findByName(workspaceName)
+          workspace = workspaceOpt.getOrElse(throw new RawlsException("workspace not found"))
+          submission <- dataAccess.submissionQuery.get(workspace, submissionId.toString)
+        } yield (workspace, submission)
+      }
+      submitterEmail = submission.getOrElse(throw new RawlsException("submission not found")).submitter
+      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, RawlsUserEmail(submitterEmail.value))
+    } yield RawlsRequestContext(petUserInfo, tracingContext.otelContext)
 
   private def attributeIsEmpty(attribute: Attribute): Boolean =
     attribute match {
