@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
@@ -150,7 +151,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
           .toSeq
         // Since we're removing all entities of entityType, we only need to check whether there are any other types included
         _ = if (referencingEntityTypes.size > 0) {
-          throw new DeleteEntitiesConflictException(referencingEntities.toSet)
+          throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
         // remove all references from these entities
         _ <- repository.queries.deleteAllReferences(entityIds)
