@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
@@ -670,11 +671,11 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    val result = intercept[DeleteEntitiesConflictException] {
+    val result = intercept[DeleteEntitiesOfTypeConflictException] {
       Await.result(provider.deleteEntitiesOfType("type", defaultRequestContext), atMost)
     }
 
-    result shouldBe a[DeleteEntitiesConflictException]
+    result shouldBe a[DeleteEntitiesOfTypeConflictException]
 
     verify(mockQuery, times(1)).getReferencingEntities(Set(createdEntityRec1.id, createdEntityRec2.id))
     verify(mockQuery, times(0)).deleteAllReferences(Set(createdEntityRec1.id, createdEntityRec2.id))
