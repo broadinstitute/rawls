@@ -290,8 +290,11 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   private def orderByColumns(entityQuery: EntityQuery): SQLActionBuilder = entityQuery.sortField match {
     case Attributable.nameReservedAttribute => sql" #${Attributable.nameReservedAttribute}"
-    case attr =>
-      sql" JSON_EXTRACT(e.attributes, ${slickAttributePath(attr)}), JSON_LENGTH(JSON_EXTRACT(e.attributes, ${slickAttributePath(attr)}))"
+    case attr                               =>
+      // the order of the columns here is also the sort precedence, list length first, then scalar value
+      // Sorting on a list column should sort by the list size and sorting on a scalar column sorts on the column value.
+      // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
+      sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
   }
 
   private def fromActiveEntitiesOfTypeInWorkspace(workspaceId: UUID, entityType: String) =
@@ -300,7 +303,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   private def filterTermsCondition(entityQuery: EntityQuery) = {
     // note the lower casing for case insensitive search
     val filterClauses = entityQuery.filterTermsList.map { filterTerm =>
-      sql"""JSON_SEARCH(lower(e.attributes->'#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
+      sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
     }
     concatSqlActions(
       sql" and (",
@@ -311,17 +314,17 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   private def columnFilterCondition(columnFilter: EntityColumnFilter) =
     // CAST, JSON_UNQUOTE and JSON_EXTRACT are used to handle strings and numbers and do a case insensitive comparison
-    sql" and CAST(JSON_UNQUOTE(JSON_EXTRACT(e.attributes, ${slickAttributePath(columnFilter.attributeName)})) AS CHAR) = ${columnFilter.term}"
+    sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
 
   private def orderBy(entityQuery: EntityQuery): SQLActionBuilder =
     concatSqlActions(
       sql" order by ",
       orderByColumns(entityQuery),
-      sql""" #${SortDirections.toSql(entityQuery.sortDirection)}"""
+      sql" #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
 
   private def paginationClause(entityQuery: EntityQuery): SQLActionBuilder =
-    sql""" limit ${entityQuery.pageSize} offset ${entityQuery.offset}"""
+    sql" limit ${entityQuery.pageSize} offset ${entityQuery.offset}"
 
   private def entityResultGetterWithFieldsFilter(entityQuery: EntityQuery) =
     entityQuery.fields.fields match {
