@@ -253,7 +253,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   private def buildFilterConditions(entityQuery: EntityQuery) = {
     val filterClauses = entityQuery.filterTermsList.map { filterTerm =>
-      sql"""JSON_SEARCH(e.attributes, 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
+      sql"""JSON_SEARCH(lower(e.attributes->'#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
     }
     concatSqlActions(
       sql" and (",

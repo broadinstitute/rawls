@@ -500,7 +500,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     10,
                     Attributable.nameReservedAttribute,
                     SortDirections.Ascending,
-                    Some("foo bar"),
+                    Some("foo bAr"),
                     FilterOperators.And
         )
       )
@@ -534,7 +534,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     10,
                     Attributable.nameReservedAttribute,
                     SortDirections.Ascending,
-                    Some("foo bar"),
+                    Some("foo bAr"),
                     FilterOperators.Or
         )
       )
@@ -600,7 +600,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     10,
                     toDelimitedName(sortAttrName),
                     SortDirections.Ascending,
-                    Some("foo bar"),
+                    Some("foo bAr"),
                     FilterOperators.And
         )
       )
@@ -648,7 +648,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       q.queryEntitiesWithFilterTermsSortByAttribute(
         wsid,
         entityType1,
-        EntityQuery(1, 10, toDelimitedName(sortAttrName), SortDirections.Ascending, Some("foo bar"), FilterOperators.Or)
+        EntityQuery(1, 10, toDelimitedName(sortAttrName), SortDirections.Ascending, Some("foo bAr"), FilterOperators.Or)
       )
     )
     actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
@@ -697,7 +697,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     10,
                     Attributable.nameReservedAttribute,
                     SortDirections.Ascending,
-                    Some("foo bar"),
+                    Some("foo bAr"),
                     FilterOperators.And
         )
       )
@@ -731,7 +731,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     10,
                     Attributable.nameReservedAttribute,
                     SortDirections.Ascending,
-                    Some("foo bar"),
+                    Some("foo bAr"),
                     FilterOperators.Or
         )
       )
