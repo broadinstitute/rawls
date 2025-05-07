@@ -68,7 +68,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def batchUpdateEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
-  ): Future[Source[Entity, _]] = ???
+  ): Future[Int] = ???
 
   override def batchUpsertEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
