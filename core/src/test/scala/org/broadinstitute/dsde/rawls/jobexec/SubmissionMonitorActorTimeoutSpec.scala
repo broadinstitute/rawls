@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType.Workspace
 import org.broadinstitute.dsde.rawls.dataaccess.{
+  MockBigQueryServiceFactory,
   MockGoogleServicesDAO,
   MockShardedExecutionServiceCluster,
   SlickDataSource
@@ -79,16 +80,16 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
       )
 
       val entityService = EntityService.constructor(
-        slickDataSource,
+        dataSource,
         mockSamDAO,
         "metric",
         EntityManager.defaultEntityManager(
           dataSource,
           new MockWorkspaceManagerDAO(),
           new WorkspaceSettingRepository(dataSource),
-          new MockDataRepoDAO("doesn't matter"),
+          new MockDataRepoDAO(""),
           mockSamDAO,
-          null,
+          MockBigQueryServiceFactory.ioFactory(),
           DataRepoEntityProviderConfig(100, 10, 0),
           false,
           java.time.Duration.ofSeconds(1),

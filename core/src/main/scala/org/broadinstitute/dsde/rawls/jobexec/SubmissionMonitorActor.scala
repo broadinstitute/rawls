@@ -465,6 +465,24 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       } yield statusCheckComplete
     }
 
+  private def getPetRequestContext(tracingContext: RawlsTracingContext)(implicit
+    executionContext: ExecutionContext
+  ): Future[RawlsRequestContext] =
+    for {
+      (workspace, submission) <- datasource.inTransaction { dataAccess =>
+        for {
+          workspaceOpt <- dataAccess.workspaceQuery.findByName(workspaceName)
+          workspace = workspaceOpt.getOrElse(
+            throw new RawlsException(s"workspace for submission $submissionId not found")
+          )
+
+          submissionOpt <- dataAccess.submissionQuery.get(workspace, submissionId.toString)
+          submission = submissionOpt.getOrElse(throw new RawlsException(s"submission $submissionId not found"))
+        } yield (workspace, submission)
+      }
+      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, RawlsUserEmail(submission.submitter.value))
+    } yield RawlsRequestContext(petUserInfo, tracingContext.otelContext)
+
   private def markWorkflowFailed(workflowRecord: WorkflowRecord, fatal: RawlsFatalExceptionWithErrorReport) = {
     logger.error(
       s"Marking workflow ${externalId(workflowRecord)} as failed handling outputs in $submissionId with user-visible reason ${fatal.toString})"
@@ -792,21 +810,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
       }
     }
-
-  private def getPetRequestContext(tracingContext: RawlsTracingContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[RawlsRequestContext] =
-    for {
-      (workspace, submission) <- datasource.inTransaction { dataAccess =>
-        for {
-          workspaceOpt <- dataAccess.workspaceQuery.findByName(workspaceName)
-          workspace = workspaceOpt.getOrElse(throw new RawlsException("workspace not found"))
-          submission <- dataAccess.submissionQuery.get(workspace, submissionId.toString)
-        } yield (workspace, submission)
-      }
-      submitterEmail = submission.getOrElse(throw new RawlsException("submission not found")).submitter
-      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, RawlsUserEmail(submitterEmail.value))
-    } yield RawlsRequestContext(petUserInfo, tracingContext.otelContext)
 
   private def attributeIsEmpty(attribute: Attribute): Boolean =
     attribute match {
