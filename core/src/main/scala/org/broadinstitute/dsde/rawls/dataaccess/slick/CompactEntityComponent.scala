@@ -247,7 +247,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
     concatSqlActions(
       selectCompactEntityColumns,
-      orderByColumns(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       filterTermsCondition(entityQuery),
       orderBy(entityQuery),
@@ -261,7 +260,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
     concatSqlActions(
       selectCompactEntityColumns,
-      orderByColumns(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       columnFilterCondition(columnFilter),
       orderBy(entityQuery),
@@ -274,7 +272,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
     concatSqlActions(
       selectCompactEntityColumns,
-      orderByColumns(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       orderBy(entityQuery),
       paginationClause(entityQuery)
@@ -286,16 +283,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   // ====================================================================================================
 
   private val selectCompactEntityColumns =
-    sql"select id, name, entity_type, workspace_id, record_version, deleted, attributes, "
-
-  private def orderByColumns(entityQuery: EntityQuery): SQLActionBuilder = entityQuery.sortField match {
-    case Attributable.nameReservedAttribute => sql" #${Attributable.nameReservedAttribute}"
-    case attr                               =>
-      // the order of the columns here is also the sort precedence, list length first, then scalar value
-      // Sorting on a list column should sort by the list size and sorting on a scalar column sorts on the column value.
-      // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
-      sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
-  }
+    sql"select id, name, entity_type, workspace_id, record_version, deleted, attributes"
 
   private def fromActiveEntitiesOfTypeInWorkspace(workspaceId: UUID, entityType: String) =
     sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
@@ -319,7 +307,14 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   private def orderBy(entityQuery: EntityQuery): SQLActionBuilder =
     concatSqlActions(
       sql" order by ",
-      orderByColumns(entityQuery),
+      entityQuery.sortField match {
+        case Attributable.nameReservedAttribute => sql" #${Attributable.nameReservedAttribute}"
+        case attr =>
+          // the order of the columns here is also the sort precedence, list length first, then scalar value
+          // Sorting on a list column should sort by the list size and sorting on a scalar column sorts on the column value.
+          // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
+          sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
+      },
       sql" #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
 
