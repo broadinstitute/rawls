@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   MockGoogleServicesDAO,
   MockShardedExecutionServiceCluster
 }
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
   RefreshGlobalJobExecGauges,
   SaveCurrentWorkflowStatusCounts,
@@ -84,9 +85,9 @@ class SubmissionSupervisorSpec
           new UncoordinatedDataSourceAccess(slickDataSource),
           mockSamDAO,
           gcsDAO,
+          _ => mock[EntityService],
           mockNotificationDAO,
           config,
-          ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher"),

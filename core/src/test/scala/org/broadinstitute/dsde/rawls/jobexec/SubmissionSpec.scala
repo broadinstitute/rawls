@@ -472,9 +472,9 @@ class SubmissionSpec(_system: ActorSystem)
             new UncoordinatedDataSourceAccess(slickDataSource),
             samDAO,
             gcsDAO,
+            _ => mock[EntityService],
             mockNotificationDAO,
             config,
-            testConf.getDuration("entities.queryTimeout").toScala,
             workbenchMetricBaseName = workbenchMetricBaseName
           )
           .withDispatcher("submission-monitor-dispatcher"),

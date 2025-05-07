@@ -573,12 +573,16 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] = ???
+  ): ReadWriteAction[Traversable[Entity]] = throw new UnsupportedEntityOperationException(
+    "save workflow output entities not supported by this provider."
+  )
 
   def listWorkflowEntities(dataAccess: DataAccess,
                            workspace: Workspace,
                            entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = ???
+  ): ReadAction[Map[Long, Entity]] = throw new UnsupportedEntityOperationException(
+    "list workflow entities not supported by this provider."
+  )
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,

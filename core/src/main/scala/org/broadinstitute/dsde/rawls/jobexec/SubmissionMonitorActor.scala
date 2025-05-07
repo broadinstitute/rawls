@@ -66,7 +66,6 @@ object SubmissionMonitorActor {
             executionServiceCluster: ExecutionServiceCluster,
             entityService: RawlsRequestContext => EntityService,
             config: SubmissionMonitorConfig,
-            queryTimeout: Duration,
             workbenchMetricBaseName: String,
             perWorkflowCostCap: Option[BigDecimal] = None
   ): Props =
@@ -81,7 +80,6 @@ object SubmissionMonitorActor {
         executionServiceCluster,
         entityService,
         config,
-        queryTimeout,
         workbenchMetricBaseName,
         perWorkflowCostCap
       )
@@ -126,7 +124,6 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val entityService: RawlsRequestContext => EntityService,
                              val config: SubmissionMonitorConfig,
-                             val queryTimeout: Duration,
                              override val workbenchMetricBaseName: String,
                              val perWorkflowCostCap: Option[BigDecimal]
 ) extends Actor
@@ -190,7 +187,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val executionServiceCluster: ExecutionServiceCluster
   val entityService: RawlsRequestContext => EntityService
   val config: SubmissionMonitorConfig
-  val queryTimeout: Duration
   val perWorkflowCostCap: Option[BigDecimal]
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
@@ -500,7 +496,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         (execServiceOutputsOption match {
           case Some(execServiceOutputs) =>
             // this workflow has Cromwell outputs. Persist those outputs.
-            handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, petRequestContext) flatMap { updates => }
+            handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, petRequestContext)
           case None => DBIO.successful(())
         }).flatMap { _ =>
           for {

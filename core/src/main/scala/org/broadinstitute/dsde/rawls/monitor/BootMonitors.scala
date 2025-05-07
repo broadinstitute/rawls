@@ -83,7 +83,6 @@ object BootMonitors extends LazyLogging {
                    methodRepoDAO: MethodRepoDAO,
                    drsResolver: DrsResolver,
                    entityService: RawlsRequestContext => EntityService,
-                   entityQueryTimeout: Duration,
                    workspaceService: RawlsRequestContext => WorkspaceService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
@@ -129,7 +128,6 @@ object BootMonitors extends LazyLogging {
         entityService,
         notificationDAO,
         shardedExecutionServiceCluster,
-        entityQueryTimeout,
         metricsPrefix
       )
 
@@ -312,7 +310,6 @@ object BootMonitors extends LazyLogging {
                                                entityService: RawlsRequestContext => EntityService,
                                                notificationDAO: NotificationDAO,
                                                shardedExecutionServiceCluster: ExecutionServiceCluster,
-                                               entityQueryTimeout: Duration,
                                                metricsPrefix: String
   ) =
     system.actorOf(
@@ -324,7 +321,6 @@ object BootMonitors extends LazyLogging {
         entityService,
         notificationDAO,
         submissionMonitorConfig,
-        entityQueryTimeout,
         workbenchMetricBaseName = metricsPrefix
       ),
       "rawls-submission-supervisor"

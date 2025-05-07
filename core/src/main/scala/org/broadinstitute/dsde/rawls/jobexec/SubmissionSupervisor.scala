@@ -58,7 +58,6 @@ object SubmissionSupervisor {
             entityService: RawlsRequestContext => EntityService,
             notificationDAO: NotificationDAO,
             submissionMonitorConfig: SubmissionMonitorConfig,
-            entityQueryTimeout: Duration,
             workbenchMetricBaseName: String
   ): Props =
     Props(
@@ -70,7 +69,6 @@ object SubmissionSupervisor {
         entityService,
         notificationDAO,
         submissionMonitorConfig,
-        entityQueryTimeout,
         workbenchMetricBaseName
       )
     )
@@ -91,7 +89,6 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            entityService: RawlsRequestContext => EntityService,
                            notificationDAO: NotificationDAO,
                            submissionMonitorConfig: SubmissionMonitorConfig,
-                           entityQueryTimeout: Duration,
                            override val workbenchMetricBaseName: String
 ) extends Actor
     with LazyLogging
@@ -200,7 +197,6 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           executionServiceCluster,
           entityService,
           submissionMonitorConfig,
-          entityQueryTimeout,
           workbenchMetricBaseName,
           perWorkflowCostCap
         )

@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
   ExecutionServiceStatusResponse,
@@ -850,7 +851,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
         ),
         this,
-        RawlsTracingContext(Option.empty)
+        testContext
       )
     )
 
@@ -914,7 +915,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o1_lib" -> Left(AttributeString("result")))))
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -971,7 +972,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o2_lib" -> Left(AttributeString("result2")))))
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -1010,7 +1011,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           )
         ),
         this,
-        RawlsTracingContext(Option.empty)
+        testContext
       )
     )
 
@@ -1056,7 +1057,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -1083,7 +1084,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait(
         monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))),
                               this,
-                              RawlsTracingContext(Option.empty)
+                              testContext
         )
       )
 
@@ -1133,7 +1134,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -1164,7 +1165,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -1762,7 +1763,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait(
         monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))),
                               this,
-                              RawlsTracingContext(Option.empty)
+                              testContext
         )
       )
 
@@ -1847,7 +1848,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -1994,7 +1995,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -2068,7 +2069,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          RawlsTracingContext(Option.empty)
+          testContext
         )
       )
 
@@ -2338,8 +2339,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         mockGoogleServicesDAO,
         mockNotificationDAO,
         MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
+        _ => mock[EntityService],
         config,
-        ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
         "test"
       )
     )
@@ -2363,11 +2364,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       new UncoordinatedDataSourceAccess(dataSource),
       samDAO,
       googleServicesDAO,
+      _ => mock[EntityService],
       mockNotificationDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       config,
-      ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
       "test",
       perWorkflowCostCap
     )
@@ -2448,11 +2449,11 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val datasource: DataSourceAccess,
                             val samDAO: SamDAO,
                             val googleServicesDAO: GoogleServicesDAO,
+                            val entityService: RawlsRequestContext => EntityService,
                             val notificationDAO: NotificationDAO,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val config: SubmissionMonitorConfig,
-                            val queryTimeout: Duration,
                             override val workbenchMetricBaseName: String,
                             val perWorkflowCostCap: Option[BigDecimal]
 ) extends SubmissionMonitor {}
