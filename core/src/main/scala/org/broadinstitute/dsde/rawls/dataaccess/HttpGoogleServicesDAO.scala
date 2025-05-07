@@ -555,6 +555,26 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
+  override def isBillingAccountEnabled(billingAccount: RawlsBillingAccountName)(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean] =
+    getBillingAccountEnabled(billingAccount, getBillingServiceAccountCredential)
+
+  protected def getBillingAccountEnabled(billingAccount: RawlsBillingAccountName, credential: Credential)(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean] = {
+    implicit val service = GoogleInstrumentedService.Billing
+    val fetcher = getCloudBillingManager(credential).billingAccounts().get(billingAccount.value)
+    retryWithRecoverWhen500orGoogleError { () =>
+      val response = blocking {
+        executeGoogleRequest(fetcher)
+      }
+      response.getOpen.booleanValue()
+    } {
+      case gjre: GoogleJsonResponseException if gjre.getStatusCode / 100 == 4 => false // any 4xx error means no access
+    }
+  }
+
   override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
   ): Future[Set[IamPermission]] =

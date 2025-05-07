@@ -430,10 +430,13 @@ trait WorkspaceComponent {
       findByIdQuery(workspaceId).map(_.lastModified).update(currentTime)
     }
 
-    def updateBilling(workspaceId: UUID, newBilling: String): WriteAction[Int] =
+    def updateBilling(workspaceId: UUID,
+                      namespace: String,
+                      newBilling: Option[RawlsBillingAccountName]
+    ): WriteAction[Int] =
       findByIdQuery(workspaceId)
         .map(ws => (ws.namespace, ws.currentBillingAccountOnGoogleProject))
-        .update((newBilling, Option(newBilling)))
+        .update((namespace, newBilling.map(_.value)))
 
     def updateGoogleProjectNumber(workspaceIds: Seq[UUID], googleProjectNumber: GoogleProjectNumber): WriteAction[Int] =
       findByIdsQuery(workspaceIds).map(_.googleProjectNumber).update(Option(googleProjectNumber.value))

@@ -135,7 +135,7 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                     complete {
                       workspaceServiceConstructor(ctx)
                         .updateWorkspaceBillingProject(workspaceName, updateRequest.newBillingProjectName)
-                        .map(_ => StatusCodes.NoContent)
+                        .map(_ => StatusCodes.OK)
                     }
                   }
                 }

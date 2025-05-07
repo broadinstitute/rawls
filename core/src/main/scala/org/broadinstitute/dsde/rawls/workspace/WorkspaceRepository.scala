@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GoogleProjectId,
   PendingCloneWorkspaceFileTransfer,
+  RawlsBillingAccountName,
   RawlsBillingProjectName,
   RawlsRequestContext,
   Workspace,
@@ -204,9 +205,9 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def getTags(workspaceIds: Seq[UUID], query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     dataSource.inTransaction(_.workspaceQuery.getTags(query, limit, Some(workspaceIds)))
 
-  def updateBilling(workspaceId: UUID, newBilling: String): Future[Int] =
+  def updateBilling(workspaceId: UUID, namespace: String, newBilling: Option[RawlsBillingAccountName]): Future[Int] =
     dataSource.inTransaction { access =>
-      access.workspaceQuery.updateBilling(workspaceId, newBilling)
+      access.workspaceQuery.updateBilling(workspaceId, namespace, newBilling)
     }
 
 }

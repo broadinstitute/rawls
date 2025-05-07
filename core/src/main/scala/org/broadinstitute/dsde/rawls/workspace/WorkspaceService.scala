@@ -655,10 +655,9 @@ class WorkspaceService(
       sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
       destBillingProject <- getBillingProjectContext(destBillingProjectName)
 
-      // Source and destination billing projects must exist
-      sourceBilling = billingRepository.getBillingProject(sourceBillingProjectName).flatMap {
+      // Source and destination billing projects must exist -- make this a reusable function
+      _ = billingRepository.getBillingProject(sourceBillingProjectName).flatMap {
         case Some(billing) =>
-          // TODO: There is probably a better way to check that the billing account is GCP
           if (billing.landingZoneId.nonEmpty) {
             Future.failed(
               RawlsExceptionWithErrorReport(
@@ -674,7 +673,7 @@ class WorkspaceService(
           )
       }
 
-      destBilling = billingRepository.getBillingProject(destBillingProjectName).flatMap {
+      _ = billingRepository.getBillingProject(destBillingProjectName).flatMap {
         case Some(billing) =>
           if (billing.landingZoneId.nonEmpty) {
             Future.failed(
@@ -741,75 +740,85 @@ class WorkspaceService(
   private def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Workspace] =
     // TODO: Handle failure cases - Revert back to original billing
     for {
-      // Check if billing is enabled
-      billingInfo <- gcsDAO.getBillingInfoForGoogleProject(workspace.googleProjectId)
-      _ <-
-        if (!billingInfo.getBillingEnabled) {
+      // Check if the billing account is enabled
+      _ <- destBillingProject.billingAccount match {
+        case Some(accountName) => gcsDAO.isBillingAccountEnabled(accountName)
+        case None =>
           Future.failed(
             RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest, s"Billing is not enabled for project ${workspace.googleProjectId}")
+              ErrorReport(StatusCodes.BadRequest,
+                          s"No billing account found for billing project ${destBillingProject.projectName}"
+              )
             )
           )
-        } else Future.successful(())
+      }
 
-      // TODO: Check that the storage APIs are enabled
+      // TODO: Check that the storage APIs are enabled on the workspace project
+      // storage-api.googleapis.com and storage-component.googleapis.com
 
-      // Change billing account
-      _ <- gcsDAO.setBillingAccount(workspace.googleProjectId, destBillingProject.billingAccount, ctx.toTracingContext)
-
-      // Change IAM permissions (on bucket)
-      workspacePolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
-      workspaceProjectOwnerEmail = workspacePolicies
-        .find(_.policyName == SamWorkspacePolicyNames.projectOwner)
-        .map(_.email)
-        .getOrElse(
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.InternalServerError,
-                        s"Unable to find project owner policy for workspace ${workspace.workspaceId}"
-            )
-          )
+      oldBillingProjectOwnerPolicyEmail <- samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             workspace.namespace,
+                             SamBillingProjectPolicyNames.owner,
+                             ctx
         )
-      newBillingProjectPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.billingProject,
-                                                                  workspace.namespace,
-                                                                  ctx
-      )
-      newBillingProjectOwnerEmail = newBillingProjectPolicies
-        .find(_.policyName == SamBillingProjectPolicyNames.owner)
         .map(_.email)
-        .getOrElse(
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.InternalServerError,
-                        s"Unable to find project owner policy for billing project ${workspace.namespace}"
-            )
-          )
+      newBillingProjectOwnerPolicyEmail <- samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             destBillingProject.projectName.value,
+                             SamBillingProjectPolicyNames.owner,
+                             ctx
         )
+        .map(_.email)
+
+      // No auth domain -- add billing project owner emails directly to bucket
       _ <- gcsDAO.changeProjectOwnerBucketIamBinding(GcsBucketName(workspace.bucketName),
-                                                     Identity.group(workspaceProjectOwnerEmail.value),
-                                                     Identity.group(newBillingProjectOwnerEmail.value)
+                                                     Identity.group(oldBillingProjectOwnerPolicyEmail.value),
+                                                     Identity.group(newBillingProjectOwnerPolicyEmail.value)
       )
 
-      // Remove fastpass grants
-      _ <- fastPassServiceConstructor(ctx).removeFastPassGrantsForWorkspace(workspace)
-      // TODO: Re-add fastpass grants
+      // Remove old billing owner policy email from project IAM and add new one
+      _ <- googleIamDao.addRoles(
+        GoogleProject(workspace.googleProjectId.value),
+        newBillingProjectOwnerPolicyEmail,
+        IamMemberTypes.Group,
+        Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+        retryIfGroupDoesNotExist = true
+      )
+      _ <- googleIamDao.removeRoles(
+        GoogleProject(workspace.googleProjectId.value),
+        oldBillingProjectOwnerPolicyEmail,
+        IamMemberTypes.Group,
+        Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+        retryIfGroupDoesNotExist = true
+      )
+
+      // Change billing account -- revert IAM bindings if this fails
+      _ <- gcsDAO.setBillingAccount(workspace.googleProjectId, destBillingProject.billingAccount, ctx.toTracingContext)
 
       // Add new billing project owner email to workspace owner policy and remove old owner
       _ <- samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
                                   workspace.workspaceId,
                                   SamWorkspacePolicyNames.projectOwner,
-                                  newBillingProjectOwnerEmail.value,
+                                  newBillingProjectOwnerPolicyEmail.value,
                                   ctx
       )
       _ <- samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
                                        workspace.workspaceId,
                                        SamWorkspacePolicyNames.projectOwner,
-                                       workspaceProjectOwnerEmail.value,
+                                       oldBillingProjectOwnerPolicyEmail.value,
                                        ctx
       )
 
-      // TODO: Update member policy?
+      // Remove and re-add fastpass grants
+      _ <- fastPassServiceConstructor(ctx).removeFastPassGrantsForWorkspace(workspace)
+      _ <- fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace)
 
       // Update DB record for the workspace
-      _ <- workspaceRepository.updateBilling(workspace.workspaceIdAsUUID, destBillingProject.projectName.value)
+      _ <- workspaceRepository.updateBilling(workspace.workspaceIdAsUUID,
+                                             destBillingProject.projectName.value,
+                                             destBillingProject.billingAccount
+      )
 
     } yield workspace
 
