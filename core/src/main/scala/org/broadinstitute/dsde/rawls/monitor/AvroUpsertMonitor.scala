@@ -446,7 +446,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
 
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
-      def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+      def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Int] = {
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
 
         // translate the upsertBatch back into a stream of json.
@@ -456,7 +456,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
           requestContext = RawlsRequestContext(petUserInfo)
-          upsertResultsSource <- entityService(requestContext).batchUpdateEntitiesInternal(
+          upsertResults <- entityService(requestContext).batchUpdateEntitiesInternal(
             workspace.toWorkspaceName,
             entityUpdateStream,
             upsert = isUpsert,
@@ -464,8 +464,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
             None,
             requestContext
           )
-          upsertResults <- upsertResultsSource.runWith(Sink.seq)
-        } yield upsertResults.toTraversable
+        } yield upsertResults
       }
 
       // create our pause signal. We use this to control when the stream should pause and resume.
@@ -506,9 +505,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       // finally, after all the stream setup, tell the stream to execute
       val upsertResults = upsertFuturesStream.compile.toList.unsafeRunSync()
 
-      val numSuccesses: Int = upsertResults.collect { case Success(entityList) =>
-        entityList.size
-      }.sum
+      val numSuccesses: Int = upsertResults.collect { case Success(writeSize) => writeSize }.sum
 
       // if the failure has underlying causes, use those; else use the parent failure.
       // unresolved entity references only have useful error messages in the underlying causes, not the parent failure
