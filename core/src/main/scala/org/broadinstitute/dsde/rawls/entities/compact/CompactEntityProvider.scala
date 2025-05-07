@@ -5,15 +5,16 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, EntityTypeAndCount, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.compact.entityQuery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
-import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils, EntityUtils}
+import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{
@@ -36,11 +37,9 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-import slick.dbio.{DBIO, Effect}
+import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
-import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
-import slick.sql.SqlStreamingAction
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -198,7 +197,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
                                    entityQuery: EntityQuery,
                                    parentContext: RawlsRequestContext = requestArguments.ctx
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
-    case class CountAndSource(count: Int, source: Source[CompactEntityRecord, _])
+    // case class CountAndSource(count: Int, source: Source[CompactEntityRecord, _])
 
     val idAttributeName =
       AttributeName(AttributeName.defaultNamespace, entityType + Attributable.entityIdAttributeSuffix)
@@ -212,59 +211,23 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
           // if there are no entities, we can just return an empty source
           Future.successful((EntityQueryResultMetadata(0, 0, 0), Source.empty))
         } else {
+
           // there are 4 cases
           // 1. filterTerms is defined
           // 2. columnFilter is defined and attributeName is idAttributeName (should have 0 or 1 results)
           // 3. columnFilter is defined and attributeName is not idAttributeName
           // 4. no filterTerms and no columnFilter
-          val filteredCountAndSourceF: Future[CountAndSource] =
-            if (entityQuery.filterTerms.isDefined) {
-              repository.dataSource
-                .inTransaction(ReadCommitted) { _ =>
-                  repository.queries.countEntitiesWithFilterTerms(workspaceId, entityType, entityQuery)
-                }
-                .map { count =>
-                  CountAndSource(
-                    count,
-                    streamQuery(count,
-                                repository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery)
-                    )
-                  )
-                }
-            } else if (entityQuery.columnFilter.exists(_.attributeName == idAttributeName)) {
-              val entityName = entityQuery.columnFilter.get.term
-              repository.dataSource.inTransaction(ReadCommitted) { _ =>
-                repository.queries.getEntity(workspaceId, entityType, entityName)
-              } map {
-                case Some(entityRec) => CountAndSource(1, Source.single(entityRec))
-                case None            => CountAndSource(0, Source.empty)
-              }
-            } else if (entityQuery.columnFilter.isDefined) {
-              val columnFilter = entityQuery.columnFilter.get
-              repository.dataSource
-                .inTransaction(ReadCommitted) { _ =>
-                  repository.queries.countEntitiesWithColumnFilter(workspaceId, entityType, columnFilter)
-                }
-                .map { count =>
-                  CountAndSource(
-                    count,
-                    streamQuery(count,
-                                repository.queries
-                                  .queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)
-                    )
-                  )
-                }
-            } else {
-              // there is no filter so we can just use the unfiltered count
-              Future.successful(
-                CountAndSource(
-                  unfilteredCount,
-                  streamQuery(unfilteredCount,
-                              repository.queries.queryEntitiesWithNoFilter(workspaceId, entityType, entityQuery)
-                  )
-                )
-              )
-            }
+          val queryStrategy = if (entityQuery.filterTerms.isDefined) {
+            new SearchStrategy(repository, workspaceId, entityType, entityQuery)
+          } else if (entityQuery.columnFilter.exists(_.attributeName == idAttributeName)) {
+            new FilterByNameStrategy(repository, workspaceId, entityType, entityQuery)
+          } else if (entityQuery.columnFilter.isDefined) {
+            new FilterByColumnStrategy(repository, workspaceId, entityType, entityQuery)
+          } else {
+            new AllEntitiesStrategy(repository, workspaceId, entityType, entityQuery, unfilteredCount)
+          }
+
+          val filteredCountAndSourceF: Future[CountAndSource] = queryStrategy.getCountAndSource
 
           filteredCountAndSourceF.map { filteredCountAndSource =>
             val pageCount: Int = Math.ceil(filteredCountAndSource.count.toFloat / entityQuery.pageSize).toInt
@@ -280,28 +243,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
           }
         }
       }
-  }
-
-  private def streamQuery(count: Int,
-                          query: SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Effect.Read]
-  ) = {
-    import repository.dataSource.dataAccess.driver.api._
-    if (count == 0) {
-      // if there are no results, we can just return an empty source
-      Source.empty
-    } else {
-      // otherwise, we need to stream the results
-      Source.fromPublisher(
-        repository.dataSource.database.stream(
-          query.transactionally
-            .withTransactionIsolation(ReadCommitted)
-            .withStatementParameters(rsType = ResultSetType.ForwardOnly,
-                                     rsConcurrency = ResultSetConcurrency.ReadOnly,
-                                     fetchSize = repository.dataSource.fetchSize
-            )
-        )
-      )
-    }
   }
 
   override def renameAttribute(entityType: String,
