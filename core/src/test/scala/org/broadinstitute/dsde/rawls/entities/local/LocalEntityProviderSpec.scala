@@ -353,7 +353,7 @@ class LocalEntityProviderSpec
         )
         val writes = localEntityProvider.batchUpsertEntities(Source(multiUpsert), testContext).futureValue
 
-        writes.runWith(Sink.seq).futureValue.size shouldBe 2
+        writes shouldBe 2
 
         val entityQuery = EntityQuery(1, 100, "name", SortDirections.Ascending, None)
         val parentContext = RawlsRequestContext(userInfo)
@@ -1050,7 +1050,7 @@ class LocalEntityProviderSpec
         // create the first entity with name "myname"
         val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
         val created1 = localEntityProvider.batchUpsertEntities(Source(upsert1), testContext).futureValue
-        created1.runWith(Sink.seq).futureValue.size shouldBe 1
+        created1 shouldBe 1
 
         // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
         val upsert2 = Seq(EntityUpdateDefinition("MyName", "casetest", Seq()))

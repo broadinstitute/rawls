@@ -527,7 +527,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     updateStream: Source[EntityUpdateDefinition, _],
     upsert: Boolean,
     parentContext: RawlsRequestContext
-  ): Future[Source[Entity, _]] =
+  ): Future[Int] =
     // immediately materialize the updateStream so existing code can work with a Seq
     updateStream
       .runWith(Sink.seq)
@@ -617,16 +617,16 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
           }
         }
       }
-      .map(writeResults => Source(writeResults.toSeq))
+      .map(writeResults => writeResults.size)
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Source[Entity, _]] =
+  ): Future[Int] =
     batchUpdateEntitiesImpl(entityUpdates, upsert = false, parentContext)
 
   override def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Source[Entity, _]] =
+  ): Future[Int] =
     batchUpdateEntitiesImpl(entityUpdates, upsert = true, parentContext)
 
   override def copyEntities(sourceWorkspaceContext: Workspace,

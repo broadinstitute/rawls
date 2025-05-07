@@ -446,7 +446,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                   dataReference: Option[DataReferenceName],
                                   billingProject: Option[GoogleProjectId],
                                   parentContext: RawlsRequestContext
-  ): Future[Source[Entity, _]] =
+  ): Future[Int] =
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext) { _ =>
       getV2WorkspaceContextAndPermissions(workspaceName,
                                           SamWorkspaceActions.write,
@@ -476,7 +476,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
-  ): Future[Source[Entity, _]] =
+  ): Future[Int] =
     traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, s)
         .recover(
@@ -488,7 +488,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
-  ): Future[Source[Entity, _]] =
+  ): Future[Int] =
     traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, s)
         .recover(
