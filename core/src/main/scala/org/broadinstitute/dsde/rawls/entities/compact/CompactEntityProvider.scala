@@ -73,9 +73,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def batchUpsertEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
-  ): Future[Source[Entity, _]] = {
+  ): Future[Int] = {
 
-    // translate the input stream entityUpdates to a stream of Entity by applying the updates to
+    // Translate the input stream entityUpdates to a stream of Entity by applying the updates to
     // a pre-existing entity (for updates) or a blank entity (for inserts)
     val entitySource: Source[Entity, _] = entityUpdates.map { updateDefinition =>
       // TODO CORE-428: for updates, look ahead (some quantity) in the update definitions and
@@ -86,37 +86,36 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       applyOperationsToEntity(baseEntity, updateDefinition.operations)
     }
 
-    // group the entities-to-be-saved into batches to optimize our SQL interactions
+    // Group the entities-to-be-saved into batches to optimize our SQL interactions
     val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(config.maxSqlBatchSizeBytes)(calculateEntitySize)
 
-    // for each batch, generate the db action to write it to the database
-    val batchActionsSource: Source[ReadWriteAction[Seq[Entity]], _] = batches
+    // For each batch, generate the db action to write it to the database
+    val batchActionsSource: Source[ReadWriteAction[Int], _] = batches
       .map { batch =>
         logger.info(s"batch upsert: batch of ${batch.size} entities")
         insertBatch(batch)
       }
 
-    // materialize the batch actions into a sequence and convert to a single DBIO action
-    val batchActionsF: Future[ReadWriteAction[Seq[Seq[Entity]]]] = batchActionsSource
+    // Materialize the batch actions into a sequence and convert to a single DBIO action
+    val batchActionsF: Future[ReadWriteAction[Int]] = batchActionsSource
       .runWith(Sink.seq)
-      .map(DBIO.sequence(_))
+      .map(DBIO.sequence(_).map(_.sum))
 
-    // convert the Future[ReadWriteAction] to a Source[Entity]. Note that since all the
-    // ReadWriteActions are fused via DBIO.sequence above, there is only one action to execute
-    // inside a transaction.
-    val dbResultsSource: Source[Seq[Entity], _] = Source.futureSource(batchActionsF.map { dbAction =>
-      Source.future(repository.dataSource.inTransaction(_ => dbAction).map(_.flatten))
+    // Convert the Future[ReadWriteAction] to a Source[Int] by executing the db actions.
+    // Note that since all the ReadWriteActions are fused via DBIO.sequence above,
+    // there is only one action to execute inside a transaction.
+    val dbResultsSource: Source[Int, _] = Source.futureSource(batchActionsF.map { dbAction =>
+      Source.future(repository.dataSource.inTransaction(_ => dbAction))
     })
 
-    //  finally, run the Source. Ignore the results from the db; they are not necessary.
-    val ignoredResults: Future[Done] = dbResultsSource.runWith(Sink.ignore)
+    // Finally, run the Source. Ignore the results from the db; they are not necessary.
+    val dbResults: Future[Int] = dbResultsSource.runWith(Sink.head)
 
-    // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
-    withWorkspaceLastModified(ignoredResults)
+    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(dbResults)
 
-    // TODO CORE-427: do we need to return results at all, beyond success/failure???
     // and return
-    ignoredResults map { _ => Source.empty[Entity] }
+    dbResults
   }
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
@@ -341,11 +340,11 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   private def calculateEntitySize(entity: Entity): Int =
     CompactEntitySerialization.toSql(entity.attributes).compactPrint.length
 
-  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Seq[Entity]] =
+  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Int] =
     for {
       // batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
       // has a reference to another entity in the same batch.
-      _ <- repository.queries.batchCreateEntities(workspaceId, batch)
+      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch)
 
       // find all requested references within this batch
       allReferences = findAllReferences(batch)
@@ -400,6 +399,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }.toSet
       // insert the references into the ENTITY_REFS table.
       _ <- repository.queries.upsertReferences(referencesToInsert)
-    } yield batch
+    } yield entitiesCreated
 
 }
