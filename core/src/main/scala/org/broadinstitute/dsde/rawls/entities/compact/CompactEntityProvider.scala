@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.NotUsed
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
@@ -196,40 +197,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   override def queryEntitiesSource(entityType: String,
                                    entityQuery: EntityQuery,
                                    parentContext: RawlsRequestContext = requestArguments.ctx
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
-    // case class CountAndSource(count: Int, source: Source[CompactEntityRecord, _])
-
-    val idAttributeName =
-      AttributeName(AttributeName.defaultNamespace, entityType + Attributable.entityIdAttributeSuffix)
-
-    repository.dataSource
-      .inTransaction(ReadCommitted) { _ =>
-        repository.queries.countEntities(workspaceId, entityType)
-      }
-      .flatMap { unfilteredCount =>
-        if (unfilteredCount == 0) {
-          // if there are no entities, we can just return an empty source
-          Future.successful((EntityQueryResultMetadata(0, 0, 0), Source.empty))
-        } else {
-
-          // there are 4 cases
-          // 1. filterTerms is defined
-          // 2. columnFilter is defined and attributeName is idAttributeName (should have 0 or 1 results)
-          // 3. columnFilter is defined and attributeName is not idAttributeName
-          // 4. no filterTerms and no columnFilter
-          val queryStrategy = if (entityQuery.filterTerms.isDefined) {
-            new SearchStrategy(repository, workspaceId, entityType, entityQuery)
-          } else if (entityQuery.columnFilter.exists(_.attributeName == idAttributeName)) {
-            new FilterByNameStrategy(repository, workspaceId, entityType, entityQuery)
-          } else if (entityQuery.columnFilter.isDefined) {
-            new FilterByColumnStrategy(repository, workspaceId, entityType, entityQuery)
-          } else {
-            new AllEntitiesStrategy(repository, workspaceId, entityType, entityQuery, unfilteredCount)
-          }
-
-          val filteredCountAndSourceF: Future[CountAndSource] = queryStrategy.getCountAndSource
-
-          filteredCountAndSourceF.map { filteredCountAndSource =>
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+    countEntitiesOfType(entityType).flatMap { unfilteredCount =>
+      if (unfilteredCount == 0) {
+        // if there are no entities, we can just return an empty source
+        Future.successful((EntityQueryResultMetadata(0, 0, 0), Source.empty))
+      } else {
+        EntityQueryStrategy
+          .choose(repository, workspaceId, entityType, entityQuery, unfilteredCount)
+          .getCountAndSource
+          .map { filteredCountAndSource =>
             val pageCount: Int = Math.ceil(filteredCountAndSource.count.toFloat / entityQuery.pageSize).toInt
             if (filteredCountAndSource.count > 0 && entityQuery.page > pageCount) {
               throw new DataEntityException(
@@ -241,9 +218,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
              filteredCountAndSource.source.map(_.toEntity)
             )
           }
-        }
       }
-  }
+    }
+
+  private def countEntitiesOfType(entityType: LookupExpression) =
+    repository.dataSource
+      .inTransaction(ReadCommitted) { _ =>
+        repository.queries.countEntities(workspaceId, entityType)
+      }
 
   override def renameAttribute(entityType: String,
                                oldAttributeName: AttributeName,
