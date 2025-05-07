@@ -122,17 +122,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   ): Future[Int] =
     repository.dataSource.inTransaction { _ =>
       for {
-        entities: Seq[Option[CompactEntityRecord]] <- DBIO.sequence(
-          entityRefs.map(ref => repository.queries.getEntity(workspaceId, ref.entityType, ref.entityName))
-        )
-        entityIds = entities.flatten.map(_.id).toSet
         // check if any of these entities are referenced by someone else
-        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
+        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(workspaceId,
+                                                                                                        entityRefs
+        )
         _ = if (referencingEntities.toSet.diff(entityRefs.toSet).size != 0) {
           throw new DeleteEntitiesConflictException(referencingEntities.toSet)
         }
         // remove all references from these entities
-        _ <- repository.queries.deleteAllReferences(entityIds)
+        _ <- repository.queries.deleteAllReferences(workspaceId, entityRefs.toSet)
         res <- repository.queries.batchHide(workspaceId, entityRefs)
       } yield res.sum
     }
@@ -143,10 +141,11 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         if (entities.isEmpty) {
           DBIO.successful(0)
         } else {
-          val entityIds = entities.map(_.id).toSet
           for {
             // check if any of these entities are referenced by someone else
-            referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(entityIds)
+            referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencingEntities(workspaceId,
+                                                                                                            entities
+            )
             referencingEntityTypes: Seq[String] = referencingEntities
               .groupBy(_.entityType)
               .keys
@@ -157,10 +156,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
               throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
             }
             // remove all references from these entities
-            _ <- repository.queries.deleteAllReferences(entityIds)
+            _ <- repository.queries.deleteAllReferences(workspaceId, entities.toSet)
             res <- repository.queries.batchHide(
               workspaceId,
-              entities.map(entity => AttributeEntityReference(entity.entityType, entity.name))
+              entities
             )
           } yield res.sum
         }
