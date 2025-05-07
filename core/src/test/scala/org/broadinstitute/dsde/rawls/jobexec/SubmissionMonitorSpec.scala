@@ -5,39 +5,42 @@ import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
-import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
-import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
   ExecutionServiceStatusResponse,
   StatusCheckComplete
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{
+  MockDataRepoDAO,
+  MockSamDAO,
+  MockWorkspaceManagerDAO,
+  RemoteServicesMockServer
+}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, never, spy, verify}
+import org.mockito.Mockito.{never, spy, verify}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import spray.json.JsObject
 
 import java.util.UUID
-import scala.Option
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.{Success, Try}
 
@@ -67,6 +70,24 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
   val mockSamDAO = new MockSamDAO(slickDataSource)
+  val entityServiceConstructor = EntityService.constructor(
+    slickDataSource,
+    mockSamDAO,
+    workbenchMetricBaseName,
+    EntityManager.defaultEntityManager(
+      slickDataSource,
+      new MockWorkspaceManagerDAO(),
+      new WorkspaceSettingRepository(slickDataSource),
+      new MockDataRepoDAO(""),
+      mockSamDAO,
+      MockBigQueryServiceFactory.ioFactory(),
+      DataRepoEntityProviderConfig(100, 10, 0),
+      false,
+      java.time.Duration.ofMinutes(2),
+      workbenchMetricBaseName
+    ),
+    1000
+  ) _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -2339,7 +2360,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         mockGoogleServicesDAO,
         mockNotificationDAO,
         MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
-        _ => mock[EntityService],
+        entityServiceConstructor,
         config,
         "test"
       )
@@ -2364,7 +2385,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       new UncoordinatedDataSourceAccess(dataSource),
       samDAO,
       googleServicesDAO,
-      _ => mock[EntityService],
+      entityServiceConstructor,
       mockNotificationDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
