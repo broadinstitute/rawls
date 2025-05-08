@@ -177,7 +177,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    * 
    * `execution plan: full table scan; nested loop; using where`
    */
-  def deleteAllReferences(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] =
+  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] =
     if (fromRefs.isEmpty) {
       DBIO.successful(0)
     } else {
@@ -203,6 +203,21 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
       query.asUpdate
     }
+
+  /**
+   * Delete all rows in ENTITY_REFS for all entities of the given type
+   *
+   * Returns the number of rows deleted
+   *
+   * `execution plan: 1 nested loop; using where & index: idx_entity_type_name & unq_from_to`
+   */
+  def deleteAllReferencesFromType(workspaceId: UUID, fromType: String): ReadWriteAction[Int] = {
+    val query =
+      sql"""delete r from ENTITY_REFS r join ENTITY e on r.from_id = e.id
+                where e.workspace_id = $workspaceId and e.entity_type = $fromType """
+
+    query.asUpdate
+  }
 
   /**
     * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
@@ -259,7 +274,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
    */
-  def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
+  def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
     // get unique suffix for renaming
     val renameSuffix = "_" + driverComponent.getSufficientlyRandomSuffix(1000000000) // 1 billion
     val deletedDate = new Timestamp(new Date().getTime)
@@ -267,26 +282,45 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     // start of the SQL statement:
     val baseUpdateSql =
       sql"""update ENTITY set deleted=1, attributes=null, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix)
-           where deleted=0 AND workspace_id=$workspaceId """
+           where deleted=0 AND workspace_id=$workspaceId AND """
 
     val groupedNames: Map[String, Seq[String]] = entities.groupMap(_.entityType)(_.entityName)
     // loop over each type and build a SQL clause `(entity_type = ? and name in (?))`
     val criteriaBuilders: Iterable[SQLActionBuilder] = groupedNames map {
       case (entityType: String, entityNames: Seq[String]) =>
-        val matchers = sql"""AND (entity_type=$entityType and name in ("""
+        val matchers = sql""" (entity_type=$entityType and name in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entityNames.map(ref => sql"$ref"))
         concatSqlActions(matchers, entityTypeNameTuples, sql"))")
     }
     // join all the clauses with "or": `(entity_type = ? and name in (?)) or `(entity_type = ? and name in (?))`
     val criteriaSql = reduceSqlActionsWithDelim(criteriaBuilders.toSeq, sql" or ")
+    val wrappedCriteriaSql = concatSqlActions(sql"(", criteriaSql, sql")")
 
-    concatSqlActions(baseUpdateSql, criteriaSql).as[Int]
+    concatSqlActions(baseUpdateSql, wrappedCriteriaSql).asUpdate
+  }
+
+  /**
+   * Soft-deletes all entities of the given type: removes their attributes and sets deleted=1 and deletedDate=now
+   * Does not remove rows from ENTITY_REFS table
+   *
+   * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
+   */
+  def batchHideType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] = {
+    // get unique suffix for renaming
+    val renameSuffix = "_" + driverComponent.getSufficientlyRandomSuffix(1000000000) // 1 billion
+    val deletedDate = new Timestamp(new Date().getTime)
+
+    val query =
+      sql"""update ENTITY set deleted=1, attributes=null, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix)
+           where entity_type=$entityType AND deleted=0 AND workspace_id=$workspaceId """
+
+    query.asUpdate
   }
 
   // Gets any entities that have references to the entities in the given list
   // `execution plan: 2 nested loops; 3 rows; using where & index: idx_entity_type_name, unq_trom_to, PRIMARY`
-  def getReferencingEntities(workspaceId: UUID,
-                             refs: Seq[AttributeEntityReference]
+  def getReferencesTo(workspaceId: UUID,
+                      refs: Seq[AttributeEntityReference]
   ): ReadAction[Seq[AttributeEntityReference]] = {
     val groupedReferences: Map[String, Seq[String]] = refs.groupMap(_.entityType)(_.entityName)
 
@@ -314,6 +348,27 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 from ENTITY e, ENTITY_REFS r
 where r.from_id = e.id
 and e.workspace_id = $workspaceId
+and r.to_id in (""",
+      subquery,
+      sql""" );"""
+    )
+
+    query.as[AttributeEntityReference]
+  }
+
+  // Gets any entities that have references to the entities in the given list
+  // `execution plan: 2 nested loops, full index scan: idx_entity_type_name; 3 simple selects; using where & index`
+  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
+    val subquery =
+      sql"""select id from ENTITY where entity_type = $entityType """
+
+    // build the overall query
+    val query = concatSqlActions(
+      sql"""select e.entity_type, e.name
+from ENTITY e, ENTITY_REFS r
+where r.from_id = e.id
+and e.workspace_id = $workspaceId
+and e.entity_type != $entityType
 and r.to_id in (""",
       subquery,
       sql""" );"""
