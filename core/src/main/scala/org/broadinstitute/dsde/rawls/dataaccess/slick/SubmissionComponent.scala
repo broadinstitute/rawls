@@ -3,11 +3,11 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import cats.implicits._
 import nl.grons.metrics4.scala.Counter
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
@@ -285,14 +285,21 @@ trait SubmissionComponent {
 
     def listActiveSubmissionIdsWithWorkspaceAndPerWorkflowCostCap(
       limit: FiniteDuration
-    ): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal])]] = {
+    ): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal], GoogleProjectId, RawlsUserEmail)]] = {
       // Exclude submissions from monitoring if they are ancient/stuck [WX-820]
       val cutoffTime = new Timestamp(DateTime.now().minusDays(limit.toDays.toInt).getMillis)
       val query = findActiveSubmissionsAfterTime(cutoffTime) join workspaceQuery on (_.workspaceId === _.id)
-      val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name, sub.perWorkflowCostCap) }.result
+      val result = query.map { case (sub, ws) =>
+        (sub.id, ws.namespace, ws.name, sub.perWorkflowCostCap, ws.googleProjectId, sub.submitterId)
+      }.result
       result.map(rows =>
-        rows.map { case (subId, wsNs, wsName, perWorkflowCostCap) =>
-          (subId, WorkspaceName(wsNs, wsName), perWorkflowCostCap)
+        rows.map { case (subId, wsNs, wsName, perWorkflowCostCap, wsGoogleProjectId, submitter) =>
+          (subId,
+           WorkspaceName(wsNs, wsName),
+           perWorkflowCostCap,
+           GoogleProjectId(wsGoogleProjectId),
+           RawlsUserEmail(submitter)
+          )
         }
       )
     }

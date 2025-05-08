@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.jobexec
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.pattern._
-import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
@@ -15,8 +14,14 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, SubmissionStatuses, WorkflowStatuses, WorkspaceName}
-import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
+import org.broadinstitute.dsde.rawls.model.{
+  RawlsRequestContext,
+  SubmissionStatuses,
+  UserInfo,
+  WorkflowStatuses,
+  WorkspaceName
+}
+import org.broadinstitute.dsde.rawls.util.{AuthUtil, ThresholdOneForOneStrategy}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 
 import java.util.UUID
@@ -31,7 +36,11 @@ import scala.util.control.NonFatal
 object SubmissionSupervisor {
   sealed trait SubmissionSupervisorMessage
 
-  case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID, perWorkflowCostCap: Option[BigDecimal])
+  case class SubmissionStarted(workspaceName: WorkspaceName,
+                               submissionId: UUID,
+                               perWorkflowCostCap: Option[BigDecimal],
+                               petUserInfo: UserInfo
+  )
   case object StartMonitorPass
   case object SubmissionMonitorPassComplete
 
@@ -84,15 +93,16 @@ object SubmissionSupervisor {
 //noinspection ScalaDocMissingParameterDescription,ActorMutableStateInspection,TypeAnnotation
 class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: DataSourceAccess,
-                           samDAO: SamDAO,
-                           googleServicesDAO: GoogleServicesDAO,
+                           val samDAO: SamDAO,
+                           val googleServicesDAO: GoogleServicesDAO,
                            entityService: RawlsRequestContext => EntityService,
                            notificationDAO: NotificationDAO,
                            submissionMonitorConfig: SubmissionMonitorConfig,
                            override val workbenchMetricBaseName: String
 ) extends Actor
     with LazyLogging
-    with RawlsInstrumented {
+    with RawlsInstrumented
+    with AuthUtil {
   import context._
 
   /* A note on metrics:
@@ -135,8 +145,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   override def receive = {
     case StartMonitorPass =>
       startMonitoringNewSubmissions pipeTo self
-    case SubmissionStarted(workspaceName, submissionId, perWorkflowCostCap) =>
-      val child = startSubmissionMonitor(workspaceName, submissionId, perWorkflowCostCap)
+    case SubmissionStarted(workspaceName, submissionId, perWorkflowCostCap, petUserInfo) =>
+      val child = startSubmissionMonitor(workspaceName, submissionId, perWorkflowCostCap, petUserInfo)
       scheduleNextCheckCurrentWorkflowStatus(child)
       registerDetailedJobExecGauges(workspaceName, submissionId)
 
@@ -183,7 +193,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName,
                                      submissionId: UUID,
-                                     perWorkflowCostCap: Option[BigDecimal]
+                                     perWorkflowCostCap: Option[BigDecimal],
+                                     petUserInfo: UserInfo
   ) =
     actorOf(
       SubmissionMonitorActor
@@ -198,7 +209,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           entityService,
           submissionMonitorConfig,
           workbenchMetricBaseName,
-          perWorkflowCostCap
+          perWorkflowCostCap,
+          petUserInfo
         )
         .withDispatcher("submission-monitor-dispatcher"),
       submissionId.toString
@@ -223,20 +235,26 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   private def startMonitoringNewSubmissions: Future[SubmissionMonitorPassComplete.type] = {
     val monitoredSubmissions = context.children.map(_.path.name).toSet
 
-    datasource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.listActiveSubmissionIdsWithWorkspaceAndPerWorkflowCostCap(limit =
-        submissionMonitorConfig.submissionPollExpiration
-      ) map { activeSubs =>
-        val unmonitoredSubmissions = activeSubs.filterNot { case (subId, _, _) =>
-          monitoredSubmissions.contains(subId.toString)
-        }
-
-        unmonitoredSubmissions.foreach { case (subId, wsName, perWorkflowCostCap) =>
-          self ! SubmissionStarted(wsName, subId, perWorkflowCostCap)
-        }
-        SubmissionMonitorPassComplete
+    (for {
+      activeSubs <- datasource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.listActiveSubmissionIdsWithWorkspaceAndPerWorkflowCostCap(
+          limit = submissionMonitorConfig.submissionPollExpiration
+        )
       }
-    } recover { case t: Throwable =>
+      unmonitoredSubmissions = activeSubs.filterNot { case (subId, _, _, _, _) =>
+        monitoredSubmissions.contains(subId.toString)
+      }
+
+      unmonitoredSubmissionsWithPets <- Future.traverse(unmonitoredSubmissions) {
+        case (subId, wsName, perWorkflowCostCap, googleProjectId, submitter) =>
+          getPetServiceAccountUserInfo(googleProjectId, submitter).map(petUserInfo =>
+            (subId, wsName, perWorkflowCostCap, petUserInfo)
+          )
+      }
+      _ = unmonitoredSubmissionsWithPets.foreach { case (subId, wsName, perWorkflowCostCap, pet) =>
+        self ! SubmissionStarted(wsName, subId, perWorkflowCostCap, pet)
+      }
+    } yield SubmissionMonitorPassComplete).recover { case t: Throwable =>
       logger.error("Error starting submission monitor actors for new submissions", t)
       SubmissionMonitorPassComplete
     }

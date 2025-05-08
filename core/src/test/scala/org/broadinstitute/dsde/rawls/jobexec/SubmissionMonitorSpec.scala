@@ -872,7 +872,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
         ),
         this,
-        testContext
+        RawlsTracingContext(Option.empty)
       )
     )
 
@@ -936,7 +936,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o1_lib" -> Left(AttributeString("result")))))
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -993,7 +993,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r, ExecutionServiceOutputs(r.externalId.get, Map("o2_lib" -> Left(AttributeString("result2")))))
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1032,7 +1032,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           )
         ),
         this,
-        testContext
+        RawlsTracingContext(Option.empty)
       )
     )
 
@@ -1078,7 +1078,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1105,7 +1105,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait(
         monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))),
                               this,
-                              testContext
+                              RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1155,7 +1155,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1186,7 +1186,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1784,7 +1784,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait(
         monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))),
                               this,
-                              testContext
+                              RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1869,7 +1869,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -2016,7 +2016,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -2090,7 +2090,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             )
           ),
           this,
-          testContext
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -2362,7 +2362,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
         entityServiceConstructor,
         config,
-        "test"
+        "test",
+        petUserInfo = userInfo
       )
     )
   }
@@ -2391,7 +2392,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       new Builder().build(),
       config,
       "test",
-      perWorkflowCostCap
+      perWorkflowCostCap,
+      userInfo
     )
   }
 
@@ -2476,5 +2478,6 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val credential: Credential,
                             val config: SubmissionMonitorConfig,
                             override val workbenchMetricBaseName: String,
-                            val perWorkflowCostCap: Option[BigDecimal]
+                            val perWorkflowCostCap: Option[BigDecimal],
+                            val petUserInfo: UserInfo
 ) extends SubmissionMonitor {}

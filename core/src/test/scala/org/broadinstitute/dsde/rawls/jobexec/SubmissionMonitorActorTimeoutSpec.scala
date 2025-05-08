@@ -2,41 +2,35 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit}
-import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
-import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType.Workspace
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
   MockBigQueryServiceFactory,
   MockGoogleServicesDAO,
   MockShardedExecutionServiceCluster,
   SlickDataSource
 }
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
   AttributeName,
   AttributeString,
   Entity,
-  RawlsRequestContext,
   RawlsTracingContext,
   WorkflowStatuses
 }
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.entities.EntityService.constructor
-import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-
-import java.sql.BatchUpdateException
 import slick.jdbc.TransactionIsolation
 
+import java.sql.BatchUpdateException
 import java.util.UUID
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
 class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
@@ -111,7 +105,8 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
             .fromDAO(new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString), dataSource),
           entityService,
           config,
-          "test"
+          "test",
+          petUserInfo = userInfo
         )
       )
 
@@ -133,7 +128,7 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
           submissionMonitorActorRef.underlyingActor.saveEntities(dataSource.dataAccess,
                                                                  workspaceContext,
                                                                  updatedEntitiesAndWorkspace,
-                                                                 testContext
+                                                                 RawlsTracingContext(None)
           ),
           Duration.create(lockTime, SECONDS)
         )
