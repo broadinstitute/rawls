@@ -1,17 +1,26 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
   AttributeString,
-  Entity
+  AttributeValue,
+  AttributeValueList,
+  Entity,
+  EntityColumnFilter,
+  EntityQuery,
+  FilterOperators,
+  SortDirections
 }
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
+import scala.util.Random
 
 class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
@@ -673,8 +682,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
   }
-
-  it should "only get entities from the given workspace" in withMinimalTestDatabase { _ =>
+  
+    it should "only get entities from the given workspace" in withMinimalTestDatabase { _ =>
     // insert an entity with attributes
     val entityType1 = "entityType1"
     val entityType2 = "entityType2"
@@ -689,7 +698,548 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getEntitiesOfType(wsid, entityType1)) should contain theSameElementsAs Seq(entity1.toReference,
                                                                                             entity3.toReference
     )
+  }
 
+  private val columnFilterCases = List(
+    (AttributeNumber(42), "42"),
+    (AttributeString("foo"), "foo"),
+    (AttributeString("fOo"), "foO") // case sensitivity check
+  )
+
+  behavior of "countEntitiesWithColumnFilter"
+
+  columnFilterCases.foreach { case (attrValue, filterValue) =>
+    it should s"return the count of entities with filter $attrValue" in withMinimalTestDatabase { _ =>
+      val entityType1 = "entityType1"
+      val entityType2 = "entityType2"
+      val testAttrName = AttributeName.withDefaultNS("foo")
+      val entity1 =
+        Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName -> attrValue))
+      val entity2 =
+        Entity(UUID.randomUUID().toString, entityType2, Map(testAttrName -> attrValue))
+      val entity3 =
+        Entity(UUID.randomUUID().toString,
+               entityType1,
+               Map(testAttrName -> AttributeString(UUID.randomUUID().toString))
+        )
+      val entity4 =
+        Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName -> attrValue))
+      insertAndGet(entity1) // should get counted
+      insertAndGet(entity2) // different entityType
+      insertAndGet(entity3) // different attribute value
+      insertAndGet(entity4) // should get counted
+      insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+      // get the count of entities grouped by type
+      val actual = runAndWait(
+        q.countEntitiesWithColumnFilter(wsid, entityType1, EntityColumnFilter(testAttrName, filterValue))
+      )
+      actual shouldBe 2
+    }
+  }
+
+  behavior of "queryEntitiesWithColumnFilter"
+
+  columnFilterCases.foreach { case (attrValue, filterValue) =>
+    it should s"return the entities with filter $attrValue sorted by name" in withMinimalTestDatabase { _ =>
+      val entityType1 = "entityType1"
+      val entityType2 = "entityType2"
+      val testAttrName = AttributeName.withDefaultNS("foo")
+      val entity1 =
+        Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName -> attrValue))
+      val entity2 =
+        Entity(UUID.randomUUID().toString, entityType2, Map(testAttrName -> attrValue))
+      val entity3 =
+        Entity(UUID.randomUUID().toString,
+               entityType1,
+               Map(testAttrName -> AttributeString(UUID.randomUUID().toString))
+        )
+      val entity4 =
+        Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName -> attrValue))
+      insertAndGet(entity1) // should get counted
+      insertAndGet(entity2) // different entityType
+      insertAndGet(entity3) // different attribute value
+      insertAndGet(entity4) // should get counted
+      insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+      val columnFilter = EntityColumnFilter(testAttrName, filterValue)
+      val actual = runAndWait(
+        q.queryEntitiesWithColumnFilter(
+          wsid,
+          entityType1,
+          EntityQuery(1,
+                      10,
+                      Attributable.nameReservedAttribute,
+                      SortDirections.Ascending,
+                      None,
+                      columnFilter = Some(columnFilter)
+          ),
+          columnFilter
+        )
+      )
+      actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
+    }
+  }
+
+  columnFilterCases.foreach { case (attrValue, filterValue) =>
+    it should s"return the entities with filter $attrValue sorted by attribute" in withMinimalTestDatabase { _ =>
+      logger.debug("hello world")
+      val entityType1 = "entityType1"
+      val entityType2 = "entityType2"
+      val testAttrName = AttributeName.withDefaultNS("foo")
+      val sortAttrName = AttributeName.withDefaultNS("sortMe")
+      val entity1 =
+        Entity(UUID.randomUUID().toString,
+               entityType1,
+               Map(testAttrName -> attrValue, sortAttrName -> AttributeNumber(Random.nextInt()))
+        )
+      val entity2 =
+        Entity(UUID.randomUUID().toString,
+               entityType2,
+               Map(testAttrName -> attrValue, sortAttrName -> AttributeNumber(Random.nextInt()))
+        )
+      val entity3 =
+        Entity(
+          UUID.randomUUID().toString,
+          entityType1,
+          Map(testAttrName -> AttributeString(UUID.randomUUID().toString),
+              sortAttrName -> AttributeNumber(Random.nextInt())
+          )
+        )
+      val entity4 =
+        Entity(UUID.randomUUID().toString,
+               entityType1,
+               Map(testAttrName -> attrValue, sortAttrName -> AttributeNumber(Random.nextInt()))
+        )
+      insertAndGet(entity1) // should get counted
+      insertAndGet(entity2) // different entityType
+      insertAndGet(entity3) // different attribute value
+      insertAndGet(entity4) // should get counted
+      insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+      val columnFilter = EntityColumnFilter(testAttrName, filterValue)
+      val actual = runAndWait(
+        q.queryEntitiesWithColumnFilter(
+          wsid,
+          entityType1,
+          EntityQuery(1,
+                      10,
+                      toDelimitedName(sortAttrName),
+                      SortDirections.Ascending,
+                      None,
+                      columnFilter = Some(columnFilter)
+          ),
+          columnFilter
+        )
+      )
+      actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
+        _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
+      )
+    }
+  }
+
+  it should "sort by attribute list size" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val testAttrName = AttributeName.withDefaultNS("foo")
+    val sortAttrName = AttributeName.withDefaultNS("sortMe")
+    val entity1 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(testAttrName -> AttributeString("foo"),
+            sortAttrName -> AttributeValueList(List.fill(7)(AttributeNumber(Random.nextInt())))
+        )
+      )
+    val entity2 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(testAttrName -> AttributeString("foo"),
+            sortAttrName -> AttributeValueList(List.fill(3)(AttributeNumber(Random.nextInt())))
+        )
+      )
+    val entity3 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(testAttrName -> AttributeString("foo"),
+            sortAttrName -> AttributeValueList(List.fill(9)(AttributeNumber(Random.nextInt())))
+        )
+      )
+    val entity4 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName -> AttributeString("foo"), sortAttrName -> AttributeNumber(Random.nextInt()))
+      )
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+    insertAndGet(entity4) // this one does not have a list so should have a sort value of 1
+
+    val columnFilter = EntityColumnFilter(testAttrName, "foo")
+    val actual = runAndWait(
+      q.queryEntitiesWithColumnFilter(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    toDelimitedName(sortAttrName),
+                    SortDirections.Ascending,
+                    None,
+                    columnFilter = Some(columnFilter)
+        ),
+        columnFilter
+      )
+    )
+    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
+  }
+
+  behavior of "queryEntitiesWithFilterTerms"
+
+  it should "return the entities with filter terms FilterOperators.And sorted by name" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val testAttrName1 = AttributeName.withDefaultNS("foo")
+    val testAttrName2 = AttributeName.withDefaultNS("bar")
+    val entity1 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName1 -> AttributeString("asdffoo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity2 =
+      Entity(UUID.randomUUID().toString,
+             entityType2,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity3 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity4 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("barasdf"))
+      )
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // different attribute value
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.queryEntitiesWithFilterTerms(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    Attributable.nameReservedAttribute,
+                    SortDirections.Ascending,
+                    Some("foo bAr"),
+                    FilterOperators.And
+        )
+      )
+    )
+    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
+  }
+
+  it should "return the entities with filter terms FilterOperators.Or sorted by name" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val testAttrName1 = AttributeName.withDefaultNS("foo")
+    val entity1 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName1 -> AttributeString("asdffoo")))
+    val entity2 =
+      Entity(UUID.randomUUID().toString, entityType2, Map(testAttrName1 -> AttributeString("foo")))
+    val entity3 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString)))
+    val entity4 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName1 -> AttributeString("barasdf")))
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // different attribute value
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.queryEntitiesWithFilterTerms(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    Attributable.nameReservedAttribute,
+                    SortDirections.Ascending,
+                    Some("foo bAr"),
+                    FilterOperators.Or
+        )
+      )
+    )
+    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
+  }
+
+  it should "return the entities with filter terms FilterOperators.And sorted by attribute" in withMinimalTestDatabase {
+    _ =>
+      val entityType1 = "entityType1"
+      val entityType2 = "entityType2"
+      val testAttrName1 = AttributeName.withDefaultNS("foo")
+      val testAttrName2 = AttributeName.withDefaultNS("bar")
+      val sortAttrName = AttributeName.withDefaultNS("sortMe")
+      val entity1 =
+        Entity(
+          UUID.randomUUID().toString,
+          entityType1,
+          Map(testAttrName1 -> AttributeString("asdffoo"),
+              testAttrName2 -> AttributeString("bar"),
+              sortAttrName -> AttributeNumber(Random.nextInt())
+          )
+        )
+      val entity2 =
+        Entity(
+          UUID.randomUUID().toString,
+          entityType2,
+          Map(testAttrName1 -> AttributeString("foo"),
+              testAttrName2 -> AttributeString("bar"),
+              sortAttrName -> AttributeNumber(Random.nextInt())
+          )
+        )
+      val entity3 =
+        Entity(
+          UUID.randomUUID().toString,
+          entityType1,
+          Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString),
+              testAttrName2 -> AttributeString("bar"),
+              sortAttrName -> AttributeNumber(Random.nextInt())
+          )
+        )
+      val entity4 =
+        Entity(
+          UUID.randomUUID().toString,
+          entityType1,
+          Map(testAttrName1 -> AttributeString("foo"),
+              testAttrName2 -> AttributeString("barasdf"),
+              sortAttrName -> AttributeNumber(Random.nextInt())
+          )
+        )
+      insertAndGet(entity1) // should get counted
+      insertAndGet(entity2) // different entityType
+      insertAndGet(entity3) // different attribute value
+      insertAndGet(entity4) // should get counted
+      insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+      val actual = runAndWait(
+        q.queryEntitiesWithFilterTerms(
+          wsid,
+          entityType1,
+          EntityQuery(1,
+                      10,
+                      toDelimitedName(sortAttrName),
+                      SortDirections.Ascending,
+                      Some("foo bAr"),
+                      FilterOperators.And
+          )
+        )
+      )
+      actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
+        _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
+      )
+  }
+
+  behavior of "countEntitiesWithFilterTerms"
+
+  it should "return the count of entities with filter terms FilterOperators.And" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val testAttrName1 = AttributeName.withDefaultNS("foo")
+    val testAttrName2 = AttributeName.withDefaultNS("bar")
+    val entity1 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName1 -> AttributeString("asdffoo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity2 =
+      Entity(UUID.randomUUID().toString,
+             entityType2,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity3 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity4 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("barasdf"))
+      )
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // different attribute value
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.countEntitiesWithFilterTerms(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    Attributable.nameReservedAttribute,
+                    SortDirections.Ascending,
+                    Some("foo bAr"),
+                    FilterOperators.And
+        )
+      )
+    )
+    actual shouldBe 2
+  }
+
+  it should "return the count of entities with filter terms FilterOperators.Or" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val testAttrName1 = AttributeName.withDefaultNS("foo")
+    val entity1 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName1 -> AttributeString("asdffoo")))
+    val entity2 =
+      Entity(UUID.randomUUID().toString, entityType2, Map(testAttrName1 -> AttributeString("foo")))
+    val entity3 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString)))
+    val entity4 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName1 -> AttributeString("barasdf")))
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // different attribute value
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.countEntitiesWithFilterTerms(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    Attributable.nameReservedAttribute,
+                    SortDirections.Ascending,
+                    Some("foo bAr"),
+                    FilterOperators.Or
+        )
+      )
+    )
+    actual shouldBe 2
+  }
+
+  behavior of "countEntities"
+
+  it should "return the count of entities" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+    insertAndGet(entity4) // different workspace
+
+    val actual = runAndWait(q.countEntities(wsid, entityType1))
+    actual shouldBe 3
+  }
+
+  behavior of "queryEntitiesWithNoFilter"
+
+  it should "return the entities with no filter sorted by name" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 =
+      Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 =
+      Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 =
+      Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 =
+      Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // should get counted
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.queryEntitiesWithNoFilter(
+        wsid,
+        entityType1,
+        EntityQuery(1, 10, Attributable.nameReservedAttribute, SortDirections.Ascending, None)
+      )
+    )
+    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity3, entity4).sortBy(_.name)
+  }
+
+  it should "return the entities with no filter sorted by attribute" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val sortAttrName = AttributeName.withDefaultNS("sortMe")
+    val entity1 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(sortAttrName -> AttributeNumber(Random.nextInt())))
+    val entity2 =
+      Entity(UUID.randomUUID().toString, entityType2, Map(sortAttrName -> AttributeNumber(Random.nextInt())))
+    val entity3 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(sortAttrName -> AttributeNumber(Random.nextInt())))
+    val entity4 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(sortAttrName -> AttributeNumber(Random.nextInt())))
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // should get counted
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.queryEntitiesWithNoFilter(
+        wsid,
+        entityType1,
+        EntityQuery(1, 10, toDelimitedName(sortAttrName), SortDirections.Ascending, None)
+      )
+    )
+    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity3, entity4).sortBy(
+      _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
+    )
+  }
+
+  it should "return the entities with no filter sorted by list attribute" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val sortAttrName = AttributeName.withDefaultNS("sortMe")
+    val entity1 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(sortAttrName -> AttributeValueList(List.fill(7)(AttributeNumber(Random.nextInt()))))
+      )
+    val entity2 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(sortAttrName -> AttributeValueList(List.fill(3)(AttributeNumber(Random.nextInt()))))
+      )
+    val entity3 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(sortAttrName -> AttributeValueList(List.fill(9)(AttributeNumber(Random.nextInt()))))
+      )
+    val entity4 =
+      Entity(UUID.randomUUID().toString, entityType1, Map(sortAttrName -> AttributeNumber(Random.nextInt())))
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+    insertAndGet(entity4) // this one does not have a list so should have a sort value of 1
+
+    val actual = runAndWait(
+      q.queryEntitiesWithNoFilter(
+        wsid,
+        entityType1,
+        EntityQuery(1, 10, toDelimitedName(sortAttrName), SortDirections.Ascending, None)
+      )
+    )
+    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
   }
 
   // ====================================================================================================

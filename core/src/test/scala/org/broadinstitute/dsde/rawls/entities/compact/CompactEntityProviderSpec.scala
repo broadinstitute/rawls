@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   CompactEntityQuery,
@@ -14,9 +16,12 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DeleteEntitiesConflictException,
   DeleteEntitiesOfTypeConflictException,
+  DataEntityException,
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
+import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
+
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -25,10 +30,13 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeNumber,
   AttributeString,
   Entity,
+  EntityQuery,
+  EntityQueryResultMetadata,
   EntityTypeMetadata,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
+  SortDirections,
   UserInfo,
   Workspace
 }
@@ -1002,6 +1010,41 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe 123
     // we should now call updateLastModified within 1 second. This threw an error but it will be ignored.
     verify(mockRepository, mockitotimeout(1000).times(1)).updateLastModified(defaultWorkspace.workspaceIdAsUUID)
+  }
+
+  behavior of "prepareQueryEntitiesResult"
+
+  it should "return the correct page count" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val query = EntityQuery(2, 10, "foo", SortDirections.Ascending, None)
+
+    val unfilteredCount = 33
+    val filteredCount = 25
+    val actual =
+      provider.prepareQueryEntitiesResult(query, unfilteredCount, CountAndSource(filteredCount, Source.empty))
+
+    actual._1 shouldBe EntityQueryResultMetadata(unfilteredCount, filteredCount, 3)
+  }
+
+  it should "fail if the requested page is too big" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val query = EntityQuery(20, 10, "foo", SortDirections.Ascending, None)
+
+    val unfilteredCount = 33
+    val filteredCount = 25
+
+    val error = intercept[DataEntityException] {
+      provider.prepareQueryEntitiesResult(query, unfilteredCount, CountAndSource(filteredCount, Source.empty))
+    }
+    error.code shouldBe StatusCodes.BadRequest
   }
 
   // ====================================================================================================
