@@ -1386,6 +1386,10 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat11(WorkspaceRequest)
 
+  implicit val WorkspaceRequestUpdateBillingFormat: RootJsonFormat[WorkspaceRequestUpdateBilling] = jsonFormat3(
+    WorkspaceRequestUpdateBilling
+  )
+
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
 
   implicit val EntityNameFormat: RootJsonFormat[EntityName] = jsonFormat1(EntityName)
