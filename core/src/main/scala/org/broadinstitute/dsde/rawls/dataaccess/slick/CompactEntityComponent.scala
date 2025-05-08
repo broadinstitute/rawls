@@ -104,20 +104,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     if (refs.isEmpty) {
       DBIO.successful(Seq())
     } else {
-      // group the entity type/name pairs by type
-      val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
-
-      // build clauses for the type/name pairs
-      val clauses: Iterable[SQLActionBuilder] = groupedReferences.map {
-        case (entityType: String, entityNames: Set[String]) =>
-          // build the "IN" clause values
-          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
-          concatSqlActions(
-            sql""" (entity_type = $entityType and name in (""",
-            entityNamesSql,
-            sql")) "
-          )
-      }
+      val typeNameClauses = generateTypeNameSql(refs)
 
       // build the overall query
       val query = concatSqlActions(
@@ -126,7 +113,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
                where workspace_id = $workspaceId
                and deleted = 0
                and ( """,
-        reduceSqlActionsWithDelim(clauses.toSeq, sql" or "),
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
         sql""" );"""
       )
 
@@ -146,20 +133,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     if (refs.isEmpty) {
       DBIO.successful(Seq())
     } else {
-      // group the entity type/name pairs by type
-      val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
-
-      // build clauses for the type/name pairs
-      val clauses: Iterable[SQLActionBuilder] = groupedReferences.map {
-        case (entityType: String, entityNames: Set[String]) =>
-          // build the "IN" clause values
-          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
-          concatSqlActions(
-            sql""" (entity_type = $entityType and name in (""",
-            entityNamesSql,
-            sql")) "
-          )
-      }
+      val typeNameClauses = generateTypeNameSql(refs)
 
       // build the overall query
       val query = concatSqlActions(
@@ -168,7 +142,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
                where workspace_id = $workspaceId
                and deleted = 0
                and ( """,
-        reduceSqlActionsWithDelim(clauses.toSeq, sql" or "),
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
         sql""" );"""
       )
 
@@ -261,6 +235,26 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       FROM ENTITY_KEYS
       WHERE workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
+
+  /**
+    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
+    * AttributeEntityReferences.
+    */
+  private def generateTypeNameSql(refs: Set[AttributeEntityReference]): Iterable[SQLActionBuilder] = {
+    // group the entity type/name pairs by type
+    val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
+
+    // build clauses for the type/name pairs
+    groupedReferences.map { case (entityType: String, entityNames: Set[String]) =>
+      // build the "IN" clause values
+      val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
+      concatSqlActions(
+        sql""" (entity_type = $entityType and name in (""",
+        entityNamesSql,
+        sql")) "
+      )
+    }
+  }
 
   // ====================================================================================================
   //  migration helpers

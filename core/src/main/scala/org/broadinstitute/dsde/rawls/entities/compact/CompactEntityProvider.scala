@@ -149,7 +149,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new EntityReferenceNotFoundException("Some entity references do not exist")
         // save the entity
         _ <- repository.queries.createEntity(workspaceId, entity)
-        // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
+        // Did it save correctly? Re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
         // normalized JSON that was persisted to the db. When we return the entity to the user, we return the
         // normalized version.
         savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
@@ -340,9 +340,22 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   private def calculateEntitySize(entity: Entity): Int =
     CompactEntitySerialization.toSql(entity.attributes).compactPrint.length
 
-  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Int] =
+  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Int] = {
+
+    // nested helper method for building error responses
+    def generateReferenceError(message: String, notFounds: Set[AttributeEntityReference]) =
+      new RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          message,
+          notFounds.map { notFound =>
+            ErrorReport(s"${notFound.entityType} ${notFound.entityName} not found", Seq.empty)
+          }.toSeq
+        )
+      )
+
     for {
-      // batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
+      // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
       // has a reference to another entity in the same batch.
       entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch)
 
@@ -359,32 +372,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       _ = if (foundIds.size != lookupCriteria.size) {
         // here's what the query actually returned; turn this into a Set
         val actuallyFound = foundIds.map(_.toAttributeEntityReference).toSet
-
         // did we find all the reference targets?
         val notFoundReferenceTargets = allReferences.values.flatten.toSet diff actuallyFound
-        if (notFoundReferenceTargets.nonEmpty)
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              "Could not resolve some entity references",
-              notFoundReferenceTargets.map { missingRef =>
-                ErrorReport(s"${missingRef.entityType} ${missingRef.entityName} not found", Seq.empty)
-              }.toSeq
-            )
-          )
-
+        if (notFoundReferenceTargets.nonEmpty) {
+          throw generateReferenceError("Could not resolve some entity references", notFoundReferenceTargets)
+        }
         // did we find all the reference sources? This should never happen, but let's be defensive
         val notFoundReferenceSources = allReferences.keys.toSet diff actuallyFound
         if (notFoundReferenceSources.nonEmpty)
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              "Could not resolve some entity reference sources",
-              notFoundReferenceSources.map { missingRef =>
-                ErrorReport(s"${missingRef.entityType} ${missingRef.entityName} not found", Seq.empty)
-              }.toSeq
-            )
-          )
+          throw generateReferenceError("Could not resolve some entity sources", notFoundReferenceSources)
       }
 
       // build a lookup table for the ids we found
@@ -400,5 +396,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       // insert the references into the ENTITY_REFS table.
       _ <- repository.queries.upsertReferences(referencesToInsert)
     } yield entitiesCreated
+  }
 
 }
