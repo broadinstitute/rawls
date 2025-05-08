@@ -1333,7 +1333,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     executionContext: ExecutionContext
   ): Boolean = {
     val client: ServiceUsage = getServiceUsageClient(getServiceUsageServiceAccountCredential)
-    val request: ServiceUsage#Services#List = client.services().list(project.value).setFilter("state:ENABLED")
+    val request: ServiceUsage#Services#List = client.services().list(s"projects/${project.value}").setFilter("state:ENABLED")
     val enabledServices = blocking {
       val result: ListServicesResponse = request.execute()
       result.getServices.asScala.map(_.getConfig.getName).toSet
