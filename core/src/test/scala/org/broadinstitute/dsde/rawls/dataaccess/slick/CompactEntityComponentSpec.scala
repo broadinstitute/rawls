@@ -254,7 +254,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIds)))) shouldBe toIds.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIds
     // delete rows
-    runAndWait(q.deleteReferences(fromId, Set())) shouldBe toIds.size
+    runAndWait(q.deleteReferencesWithFilter(fromId, Set())) shouldBe toIds.size
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
   }
 
@@ -268,7 +268,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIds
     // delete rows, keeping the first two from toIds
     val toKeep = toIds.take(2)
-    runAndWait(q.deleteReferences(fromId, toKeep)) shouldBe toIds.size - toKeep.size
+    runAndWait(q.deleteReferencesWithFilter(fromId, toKeep)) shouldBe toIds.size - toKeep.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toKeep
   }
 
@@ -282,7 +282,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIdsOne)))) shouldBe toIdsOne.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIdsOne
     // delete rows, specifying to keep those in set two (which has no overlap with set one)
-    runAndWait(q.deleteReferences(fromId, toIdsTwo)) shouldBe toIdsOne.size
+    runAndWait(q.deleteReferencesWithFilter(fromId, toIdsTwo)) shouldBe toIdsOne.size
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
   }
 

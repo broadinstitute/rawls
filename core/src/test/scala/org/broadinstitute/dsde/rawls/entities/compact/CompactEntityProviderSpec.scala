@@ -229,7 +229,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
     verify(mockQuery, never()).upsertReferences(any())
   }
 
@@ -271,7 +271,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
     verify(mockQuery, never()).upsertReferences(any())
   }
 
@@ -334,7 +334,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
     verify(mockQuery, times(1)).upsertReferences(
       Set(RefPointers(42, Set(0, 1, 2)))
     ) // 42 is the entity id from createdEntityRec; Set(0, 1, 2) are the ids returned from getReferencedIds
@@ -385,7 +385,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
     verify(mockQuery, never()).upsertReferences(any())
   }
 
@@ -421,7 +421,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     verify(mockQuery, never()).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockQuery, never()).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
     verify(mockQuery, never()).upsertReferences(any())
   }
 
@@ -451,7 +451,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       verify(mockQuery, never()).getEntity(any(), any(), any())
       verify(mockQuery, never()).getReferencedIds(any(), any())
       verify(mockQuery, never()).createEntity(any(), any())
-      verify(mockQuery, never()).deleteReferences(any(), any())
+      verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
       verify(mockQuery, never()).upsertReferences(any())
     }
   }
@@ -720,7 +720,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe (0, 0)
 
-    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
     verify(mockQuery, never()).upsertReferences(any())
   }
 
@@ -731,7 +731,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       .thenAnswer { invocation =>
         DBIO.successful(invocation.getArgument[Set[Long]](1).size)
       }
-    when(mockQuery.deleteReferences(any(), any()))
+    when(mockQuery.deleteReferencesWithFilter(any(), any()))
       .thenReturn(DBIO.successful(Int.MinValue))
 
     // provider using mocks
@@ -741,14 +741,14 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe (0, 3)
 
-    verify(mockQuery, never()).deleteReferences(any(), any())
+    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
     verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(7, 8, 9))))
   }
 
   it should "skip upserts when isInsert=false and references are empty" in {
     // mocks
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.deleteReferences(any(), any()))
+    when(mockQuery.deleteReferencesWithFilter(any(), any()))
       .thenReturn(DBIO.successful(Int.MinValue))
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -757,7 +757,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe (Int.MinValue, 0)
 
-    verify(mockQuery, times(1)).deleteReferences(2, Set())
+    verify(mockQuery, times(1)).deleteReferencesWithFilter(2, Set())
     verify(mockQuery, never()).upsertReferences(any())
   }
 
@@ -768,7 +768,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       .thenAnswer { invocation =>
         DBIO.successful(invocation.getArgument[Set[Long]](1).size)
       }
-    when(mockQuery.deleteReferences(any(), any()))
+    when(mockQuery.deleteReferencesWithFilter(any(), any()))
       .thenReturn(DBIO.successful(Int.MinValue))
 
     // provider using mocks
@@ -778,7 +778,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe (Int.MinValue, 3)
 
-    verify(mockQuery, times(1)).deleteReferences(2, Set(7, 8, 9))
+    verify(mockQuery, times(1)).deleteReferencesWithFilter(2, Set(7, 8, 9))
     verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(7, 8, 9))))
   }
 

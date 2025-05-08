@@ -190,7 +190,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     */
   // The index range scan is caused by the "not in" clause. I believe this is still optimal as compared to
   // performing a select, performing a diff in the Scala layer, then sending an optimized delete query back to MySQL
-  def deleteReferences(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
+  def deleteReferencesWithFilter(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
     val query = if (idsToKeep.isEmpty) {
       sql"""delete from ENTITY_REFS where from_id = $fromId;"""
     } else {

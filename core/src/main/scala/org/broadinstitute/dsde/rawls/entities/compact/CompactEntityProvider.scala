@@ -304,7 +304,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         if (isInsert) {
           DBIO.successful(0)
         } else {
-          repository.queries.deleteReferences(fromId, toIds)
+          repository.queries.deleteReferencesWithFilter(fromId, toIds)
         }
       // upsert all reference pointers that do exist
       upserts <-
