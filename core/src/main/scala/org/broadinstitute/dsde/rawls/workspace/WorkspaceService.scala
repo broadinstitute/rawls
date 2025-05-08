@@ -655,13 +655,11 @@ class WorkspaceService(
             )
           )
         else Future.unit
-
       sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
       destBillingProject <- getBillingProjectContext(destBillingProjectName)
-
       // Source and destination billing must be GCP
-      _ = requireBillingProjectIsGCP(sourceBillingProject)
-      _ = requireBillingProjectIsGCP(destBillingProject)
+      _ <- requireBillingProjectIsGCP(sourceBillingProject)
+      _ <- requireBillingProjectIsGCP(destBillingProject)
 
       // User must be an owner of both the source and destination billing projects
       _ <- requireBillingProjectOwnerAccess(sourceBillingProjectName, ctx)
