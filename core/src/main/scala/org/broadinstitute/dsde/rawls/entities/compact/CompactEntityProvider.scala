@@ -3,11 +3,13 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.NotUsed
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.compact.entityQuery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   EntityNotFoundException,
@@ -38,6 +40,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
+import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -57,6 +60,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   override def entityStoreId: Option[String] = None // unused
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
+  val workspaceContext = requestArguments.workspace
 
   override def batchUpdateEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
@@ -179,10 +183,55 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
                              parentContext: RawlsRequestContext
   ): Future[EntityQueryResponse] = ???
 
+  /**
+   * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
+   * This method returns fully materialized metadata (row counts, page size, etc) as EntityQueryResultMetadata, and
+   * also returns a streaming Source of Entity objects. We avoid materializing the full set of Entity objects for
+   * performance and memory reasons.
+   *
+   * @param entityType the type of entities to return in the result set
+   * @param query criteria for filtering and paginating the result set
+   * @param parentContext tracing context into which this method will add traces
+   * @return a tuple of 1) the fully materialized metadata, and 2) a streaming Source of Entity objects
+   */
   override def queryEntitiesSource(entityType: String,
-                                   query: EntityQuery,
-                                   parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = ???
+                                   entityQuery: EntityQuery,
+                                   parentContext: RawlsRequestContext = requestArguments.ctx
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+    countEntitiesOfType(entityType).flatMap { unfilteredCount =>
+      if (unfilteredCount == 0) {
+        // if there are no entities, we can just return an empty source
+        Future.successful((EntityQueryResultMetadata(0, 0, 0), Source.empty))
+      } else {
+        EntityQueryStrategy
+          .choose(repository, workspaceId, entityType, entityQuery, unfilteredCount)
+          .getCountAndSource
+          .map(prepareQueryEntitiesResult(entityQuery, unfilteredCount, _))
+      }
+    }
+
+  @VisibleForTesting
+  private[compact] def prepareQueryEntitiesResult(entityQuery: EntityQuery,
+                                                  unfilteredCount: Int,
+                                                  filteredCountAndSource: CountAndSource
+  ): (EntityQueryResultMetadata, Source[Entity, _]) = {
+    val pageCount: Int = Math.ceil(filteredCountAndSource.count.toFloat / entityQuery.pageSize).toInt
+    if (filteredCountAndSource.count > 0 && entityQuery.page > pageCount) {
+      throw new DataEntityException(
+        code = StatusCodes.BadRequest,
+        message = s"requested page ${entityQuery.page} is greater than the number of pages $pageCount"
+      )
+    }
+    (EntityQueryResultMetadata(unfilteredCount, filteredCountAndSource.count, pageCount),
+     filteredCountAndSource.source.map(_.toEntity)
+    )
+  }
+
+  private def countEntitiesOfType(entityType: LookupExpression) =
+    repository.dataSource
+      .inTransaction(ReadCommitted) { _ =>
+        repository.queries.countEntities(workspaceId, entityType)
+      }
 
   override def renameAttribute(entityType: String,
                                oldAttributeName: AttributeName,
