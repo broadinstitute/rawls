@@ -720,7 +720,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.upsertReferences(any()))
       .thenAnswer { invocation =>
-        DBIO.successful(invocation.getArgument[Set[Long]](1).size)
+        DBIO.successful(invocation.getArgument[Set[RefPointers]](0).head.toIds.size)
       }
     when(mockQuery.deleteReferencesWithFilter(any(), any()))
       .thenReturn(DBIO.successful(Int.MinValue))
@@ -757,7 +757,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.upsertReferences(any()))
       .thenAnswer { invocation =>
-        DBIO.successful(invocation.getArgument[Set[Long]](1).size)
+        DBIO.successful(invocation.getArgument[Set[RefPointers]](0).head.toIds.size)
       }
     when(mockQuery.deleteReferencesWithFilter(any(), any()))
       .thenReturn(DBIO.successful(Int.MinValue))
