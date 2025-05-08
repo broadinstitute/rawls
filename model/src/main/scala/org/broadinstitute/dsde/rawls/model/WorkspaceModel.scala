@@ -202,8 +202,6 @@ case class WorkspaceRequest(
 }
 
 case class WorkspaceRequestUpdateBilling(
-  namespace: String,
-  name: String,
   newBillingProjectName: String
 )
 
@@ -1386,7 +1384,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat11(WorkspaceRequest)
 
-  implicit val WorkspaceRequestUpdateBillingFormat: RootJsonFormat[WorkspaceRequestUpdateBilling] = jsonFormat3(
+  implicit val WorkspaceRequestUpdateBillingFormat: RootJsonFormat[WorkspaceRequestUpdateBilling] = jsonFormat1(
     WorkspaceRequestUpdateBilling
   )
 

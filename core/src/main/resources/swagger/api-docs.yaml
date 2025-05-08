@@ -4273,7 +4273,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/billingProject:
-    put:
+    patch:
       tags:
         - workspaces_v2
       summary: Update workspace billing
@@ -6383,16 +6383,8 @@ components:
     WorkspaceRequestUpdateBilling:
       required:
         - newBillingProjectName
-        - name
-        - namespace
       type: object
       properties:
-        namespace:
-          type: string
-          description: The namespace (billing project) the workspace belongs to
-        name:
-          type: string
-          description: The name of the workspace
         newBillingProjectName:
           type: string
           description: The new namespace (billing project) to use for this workspace
