@@ -6,7 +6,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction, RefPointers}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -311,7 +311,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         if (toIds.isEmpty) {
           DBIO.successful(0)
         } else {
-          repository.queries.upsertReferences(fromId, toIds)
+          repository.queries.upsertReferences(Set(RefPointers(fromId, toIds)))
         }
     } yield (deletes, upserts)
   }
@@ -393,9 +393,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }.toMap
 
       // rehydrate the looked-up ids into sources and targets (from_id, to_id)
-      referencesToInsert: Set[(Long, Set[Long])] = allReferences.map { case (from, tos) =>
+      referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
         val toIds = tos.map(idLookup).toSet
-        (idLookup(from), toIds)
+        RefPointers(idLookup(from), toIds)
       }.toSet
       // insert the references into the ENTITY_REFS table.
       _ <- repository.queries.upsertReferences(referencesToInsert)

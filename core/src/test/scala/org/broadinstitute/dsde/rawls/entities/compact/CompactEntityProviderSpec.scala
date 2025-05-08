@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   EntityTypeAndAttributeKey,
   EntityTypeAndCount,
   ReadWriteAction,
+  RefPointers,
   TestDriverComponentWithFlatSpecAndMatchers
 }
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
@@ -188,7 +189,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
     // entities found references, so should ask to upsert those.
     // given the mock response defined above, we expect references from 2->4 and 3->4
-    verify(mockQuery, times(1)).upsertReferences(Set((2, Set(4)), (3, Set(4))))
+    verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(4)), RefPointers(3, Set(4))))
   }
 
   "copyEntities" should "have tests" is pending
@@ -229,7 +230,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.name
     )
     verify(mockQuery, never()).deleteReferences(any(), any())
-    verify(mockQuery, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any())
   }
 
   it should "persist an entity with simple attributes" in {
@@ -271,7 +272,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.name
     )
     verify(mockQuery, never()).deleteReferences(any(), any())
-    verify(mockQuery, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any())
   }
 
   it should "persist an entity with references" in {
@@ -310,7 +311,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
-    when(mockQuery.upsertReferences(any(), any()))
+    when(mockQuery.upsertReferences(any()))
       .thenReturn(DBIO.successful(2))
 
     // provider using mocks
@@ -334,8 +335,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.name
     )
     verify(mockQuery, never()).deleteReferences(any(), any())
-    verify(mockQuery, times(1)).upsertReferences(42,
-                                                 Set(0, 1, 2)
+    verify(mockQuery, times(1)).upsertReferences(
+      Set(RefPointers(42, Set(0, 1, 2)))
     ) // 42 is the entity id from createdEntityRec; Set(0, 1, 2) are the ids returned from getReferencedIds
   }
 
@@ -385,7 +386,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.name
     )
     verify(mockQuery, never()).deleteReferences(any(), any())
-    verify(mockQuery, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any())
   }
 
   it should "throw RawlsExceptionWithErrorReport if this type & name already exists" in {
@@ -421,7 +422,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     verify(mockQuery, never()).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockQuery, never()).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
     verify(mockQuery, never()).deleteReferences(any(), any())
-    verify(mockQuery, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any())
   }
 
   private val illegalEntities = Map(
@@ -451,7 +452,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       verify(mockQuery, never()).getReferencedIds(any(), any())
       verify(mockQuery, never()).createEntity(any(), any())
       verify(mockQuery, never()).deleteReferences(any(), any())
-      verify(mockQuery, never()).upsertReferences(any(), any())
+      verify(mockQuery, never()).upsertReferences(any())
     }
   }
 
@@ -720,13 +721,13 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe (0, 0)
 
     verify(mockQuery, never()).deleteReferences(any(), any())
-    verify(mockQuery, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any())
   }
 
   it should "skip deletes when isInsert=true and non-empty references" in {
     // mocks
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.upsertReferences(any(), any()))
+    when(mockQuery.upsertReferences(any()))
       .thenAnswer { invocation =>
         DBIO.successful(invocation.getArgument[Set[Long]](1).size)
       }
@@ -741,7 +742,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe (0, 3)
 
     verify(mockQuery, never()).deleteReferences(any(), any())
-    verify(mockQuery, times(1)).upsertReferences(2, Set(7, 8, 9))
+    verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(7, 8, 9))))
   }
 
   it should "skip upserts when isInsert=false and references are empty" in {
@@ -757,13 +758,13 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe (Int.MinValue, 0)
 
     verify(mockQuery, times(1)).deleteReferences(2, Set())
-    verify(mockQuery, never()).upsertReferences(any(), any())
+    verify(mockQuery, never()).upsertReferences(any())
   }
 
   it should "both delete and upsert when isInsert=false and non-empty references" in {
     // mocks
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.upsertReferences(any(), any()))
+    when(mockQuery.upsertReferences(any()))
       .thenAnswer { invocation =>
         DBIO.successful(invocation.getArgument[Set[Long]](1).size)
       }
@@ -778,7 +779,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe (Int.MinValue, 3)
 
     verify(mockQuery, times(1)).deleteReferences(2, Set(7, 8, 9))
-    verify(mockQuery, times(1)).upsertReferences(2, Set(7, 8, 9))
+    verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(7, 8, 9))))
   }
 
   behavior of "withWorkspaceLastModified"

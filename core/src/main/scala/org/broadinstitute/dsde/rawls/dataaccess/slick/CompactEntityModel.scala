@@ -48,11 +48,17 @@ case class CompactEntityRefRecord(id: Long, name: String, entityType: String) {
 }
 
 /**
+  * model class for rows in the ENTITY_KEYS table
+  */
+case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)
+
+/**
   * model class for rows in the ENTITY_REFS table
   */
 case class RefPointerRecord(fromId: Long, toId: Long)
 
-case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)
+/** all reference pointers from one entity to all its reference targets */
+case class RefPointers(fromId: Long, toIds: Set[Long])
 
 case class EntityTypeAndAttributeKey(
   entityType: String,

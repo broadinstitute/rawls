@@ -251,7 +251,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
     // insert rows
-    runAndWait(q.upsertReferences(fromId, toIds)) shouldBe toIds.size
+    runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIds)))) shouldBe toIds.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIds
     // delete rows
     runAndWait(q.deleteReferences(fromId, Set())) shouldBe toIds.size
@@ -264,7 +264,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
     // insert rows
-    runAndWait(q.upsertReferences(fromId, toIds)) shouldBe toIds.size
+    runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIds)))) shouldBe toIds.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIds
     // delete rows, keeping the first two from toIds
     val toKeep = toIds.take(2)
@@ -279,7 +279,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
     // insert rows for set one
-    runAndWait(q.upsertReferences(fromId, toIdsOne)) shouldBe toIdsOne.size
+    runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIdsOne)))) shouldBe toIdsOne.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIdsOne
     // delete rows, specifying to keep those in set two (which has no overlap with set one)
     runAndWait(q.deleteReferences(fromId, toIdsTwo)) shouldBe toIdsOne.size
@@ -296,7 +296,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getReferencedIds(fromIdTwo)) shouldBe empty
     // insert
     runAndWait(
-      q.upsertReferences(Set((fromIdOne, toIdsOne), (fromIdTwo, toIdsTwo)))
+      q.upsertReferences(Set(RefPointers(fromIdOne, toIdsOne), RefPointers(fromIdTwo, toIdsTwo)))
     ) shouldBe toIdsOne.size + toIdsTwo.size
     runAndWait(q.getReferencedIds(fromIdOne)) should contain theSameElementsAs toIdsOne
     runAndWait(q.getReferencedIds(fromIdTwo)) should contain theSameElementsAs toIdsTwo

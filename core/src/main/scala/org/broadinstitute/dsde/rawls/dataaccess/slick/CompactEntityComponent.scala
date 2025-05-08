@@ -216,24 +216,14 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: batched insert (one statement, multiple rows)`
     */
-  def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] =
-    upsertReferences(Set((fromId, toIds)))
-
-  /**
-    * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
-    *
-    * Returns the number of rows upserted.
-    *
-    * `execution plan: batched insert (one statement, multiple rows)`
-    */
-  def upsertReferences(references: Set[(Long, Set[Long])]): ReadWriteAction[Int] =
+  def upsertReferences(references: Set[RefPointers]): ReadWriteAction[Int] =
     // short-circuit
     if (references.isEmpty) {
       DBIO.successful(0)
     } else {
-      val insertValues: Iterable[SQLActionBuilder] = references.flatMap { case (fromId, toIds) =>
-        toIds.map { toId =>
-          sql"($fromId,$toId)"
+      val insertValues: Set[SQLActionBuilder] = references.flatMap { refPointers =>
+        refPointers.toIds.map { toId =>
+          sql"(${refPointers.fromId},$toId)"
         }
       }
       val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
