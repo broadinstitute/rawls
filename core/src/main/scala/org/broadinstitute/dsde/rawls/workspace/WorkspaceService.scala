@@ -644,14 +644,15 @@ class WorkspaceService(
     }
 
   def updateWorkspaceBillingProject(workspaceName: WorkspaceName, newBillingProjectName: String): Future[Workspace] = {
-    if (workspaceName.namespace == newBillingProjectName) {
-      RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, s"Workspace billing is already set to $newBillingProjectName")
-      )
-    }
     val sourceBillingProjectName = RawlsBillingProjectName(workspaceName.namespace)
     val destBillingProjectName = RawlsBillingProjectName(newBillingProjectName)
     for {
+      _ <- if (workspaceName.namespace == newBillingProjectName)
+        Future.failed(RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Workspace billing is already set to $newBillingProjectName")
+        ))
+      else Future.unit
+
       sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
       destBillingProject <- getBillingProjectContext(destBillingProjectName)
 
