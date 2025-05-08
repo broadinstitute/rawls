@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
-import akka.{Done, NotUsed}
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
@@ -43,7 +43,7 @@ import slick.jdbc.ResultSetConcurrency.ReadOnly
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
   * Implementation logic for compact data tables. Compact data tables store all an entity's attributes in a

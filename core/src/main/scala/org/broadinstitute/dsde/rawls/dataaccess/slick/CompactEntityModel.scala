@@ -3,10 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import spray.json.DefaultJsonProtocol._
-import spray.json._
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity}
 
 import java.sql.Timestamp
 import java.util.UUID

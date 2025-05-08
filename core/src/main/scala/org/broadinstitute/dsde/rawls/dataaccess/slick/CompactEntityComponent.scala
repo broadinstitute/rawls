@@ -3,11 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity}
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
-
 import spray.json._
 
 import java.util.UUID

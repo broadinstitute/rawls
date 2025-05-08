@@ -4,16 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  CompactEntityQuery,
-  CompactEntityRecord,
-  CompactEntityRefRecord,
-  EntityTypeAndAttributeKey,
-  EntityTypeAndCount,
-  ReadWriteAction,
-  RefPointers,
-  TestDriverComponentWithFlatSpecAndMatchers
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
