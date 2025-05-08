@@ -13,7 +13,10 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.Await
 
-class AllEntitiesStrategySpec extends TestDriverComponentWithFlatSpecAndMatchers with MockitoTestUtils with ScalatestRouteTest {
+class AllEntitiesStrategySpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with MockitoTestUtils
+    with ScalatestRouteTest {
   behavior of "getCountAndSource"
 
   it should "return the count and results" in {

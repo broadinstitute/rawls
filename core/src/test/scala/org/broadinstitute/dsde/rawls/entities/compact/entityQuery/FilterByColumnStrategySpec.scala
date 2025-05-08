@@ -13,7 +13,10 @@ import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-class FilterByColumnStrategySpec extends TestDriverComponentWithFlatSpecAndMatchers with MockitoTestUtils with ScalatestRouteTest {
+class FilterByColumnStrategySpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with MockitoTestUtils
+    with ScalatestRouteTest {
   behavior of "getCountAndSource"
 
   it should "return the count and results" in {

@@ -206,20 +206,26 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         EntityQueryStrategy
           .choose(repository, workspaceId, entityType, entityQuery, unfilteredCount)
           .getCountAndSource
-          .map { filteredCountAndSource =>
-            val pageCount: Int = Math.ceil(filteredCountAndSource.count.toFloat / entityQuery.pageSize).toInt
-            if (filteredCountAndSource.count > 0 && entityQuery.page > pageCount) {
-              throw new DataEntityException(
-                code = StatusCodes.BadRequest,
-                message = s"requested page ${entityQuery.page} is greater than the number of pages $pageCount"
-              )
-            }
-            (EntityQueryResultMetadata(unfilteredCount, filteredCountAndSource.count, pageCount),
-             filteredCountAndSource.source.map(_.toEntity)
-            )
-          }
+          .map(prepareQueryEntitiesResult(entityQuery, unfilteredCount, _))
       }
     }
+
+  @VisibleForTesting
+  private[compact] def prepareQueryEntitiesResult(entityQuery: EntityQuery,
+                                                  unfilteredCount: Int,
+                                                  filteredCountAndSource: CountAndSource
+  ): (EntityQueryResultMetadata, Source[Entity, _]) = {
+    val pageCount: Int = Math.ceil(filteredCountAndSource.count.toFloat / entityQuery.pageSize).toInt
+    if (filteredCountAndSource.count > 0 && entityQuery.page > pageCount) {
+      throw new DataEntityException(
+        code = StatusCodes.BadRequest,
+        message = s"requested page ${entityQuery.page} is greater than the number of pages $pageCount"
+      )
+    }
+    (EntityQueryResultMetadata(unfilteredCount, filteredCountAndSource.count, pageCount),
+     filteredCountAndSource.source.map(_.toEntity)
+    )
+  }
 
   private def countEntitiesOfType(entityType: LookupExpression) =
     repository.dataSource
