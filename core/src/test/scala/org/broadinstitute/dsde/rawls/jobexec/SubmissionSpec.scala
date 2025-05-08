@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
@@ -537,6 +537,9 @@ class SubmissionSpec(_system: ActorSystem)
         workbenchMetricBaseName
       )
 
+      val entityServiceConstructor =
+        EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000) _
+
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
       val resourceBufferService = new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig)
@@ -576,7 +579,8 @@ class SubmissionSpec(_system: ActorSystem)
         genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
-        workspaceSettingRepository
+        workspaceSettingRepository,
+        entityServiceConstructor
       ) _
       lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(testContext)
       try
@@ -763,6 +767,225 @@ class SubmissionSpec(_system: ActorSystem)
 
       val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+  }
+
+  it should "keep entity set if deleteEntity is not specified" in withSubmissionsService { submissionsService =>
+    val sset = Entity(
+      "testset6",
+      "SampleSet",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("Sample", "sample1"),
+            AttributeEntityReference("Sample", "sample2"),
+            AttributeEntityReference("Sample", "sample3"),
+            AttributeEntityReference("Sample", "sample4"),
+            AttributeEntityReference("Sample", "sample5"),
+            AttributeEntityReference("Sample", "sample6")
+          )
+        )
+      )
+    )
+
+    runAndWait(entityQuery.save(testData.workspace, sset))
+
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = "dsde",
+      methodConfigurationName = "GoodMethodConfig",
+      entityType = Option(sset.entityType),
+      entityName = Option(sset.name),
+      expression = Option("this.samples"),
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+    val newSubmissionReport =
+      Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+    assert(newSubmissionReport.workflows.size == 6)
+
+    checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+    val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+    assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+
+    assertResult(Some(sset)) {
+      runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+    }
+  }
+
+  it should "delete entity set if deleteEntity is present and matches submission entity" in withSubmissionsService {
+    submissionsService =>
+      val sset = Entity(
+        "testset6",
+        "Sample_set",
+        Map(
+          AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+            Seq(
+              AttributeEntityReference("Sample", "sample1"),
+              AttributeEntityReference("Sample", "sample2"),
+              AttributeEntityReference("Sample", "sample3"),
+              AttributeEntityReference("Sample", "sample4"),
+              AttributeEntityReference("Sample", "sample5"),
+              AttributeEntityReference("Sample", "sample6")
+            )
+          )
+        )
+      )
+
+      runAndWait(entityQuery.save(testData.workspace, sset))
+
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "GoodMethodConfig",
+        entityType = Option(sset.entityType),
+        entityName = Option(sset.name),
+        expression = Option("this.samples"),
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false,
+        deleteEntity = Option(sset.entityType + "/" + sset.name)
+      )
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      assert(newSubmissionReport.workflows.size == 6)
+
+      checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+      val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+      assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+
+      assertResult(None) {
+        runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+      }
+  }
+
+  it should "not delete entity if deleteEntity is present but does not match submission entity" in withSubmissionsService {
+    submissionsService =>
+      val sset = Entity(
+        "testset6",
+        "Sample_set",
+        Map(
+          AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+            Seq(
+              AttributeEntityReference("Sample", "sample1"),
+              AttributeEntityReference("Sample", "sample2"),
+              AttributeEntityReference("Sample", "sample3"),
+              AttributeEntityReference("Sample", "sample4"),
+              AttributeEntityReference("Sample", "sample5"),
+              AttributeEntityReference("Sample", "sample6")
+            )
+          )
+        )
+      )
+
+      runAndWait(entityQuery.save(testData.workspace, sset))
+
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "GoodMethodConfig",
+        entityType = Option(sset.entityType),
+        entityName = Option(sset.name),
+        expression = Option("this.samples"),
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false,
+        deleteEntity = Option(sset.entityType + "/" + "other")
+      )
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      assert(newSubmissionReport.workflows.size == 6)
+
+      checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+      val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+      assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+
+      assertResult(Some(sset)) {
+        runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+      }
+  }
+
+  it should "not fail if deleteEntity is present but there is no root entity" in withSubmissionsService {
+    submissionsService =>
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = testData.methodConfigEntityless.namespace,
+        methodConfigurationName = testData.methodConfigEntityless.name,
+        entityType = None,
+        entityName = None,
+        expression = None,
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false,
+        deleteEntity = Some("entityType/entityName")
+      )
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      assert(newSubmissionReport.workflows.size == 1)
+
+      val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+      assert(submissionData.workflows.size == 1)
+
+      val subList = Await.result(submissionsService.listSubmissions(testData.wsName, testContext), Duration.Inf)
+
+      val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
+      assert(oneSub.nonEmpty)
+  }
+
+  it should "not fail if deleting deleteEntity fails" in withSubmissionsService { submissionsService =>
+    val sset = Entity(
+      "testset6",
+      "Sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("Sample", "sample1"),
+            AttributeEntityReference("Sample", "sample2"),
+            AttributeEntityReference("Sample", "sample3"),
+            AttributeEntityReference("Sample", "sample4"),
+            AttributeEntityReference("Sample", "sample5"),
+            AttributeEntityReference("Sample", "sample6")
+          )
+        )
+      )
+    )
+
+    // Creating an entity referring to the sample set is easier to set up than mocking the entity service to throw an error on delete
+    val referencingEntity = Entity(
+      "ref1",
+      "referrer",
+      Map(
+        AttributeName.withDefaultNS("sets") ->
+          AttributeEntityReference("Sample_set", "testset6")
+      )
+    )
+
+    runAndWait(entityQuery.save(testData.workspace, sset))
+    runAndWait(entityQuery.save(testData.workspace, referencingEntity))
+
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = "dsde",
+      methodConfigurationName = "GoodMethodConfig",
+      entityType = Option(sset.entityType),
+      entityName = Option(sset.name),
+      expression = Option("this.samples"),
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false,
+      deleteEntity = Option(sset.entityType + "/" + sset.name)
+    )
+    val newSubmissionReport =
+      Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+    assert(newSubmissionReport.workflows.size == 6)
+
+    checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+
+    val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+    assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
+
+    // The sset would have failed to delete, but the submission succeeded
+    assertResult(Some(sset)) {
+      runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+    }
   }
 
   it should "return a successful Submission when given an wdl struct entity expression that evaluates to a set of entities" in withSubmissionsService {

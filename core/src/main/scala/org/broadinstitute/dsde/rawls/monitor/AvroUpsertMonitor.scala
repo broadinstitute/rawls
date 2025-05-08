@@ -4,6 +4,8 @@ import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
+import akka.stream.scaladsl.{Sink, Source}
+import akka.util.ByteString
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
@@ -410,7 +412,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
 
       // Start reading the file. This returns a stream
       logger.info(s"checking access to $upsertFile for jobId ${jobId.toString} ...")
-      val upsertStream = getUpsertStream(upsertFile)
+      val upsertStream: fs2.Stream[IO, Byte] = getUpsertStream(upsertFile)
 
       // Ensure that the file has some contents. Our implementation of GoogleStorageInterpreter will return an empty
       // stream instead of an error in cases where it could not read the file. We check to see if there is at least
@@ -444,14 +446,19 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
 
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
-      def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+      def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Int] = {
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
+
+        // translate the upsertBatch back into a stream of json.
+        // TODO CORE-427: rewrite this monitor to fully stream, instead of stream->materialize->stream
+        val entityUpdateStream: Source[EntityUpdateDefinition, _] = Source(upsertBatch)
+
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
           requestContext = RawlsRequestContext(petUserInfo)
           upsertResults <- entityService(requestContext).batchUpdateEntitiesInternal(
             workspace.toWorkspaceName,
-            upsertBatch,
+            entityUpdateStream,
             upsert = isUpsert,
             None,
             None,
@@ -498,9 +505,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       // finally, after all the stream setup, tell the stream to execute
       val upsertResults = upsertFuturesStream.compile.toList.unsafeRunSync()
 
-      val numSuccesses: Int = upsertResults.collect { case Success(entityList) =>
-        entityList.size
-      }.sum
+      val numSuccesses: Int = upsertResults.collect { case Success(writeSize) => writeSize }.sum
 
       // if the failure has underlying causes, use those; else use the parent failure.
       // unresolved entity references only have useful error messages in the underlying causes, not the parent failure

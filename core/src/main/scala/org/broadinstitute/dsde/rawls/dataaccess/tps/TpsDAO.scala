@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.tps
 
-import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest}
+import bio.terra.policy.model.{TpsPaoCreateRequest, TpsPaoGetResult, TpsPaoSourceRequest, TpsPaoUpdateResult}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 
 import java.util.UUID
@@ -11,7 +11,9 @@ trait TpsDAO {
 
   def mergePao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[Unit]
 
-  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[Option[TpsPaoGetResult]]
+  def getPao(objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoGetResult]
 
   def deletePao(objectId: UUID, ctx: RawlsRequestContext): Future[Unit]
+
+  def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoUpdateResult]
 }

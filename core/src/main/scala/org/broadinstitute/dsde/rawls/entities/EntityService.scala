@@ -1,11 +1,13 @@
 package org.broadinstitute.dsde.rawls.entities
 
 import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
@@ -15,11 +17,13 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
+import slick.dbio.DBIO
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
@@ -29,9 +33,18 @@ object EntityService {
                   samDAO: SamDAO,
                   workbenchMetricBaseName: String,
                   entityManager: EntityManager,
-                  pageSizeLimit: Int
-  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): EntityService =
-    new EntityService(ctx, dataSource, samDAO, entityManager, workbenchMetricBaseName, pageSizeLimit)
+                  pageSizeLimit: Int,
+                  workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
+                    None // only used for Quicksilver migration
+  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext, system: ActorSystem): EntityService =
+    new EntityService(ctx,
+                      dataSource,
+                      samDAO,
+                      entityManager,
+                      workbenchMetricBaseName,
+                      pageSizeLimit,
+                      workspaceSettingServiceConstructor
+    )
 }
 
 class EntityService(protected val ctx: RawlsRequestContext,
@@ -39,8 +52,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
                     val samDAO: SamDAO,
                     entityManager: EntityManager,
                     override val workbenchMetricBaseName: String,
-                    pageSizeLimit: Int
-)(implicit protected val executionContext: ExecutionContext)
+                    pageSizeLimit: Int,
+                    workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
+                      None // only used for Quicksilver migration
+)(implicit protected val executionContext: ExecutionContext, system: ActorSystem)
     extends WorkspaceSupport
     with EntitySupport
     with AttributeSupport
@@ -426,12 +441,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
-                                  entityUpdates: Seq[EntityUpdateDefinition],
+                                  entityUpdates: Source[EntityUpdateDefinition, _],
                                   upsert: Boolean,
                                   dataReference: Option[DataReferenceName],
                                   billingProject: Option[GoogleProjectId],
                                   parentContext: RawlsRequestContext
-  ): Future[Traversable[Entity]] =
+  ): Future[Int] =
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext) { _ =>
       getV2WorkspaceContextAndPermissions(workspaceName,
                                           SamWorkspaceActions.write,
@@ -458,26 +473,26 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Seq[EntityUpdateDefinition],
+                          entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
-  ): Future[Traversable[Entity]] =
+  ): Future[Int] =
     traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, s)
         .recover(
-          sqlLoggingRecover(s"batchUpdateEntities: $workspaceName ${entityUpdates.size} updates")
+          sqlLoggingRecover(s"batchUpdateEntities: $workspaceName")
         )
     }
 
   def batchUpsertEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Seq[EntityUpdateDefinition],
+                          entityUpdates: Source[EntityUpdateDefinition, _],
                           dataReference: Option[DataReferenceName],
                           billingProject: Option[GoogleProjectId]
-  ): Future[Traversable[Entity]] =
+  ): Future[Int] =
     traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
       batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, s)
         .recover(
-          sqlLoggingRecover(s"batchUpsertEntities: $workspaceName ${entityUpdates.size} upserts")
+          sqlLoggingRecover(s"batchUpsertEntities: $workspaceName")
         )
     }
 
@@ -540,4 +555,102 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
   }
 
+  /**
+    * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to compact (Quicksilver) format.
+    *
+    * This migration method is unoptimized and in flux; use at your own risk
+    *
+    */
+  def quicksilverMigration(workspaceName: WorkspaceName): Future[Map[String, Int]] = {
+    implicit val system: ActorSystem = ActorSystem("quicksilverMigration")
+
+    for {
+      // verify owner of workspace.
+      // TODO CORE-364: require some kind of admin permission via asFCAdmin or a resource type admin instead?
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                              SamWorkspaceActions.own,
+                                                              Some(WorkspaceAttributeSpecs(all = false))
+      )
+
+      // confirm if this is already a quicksilver workspace by checking settings
+      workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
+      settings <- workspaceSettingService.getWorkspaceSettings(workspaceName)
+      _ = if (
+        settings
+          .find(_.isInstanceOf[CompactDataTablesSetting])
+          .asInstanceOf[Option[CompactDataTablesSetting]]
+          .exists(_.config.enabled)
+      ) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
+      }
+
+      // get the local (legacy) provider
+      localProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+
+      // get the list of entity types in this workspace
+      entityTypeMetadata <- localProvider.entityTypeMetadata(useCache = true, ctx)
+
+      // start a transaction; here's where we do a bunch of writes
+      _ <- dataSource.inTransaction { dataAccess =>
+        val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
+
+        // loop over entity types
+        def allTypesResult: Iterable[ReadWriteAction[Iterator[Int]]] =
+          entityTypeMetadata.map { case (entityType, metadata) =>
+            logger.info(s"Quicksilver migration:     - $entityType (${metadata.count}) ...")
+
+            val thisTypeList: ReadAction[Seq[Entity]] = DBIO.from(
+              localProvider
+                .listEntities(entityType)
+                .runWith(Sink.seq)
+            )
+
+            val thisTypeInserts: ReadWriteAction[Iterator[Int]] = thisTypeList flatMap { entities =>
+              // batch inserts into chunks of 400 entities at a time
+              val batches = entities.grouped(400)
+
+              DBIO.sequence(batches.map { batch =>
+                // ... insert each batch into the temp table
+                dataAccess.compactEntityQuery.migrationInsertAttributesToTempTable(batch)
+              })
+            }
+
+            thisTypeInserts
+          }
+
+        for {
+          // create temp table
+          _ <- dataAccess.compactEntityQuery.migrationCreateTempTable
+          // insert entity name, entity type, and attributes to the temp table
+          _ = logger.info(s"Quicksilver migration: inserting to temp table ...")
+          _ <- DBIO.sequence(allTypesResult)
+          // update ENTITY from the contents of the temp table
+          _ = logger.info(s"Quicksilver migration: updating ENTITY from temp table ...")
+          _ <- dataAccess.compactEntityQuery.migrationUpdateFromTempTable(workspaceContext.workspaceIdAsUUID)
+          // populate the ENTITY_REFS table for this workspace
+          _ = logger.info(s"Quicksilver migration: populating ENTITY_REFS ...")
+          _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
+          // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
+          _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
+          _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
+                                                                             shardId
+          )
+          // delete the all_attribute_values column for this workspace
+          _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
+          _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
+
+          _ <- dataAccess.compactEntityQuery.migrationDeleteTempTable
+          _ = logger.info(s"Quicksilver migration: done!")
+        } yield ()
+      }
+
+      // finally, change the workspace to be quicksilver-enabled
+      _ <- workspaceSettingService.setWorkspaceSettings(
+        workspaceName,
+        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+      )
+
+      // return a count of entities updated
+    } yield entityTypeMetadata.map { case (entityType, metadata) => (entityType, metadata.count) }
+  }
 }

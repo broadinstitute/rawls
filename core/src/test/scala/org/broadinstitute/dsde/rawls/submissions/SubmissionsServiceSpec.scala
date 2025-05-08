@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
@@ -23,7 +23,6 @@ import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, Submissio
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
-import org.broadinstitute.dsde.rawls.model.WorkflowCostTypes.WorkflowCostType
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Running, Succeeded, WorkflowStatus}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
@@ -240,6 +239,9 @@ class SubmissionsServiceSpec
       workbenchMetricBaseName
     )
 
+    val entityServiceConstructor =
+      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000) _
+
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
     val resourceBufferService = spy(new ResourceBufferServiceImpl(resourceBufferDAO, resourceBufferConfig))
@@ -332,7 +334,8 @@ class SubmissionsServiceSpec
         genomicsServiceConstructor,
         workspaceServiceConfig,
         workspaceRepository,
-        workspaceSettingRepository
+        workspaceSettingRepository,
+        entityServiceConstructor
       ) _
 
     def cleanupSupervisor =

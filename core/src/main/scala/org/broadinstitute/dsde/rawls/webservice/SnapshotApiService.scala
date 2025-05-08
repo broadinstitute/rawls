@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import spray.json.DefaultJsonProtocol._
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -32,33 +33,59 @@ trait SnapshotApiService extends UserInfoDirectives {
   def snapshotRoutes(otelContext: Context = Context.root()): server.Route =
     requireUserInfo(Option(otelContext)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
+      path("workspaces" / Segment / Segment / "snapshots" / "v3") { (workspaceNamespace, workspaceName) =>
         post {
-          entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+          entity(as[Set[String]]) { snapshotIds =>
             complete {
               snapshotServiceConstructor(ctx)
-                .createSnapshotByWorkspaceName(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot)
-                .map(StatusCodes.Created -> _)
+                .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName),
+                                                  snapshotIds.map(UUID.fromString)
+                )
+                .map(_ => StatusCodes.NoContent)
+            }
+          }
+        }
+      } ~
+        path("workspaces" / Segment / "snapshots" / "v3") { workspaceId =>
+          post {
+            entity(as[Set[String]]) { snapshotIds =>
+              complete {
+                snapshotServiceConstructor(ctx)
+                  .createSnapshotsByWorkspaceIdV3(workspaceId, snapshotIds.map(UUID.fromString))
+                  .map(_ => StatusCodes.NoContent)
+              }
             }
           }
         } ~
-          get {
-            // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
-            // that method provides a 400 Bad Request response and nice error message
-            parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
-              (offset, limit, referencedSnapshotId) =>
-                complete {
-                  snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
-                                                                                                  workspaceName
-                                                                                    ),
-                                                                                    offset,
-                                                                                    limit,
-                                                                                    referencedSnapshotId
+        path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
+          post {
+            entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+              complete {
+                snapshotServiceConstructor(ctx)
+                  .createSnapshotByWorkspaceName(WorkspaceName(workspaceNamespace, workspaceName),
+                                                 namedDataRepoSnapshot
                   )
-                }
+                  .map(StatusCodes.Created -> _)
+              }
             }
-          }
-      } ~
+          } ~
+            get {
+              // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+              // that method provides a 400 Bad Request response and nice error message
+              parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+                (offset, limit, referencedSnapshotId) =>
+                  complete {
+                    snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
+                                                                                                    workspaceName
+                                                                                      ),
+                                                                                      offset,
+                                                                                      limit,
+                                                                                      referencedSnapshotId
+                    )
+                  }
+              }
+            }
+        } ~
         path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) {
           (workspaceNamespace, workspaceName, snapshotId) =>
             get {
