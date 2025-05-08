@@ -237,7 +237,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
     (for {
       activeSubs <- datasource.inTransaction { dataAccess =>
-        dataAccess.submissionQuery.listActiveSubmissionIdsWithWorkspaceAndPerWorkflowCostCap(
+        dataAccess.submissionQuery.listActiveSubmissionIdsWithMetadata(
           limit = submissionMonitorConfig.submissionPollExpiration
         )
       }

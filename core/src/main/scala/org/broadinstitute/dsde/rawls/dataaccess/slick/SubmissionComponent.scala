@@ -283,7 +283,7 @@ trait SubmissionComponent {
         })
       )
 
-    def listActiveSubmissionIdsWithWorkspaceAndPerWorkflowCostCap(
+    def listActiveSubmissionIdsWithMetadata(
       limit: FiniteDuration
     ): ReadAction[Seq[(UUID, WorkspaceName, Option[BigDecimal], GoogleProjectId, RawlsUserEmail)]] = {
       // Exclude submissions from monitoring if they are ancient/stuck [WX-820]
