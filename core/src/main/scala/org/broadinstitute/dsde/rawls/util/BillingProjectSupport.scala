@@ -67,6 +67,38 @@ trait BillingProjectSupport {
       }
     } yield ()
 
+  def requireBillingProjectIsGCP(billingProjectName: RawlsBillingProjectName): Future[Unit] =
+    billingRepository.getBillingProject(billingProjectName).flatMap {
+      case Some(billing) =>
+        if (billing.landingZoneId.nonEmpty) {
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Billing profile ${billingProjectName.value} must be GCP")
+            )
+          )
+        } else Future.successful()
+      case None =>
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} not found")
+          )
+        )
+    }
+
+  def requireSameServicePerimeter(sourceBillingProject: RawlsBillingProject,
+                                  destBillingProject: RawlsBillingProject
+  ): Future[Unit] =
+    if (sourceBillingProject.servicePerimeter != destBillingProject.servicePerimeter) {
+      Future.failed(
+        RawlsExceptionWithErrorReport(
+          ErrorReport(
+            StatusCodes.BadRequest,
+            s"Source and destination billing must have the same service perimeter, if any"
+          )
+        )
+      )
+    } else Future.successful(())
+
   /**
     * Load the specified billing project, throwing if the billing project is not ready.
     */

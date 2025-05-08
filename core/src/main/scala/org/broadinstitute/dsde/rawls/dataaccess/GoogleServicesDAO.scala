@@ -320,6 +320,10 @@ trait GoogleServicesDAO extends ErrorReportable {
                                          oldIdentity: Identity,
                                          newIdentity: Identity
   ): Future[Unit]
+
+  def areServicesEnabled(project: GoogleProject, services: List[String])(implicit
+    executionContext: ExecutionContext
+  ): Boolean
 }
 
 object GoogleApiTypes {

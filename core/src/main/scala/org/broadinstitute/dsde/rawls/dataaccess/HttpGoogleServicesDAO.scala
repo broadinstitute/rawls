@@ -41,6 +41,8 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.cloud.monitoring.v3.{MetricServiceClient, MetricServiceSettings}
 import com.google.monitoring.v3.{Aggregation, ListTimeSeriesRequest, TimeInterval}
 import com.google.api.services.monitoring.v3.MonitoringScopes
+import com.google.api.services.serviceusage.v1.{ServiceUsage, ServiceUsageScopes}
+import com.google.api.services.serviceusage.v1.model.ListServicesResponse
 import com.google.protobuf.util.Timestamps
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.auth.oauth2.GoogleCredentials
@@ -131,6 +133,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   ) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
   val lifesciencesScopes = Seq(CloudLifeSciencesScopes.CLOUD_PLATFORM)
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
+  val serviceUsageScopes = Seq(ServiceUsageScopes.CLOUD_PLATFORM_READ_ONLY)
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = GsonFactory.getDefaultInstance
@@ -139,6 +142,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val SingleRegionLocationType: String = "region"
 
   val REQUESTER_PAYS_ERROR_SUBSTRINGS = Seq("requester pays", "UserProjectMissing")
+
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
@@ -668,6 +672,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         case _                             => Future.successful(acc)
       }
     }
+
     recurse()
   }
 
@@ -734,6 +739,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
    * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
    * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input
    * validations.
+   *
    * @param googleProjectId
    * @param billingAccountName
    * @return
@@ -921,7 +927,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
    * 3) if updated policies are the same as existing policies return false, don't call google
    * 4) if updated policies are different than existing policies update google and return true
    *
-   * @param googleProject google project id
+   * @param googleProject  google project id
    * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
    *                       which will be handled appropriately when sent to google.
    * @return true if google was called to update policies, false otherwise
@@ -994,7 +1000,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   /**
    * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
-   * @param googleProjectId project to update
+   *
+   * @param googleProjectId          project to update
    * @param googleProjectWithUpdates [[Project]] with values to update. For example, a (new Project().setName("ex")) will update the name of the googleProjectId project.
    * @return the project passed in as googleProjectWithUpdates
    */
@@ -1075,6 +1082,14 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setApplicationName(appName)
       .build()
   }
+
+  def getServiceUsageClient(credential: Credential): ServiceUsage =
+    new ServiceUsage.Builder(
+      httpTransport,
+      jsonFactory,
+      credential
+    ).setApplicationName(appName)
+      .build()
 
   def getCloudResourceManager(credential: Credential): CloudResourceManager =
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
@@ -1203,6 +1218,15 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setServiceAccountUser(billingEmail)
       .build()
 
+  def getServiceUsageServiceAccountCredential: Credential =
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountScopes(serviceUsageScopes.asJava)
+      .setServiceAccountId(clientEmail)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+
   lazy val getResourceBufferServiceAccountCredential: Credential = {
     val file = new java.io.File(resourceBufferJsonFile)
     val inputStream: InputStream = new FileInputStream(file)
@@ -1212,6 +1236,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   def toGoogleGroupName(groupName: RawlsGroupName) = s"${proxyNamePrefix}GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
+
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
 
   private def buildCredentialFromAccessToken(accessToken: String, credentialEmail: String): GoogleCredential =
@@ -1303,6 +1328,18 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       )
     } yield ()
   }.compile.drain.unsafeToFuture()
+
+  override def areServicesEnabled(project: GoogleProject, services: List[String])(implicit
+    executionContext: ExecutionContext
+  ): Boolean = {
+    val client: ServiceUsage = getServiceUsageClient(getServiceUsageServiceAccountCredential)
+    val request: ServiceUsage#Services#List = client.services().list(project.value).setFilter("state:ENABLED")
+    val enabledServices = blocking {
+      val result: ListServicesResponse = request.execute()
+      result.getServices.asScala.map(_.getConfig.getName).toSet
+    }
+    services.forall(enabledServices.contains)
+  }
 }
 
 object HttpGoogleServicesDAO {

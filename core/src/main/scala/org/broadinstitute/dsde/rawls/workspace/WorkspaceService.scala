@@ -655,57 +655,16 @@ class WorkspaceService(
       sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
       destBillingProject <- getBillingProjectContext(destBillingProjectName)
 
-      // Source and destination billing projects must exist -- make this a reusable function
-      _ = billingRepository.getBillingProject(sourceBillingProjectName).flatMap {
-        case Some(billing) =>
-          if (billing.landingZoneId.nonEmpty) {
-            Future.failed(
-              RawlsExceptionWithErrorReport(
-                ErrorReport(StatusCodes.NotFound, s"Billing profile ${workspaceName.namespace} must be GCP")
-              )
-            )
-          } else Future.successful()
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Billing project ${workspaceName.namespace} not found")
-            )
-          )
-      }
-
-      _ = billingRepository.getBillingProject(destBillingProjectName).flatMap {
-        case Some(billing) =>
-          if (billing.landingZoneId.nonEmpty) {
-            Future.failed(
-              RawlsExceptionWithErrorReport(
-                ErrorReport(StatusCodes.NotFound, s"Billing profile ${workspaceName.namespace} must be GCP")
-              )
-            )
-          } else Future.successful()
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Billing project $newBillingProjectName not found")
-            )
-          )
-      }
+      // Source and destination billing must be GCP
+      _ = requireBillingProjectIsGCP(sourceBillingProjectName)
+      _ = requireBillingProjectIsGCP(destBillingProjectName)
 
       // User must be an owner of both the source and destination billing projects
       _ <- requireBillingProjectOwnerAccess(sourceBillingProjectName, ctx)
       _ <- requireBillingProjectOwnerAccess(destBillingProjectName, ctx)
 
       // Source and destination billing projects must have the same service perimeter (or no service perimeter)
-      _ <-
-        if (sourceBillingProject.servicePerimeter != destBillingProject.servicePerimeter) {
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(
-                StatusCodes.BadRequest,
-                s"Source and destination billing must have the same service perimeter, if any"
-              )
-            )
-          )
-        } else Future.successful(())
+      _ <- requireSameServicePerimeter(sourceBillingProject, destBillingProject)
 
       // Destination billing/namespace must not contain a workspace with this workspace name
       workspaceWithNameExists <- workspaceRepository.getWorkspace(
@@ -722,25 +681,8 @@ class WorkspaceService(
           )
         case None => Future.successful()
       }
-      // Source workspace must exist
-      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
-      workspace <- workspaceOpt match {
-        case Some(ws) => Future.successful(ws)
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
-            )
-          )
-      }
-      updatedWorkspace <- updateWorkspaceBilling(workspace, destBillingProject)
-    } yield updatedWorkspace
-  }
 
-  private def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Workspace] =
-    // TODO: Handle failure cases - Revert back to original billing
-    for {
-      // Check if the billing account is enabled
+      // Check if the destination billing account is enabled
       _ <- destBillingProject.billingAccount match {
         case Some(accountName) => gcsDAO.isBillingAccountEnabled(accountName)
         case None =>
@@ -753,29 +695,59 @@ class WorkspaceService(
           )
       }
 
-      // TODO: Check that the storage APIs are enabled on the workspace project
-      // storage-api.googleapis.com and storage-component.googleapis.com
+      // Source workspace must exist
+      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
+      workspace <- workspaceOpt match {
+        case Some(ws) => Future.successful(ws)
+        case None =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+            )
+          )
+      }
 
-      oldBillingProjectOwnerPolicyEmail <- samDAO
-        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-                             workspace.namespace,
-                             SamBillingProjectPolicyNames.owner,
-                             ctx
-        )
-        .map(_.email)
-      newBillingProjectOwnerPolicyEmail <- samDAO
-        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-                             destBillingProject.projectName.value,
-                             SamBillingProjectPolicyNames.owner,
-                             ctx
-        )
-        .map(_.email)
-
-      // No auth domain -- add billing project owner emails directly to bucket
-      _ <- gcsDAO.changeProjectOwnerBucketIamBinding(GcsBucketName(workspace.bucketName),
-                                                     Identity.group(oldBillingProjectOwnerPolicyEmail.value),
-                                                     Identity.group(newBillingProjectOwnerPolicyEmail.value)
+      // Storage APIs must be enabled on the workspace project
+      val storageAPIs = List(
+        "storage-api.googleapis.com",
+        "storage-component.googleapis.com"
       )
+      servicesEnabled <- Future(gcsDAO.areServicesEnabled(GoogleProject(workspace.googleProjectId.value), storageAPIs))
+      _ <-
+        if (servicesEnabled) Future.unit
+        else
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Required GCS APIs ${storageAPIs.toString()} are not enabled on project ${workspace.googleProjectId.value}." +
+                  s"Contact Terra-Support@firecloud.org for assistance."
+              )
+            )
+          )
+
+      updatedWorkspace <- updateWorkspaceBilling(workspace, destBillingProject)
+    } yield updatedWorkspace
+  }
+
+  private def updateWorkspaceBillingInGCP(workspace: Workspace,
+                                          destBillingAccountName: Option[RawlsBillingAccountName],
+                                          oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                                          newBillingProjectOwnerPolicyEmail: WorkbenchEmail
+  ): Future[Unit] =
+    for {
+      // If there is no auth domain on the workspace, add the billing project owner emails directly to bucket
+      sourceAuthDomains <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+      _ <-
+        if (sourceAuthDomains.nonEmpty) {
+          gcsDAO.changeProjectOwnerBucketIamBinding(
+            GcsBucketName(workspace.bucketName),
+            Identity.group(oldBillingProjectOwnerPolicyEmail.value),
+            Identity.group(newBillingProjectOwnerPolicyEmail.value)
+          )
+        } else {
+          Future.unit
+        }
 
       // Remove old billing owner policy email from project IAM and add new one
       _ <- googleIamDao.addRoles(
@@ -793,9 +765,15 @@ class WorkspaceService(
         retryIfGroupDoesNotExist = true
       )
 
-      // Change billing account -- revert IAM bindings if this fails
-      _ <- gcsDAO.setBillingAccount(workspace.googleProjectId, destBillingProject.billingAccount, ctx.toTracingContext)
+      // Change billing account
+      _ <- gcsDAO.setBillingAccount(workspace.googleProjectId, destBillingAccountName, ctx.toTracingContext)
+    } yield ()
 
+  private def updateWorkspaceBillingInSam(workspace: Workspace,
+                                          oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                                          newBillingProjectOwnerPolicyEmail: WorkbenchEmail
+  ): Future[Unit] =
+    for {
       // Add new billing project owner email to workspace owner policy and remove old owner
       _ <- samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
                                   workspace.workspaceId,
@@ -813,12 +791,76 @@ class WorkspaceService(
       // Remove and re-add fastpass grants
       _ <- fastPassServiceConstructor(ctx).removeFastPassGrantsForWorkspace(workspace)
       _ <- fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace)
+    } yield ()
+
+  private def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Workspace] =
+    for {
+      oldBillingProjectOwnerPolicyEmail <- samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             workspace.namespace,
+                             SamBillingProjectPolicyNames.owner,
+                             ctx
+        )
+        .map(_.email)
+      newBillingProjectOwnerPolicyEmail <- samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             destBillingProject.projectName.value,
+                             SamBillingProjectPolicyNames.owner,
+                             ctx
+        )
+        .map(_.email)
+
+      _ <- updateWorkspaceBillingInGCP(workspace,
+                                       destBillingProject.billingAccount,
+                                       oldBillingProjectOwnerPolicyEmail,
+                                       newBillingProjectOwnerPolicyEmail
+      ).recoverWith { case ex =>
+        updateWorkspaceBillingInGCP(workspace,
+                                    workspace.currentBillingAccountOnGoogleProject,
+                                    newBillingProjectOwnerPolicyEmail,
+                                    oldBillingProjectOwnerPolicyEmail
+        )
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.InternalServerError, "Billing update failed in GCP", ex)
+          )
+        )
+      }
+
+      _ <- updateWorkspaceBillingInSam(workspace, oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail)
+        .recoverWith { case ex =>
+          updateWorkspaceBillingInGCP(workspace,
+                                      workspace.currentBillingAccountOnGoogleProject,
+                                      newBillingProjectOwnerPolicyEmail,
+                                      oldBillingProjectOwnerPolicyEmail
+          )
+          updateWorkspaceBillingInSam(workspace, newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail)
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError, "Billing update failed in SAM", ex)
+            )
+          )
+        }
 
       // Update DB record for the workspace
-      _ <- workspaceRepository.updateBilling(workspace.workspaceIdAsUUID,
-                                             destBillingProject.projectName.value,
-                                             destBillingProject.billingAccount
-      )
+      _ <- workspaceRepository
+        .updateBilling(workspace.workspaceIdAsUUID,
+                       destBillingProject.projectName.value,
+                       destBillingProject.billingAccount
+        )
+        .recoverWith { case ex =>
+          updateWorkspaceBillingInGCP(workspace,
+                                      workspace.currentBillingAccountOnGoogleProject,
+                                      newBillingProjectOwnerPolicyEmail,
+                                      oldBillingProjectOwnerPolicyEmail
+          )
+          updateWorkspaceBillingInSam(workspace, newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail)
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError, "Billing update failed in Rawls", ex)
+            )
+          )
+        }
 
     } yield workspace
 
