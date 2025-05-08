@@ -647,18 +647,21 @@ class WorkspaceService(
     val sourceBillingProjectName = RawlsBillingProjectName(workspaceName.namespace)
     val destBillingProjectName = RawlsBillingProjectName(newBillingProjectName)
     for {
-      _ <- if (workspaceName.namespace == newBillingProjectName)
-        Future.failed(RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.BadRequest, s"Workspace billing is already set to $newBillingProjectName")
-        ))
-      else Future.unit
+      _ <-
+        if (workspaceName.namespace == newBillingProjectName)
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Workspace billing is already set to $newBillingProjectName")
+            )
+          )
+        else Future.unit
 
       sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
       destBillingProject <- getBillingProjectContext(destBillingProjectName)
 
       // Source and destination billing must be GCP
-      _ = requireBillingProjectIsGCP(sourceBillingProjectName)
-      _ = requireBillingProjectIsGCP(destBillingProjectName)
+      _ = requireBillingProjectIsGCP(sourceBillingProject)
+      _ = requireBillingProjectIsGCP(destBillingProject)
 
       // User must be an owner of both the source and destination billing projects
       _ <- requireBillingProjectOwnerAccess(sourceBillingProjectName, ctx)

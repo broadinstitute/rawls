@@ -67,22 +67,16 @@ trait BillingProjectSupport {
       }
     } yield ()
 
-  def requireBillingProjectIsGCP(billingProjectName: RawlsBillingProjectName): Future[Unit] =
-    billingRepository.getBillingProject(billingProjectName).flatMap {
-      case Some(billing) =>
-        if (billing.landingZoneId.nonEmpty) {
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Billing profile ${billingProjectName.value} must be GCP")
-            )
-          )
-        } else Future.successful()
-      case None =>
+  def requireBillingProjectIsGCP(billingProject: RawlsBillingProject): Future[Unit] =
+    billingProject.landingZoneId match {
+      case Some(_) =>
         Future.failed(
           RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} not found")
+            ErrorReport(StatusCodes.NotFound, s"Billing profile ${billingProject.projectName.value} must be GCP")
           )
         )
+      case None =>
+        Future.unit
     }
 
   def requireSameServicePerimeter(sourceBillingProject: RawlsBillingProject,
