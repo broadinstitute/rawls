@@ -108,7 +108,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       Source.future(repository.dataSource.inTransaction(_ => dbAction))
     })
 
-    // Finally, run the Source. Ignore the results from the db; they are not necessary.
+    // Finally, run the Source.
     val dbResults: Future[Int] = dbResultsSource.runWith(Sink.head)
 
     // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
