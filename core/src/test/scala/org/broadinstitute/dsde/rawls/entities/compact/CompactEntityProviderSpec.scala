@@ -14,9 +14,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
   DeleteEntitiesConflictException,
   DeleteEntitiesOfTypeConflictException,
-  DataEntityException,
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }

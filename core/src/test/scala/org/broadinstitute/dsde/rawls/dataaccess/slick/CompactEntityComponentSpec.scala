@@ -682,8 +682,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
   }
-  
-    it should "only get entities from the given workspace" in withMinimalTestDatabase { _ =>
+
+  it should "only get entities from the given workspace" in withMinimalTestDatabase { _ =>
     // insert an entity with attributes
     val entityType1 = "entityType1"
     val entityType2 = "entityType2"
