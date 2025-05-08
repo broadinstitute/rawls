@@ -23,19 +23,19 @@
         <appender-ref ref="console"/>
     </root>
 
-    <logger name="org.broadinstitute.dsde" level="debug" additivity="false">
+    <logger name="org.broadinstitute.dsde" level="info" additivity="false">
         <appender-ref ref="FILE"/>
         <appender-ref ref="console"/>
     </logger>
 
     <!--
-    <logger name="slick.jdbc.JdbcBackend.statement" level="debug" additivity="false">
+    <logger name="slick.jdbc.JdbcBackend.statement" level="DEBUG" additivity="false">
         <appender-ref ref="FILE"/>
         <appender-ref ref="console"/>
     </logger>
     -->
     <!--
-    <logger name="slick.jdbc.StatementInvoker.result" level="debug" additivity="false">
+    <logger name="slick.jdbc.StatementInvoker.result" level="DEBUG" additivity="false">
         <appender-ref ref="FILE"/>
         <appender-ref ref="console"/>
     </logger>
