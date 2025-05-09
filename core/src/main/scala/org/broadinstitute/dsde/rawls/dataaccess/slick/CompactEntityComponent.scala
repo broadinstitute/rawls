@@ -356,13 +356,13 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
     // build the overall query
     val query = concatSqlActions(
-      sql"""with SubqueryResult as (""",
+      sql"""with TargetEntities as (""",
       subquery,
       sql""" ) select distinct e.entity_type, e.name
 from ENTITY e, ENTITY_REFS r
 where r.from_id = e.id
 and e.workspace_id = $workspaceId
-and r.to_id in (select id from SubqueryResult) and r.from_id not in (select id from SubqueryResult)"""
+and r.to_id in (select id from TargetEntities) and r.from_id not in (select id from TargetEntities)"""
     )
 
     query.as[AttributeEntityReference]
@@ -371,26 +371,15 @@ and r.to_id in (select id from SubqueryResult) and r.from_id not in (select id f
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
   // `execution plan: 2 nested loops, full index scan: idx_entity_type_name; 3 simple selects; using where & index`
-  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
-    val subquery =
-      sql"""select id from ENTITY where entity_type = $entityType """
-
-    // build the overall query
-    val query = concatSqlActions(
-      sql"""select e.entity_type, e.name
+  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] =
+    sql"""select e.entity_type, e.name
 from ENTITY e, ENTITY_REFS r
 where r.from_id = e.id
 and deleted = 0
 and e.workspace_id = $workspaceId
 and e.entity_type != $entityType
-and r.to_id in (""",
-      subquery,
-      sql""" );"""
-    )
-
-    query.as[AttributeEntityReference]
-
-  }
+and r.to_id in (select id from ENTITY where entity_type = $entityType and workspace_id = $workspaceId );"""
+      .as[AttributeEntityReference]
 
   /*
    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
