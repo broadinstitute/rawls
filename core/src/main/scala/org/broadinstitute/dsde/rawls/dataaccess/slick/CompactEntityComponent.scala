@@ -205,7 +205,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * Returns the number of rows deleted
    * 
-   * `execution plan: full table scan; nested loop; using where`
+   * `execution plan: index range scan; nested loop; using where & index: idx_entity_type_name, unq_from_to`
    */
   def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] =
     if (fromRefs.isEmpty) {
@@ -338,8 +338,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
-  // TODO: update execution plan
-  // `execution plan: 2 nested loops; 3 rows; using where & index: idx_entity_type_name, unq_trom_to, PRIMARY`
+  // `execution plan: 3 nested loops; 4 rows; using where, temporary & index: idx_entity_type_name, unq_trom_to, PRIMARY`
   def getReferencesTo(workspaceId: UUID,
                       refs: Seq[AttributeEntityReference]
   ): ReadAction[Seq[AttributeEntityReference]] = {
