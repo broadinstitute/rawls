@@ -311,7 +311,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getReferencedIds(fromIdTwo)) should contain theSameElementsAs toIdsTwo
   }
 
-  behavior of "deleteAllReferences"
+  behavior of "deleteAllReferencesFrom"
 
   it should "delete references for multiple entities" in withMinimalTestDatabase { _ =>
     // referencing/source entities
