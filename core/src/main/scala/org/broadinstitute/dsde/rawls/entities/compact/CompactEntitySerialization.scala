@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityAttributeListSerializer
 import org.broadinstitute.dsde.rawls.entities.exceptions.CompactEntityDeserializationException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeFormat
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.model.{AttributeFormat, AttributeName}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -46,6 +47,25 @@ trait CompactEntitySerialization {
           s"wanted a JsObject; found a ${otherJsValue.getClass.getName}"
         )
     }
+
+  def keepOnlyFields(attributes: Option[String], fields: Set[AttributeName]): Option[String] =
+    attributes.map { attr =>
+      val attributeMap = attr.parseJson match {
+        case jso: JsObject => deserialize(jso)
+        case otherJsValue =>
+          throw new CompactEntityDeserializationException(
+            s"wanted a JsObject; found a ${otherJsValue.getClass.getName}"
+          )
+      }
+      val filtered = attributeMap.filter { case (k, _) =>
+        fields.contains(k)
+      }
+      toSql(filtered).compactPrint
+    }
+
+  val slickAttrsPath: String = s"$$.${ATTRS_KEY}"
+  def slickAttributePath(attributeName: String): String = s"${slickAttrsPath}.${attributeName}"
+  def slickAttributePath(attributeName: AttributeName): String = slickAttributePath(toDelimitedName(attributeName))
 
   // retrieve the version number from the database's JSON
   private def getVersion(jso: JsObject): Int =
