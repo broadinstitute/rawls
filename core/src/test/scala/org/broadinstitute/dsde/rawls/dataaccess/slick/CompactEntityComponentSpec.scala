@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
+  AttributeNull,
   AttributeNumber,
   AttributeString,
   AttributeValue,
@@ -14,8 +15,11 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityColumnFilter,
   EntityQuery,
   FilterOperators,
-  SortDirections
+  SortDirections,
+  WorkspaceFieldSpecs
 }
+import slick.dbio.Effect.Read
+import slick.sql.SqlStreamingAction
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -593,6 +597,18 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
   }
 
+  it should "respect desired fields" in withMinimalTestDatabase { _ =>
+    val columnFilter = EntityColumnFilter(AttributeName.withDefaultNS("foo"), "foo")
+    testDesiredFields(None, Some(columnFilter)) { (entityType, entityQuery) =>
+      q.queryEntitiesWithColumnFilter(
+        wsid,
+        entityType,
+        entityQuery,
+        columnFilter
+      )
+    }
+  }
+
   behavior of "queryEntitiesWithFilterTerms"
 
   it should "return the entities with filter terms FilterOperators.And sorted by name" in withMinimalTestDatabase { _ =>
@@ -741,6 +757,16 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
         _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
       )
+  }
+
+  it should "respect desired fields" in withMinimalTestDatabase { _ =>
+    testDesiredFields(Some("foo"), None) { (entityType, entityQuery) =>
+      q.queryEntitiesWithFilterTerms(
+        wsid,
+        entityType,
+        entityQuery
+      )
+    }
   }
 
   behavior of "countEntitiesWithFilterTerms"
@@ -941,6 +967,16 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
   }
 
+  it should "respect desired fields" in withMinimalTestDatabase { _ =>
+    testDesiredFields(None, None) { (entityType, entityQuery) =>
+      q.queryEntitiesWithNoFilter(
+        wsid,
+        entityType,
+        entityQuery
+      )
+    }
+  }
+
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================
@@ -990,4 +1026,47 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
+  def testDesiredFields(filterTerms: Option[String], columnFilter: Option[EntityColumnFilter])(
+    testQuery: (String, EntityQuery) => SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read]
+  ): Unit = {
+    val entityType = "entityType"
+    val columnFilterAttr = AttributeName.withDefaultNS("foo")
+    val desiredColumnAttr1 = AttributeName.withDefaultNS("bar")
+    val desiredColumnAttr2 = AttributeName.withDefaultNS("baz")
+    val entity1 =
+      Entity(UUID.randomUUID().toString,
+        entityType,
+        Map(columnFilterAttr -> AttributeString("foo"), desiredColumnAttr1 -> AttributeString("bar"))
+      )
+    val entity2 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType,
+        Map(columnFilterAttr -> AttributeString("foo"),
+          desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
+        )
+      )
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+
+    val entityQuery = EntityQuery(
+      1,
+      10,
+      Attributable.nameReservedAttribute,
+      SortDirections.Ascending,
+      filterTerms,
+      columnFilter = columnFilter,
+      fields = WorkspaceFieldSpecs(Some(Set(toDelimitedName(desiredColumnAttr1), toDelimitedName(desiredColumnAttr2))))
+    )
+    val actual = runAndWait(testQuery(entityType, entityQuery))
+
+    actual.map(_.toEntity) should contain theSameElementsAs List(
+      entity1.copy(attributes = Map(desiredColumnAttr1 -> AttributeString("bar"), desiredColumnAttr2 -> AttributeNull)),
+      entity2.copy(attributes =
+        Map(desiredColumnAttr1 -> AttributeNull,
+          desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
+        )
+      )
+    )
+  }
 }

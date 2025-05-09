@@ -303,11 +303,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
     concatSqlActions(
       selectCompactEntityColumns,
+      filteredAttributesColumn(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       filterTermsCondition(entityQuery),
       orderBy(entityQuery),
       paginationClause(entityQuery)
-    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+    ).as[CompactEntityRecord]
 
   def queryEntitiesWithColumnFilter(workspaceId: UUID,
                                     entityType: String,
@@ -316,11 +317,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
     concatSqlActions(
       selectCompactEntityColumns,
+      filteredAttributesColumn(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       columnFilterCondition(columnFilter),
       orderBy(entityQuery),
       paginationClause(entityQuery)
-    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+    ).as[CompactEntityRecord]
 
   def queryEntitiesWithNoFilter(workspaceId: UUID,
                                 entityType: String,
@@ -328,10 +330,11 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
     concatSqlActions(
       selectCompactEntityColumns,
+      filteredAttributesColumn(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       orderBy(entityQuery),
       paginationClause(entityQuery)
-    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+    ).as[CompactEntityRecord]
 
   // ====================================================================================================
   //  entity query helpers
@@ -339,7 +342,39 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   // ====================================================================================================
 
   private val selectCompactEntityColumns =
-    sql"select id, name, entity_type, workspace_id, record_version, deleted, attributes"
+    sql"select id, name, entity_type, workspace_id, record_version, deleted, "
+
+  /**
+   * Constructs the SQL fragment to extract specific attributes from the attributes JSON column
+   * in the database based on the fields specified in the EntityQuery object.
+   *
+   * If specific fields are provided in entityQuery.fields, the method dynamically generates
+   * a JSON object containing only those fields. Each field is extracted from the attributes column
+   * using the -> operator. If no fields are specified, the entire attributes column is selected.
+   *
+   * Example sql produced:
+   * JSON_OBJECT(
+   *   'v', e.attributes -> '$.v',
+   *   'attrs', JSON_OBJECT(
+   *     ?, e.attributes -> ?,
+   *     ?, e.attributes -> ?
+   *   ))
+   */
+  private def filteredAttributesColumn(entityQuery: EntityQuery) =
+    entityQuery.fields.fields match {
+      case Some(fields) =>
+        val fieldSqls = fields.map { field =>
+          sql"$field, e.attributes -> ${slickAttributePath(field)}"
+        }
+        concatSqlActions(
+          sql"""JSON_OBJECT(
+               '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
+               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_OBJECT(""",
+          reduceSqlActionsWithDelim(fieldSqls.toSeq, sql","),
+          sql"))"
+        )
+      case _ => sql"attributes"
+    }
 
   private def fromActiveEntitiesOfTypeInWorkspace(workspaceId: UUID, entityType: String) =
     sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
@@ -376,17 +411,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   private def paginationClause(entityQuery: EntityQuery): SQLActionBuilder =
     sql" limit ${entityQuery.pageSize} offset ${entityQuery.offset}"
-
-  private def entityResultGetterWithFieldsFilter(entityQuery: EntityQuery) =
-    entityQuery.fields.fields match {
-      case Some(fields) =>
-        // this special GetResult instance is the only way I found to filter the fields and keep this a streaming result
-        val desiredFields = fields.map(AttributeName.fromDelimitedName)
-        val getResultFilteringFields =
-          GetResult(r => CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, keepOnlyFields(r.<<, desiredFields)))
-        getResultFilteringFields
-      case _ => getJsonEntityRecord
-    }
 
   // ====================================================================================================
   //  migration helpers
