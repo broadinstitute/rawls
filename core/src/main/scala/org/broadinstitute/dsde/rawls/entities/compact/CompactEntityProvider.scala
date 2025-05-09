@@ -130,7 +130,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencesTo(workspaceId,
                                                                                                  entityRefs
         )
-        _ = if (referencingEntities.toSet.diff(entityRefs.toSet).size != 0) {
+        // getReferencesTo already excludes the entities that are being deleted
+        _ = if (referencingEntities.size != 0) {
           throw new DeleteEntitiesConflictException(referencingEntities.toSet)
         }
         // remove all references from these entities

@@ -569,6 +569,50 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   }
 
+  it should "exclude entities included in the search" in withMinimalTestDatabase { _ =>
+    // create referenced/target entities
+    val targetType1 = "targetType1"
+    val targetType2 = "targetType2"
+    val targetEntity1 = Entity("target1", targetType1, Map())
+    val targetEntity2 = Entity("target2", targetType1, Map())
+    val targetEntity3 =
+      Entity("target3",
+             targetType2,
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"))
+      )
+    val target1 = insertAndGet(targetEntity1)
+    val target2 = insertAndGet(targetEntity2)
+    val target3 = insertAndGet(targetEntity3)
+
+    // create referencing/source entities
+    val sourceEntity1 = Entity(
+      "entity1",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target2"),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType2, "target3")
+      )
+    )
+    val sourceEntity2 =
+      Entity("entity2",
+             "entityType1",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target2"))
+      )
+    val entity1 = insertAndGet(sourceEntity1)
+    val entity2 = insertAndGet(sourceEntity2)
+
+    // insert rows
+    runAndWait(q.upsertReferences(entity1.id, Set(target3.id, target2.id)))
+    runAndWait(q.upsertReferences(entity2.id, Set(target2.id)))
+    runAndWait(q.upsertReferences(target3.id, Set(target1.id)))
+
+    val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference)
+    runAndWait(
+      q.getReferencesTo(wsid, Seq(targetEntity1.toReference, targetEntity2.toReference, targetEntity3.toReference))
+    ) should contain theSameElementsAs expected
+
+  }
+
   behavior of "getReferencesToType"
 
   it should "find entities" in withMinimalTestDatabase { _ =>
@@ -661,43 +705,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       q.getReferencesToType(wsid, targetType1)
     ) should contain theSameElementsAs expected
 
-  }
-
-  behavior of "getEntitiesOfType"
-
-  it should "find entities" in withMinimalTestDatabase { _ =>
-    // insert an entity with attributes
-    val entityType1 = "entityType1"
-    val entityType2 = "entityType2"
-    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
-    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
-    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
-    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
-    insertAndGet(entity1)
-    insertAndGet(entity2)
-    insertAndGet(entity3)
-    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
-    runAndWait(q.getEntitiesOfType(wsid, entityType1)) should contain theSameElementsAs Seq(entity1.toReference,
-                                                                                            entity3.toReference
-    )
-
-  }
-
-  it should "only get entities from the given workspace" in withMinimalTestDatabase { _ =>
-    // insert an entity with attributes
-    val entityType1 = "entityType1"
-    val entityType2 = "entityType2"
-    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
-    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
-    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
-    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
-    insertAndGet(entity1)
-    insertAndGet(entity2)
-    insertAndGet(entity3)
-    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
-    runAndWait(q.getEntitiesOfType(wsid, entityType1)) should contain theSameElementsAs Seq(entity1.toReference,
-                                                                                            entity3.toReference
-    )
   }
 
   private val columnFilterCases = List(

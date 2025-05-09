@@ -98,22 +98,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           and entity_type = $entityType
           and name = $entityName"""
 
-  /**
-   * Get all entities of the given type in workspace
-   *
-   * `execution plan: simple select; indexed by idx_entity_type_name; using where, index condition`
-   */
-  def getEntitiesOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
-    val selectStatement: SQLActionBuilder =
-      sql"""select entity_type, name
-              from ENTITY
-              where workspace_id = $workspaceId
-              and entity_type = $entityType
-              and deleted = 0;"""
-
-    selectStatement.as[AttributeEntityReference]
-  }
-
   /** Given a set of entity references, return the ids being referenced.
     * Ignores deleted entities.
     *
@@ -334,6 +318,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   // Gets any entities that have references to the entities in the given list
+  // Excludes entities that are in the list
+  // TODO: update execution plan
   // `execution plan: 2 nested loops; 3 rows; using where & index: idx_entity_type_name, unq_trom_to, PRIMARY`
   def getReferencesTo(workspaceId: UUID,
                       refs: Seq[AttributeEntityReference]
@@ -360,19 +346,20 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
     // build the overall query
     val query = concatSqlActions(
-      sql"""select e.entity_type, e.name
+      sql"""with SubqueryResult as (""",
+      subquery,
+      sql""" ) select distinct e.entity_type, e.name
 from ENTITY e, ENTITY_REFS r
 where r.from_id = e.id
 and e.workspace_id = $workspaceId
-and r.to_id in (""",
-      subquery,
-      sql""" );"""
+and r.to_id in (select id from SubqueryResult) and r.from_id not in (select id from SubqueryResult)"""
     )
 
     query.as[AttributeEntityReference]
   }
 
-  // Gets any entities that have references to the entities in the given list
+  // Gets entities that have references to any entities of the given type
+  // Excludes entities with the same type
   // `execution plan: 2 nested loops, full index scan: idx_entity_type_name; 3 simple selects; using where & index`
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
     val subquery =
@@ -383,6 +370,7 @@ and r.to_id in (""",
       sql"""select e.entity_type, e.name
 from ENTITY e, ENTITY_REFS r
 where r.from_id = e.id
+and deleted = 0
 and e.workspace_id = $workspaceId
 and e.entity_type != $entityType
 and r.to_id in (""",
