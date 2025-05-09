@@ -5,6 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import java.sql.Timestamp
 import java.util.{Date, UUID}
+import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -66,6 +67,9 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   implicit val getAttributeEntityReference: GetResult[AttributeEntityReference] =
     GetResult(r => AttributeEntityReference(r.<<, r.<<))
+
+  implicit val getEntity: GetResult[Entity] =
+    GetResult(r => Entity(r.<<, r.<<, fromSql(r.<<)))
 
   private val fromEntityWhereNotDeleted = "from ENTITY e where e.deleted = 0"
 
@@ -409,86 +413,119 @@ and r.to_id in (""",
   }
 
   def countEntities(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
-    concatSqlActions(
-      sql"select count(*) ",
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType)
-    ).as[Int].map(_.head)
+    countEntitiesWithFilter(workspaceId, entityType, sql"")
 
   def countEntitiesWithColumnFilter(workspaceId: UUID,
                                     entityType: String,
                                     columnFilter: EntityColumnFilter
-  ): ReadWriteAction[Int] =
-    concatSqlActions(
-      sql"select count(*) ",
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
-      columnFilterCondition(columnFilter)
-    ).as[Int].map(_.head)
+  ): ReadWriteAction[Int] = countEntitiesWithFilter(workspaceId, entityType, columnFilterCondition(columnFilter))
 
   def countEntitiesWithFilterTerms(workspaceId: UUID,
                                    entityType: String,
-                                   entityQuery: EntityQuery
+                                   entityQuery: EntityQuery,
+                                   filterTerms: Seq[String]
   ): ReadWriteAction[Int] =
-    concatSqlActions(
-      sql"select count(*) ",
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
-      filterTermsCondition(entityQuery)
-    ).as[Int].map(_.head)
+    countEntitiesWithFilter(workspaceId, entityType, filterTermsCondition(filterTerms, entityQuery.filterOperator))
 
   def queryEntitiesWithFilterTerms(workspaceId: UUID,
                                    entityType: String,
-                                   entityQuery: EntityQuery
-  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
-    concatSqlActions(
-      selectCompactEntityColumns,
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
-      filterTermsCondition(entityQuery),
-      orderBy(entityQuery),
-      paginationClause(entityQuery)
-    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+                                   entityQuery: EntityQuery,
+                                   filterTerms: Seq[String]
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
+    queryEntitiesWithFilter(workspaceId,
+                            entityType,
+                            entityQuery,
+                            filterTermsCondition(filterTerms, entityQuery.filterOperator)
+    )
 
   def queryEntitiesWithColumnFilter(workspaceId: UUID,
                                     entityType: String,
                                     entityQuery: EntityQuery,
                                     columnFilter: EntityColumnFilter
-  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
-    concatSqlActions(
-      selectCompactEntityColumns,
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
-      columnFilterCondition(columnFilter),
-      orderBy(entityQuery),
-      paginationClause(entityQuery)
-    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
+    queryEntitiesWithFilter(workspaceId, entityType, entityQuery, columnFilterCondition(columnFilter))
 
   def queryEntitiesWithNoFilter(workspaceId: UUID,
                                 entityType: String,
                                 entityQuery: EntityQuery
-  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
-    concatSqlActions(
-      selectCompactEntityColumns,
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
-      orderBy(entityQuery),
-      paginationClause(entityQuery)
-    ).as[CompactEntityRecord](entityResultGetterWithFieldsFilter(entityQuery))
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
+    queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
 
   // ====================================================================================================
   //  entity query helpers
   //      methods in this section are used for building entity query functions
   // ====================================================================================================
 
-  private val selectCompactEntityColumns =
-    sql"select id, name, entity_type, workspace_id, record_version, deleted, attributes"
+  private def countEntitiesWithFilter(workspaceId: UUID,
+                                      entityType: String,
+                                      filter: SQLActionBuilder
+  ): ReadWriteAction[Int] =
+    concatSqlActions(
+      sql"select count(*) ",
+      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
+      filter
+    ).as[Int].map(_.head)
+
+  private def queryEntitiesWithFilter(workspaceId: UUID,
+                                      entityType: String,
+                                      entityQuery: EntityQuery,
+                                      filter: SQLActionBuilder
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
+    concatSqlActions(
+      selectEntityColumns,
+      filteredAttributesColumn(entityQuery),
+      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
+      filter,
+      orderBy(entityQuery),
+      paginationClause(entityQuery)
+    ).as[Entity]
+
+  private val selectEntityColumns =
+    sql"select name, entity_type, "
+
+  /**
+   * Constructs the SQL fragment to extract specific attributes from the attributes JSON column
+   * in the database based on the fields specified in the EntityQuery object.
+   *
+   * If specific fields are provided in entityQuery.fields, the method dynamically generates
+   * a JSON object containing only those fields. Each field is extracted from the attributes column
+   * using the -> operator. If no fields are specified, the entire attributes column is selected.
+   *
+   * Example sql produced:
+   * JSON_OBJECT(
+   *   'v', e.attributes -> '$.v',
+   *   'attrs', JSON_OBJECT(
+   *     ?, e.attributes -> ?,
+   *     ?, e.attributes -> ?
+   *   ))
+   */
+  private def filteredAttributesColumn(entityQuery: EntityQuery) =
+    entityQuery.fields.fields match {
+      case Some(fields) =>
+        val fieldSqls = fields.map { field =>
+          sql"$field, e.attributes -> ${slickAttributePath(field)}"
+        }
+        concatSqlActions(
+          sql"""JSON_OBJECT(
+               '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
+               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_OBJECT(""",
+          reduceSqlActionsWithDelim(fieldSqls.toSeq, sql","),
+          sql"))"
+        )
+      case _ => sql"attributes"
+    }
 
   private def fromActiveEntitiesOfTypeInWorkspace(workspaceId: UUID, entityType: String) =
     sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
 
-  private def filterTermsCondition(entityQuery: EntityQuery) = {
+  private def filterTermsCondition(filterTerms: Seq[String], operator: FilterOperator) = {
     // note the lower casing for case insensitive search
-    val filterClauses = entityQuery.filterTermsList.map { filterTerm =>
+    val filterClauses = filterTerms.map { filterTerm =>
       sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
     }
     concatSqlActions(
       sql" and (",
-      reduceSqlActionsWithDelim(filterClauses, sql" #${FilterOperators.toSql(entityQuery.filterOperator)} "),
+      reduceSqlActionsWithDelim(filterClauses, sql" #${FilterOperators.toSql(operator)} "),
       sql")"
     )
   }
@@ -513,17 +550,6 @@ and r.to_id in (""",
 
   private def paginationClause(entityQuery: EntityQuery): SQLActionBuilder =
     sql" limit ${entityQuery.pageSize} offset ${entityQuery.offset}"
-
-  private def entityResultGetterWithFieldsFilter(entityQuery: EntityQuery) =
-    entityQuery.fields.fields match {
-      case Some(fields) =>
-        // this special GetResult instance is the only way I found to filter the fields and keep this a streaming result
-        val desiredFields = fields.map(AttributeName.fromDelimitedName)
-        val getResultFilteringFields =
-          GetResult(r => CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, keepOnlyFields(r.<<, desiredFields)))
-        getResultFilteringFields
-      case _ => getJsonEntityRecord
-    }
 
   // ====================================================================================================
   //  migration helpers

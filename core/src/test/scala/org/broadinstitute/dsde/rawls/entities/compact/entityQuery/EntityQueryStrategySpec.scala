@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeName,
+  Entity,
   EntityColumnFilter,
   EntityQuery,
   SortDirections
@@ -87,14 +88,14 @@ class EntityQueryStrategySpec
 
   it should "return a non-empty source when count is greater than 0" in {
     import slick.jdbc.MySQLProfile.api._
-    val testValue = CompactEntityRecord(0, "name", "type", UUID.randomUUID(), 1, false, None)
-    implicit val testCompactEntityGetter: GetResult[CompactEntityRecord] = GetResult(_ => testValue)
+    val testValue = Entity("name", "type", Map.empty)
+    implicit val testCompactEntityGetter: GetResult[Entity] = GetResult(_ => testValue)
 
     val strategy = new EntityQueryStrategy {
       override val repository: CompactEntityRepository = mock[CompactEntityRepository]
       override def getCountAndSource: Future[CountAndSource] = {
         when(repository.dataSource).thenReturn(slickDataSource)
-        Future.successful(CountAndSource(1, streamQuery(1, sql"SELECT 1".as[CompactEntityRecord])))
+        Future.successful(CountAndSource(1, streamQuery(1, sql"SELECT 1".as[Entity])))
       }
     }
 

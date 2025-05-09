@@ -4,7 +4,7 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityRecord
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, EntityColumnFilter, EntityQuery}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, Entity, EntityColumnFilter, EntityQuery}
 import slick.dbio.Effect
 import slick.jdbc.TransactionIsolation.ReadCommitted
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
@@ -13,7 +13,7 @@ import slick.sql.SqlStreamingAction
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-case class CountAndSource(count: Int, source: Source[CompactEntityRecord, _])
+case class CountAndSource(count: Int, source: Source[Entity, _])
 
 trait EntityQueryStrategy {
   val repository: CompactEntityRepository
@@ -22,8 +22,8 @@ trait EntityQueryStrategy {
 
   protected def streamQuery(
     count: Int,
-    query: SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Effect.Read]
-  ): Source[CompactEntityRecord, NotUsed] = {
+    query: SqlStreamingAction[Seq[Entity], Entity, Effect.Read]
+  ): Source[Entity, NotUsed] = {
     import repository.dataSource.dataAccess.driver.api._
     if (count == 0) {
       // if there are no results, we can just return an empty source
@@ -63,8 +63,8 @@ object EntityQueryStrategy {
     val idAttributeName = AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix)
 
     (entityQuery.filterTerms, entityQuery.columnFilter) match {
-      case (Some(_), _) =>
-        new SearchStrategy(repository, workspaceId, entityType, entityQuery)
+      case (Some(filterTerms), _) =>
+        new SearchStrategy(repository, workspaceId, entityType, entityQuery, filterTerms.split(" ").toSeq)
       case (_, Some(EntityColumnFilter(`idAttributeName`, _))) =>
         new FilterByNameStrategy(repository, workspaceId, entityType, entityQuery)
       case (_, Some(_)) =>
