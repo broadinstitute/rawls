@@ -63,6 +63,9 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
     GetResult(r => EntityTypeAndCount(r.<<, r.<<))
 
+  implicit val getEntity: GetResult[Entity] =
+    GetResult(r => Entity(r.<<, r.<<, fromSql(r.<<)))
+
   private val fromEntityWhereNotDeleted = "from ENTITY e where e.deleted = 0"
 
   /**
@@ -300,49 +303,49 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def queryEntitiesWithFilterTerms(workspaceId: UUID,
                                    entityType: String,
                                    entityQuery: EntityQuery
-  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     concatSqlActions(
-      selectCompactEntityColumns,
+      selectEntityColumns,
       filteredAttributesColumn(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       filterTermsCondition(entityQuery),
       orderBy(entityQuery),
       paginationClause(entityQuery)
-    ).as[CompactEntityRecord]
+    ).as[Entity]
 
   def queryEntitiesWithColumnFilter(workspaceId: UUID,
                                     entityType: String,
                                     entityQuery: EntityQuery,
                                     columnFilter: EntityColumnFilter
-  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     concatSqlActions(
-      selectCompactEntityColumns,
+      selectEntityColumns,
       filteredAttributesColumn(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       columnFilterCondition(columnFilter),
       orderBy(entityQuery),
       paginationClause(entityQuery)
-    ).as[CompactEntityRecord]
+    ).as[Entity]
 
   def queryEntitiesWithNoFilter(workspaceId: UUID,
                                 entityType: String,
                                 entityQuery: EntityQuery
-  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     concatSqlActions(
-      selectCompactEntityColumns,
+      selectEntityColumns,
       filteredAttributesColumn(entityQuery),
       fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       orderBy(entityQuery),
       paginationClause(entityQuery)
-    ).as[CompactEntityRecord]
+    ).as[Entity]
 
   // ====================================================================================================
   //  entity query helpers
   //      methods in this section are used for building entity query functions
   // ====================================================================================================
 
-  private val selectCompactEntityColumns =
-    sql"select id, name, entity_type, workspace_id, record_version, deleted, "
+  private val selectEntityColumns =
+    sql"select name, entity_type, "
 
   /**
    * Constructs the SQL fragment to extract specific attributes from the attributes JSON column

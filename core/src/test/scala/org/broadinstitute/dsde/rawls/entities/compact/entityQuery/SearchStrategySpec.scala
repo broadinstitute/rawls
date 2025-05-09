@@ -4,7 +4,7 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.stream.scaladsl.Sink
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, TestDriverComponentWithFlatSpecAndMatchers}
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
-import org.broadinstitute.dsde.rawls.model.{EntityQuery, SortDirections}
+import org.broadinstitute.dsde.rawls.model.{Entity, EntityQuery, SortDirections}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.Mockito.when
 import slick.jdbc.GetResult
@@ -26,8 +26,8 @@ class SearchStrategySpec
     when(mockRepository.dataSource).thenReturn(slickDataSource)
     when(mockRepository.queries).thenReturn(mockQuery)
 
-    val testValue = CompactEntityRecord(0, "name", "type", UUID.randomUUID(), 1, false, None)
-    implicit val testCompactEntityGetter: GetResult[CompactEntityRecord] = GetResult(_ => testValue)
+    val testValue = Entity("name", "type", Map.empty)
+    implicit val testCompactEntityGetter: GetResult[Entity] = GetResult(_ => testValue)
 
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, Some("test"))
     val workspaceId = UUID.randomUUID()
@@ -37,7 +37,7 @@ class SearchStrategySpec
     when(mockRepository.queries.countEntitiesWithFilterTerms(workspaceId, entityType, entityQuery))
       .thenReturn(DBIO.successful(10))
     when(mockRepository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery))
-      .thenReturn(sql"SELECT 1".as[CompactEntityRecord])
+      .thenReturn(sql"SELECT 1".as[Entity])
 
     val testFuture = for {
       countAndSource <- strategy.getCountAndSource
