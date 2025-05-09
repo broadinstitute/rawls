@@ -294,8 +294,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.deleteReferencesWithFilter(fromId, toIdsTwo)) shouldBe toIdsOne.size
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
   }
-  
-    it should "upsert for multiple source entities" in withMinimalTestDatabase { _ =>
+
+  it should "upsert for multiple source entities" in withMinimalTestDatabase { _ =>
     val fromIdOne: Long = 1 // id of the entity doing the referencing: the "source"
     val fromIdTwo: Long = 2 // id of the entity doing the referencing: the "source"
     val toIdsOne: Set[Long] = Set(101, 102, 103, 104, 105) // ids of entities being referenced: the "targets"

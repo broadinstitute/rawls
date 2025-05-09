@@ -417,11 +417,11 @@ and r.to_id in (""",
     query.as[AttributeEntityReference]
 
   }
-  
+
   /*
-  * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
-    * AttributeEntityReferences.
-    */
+   * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
+   * AttributeEntityReferences.
+   */
   private def generateTypeNameSql(refs: Set[AttributeEntityReference]): Iterable[SQLActionBuilder] = {
     // group the entity type/name pairs by type
     val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
