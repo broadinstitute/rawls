@@ -336,9 +336,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val toIds2: Set[Long] = Set(target3.id, target4.id, target5.id)
     val toIds3: Set[Long] = Set(target1.id, target3.id, target6.id)
     // insert rows
-    runAndWait(q.upsertReferences(source1.id, toIds1)) shouldBe toIds1.size
-    runAndWait(q.upsertReferences(source2.id, toIds2)) shouldBe toIds2.size
-    runAndWait(q.upsertReferences(source3.id, toIds3)) shouldBe toIds3.size
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(source1.id, toIds1), RefPointers(source2.id, toIds2), RefPointers(source3.id, toIds3))
+      )
+    ) shouldBe (toIds1.size + toIds2.size + toIds3.size)
     runAndWait(q.getReferencedIds(source1.id)) should contain theSameElementsAs toIds1
     runAndWait(q.getReferencedIds(source2.id)) should contain theSameElementsAs toIds2
     runAndWait(q.getReferencedIds(source3.id)) should contain theSameElementsAs toIds3
@@ -370,8 +372,13 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val targetWorkspace2 =
       insertAndGet(Entity("target", targetType, Map()), minimalTestData.workspace2.workspaceIdAsUUID)
     // insert rows
-    runAndWait(q.upsertReferences(sourceWorkspace1.id, Set(targetWorkspace1.id)))
-    runAndWait(q.upsertReferences(sourceWorkspace2.id, Set(targetWorkspace2.id)))
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(sourceWorkspace1.id, Set(targetWorkspace1.id)),
+            RefPointers(sourceWorkspace2.id, Set(targetWorkspace2.id))
+        )
+      )
+    )
     runAndWait(q.getReferencedIds(sourceWorkspace1.id)) should contain theSameElementsAs Seq(targetWorkspace1.id)
     runAndWait(q.getReferencedIds(sourceWorkspace2.id)) should contain theSameElementsAs Seq(targetWorkspace2.id)
     // delete rows
@@ -409,9 +416,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val toIds2: Set[Long] = Set(target3.id, target4.id, target5.id)
     val toIds3: Set[Long] = Set(target1.id, target3.id, target6.id)
     // insert rows
-    runAndWait(q.upsertReferences(source1.id, toIds1)) shouldBe toIds1.size
-    runAndWait(q.upsertReferences(source2.id, toIds2)) shouldBe toIds2.size
-    runAndWait(q.upsertReferences(source3.id, toIds3)) shouldBe toIds3.size
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(source1.id, toIds1), RefPointers(source2.id, toIds2), RefPointers(source3.id, toIds3))
+      )
+    ) shouldBe (toIds1.size + toIds2.size + toIds3.size)
     runAndWait(q.getReferencedIds(source1.id)) should contain theSameElementsAs toIds1
     runAndWait(q.getReferencedIds(source2.id)) should contain theSameElementsAs toIds2
     runAndWait(q.getReferencedIds(source3.id)) should contain theSameElementsAs toIds3
@@ -665,9 +674,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val entity3 = insertAndGet(sourceEntity3)
 
     // insert rows
-    runAndWait(q.upsertReferences(entity1.id, Set(target1.id, target3.id)))
-    runAndWait(q.upsertReferences(entity2.id, Set(target2.id)))
-    runAndWait(q.upsertReferences(entity3.id, Set(target1.id)))
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target1.id, target3.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(entity3.id, Set(target1.id))
+        )
+      )
+    )
 
     val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference, sourceEntity3.toReference)
     runAndWait(
@@ -695,8 +709,13 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val entityWorkspace2 = insertAndGet(sourceEntity, minimalTestData.workspace2.workspaceIdAsUUID)
 
     // insert rows
-    runAndWait(q.upsertReferences(entityWorkspace1.id, Set(targetWorkspace1.id)))
-    runAndWait(q.upsertReferences(entityWorkspace2.id, Set(targetWorkspace2.id)))
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entityWorkspace1.id, Set(targetWorkspace1.id)),
+            RefPointers(entityWorkspace2.id, Set(targetWorkspace2.id))
+        )
+      )
+    )
 
     val expected = Set(sourceEntity.toReference)
     runAndWait(
@@ -738,9 +757,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val entity2 = insertAndGet(sourceEntity2)
 
     // insert rows
-    runAndWait(q.upsertReferences(entity1.id, Set(target3.id, target2.id)))
-    runAndWait(q.upsertReferences(entity2.id, Set(target2.id)))
-    runAndWait(q.upsertReferences(target3.id, Set(target1.id)))
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target3.id, target2.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(target3.id, Set(target1.id))
+        )
+      )
+    )
 
     val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference)
     runAndWait(
@@ -786,9 +810,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val entity3 = insertAndGet(sourceEntity3)
 
     // insert rows
-    runAndWait(q.upsertReferences(entity1.id, Set(target1.id, target3.id)))
-    runAndWait(q.upsertReferences(entity2.id, Set(target2.id)))
-    runAndWait(q.upsertReferences(entity3.id, Set(target1.id)))
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target1.id, target3.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(entity3.id, Set(target1.id))
+        )
+      )
+    )
 
     val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference, sourceEntity3.toReference)
     runAndWait(
@@ -832,9 +861,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val entity3 = insertAndGet(sourceEntity3)
 
     // insert rows
-    runAndWait(q.upsertReferences(entity1.id, Set(target1.id, target3.id)))
-    runAndWait(q.upsertReferences(entity2.id, Set(target2.id)))
-    runAndWait(q.upsertReferences(entity3.id, Set(target1.id)))
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target1.id, target3.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(entity3.id, Set(target1.id))
+        )
+      )
+    )
 
     val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference, sourceEntity3.toReference)
     runAndWait(
