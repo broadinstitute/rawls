@@ -7,7 +7,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
@@ -495,6 +495,25 @@ class EntityService(protected val ctx: RawlsRequestContext,
           sqlLoggingRecover(s"batchUpsertEntities: $workspaceName")
         )
     }
+
+  def saveWorkflowOutputEntities(
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Traversable[Entity]] =
+    for {
+      provider <- DBIO.from(entityManager.resolveProviderFuture(EntityRequestArguments(workspace, ctx)))
+      res <- provider.saveWorkflowOutputEntities(dataAccess, workspace, updatedEntities)
+    } yield res
+
+  def listWorkflowEntities(dataAccess: DataAccess,
+                           workspace: Workspace,
+                           entityIds: Seq[Long]
+  ): ReadAction[Map[Long, Entity]] =
+    for {
+      provider <- DBIO.from(entityManager.resolveProviderFuture(EntityRequestArguments(workspace, ctx)))
+      res <- provider.listWorkflowEntities(dataAccess, workspace, entityIds)
+    } yield res
 
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
