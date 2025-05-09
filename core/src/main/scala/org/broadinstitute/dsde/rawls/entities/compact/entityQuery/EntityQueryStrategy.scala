@@ -63,8 +63,8 @@ object EntityQueryStrategy {
     val idAttributeName = AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix)
 
     (entityQuery.filterTerms, entityQuery.columnFilter) match {
-      case (Some(_), _) =>
-        new SearchStrategy(repository, workspaceId, entityType, entityQuery)
+      case (Some(filterTerms), _) =>
+        new SearchStrategy(repository, workspaceId, entityType, entityQuery, filterTerms.split(" ").toSeq)
       case (_, Some(EntityColumnFilter(`idAttributeName`, _))) =>
         new FilterByNameStrategy(repository, workspaceId, entityType, entityQuery)
       case (_, Some(_)) =>

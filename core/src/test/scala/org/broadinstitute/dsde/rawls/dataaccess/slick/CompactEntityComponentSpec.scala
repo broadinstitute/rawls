@@ -652,7 +652,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.And
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
     actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
@@ -686,7 +687,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.Or
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
     actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
@@ -751,7 +753,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                       SortDirections.Ascending,
                       Some("foo bAr"),
                       FilterOperators.And
-          )
+          ),
+          Seq("foo", "bAr")
         )
       )
       actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
@@ -764,7 +767,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       q.queryEntitiesWithFilterTerms(
         wsid,
         entityType,
-        entityQuery
+        entityQuery,
+        entityQuery.filterTerms.map(_.split(" ").toSeq).getOrElse(Seq.empty)
       )
     }
   }
@@ -812,7 +816,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.And
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
     actual shouldBe 2
@@ -846,7 +851,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.Or
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
     actual shouldBe 2

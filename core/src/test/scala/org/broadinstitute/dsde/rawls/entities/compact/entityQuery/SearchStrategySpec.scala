@@ -32,11 +32,11 @@ class SearchStrategySpec
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, Some("test"))
     val workspaceId = UUID.randomUUID()
     val entityType = "testType"
-    val strategy = new SearchStrategy(mockRepository, workspaceId, entityType, entityQuery)
+    val strategy = new SearchStrategy(mockRepository, workspaceId, entityType, entityQuery, Seq("test"))
 
-    when(mockRepository.queries.countEntitiesWithFilterTerms(workspaceId, entityType, entityQuery))
+    when(mockRepository.queries.countEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, Seq("test")))
       .thenReturn(DBIO.successful(10))
-    when(mockRepository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery))
+    when(mockRepository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, Seq("test")))
       .thenReturn(sql"SELECT 1".as[Entity])
 
     val testFuture = for {
