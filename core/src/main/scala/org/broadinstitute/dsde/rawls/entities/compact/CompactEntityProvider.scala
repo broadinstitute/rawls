@@ -7,38 +7,15 @@ import akka.stream.scaladsl.{Sink, Source}
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction, RefPointers}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  EntityNotFoundException,
-  EntityReferenceNotFoundException
-}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeEntityReference,
-  AttributeEntityReferenceList,
-  AttributeName,
-  AttributeRename,
-  AttributeUpdateOperations,
-  AttributeValue,
-  Entity,
-  EntityCopyResponse,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  EntityTypeRename,
-  ErrorReport,
-  RawlsRequestContext,
-  SubmissionValidationEntityInputs,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeRename, AttributeUpdateOperations, AttributeValue, Entity, EntityCopyResponse, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, ErrorReport, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
@@ -121,6 +98,17 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     // and return
     dbResults
   }
+
+  def saveWorkflowOutputEntities(
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Traversable[Entity]] = ???
+
+  def listWorkflowEntities(dataAccess: DataAccess,
+                           workspace: Workspace,
+                           entityIds: Seq[Long]
+  ): ReadAction[Map[Long, Entity]] = ???
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,

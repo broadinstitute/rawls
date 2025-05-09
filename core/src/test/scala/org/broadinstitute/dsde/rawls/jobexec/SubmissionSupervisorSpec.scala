@@ -3,10 +3,9 @@ package org.broadinstitute.dsde.rawls.jobexec
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
-import org.broadinstitute.dsde.rawls.credentials.{FakeRawlsCredentials, GoogleRawlsCredential}
+import org.broadinstitute.dsde.rawls.credentials.FakeRawlsCredentials
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
   HttpSamDAO,
@@ -14,6 +13,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   MockGoogleServicesDAO,
   MockShardedExecutionServiceCluster
 }
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
   RefreshGlobalJobExecGauges,
   SaveCurrentWorkflowStatusCounts,
@@ -32,7 +32,6 @@ import org.scalatest.matchers.should.Matchers
 import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation
@@ -84,9 +83,9 @@ class SubmissionSupervisorSpec
           new UncoordinatedDataSourceAccess(slickDataSource),
           mockSamDAO,
           gcsDAO,
+          _ => mock[EntityService],
           mockNotificationDAO,
           config,
-          ConfigFactory.load().getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName
         )
         .withDispatcher("submission-monitor-dispatcher"),
@@ -103,7 +102,8 @@ class SubmissionSupervisorSpec
       withSupervisor() { supervisor =>
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
                                        UUID.fromString(testData.submission1.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspace.toWorkspaceName,
@@ -115,7 +115,8 @@ class SubmissionSupervisorSpec
 
         supervisor ! SubmissionStarted(testData.workspaceSuccessfulSubmission.toWorkspaceName,
                                        UUID.fromString(testData.submissionSuccessful1.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspaceSuccessfulSubmission.toWorkspaceName,
@@ -166,11 +167,13 @@ class SubmissionSupervisorSpec
         // start the submission
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
                                        UUID.fromString(testData.submission1.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
                                        UUID.fromString(testData.submission2.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
 
         // the first submission updates once and then completes
@@ -240,11 +243,13 @@ class SubmissionSupervisorSpec
         // start the submission
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
                                        UUID.fromString(testData.submission1.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
                                        UUID.fromString(testData.submission2.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
 
         // both submissions immediately complete
@@ -311,7 +316,8 @@ class SubmissionSupervisorSpec
       withSupervisor(trackDetailedMetrics = false) { supervisor =>
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName,
                                        UUID.fromString(testData.submission1.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspace.toWorkspaceName,
@@ -323,7 +329,8 @@ class SubmissionSupervisorSpec
 
         supervisor ! SubmissionStarted(testData.workspaceSuccessfulSubmission.toWorkspaceName,
                                        UUID.fromString(testData.submissionSuccessful1.submissionId),
-                                       None
+                                       None,
+                                       userInfo
         )
         supervisor ! SaveCurrentWorkflowStatusCounts(
           testData.workspaceSuccessfulSubmission.toWorkspaceName,
