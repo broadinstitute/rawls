@@ -11,11 +11,34 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityReferenceNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  EntityNotFoundException,
+  EntityReferenceNotFoundException
+}
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeRename, AttributeUpdateOperations, AttributeValue, Entity, EntityCopyResponse, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, ErrorReport, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
+import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
+  AttributeEntityReference,
+  AttributeEntityReferenceList,
+  AttributeName,
+  AttributeRename,
+  AttributeUpdateOperations,
+  AttributeValue,
+  Entity,
+  EntityCopyResponse,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  EntityTypeMetadata,
+  EntityTypeRename,
+  ErrorReport,
+  RawlsRequestContext,
+  SubmissionValidationEntityInputs,
+  Workspace
+}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
