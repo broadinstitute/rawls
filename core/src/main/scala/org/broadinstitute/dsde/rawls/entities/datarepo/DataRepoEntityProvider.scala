@@ -12,6 +12,7 @@ import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, Quer
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, GoogleBigQueryServiceFactoryImpl, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
@@ -567,6 +568,21 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                                    parentContext: RawlsRequestContext
   ): Future[Int] =
     throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
+
+  def saveWorkflowOutputEntities(
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Traversable[Entity]] = throw new UnsupportedEntityOperationException(
+    "save workflow output entities not supported by this provider."
+  )
+
+  def listWorkflowEntities(dataAccess: DataAccess,
+                           workspace: Workspace,
+                           entityIds: Seq[Long]
+  ): ReadAction[Map[Long, Entity]] = throw new UnsupportedEntityOperationException(
+    "list workflow entities not supported by this provider."
+  )
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,

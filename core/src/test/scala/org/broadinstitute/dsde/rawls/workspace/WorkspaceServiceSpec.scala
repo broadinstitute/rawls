@@ -184,9 +184,9 @@ class WorkspaceServiceSpec
           new UncoordinatedDataSourceAccess(slickDataSource),
           samDAO,
           gcsDAO,
+          _ => mock[EntityService],
           mockNotificationDAO,
           SubmissionMonitorConfig(1 second, 30 days, true, 20000, true, true),
-          testConf.getDuration("entities.queryTimeout").toScala,
           workbenchMetricBaseName = "test"
         )
         .withDispatcher("submission-monitor-dispatcher")

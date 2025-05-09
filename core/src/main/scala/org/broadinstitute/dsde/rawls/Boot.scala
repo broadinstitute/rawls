@@ -624,7 +624,6 @@ object Boot extends IOApp with LazyLogging {
           methodRepoDAO,
           drsResolver,
           entityServiceConstructor,
-          entityQueryTimeout.toScala,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,

@@ -200,26 +200,6 @@ trait ApiServiceSpec
     val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true, true)
     val testConf = ConfigFactory.load()
 
-    // if a test doesn't need the Cromwell monitor actors, it can override submissionMonitorsEnabled to false,
-    // and we'll spin up a simple TestKit blackhole actor instead of the heavyweight Rawls actors.
-    val submissionSupervisorProps = if (submissionMonitorsEnabled) {
-      SubmissionSupervisor
-        .props(
-          executionServiceCluster,
-          new UncoordinatedDataSourceAccess(slickDataSource),
-          samDAO,
-          gcsDAO,
-          mockNotificationDAO,
-          config,
-          testConf.getDuration("entities.queryTimeout").toScala,
-          workbenchMetricBaseName
-        )
-        .withDispatcher("submission-monitor-dispatcher")
-    } else {
-      TestActors.blackholeProps
-    }
-    val submissionSupervisor = system.actorOf(submissionSupervisorProps)
-
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
     val googleGroupSyncTopic = "test-topic-name"
@@ -457,6 +437,26 @@ trait ApiServiceSpec
       new WorkspaceSettingRepository(slickDataSource),
       entityServiceConstructor
     ) _
+
+    // if a test doesn't need the Cromwell monitor actors, it can override submissionMonitorsEnabled to false,
+    // and we'll spin up a simple TestKit blackhole actor instead of the heavyweight Rawls actors.
+    val submissionSupervisorProps = if (submissionMonitorsEnabled) {
+      SubmissionSupervisor
+        .props(
+          executionServiceCluster,
+          new UncoordinatedDataSourceAccess(slickDataSource),
+          samDAO,
+          gcsDAO,
+          entityServiceConstructor,
+          mockNotificationDAO,
+          config,
+          workbenchMetricBaseName
+        )
+        .withDispatcher("submission-monitor-dispatcher")
+    } else {
+      TestActors.blackholeProps
+    }
+    val submissionSupervisor = system.actorOf(submissionSupervisorProps)
 
     override val googleProjectRegServiceConstructor =
       GoogleProjectRegistrationService.constructor(

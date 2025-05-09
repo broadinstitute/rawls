@@ -6,7 +6,7 @@ import akka.stream.scaladsl.Source
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityTypeAndCount, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery._
@@ -71,6 +71,17 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
   ): Future[Int] = ???
+
+  def saveWorkflowOutputEntities(
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Traversable[Entity]] = ???
+
+  def listWorkflowEntities(dataAccess: DataAccess,
+                           workspace: Workspace,
+                           entityIds: Seq[Long]
+  ): ReadAction[Map[Long, Entity]] = ???
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,

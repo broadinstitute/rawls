@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.base
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -41,6 +42,17 @@ trait EntityProvider {
   def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                           parentContext: RawlsRequestContext
   ): Future[Int]
+
+  def saveWorkflowOutputEntities(
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Traversable[Entity]]
+
+  def listWorkflowEntities(dataAccess: DataAccess,
+                           workspace: Workspace,
+                           entityIds: Seq[Long]
+  ): ReadAction[Map[Long, Entity]]
 
   def copyEntities(sourceWorkspaceContext: Workspace,
                    destWorkspaceContext: Workspace,
