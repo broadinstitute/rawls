@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
+import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
@@ -9,7 +10,8 @@ import scala.reflect.runtime.universe._
 import scala.util.{Success, Try}
 
 class CompactEntityProviderBuilder(dataSource: SlickDataSource)(implicit
-  protected val executionContext: ExecutionContext
+  protected val executionContext: ExecutionContext,
+  actorSystem: ActorSystem
 ) extends EntityProviderBuilder[CompactEntityProvider] {
 
   /** declares the type of EntityProvider this builder will build.

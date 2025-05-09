@@ -1,15 +1,16 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityTypeAndCount, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.compact.entityQuery._
+import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   EntityNotFoundException,
@@ -38,6 +39,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
+import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.TransactionIsolation.ReadCommitted
@@ -53,9 +55,14 @@ import scala.util.Try
   *
   * @param executionContext scala concurrency context
   */
-class CompactEntityProvider(requestArguments: EntityRequestArguments, repository: CompactEntityRepository)(implicit
-  protected val executionContext: ExecutionContext
+class CompactEntityProvider(requestArguments: EntityRequestArguments,
+                            repository: CompactEntityRepository,
+                            config: CompactEntityProviderConfig = CompactEntityProviderConfig()
+)(implicit
+  protected val executionContext: ExecutionContext,
+  actorSystem: ActorSystem
 ) extends EntityProvider
+    with AttributeSupport
     with LazyLogging {
   override def entityStoreId: Option[String] = None // unused
 
@@ -70,7 +77,50 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   override def batchUpsertEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] = {
+
+    // Translate the input stream entityUpdates to a stream of Entity by applying the updates to
+    // a pre-existing entity (for updates) or a blank entity (for inserts)
+    val entitySource: Source[Entity, _] = entityUpdates.map { updateDefinition =>
+      // TODO CORE-428: for updates, look ahead (some quantity) in the update definitions and
+      //   retrieve the existing entities from the db
+      // for inserts, start with an empty entity
+      val baseEntity = Entity(updateDefinition.name, updateDefinition.entityType, Map())
+      // update the starting entity with the user's operations
+      applyOperationsToEntity(baseEntity, updateDefinition.operations)
+    }
+
+    // Group the entities-to-be-saved into batches to optimize our SQL interactions
+    val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(config.maxSqlBatchSizeBytes)(calculateEntitySize)
+
+    // For each batch, generate the db action to write it to the database
+    val batchActionsSource: Source[ReadWriteAction[Int], _] = batches
+      .map { batch =>
+        logger.info(s"batch upsert: batch of ${batch.size} entities")
+        insertBatch(batch)
+      }
+
+    // Materialize the batch actions into a sequence and convert to a single DBIO action
+    val batchActionsF: Future[ReadWriteAction[Int]] = batchActionsSource
+      .runWith(Sink.seq)
+      .map(DBIO.sequence(_).map(_.sum))
+
+    // Convert the Future[ReadWriteAction] to a Source[Int] by executing the db actions.
+    // Note that since all the ReadWriteActions are fused via DBIO.sequence above,
+    // there is only one action to execute inside a transaction.
+    val dbResultsSource: Source[Int, _] = Source.futureSource(batchActionsF.map { dbAction =>
+      Source.future(repository.dataSource.inTransaction(_ => dbAction))
+    })
+
+    // Finally, run the Source.
+    val dbResults: Future[Int] = dbResultsSource.runWith(Sink.head)
+
+    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(dbResults)
+
+    // and return
+    dbResults
+  }
 
   def saveWorkflowOutputEntities(
     dataAccess: DataAccess,
@@ -105,7 +155,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
             )
           )
         // find all references in this entity
-        refs: Map[AttributeName, Seq[AttributeEntityReference]] = findAllReferences(entity)
+        refs: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = findAllReferences(entity)
         // find all unique references in this entity
         uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
         // verify that all references in the entity-to-be-saved actually exist
@@ -114,7 +164,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
           throw new EntityReferenceNotFoundException("Some entity references do not exist")
         // save the entity
         _ <- repository.queries.createEntity(workspaceId, entity)
-        // did it save correctly? re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
+        // Did it save correctly? Re-retrieve it. By re-retrieving it, we can 1) get its id, and 2) get the actual,
         // normalized JSON that was persisted to the db. When we return the entity to the user, we return the
         // normalized version.
         savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
@@ -271,16 +321,31 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
   //  helper methods
   // ====================================================================================================
 
-  // given an entity, finds all references in that entity, grouped by their attribute names
-  protected[compact] def findAllReferences(entity: Entity): Map[AttributeName, Seq[AttributeEntityReference]] =
-    entity.attributes
-      .collect {
-        case (name: AttributeName, ref: AttributeEntityReference)         => Seq((name, ref))
-        case (name: AttributeName, refList: AttributeEntityReferenceList) => refList.list.map(ref => (name, ref))
+  // Given an entity, finds all references in that entity. Returns a map of source entity -> target entities
+  protected[compact] def findAllReferences(
+    entity: Entity
+  ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+    findAllReferences(Seq(entity))
+
+  // Given a Seq of entities, finds all references in those entities. Returns a map of source entity -> target entities
+  // representing all references.
+  protected[compact] def findAllReferences(
+    entities: Seq[Entity]
+  ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+    entities
+      .map { entity =>
+        val referenceTargets =
+          entity.attributes
+            .collect {
+              case (_, ref: AttributeEntityReference)         => Seq(ref)
+              case (_, refList: AttributeEntityReferenceList) => refList.list
+            }
+            .flatten
+            .toSeq
+        entity.toReference -> referenceTargets
       }
-      .flatten
-      .toSeq
-      .groupMap(_._1)(_._2)
+      .filter(_._2.nonEmpty)
+      .toMap
 
   // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
   // entity
@@ -299,14 +364,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
         if (isInsert) {
           DBIO.successful(0)
         } else {
-          repository.queries.deleteReferences(fromId, toIds)
+          repository.queries.deleteReferencesWithFilter(fromId, toIds)
         }
       // upsert all reference pointers that do exist
       upserts <-
         if (toIds.isEmpty) {
           DBIO.successful(0)
         } else {
-          repository.queries.upsertReferences(fromId, toIds)
+          repository.queries.upsertReferences(Set(RefPointers(fromId, toIds)))
         }
     } yield (deletes, upserts)
   }
@@ -330,5 +395,67 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments, repository
           )
         }
     )
+
+  // approximate the byte size of this entity by looking at the character length of its JSONized attributes
+  private def calculateEntitySize(entity: Entity): Int =
+    CompactEntitySerialization.toSql(entity.attributes).compactPrint.length
+
+  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Int] = {
+
+    // nested helper method for building error responses
+    def generateReferenceError(message: String, notFounds: Set[AttributeEntityReference]) =
+      new RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          message,
+          notFounds.map { notFound =>
+            ErrorReport(s"${notFound.entityType} ${notFound.entityName} not found", Seq.empty)
+          }.toSeq
+        )
+      )
+
+    for {
+      // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
+      // has a reference to another entity in the same batch.
+      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch)
+
+      // find all requested references within this batch
+      allReferences = findAllReferences(batch)
+
+      // generate a combined list of entity type/name pairs for both reference sources and targets
+      lookupCriteria: Set[AttributeEntityReference] = allReferences.keys.toSet ++ allReferences.values.flatten.toSet
+
+      // look up the ids for both reference sources and targets
+      foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
+
+      // did we find all the reference sources and targets?
+      _ = if (foundIds.size != lookupCriteria.size) {
+        // here's what the query actually returned; turn this into a Set
+        val actuallyFound = foundIds.map(_.toAttributeEntityReference).toSet
+        // did we find all the reference targets?
+        val notFoundReferenceTargets = allReferences.values.flatten.toSet diff actuallyFound
+        if (notFoundReferenceTargets.nonEmpty) {
+          throw generateReferenceError("Could not resolve some entity references", notFoundReferenceTargets)
+        }
+        // did we find all the reference sources? This should never happen, but let's be defensive
+        val notFoundReferenceSources = allReferences.keys.toSet diff actuallyFound
+        if (notFoundReferenceSources.nonEmpty)
+          throw generateReferenceError("Could not resolve some entity sources", notFoundReferenceSources)
+      }
+
+      // build a lookup table for the ids we found
+      idLookup: Map[AttributeEntityReference, Long] = foundIds.map { rec =>
+        rec.toAttributeEntityReference -> rec.id
+      }.toMap
+
+      // rehydrate the looked-up ids into sources and targets (from_id, to_id)
+      referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
+        val toIds = tos.map(idLookup).toSet
+        RefPointers(idLookup(from), toIds)
+      }.toSet
+      // insert the references into the ENTITY_REFS table.
+      _ <- repository.queries.upsertReferences(referencesToInsert)
+    } yield entitiesCreated
+  }
 
 }

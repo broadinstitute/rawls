@@ -6,6 +6,13 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives.{handleExceptions, handleRejections}
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
+  AddListMember,
+  AddUpdateAttribute,
+  CreateAttributeEntityReferenceList,
+  CreateAttributeValueList,
+  EntityUpdateDefinition
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.{
@@ -176,6 +183,60 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
     val legacyMetadata = getEntityTypeMetadata(legacyWs, services)
 
     compactMetadata shouldBe legacyMetadata
+  }
+
+  behavior of "POST batchUpsert"
+
+  it should "create new entities" in withProviderEquivalenceApiServices { services =>
+    // define the upsert payload
+    val ent1 = AttributeEntityReference("typeA", "name1")
+    val ent2 = AttributeEntityReference("typeA", "name2")
+    val ent3 = AttributeEntityReference("typeB", "name3")
+    val payload = Seq(
+      EntityUpdateDefinition(
+        ent1.entityName,
+        ent1.entityType,
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("attr1"), AttributeString("value1")),
+          AddUpdateAttribute(AttributeName.withDefaultNS("attr2"), AttributeString("value2"))
+        )
+      ),
+      EntityUpdateDefinition(
+        ent2.entityName,
+        ent2.entityType,
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("attr1"), AttributeString("value1")),
+          CreateAttributeValueList(AttributeName.withDefaultNS("valueList")),
+          AddListMember(AttributeName.withDefaultNS("valueList"), AttributeString("list1")),
+          AddListMember(AttributeName.withDefaultNS("valueList"), AttributeString("list2"))
+        )
+      ),
+      EntityUpdateDefinition(
+        ent3.entityName,
+        ent3.entityType,
+        Seq(
+          CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("refList")),
+          AddListMember(AttributeName.withDefaultNS("refList"), AttributeEntityReference("typeA", "name1")),
+          AddListMember(AttributeName.withDefaultNS("refList"), AttributeEntityReference("typeA", "name2"))
+        )
+      )
+    )
+    // perform the upserts
+    Seq(legacyWs, compactWs) foreach { ws =>
+      withClue(s"POST batchUpsert for workspace ${ws.toWorkspaceName}") {
+        Post(s"/workspaces/${ws.namespace}/${ws.name}/entities/batchUpsert", httpJson(payload)) ~>
+          withHandlers(services.entityRoutes()) ~>
+          check {
+            status shouldBe StatusCodes.NoContent
+          }
+      }
+    }
+    // compare the resultant entities
+    Seq(ent1, ent2, ent3) foreach { ent =>
+      val legacyEntity = getEntity(legacyWs, ent.entityType, ent.entityName, services)
+      val compactEntity = getEntity(compactWs, ent.entityType, ent.entityName, services)
+      legacyEntity shouldBe compactEntity
+    }
   }
 
   behavior of "test assumptions via setupProviders helper"

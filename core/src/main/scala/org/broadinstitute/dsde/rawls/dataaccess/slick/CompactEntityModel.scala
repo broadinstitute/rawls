@@ -3,10 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{AttributeFormat, AttributeName, Entity}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import spray.json.DefaultJsonProtocol._
-import spray.json._
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity}
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -43,14 +40,22 @@ case class CompactEntityRecord(id: Long,
 /**
   * abbreviated model for rows in the ENTITY table when we don't need all the columns
   */
-case class CompactEntityRefRecord(id: Long, name: String, entityType: String)
+case class CompactEntityRefRecord(id: Long, name: String, entityType: String) {
+  def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
+}
+
+/**
+  * model class for rows in the ENTITY_KEYS table
+  */
+case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)
 
 /**
   * model class for rows in the ENTITY_REFS table
   */
 case class RefPointerRecord(fromId: Long, toId: Long)
 
-case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)
+/** all reference pointers from one entity to all its reference targets */
+case class RefPointers(fromId: Long, toIds: Set[Long])
 
 case class EntityTypeAndAttributeKey(
   entityType: String,

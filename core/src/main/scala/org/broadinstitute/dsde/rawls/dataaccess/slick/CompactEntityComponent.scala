@@ -70,14 +70,30 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
     *
+    * `execution plan: multiple-row insert`
+    */
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity]): ReadWriteAction[Int] = {
+    val baseSql =
+      sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
+
+    val values = entities.map { entity =>
+      val attributesJson: JsValue = toSql(entity.attributes)
+
+      sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
+    }
+
+    concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql",")).asUpdate
+  }
+
+  /**
+    * Insert a single entity to the db.
+    *
+    * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
+    *
     * `execution plan: single-row insert`
     */
-  def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] = {
-    val attributesJson: JsValue = toSql(entity.attributes)
-
-    sqlu"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
-          values (${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
-  }
+  def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
+    batchCreateEntities(workspaceId, Seq(entity))
 
   /**
     * Read a single entity from the db
@@ -94,6 +110,33 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           and entity_type = $entityType
           and name = $entityName"""
 
+  /** Given a set of entity type/name pairs, return the CompactEntityRefRecord for those pairs.
+    * The CompactEntityRefRecord includes the internal database id for these entities.
+    *
+    * `execution plan: index range scan on idx_entity_type_name`
+    */
+  def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
+    // short-circuit
+    if (refs.isEmpty) {
+      DBIO.successful(Seq())
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""select id, name, entity_type
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.as[CompactEntityRefRecord]
+    }
+
   /** Given a set of entity references, return the ids being referenced.
     * Ignores deleted entities.
     *
@@ -106,20 +149,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     if (refs.isEmpty) {
       DBIO.successful(Seq())
     } else {
-      // group the entity type/name pairs by type
-      val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
-
-      // build clauses for the type/name pairs
-      val clauses: Iterable[SQLActionBuilder] = groupedReferences.map {
-        case (entityType: String, entityNames: Set[String]) =>
-          // build the "IN" clause values
-          val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
-          concatSqlActions(
-            sql""" (entity_type = $entityType and name in (""",
-            entityNamesSql,
-            sql")) "
-          )
-      }
+      val typeNameClauses = generateTypeNameSql(refs)
 
       // build the overall query
       val query = concatSqlActions(
@@ -127,7 +157,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
                #$fromEntityWhereNotDeleted
                and workspace_id = $workspaceId
                and ( """,
-        reduceSqlActionsWithDelim(clauses.toSeq, sql" or "),
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
         sql""" );"""
       )
 
@@ -147,7 +177,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     */
   // The index range scan is caused by the "not in" clause. I believe this is still optimal as compared to
   // performing a select, performing a diff in the Scala layer, then sending an optimized delete query back to MySQL
-  def deleteReferences(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
+  def deleteReferencesWithFilter(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
     val query = if (idsToKeep.isEmpty) {
       sql"""delete from ENTITY_REFS where from_id = $fromId;"""
     } else {
@@ -173,25 +203,31 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: batched insert (one statement, multiple rows)`
     */
-  def upsertReferences(fromId: Long, toIds: Set[Long]): ReadWriteAction[Int] = {
-    val insertValues: Iterable[SQLActionBuilder] = toIds.map { toId =>
-      sql"($fromId,$toId)"
-    }
-    val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
+  def upsertReferences(references: Set[RefPointers]): ReadWriteAction[Int] =
+    // short-circuit
+    if (references.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val insertValues: Set[SQLActionBuilder] = references.flatMap { refPointers =>
+        refPointers.toIds.map { toId =>
+          sql"(${refPointers.fromId},$toId)"
+        }
+      }
+      val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
 
-    val query = concatSqlActions(
-      sql"""insert into ENTITY_REFS(from_id, to_id)
+      val query = concatSqlActions(
+        sql"""insert into ENTITY_REFS(from_id, to_id)
               values
               """,
-      allInsertValues,
-      sql"""
+        allInsertValues,
+        sql"""
               on duplicate key update from_id=from_id;"""
-    )
-    // The `on duplicate key update ...` makes this `insert` an upsert, not throwing errors on any
-    // pre-existing rows. The `update from_id=from_id` is a noop update, saying "leave this row alone"
+      )
+      // The `on duplicate key update ...` makes this `insert` an upsert, not throwing errors on any
+      // pre-existing rows. The `update from_id=from_id` is a noop update, saying "leave this row alone"
 
-    query.asUpdate
-  }
+      query.asUpdate
+    }
 
   /**
    * Get all entity attribute keys for a workspace.
@@ -214,6 +250,26 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       FROM ENTITY_KEYS
       WHERE workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
+
+  /**
+    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
+    * AttributeEntityReferences.
+    */
+  private def generateTypeNameSql(refs: Set[AttributeEntityReference]): Iterable[SQLActionBuilder] = {
+    // group the entity type/name pairs by type
+    val groupedReferences: Map[String, Set[String]] = refs.groupMap(_.entityType)(_.entityName)
+
+    // build clauses for the type/name pairs
+    groupedReferences.map { case (entityType: String, entityNames: Set[String]) =>
+      // build the "IN" clause values
+      val entityNamesSql = reduceSqlActionsWithDelim(entityNames.map(name => sql"$name").toSeq, sql",")
+      concatSqlActions(
+        sql""" (entity_type = $entityType and name in (""",
+        entityNamesSql,
+        sql")) "
+      )
+    }
+  }
 
   def countEntities(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
     concatSqlActions(
@@ -393,7 +449,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   // return all reference targets for a given reference source
   // `execution plan: non-unique key lookup; fully indexed by unq_from_to`
   @VisibleForTesting
-  protected[slick] def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
+  def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
     sql"""select to_id from ENTITY_REFS where from_id = $fromId;""".as[Long]
 
   // return the ENTITY_KEYS row for a given entity
