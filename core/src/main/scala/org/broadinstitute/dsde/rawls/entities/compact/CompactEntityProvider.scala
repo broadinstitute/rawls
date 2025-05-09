@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityTypeAndCount, ReadWriteAction, RefPointers}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   EntityNotFoundException,
