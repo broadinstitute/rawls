@@ -48,21 +48,6 @@ trait CompactEntitySerialization {
         )
     }
 
-  def keepOnlyFields(attributes: Option[String], fields: Set[AttributeName]): Option[String] =
-    attributes.map { attr =>
-      val attributeMap = attr.parseJson match {
-        case jso: JsObject => deserialize(jso)
-        case otherJsValue =>
-          throw new CompactEntityDeserializationException(
-            s"wanted a JsObject; found a ${otherJsValue.getClass.getName}"
-          )
-      }
-      val filtered = attributeMap.filter { case (k, _) =>
-        fields.contains(k)
-      }
-      toSql(filtered).compactPrint
-    }
-
   val slickAttrsPath: String = s"$$.${ATTRS_KEY}"
   def slickAttributePath(attributeName: String): String = s"${slickAttrsPath}.${attributeName}"
   def slickAttributePath(attributeName: AttributeName): String = slickAttributePath(toDelimitedName(attributeName))

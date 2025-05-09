@@ -283,9 +283,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         message = s"requested page ${entityQuery.page} is greater than the number of pages $pageCount"
       )
     }
-    (EntityQueryResultMetadata(unfilteredCount, filteredCountAndSource.count, pageCount),
-     filteredCountAndSource.source.map(_.toEntity)
-    )
+    (EntityQueryResultMetadata(unfilteredCount, filteredCountAndSource.count, pageCount), filteredCountAndSource.source)
   }
 
   private def countEntitiesOfType(entityType: LookupExpression) =

@@ -22,7 +22,7 @@ class FilterByNameStrategy(override val repository: CompactEntityRepository,
     repository.dataSource.inTransaction(ReadCommitted) { _ =>
       repository.queries.getEntity(workspaceId, entityType, entityName)
     } map {
-      case Some(entityRec) => CountAndSource(1, Source.single(entityRec))
+      case Some(entityRec) => CountAndSource(1, Source.single(entityRec.toEntity))
       case None            => CountAndSource(0, Source.empty)
     }
   }
