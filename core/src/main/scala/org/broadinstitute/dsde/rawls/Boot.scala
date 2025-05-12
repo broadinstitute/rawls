@@ -460,12 +460,25 @@ object Boot extends IOApp with LazyLogging {
           workbenchMetricBaseName = metricsPrefix
         )
 
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
+
+      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+      val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
+        new WorkspaceSettingService(_,
+                                    workspaceSettingRepository,
+                                    workspaceRepository,
+                                    gcsDAO,
+                                    samDAO,
+                                    appDependencies.googleStorageService
+        )(implicitly, IORuntime.global)
+
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
         entityManager,
-        appConfigManager.conf.getInt("entities.pageSizeLimit")
+        appConfigManager.conf.getInt("entities.pageSizeLimit"),
+        Option(workspaceSettingServiceConstructor)
       )
 
       val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
@@ -489,7 +502,6 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val billingRepository = new BillingRepository(slickDataSource)
-      val workspaceRepository = new WorkspaceRepository(slickDataSource)
       val googleProjectRegRepo = new GoogleProjectRegistrationRepository(slickDataSource)
 
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
@@ -551,16 +563,6 @@ object Boot extends IOApp with LazyLogging {
 
       val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
         BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
-
-      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-      val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-        new WorkspaceSettingService(_,
-                                    workspaceSettingRepository,
-                                    workspaceRepository,
-                                    gcsDAO,
-                                    samDAO,
-                                    appDependencies.googleStorageService
-        )(implicitly, IORuntime.global)
 
       val googleProjectRegistrationServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService =
         new GoogleProjectRegistrationService(_, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)

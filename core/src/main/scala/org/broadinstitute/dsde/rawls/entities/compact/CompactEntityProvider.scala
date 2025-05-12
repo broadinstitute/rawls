@@ -11,7 +11,13 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.compact.batch.BatchHandling
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityReferenceNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException,
+  EntityNotFoundException,
+  EntityReferenceNotFoundException
+}
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
@@ -20,6 +26,7 @@ import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
+import java.util
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -120,9 +127,42 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
                               parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] =
+    repository.dataSource.inTransaction { _ =>
+      for {
+        // check if any of these entities are referenced by someone else
+        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencesTo(workspaceId,
+                                                                                                 entityRefs
+        )
+        // getReferencesTo already excludes the entities that are being deleted
+        _ = if (referencingEntities.size != 0) {
+          throw new DeleteEntitiesConflictException(referencingEntities.toSet)
+        }
+        // remove all references from these entities
+        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, entityRefs.toSet)
+        res <- repository.queries.batchHide(workspaceId, entityRefs)
+      } yield res
+    }
 
-  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] = ???
+  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] =
+    repository.dataSource.inTransaction { _ =>
+      for {
+        // check if any of these entities are referenced by someone else
+        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencesToType(workspaceId,
+                                                                                                     entityType
+        )
+        // The getReferencesToType query already disregards references of the type to be deleted
+        _ = if (referencingEntities.size > 0) {
+          throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
+        }
+        // remove all references from these entities
+        _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
+        res <- repository.queries.batchHideType(
+          workspaceId,
+          entityType
+        )
+      } yield res
+    }
 
   override def deleteEntityAttributes(entityType: String,
                                       attributeNames: Set[AttributeName],

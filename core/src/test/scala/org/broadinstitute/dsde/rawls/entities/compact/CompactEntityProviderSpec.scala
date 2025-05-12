@@ -12,9 +12,13 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateA
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
+  DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
+import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
+
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -35,6 +39,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
 import org.mockito.Mockito
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
@@ -457,8 +462,214 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     }
   }
 
-  "deleteEntities" should "have tests" is pending
-  "deleteEntitiesOfType" should "have tests" is pending
+  behavior of "deleteEntities"
+
+  it should "remove entities" in {
+    val entity1 = Entity("name1",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(123)
+                         )
+    )
+    val createdEntityRec1 =
+      CompactEntityRecord(42,
+                          entity1.name,
+                          entity1.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":123,"foo":"bar"}""")
+      )
+
+    val entity2 = Entity("name2",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("boo"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(456)
+                         )
+    )
+    val createdEntityRec2 =
+      CompactEntityRecord(41,
+                          entity2.name,
+                          entity2.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":456,"foo":"boo"}""")
+      )
+
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(1))
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec1.entityType),
+                          ArgumentMatchers.eq(createdEntityRec1.name)
+      )
+    )
+      .thenReturn(DBIO.successful(Some(createdEntityRec1)))
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec2.entityType),
+                          ArgumentMatchers.eq(createdEntityRec2.name)
+      )
+    )
+      .thenReturn(DBIO.successful(Some(createdEntityRec2)))
+    when(mockQuery.batchHide(any(), any())).thenReturn(DBIO.successful(1))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext), atMost)
+
+    verify(mockQuery, times(1)).getReferencesTo(defaultWorkspace.workspaceIdAsUUID,
+                                                Seq(entity1.toReference, entity2.toReference)
+    )
+    verify(mockQuery, times(1)).deleteAllReferencesFrom(defaultWorkspace.workspaceIdAsUUID,
+                                                        Set(entity1.toReference, entity2.toReference)
+    )
+    verify(mockQuery, times(1)).batchHide(defaultWorkspace.workspaceIdAsUUID,
+                                          Seq(entity1.toReference, entity2.toReference)
+    )
+  }
+
+  it should "throw error if entities are referenced" in {
+    val entity1 = Entity("name1",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(123)
+                         )
+    )
+    val createdEntityRec1 =
+      CompactEntityRecord(42,
+                          entity1.name,
+                          entity1.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":123,"foo":"bar"}""")
+      )
+
+    val entity2 = Entity("name2",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("boo"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(456)
+                         )
+    )
+    val createdEntityRec2 =
+      CompactEntityRecord(41,
+                          entity2.name,
+                          entity2.entityType,
+                          defaultWorkspace.workspaceIdAsUUID,
+                          1,
+                          deleted = false,
+                          Some("""{"baz":456,"foo":"boo"}""")
+      )
+
+    val referencingEntity =
+      Entity("ref",
+             "refType",
+             Map(
+               AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
+             )
+      )
+
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toReference)))
+    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(1))
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec1.entityType),
+                          ArgumentMatchers.eq(createdEntityRec1.name)
+      )
+    )
+      .thenReturn(DBIO.successful(Some(createdEntityRec1)))
+    when(
+      mockQuery.getEntity(any[UUID],
+                          ArgumentMatchers.eq(createdEntityRec2.entityType),
+                          ArgumentMatchers.eq(createdEntityRec2.name)
+      )
+    )
+      .thenReturn(DBIO.successful(Some(createdEntityRec2)))
+    when(mockQuery.batchHide(any(), any())).thenReturn(DBIO.successful(1))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val result = intercept[DeleteEntitiesConflictException] {
+      Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext),
+                   atMost
+      )
+    }
+    result shouldBe a[DeleteEntitiesConflictException]
+
+    verify(mockQuery, never()).deleteAllReferencesFrom(defaultWorkspace.workspaceIdAsUUID,
+                                                       Set(entity1.toReference, entity2.toReference)
+    )
+    verify(mockQuery, never()).batchHide(defaultWorkspace.workspaceIdAsUUID,
+                                         Seq(entity1.toReference, entity2.toReference)
+    )
+  }
+
+  behavior of "deleteEntitiesOfType"
+
+  it should "delete all entities of type" in {
+    val entityType = "type"
+
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFromType(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    Await.result(provider.deleteEntitiesOfType(entityType, defaultRequestContext), atMost)
+
+    verify(mockQuery, times(1)).getReferencesToType(defaultWorkspace.workspaceIdAsUUID, entityType)
+    verify(mockQuery, times(1)).deleteAllReferencesFromType(defaultWorkspace.workspaceIdAsUUID, entityType)
+    verify(mockQuery, times(1)).batchHideType(defaultWorkspace.workspaceIdAsUUID, entityType)
+  }
+
+  it should "throw an error if any of the entities are referenced" in {
+    val entity1 = Entity("name1",
+                         "type",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(123)
+                         )
+    )
+
+    val referencingEntity =
+      Entity("ref",
+             "refType",
+             Map(
+               AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
+             )
+      )
+
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toReference)))
+    when(mockQuery.deleteAllReferencesFromType(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val result = intercept[DeleteEntitiesOfTypeConflictException] {
+      Await.result(provider.deleteEntitiesOfType("type", defaultRequestContext), atMost)
+    }
+
+    result shouldBe a[DeleteEntitiesOfTypeConflictException]
+
+    verify(mockQuery, times(1)).getReferencesToType(defaultWorkspace.workspaceIdAsUUID, entity1.entityType)
+    verify(mockQuery, never()).deleteAllReferencesFromType(defaultWorkspace.workspaceIdAsUUID, entity1.entityType)
+    verify(mockQuery, never()).batchHideType(defaultWorkspace.workspaceIdAsUUID, entity1.entityType)
+  }
+
   "deleteEntityAttributes" should "have tests" is pending
 
   behavior of "entityTypeMetadata"
