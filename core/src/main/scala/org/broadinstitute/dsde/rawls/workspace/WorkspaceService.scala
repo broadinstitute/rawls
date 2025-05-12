@@ -791,6 +791,18 @@ class WorkspaceService(
       _ <- gcsDAO.setBillingAccount(workspace.googleProjectId, destBillingAccountName, ctx.toTracingContext)
     } yield ()
 
+  private def rollbackUpdateWorkspaceBillingInGCP(workspace: Workspace,
+                                                  oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                                                  newBillingProjectOwnerPolicyEmail: WorkbenchEmail
+  ): Future[Unit] =
+    updateWorkspaceBillingInGCP(workspace,
+                                workspace.currentBillingAccountOnGoogleProject,
+                                newBillingProjectOwnerPolicyEmail,
+                                oldBillingProjectOwnerPolicyEmail
+    ).recover { case rollbackEx =>
+      logger.warn(s"Failed to roll back GCP billing update for workspace ${workspace.briefName}", rollbackEx)
+    }
+
   private def updateWorkspaceBillingInSam(workspace: Workspace,
                                           oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
                                           newBillingProjectOwnerPolicyEmail: WorkbenchEmail
@@ -815,6 +827,15 @@ class WorkspaceService(
       _ <- fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace)
     } yield ()
 
+  private def rollbackUpdateWorkspaceBillingInSam(workspace: Workspace,
+                                                  oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                                                  newBillingProjectOwnerPolicyEmail: WorkbenchEmail
+  ): Future[Unit] =
+    updateWorkspaceBillingInSam(workspace, newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail)
+      .recover { case rollbackEx =>
+        logger.warn(s"Failed to roll back SAM billing update for workspace ${workspace.briefName}", rollbackEx)
+      }
+
   def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Option[Workspace]] =
     for {
       oldBillingProjectOwnerPolicyEmail <- samDAO
@@ -837,10 +858,9 @@ class WorkspaceService(
                                        oldBillingProjectOwnerPolicyEmail,
                                        newBillingProjectOwnerPolicyEmail
       ).recoverWith { case ex =>
-        updateWorkspaceBillingInGCP(workspace,
-                                    workspace.currentBillingAccountOnGoogleProject,
-                                    newBillingProjectOwnerPolicyEmail,
-                                    oldBillingProjectOwnerPolicyEmail
+        rollbackUpdateWorkspaceBillingInGCP(workspace,
+                                            oldBillingProjectOwnerPolicyEmail,
+                                            newBillingProjectOwnerPolicyEmail
         )
         Future.failed(
           RawlsExceptionWithErrorReport(
@@ -851,12 +871,14 @@ class WorkspaceService(
 
       _ <- updateWorkspaceBillingInSam(workspace, oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail)
         .recoverWith { case ex =>
-          updateWorkspaceBillingInGCP(workspace,
-                                      workspace.currentBillingAccountOnGoogleProject,
-                                      newBillingProjectOwnerPolicyEmail,
-                                      oldBillingProjectOwnerPolicyEmail
+          rollbackUpdateWorkspaceBillingInGCP(workspace,
+                                              oldBillingProjectOwnerPolicyEmail,
+                                              newBillingProjectOwnerPolicyEmail
           )
-          updateWorkspaceBillingInSam(workspace, newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail)
+          rollbackUpdateWorkspaceBillingInSam(workspace,
+                                              oldBillingProjectOwnerPolicyEmail,
+                                              newBillingProjectOwnerPolicyEmail
+          )
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.InternalServerError, "Billing update failed in SAM", ex)
@@ -871,19 +893,21 @@ class WorkspaceService(
                        destBillingProject.billingAccount
         )
         .recoverWith { case ex =>
-          updateWorkspaceBillingInGCP(workspace,
-                                      workspace.currentBillingAccountOnGoogleProject,
-                                      newBillingProjectOwnerPolicyEmail,
-                                      oldBillingProjectOwnerPolicyEmail
+          rollbackUpdateWorkspaceBillingInGCP(workspace,
+                                              oldBillingProjectOwnerPolicyEmail,
+                                              newBillingProjectOwnerPolicyEmail
           )
-          updateWorkspaceBillingInSam(workspace, newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail)
+          rollbackUpdateWorkspaceBillingInSam(workspace,
+                                              oldBillingProjectOwnerPolicyEmail,
+                                              newBillingProjectOwnerPolicyEmail
+          )
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.InternalServerError, "Billing update failed in Rawls", ex)
             )
           )
         }
-      updatedWorkspace <- workspaceRepository.getWorkspace(workspace.toWorkspaceName)
+      updatedWorkspace <- workspaceRepository.getWorkspace(workspace.workspaceIdAsUUID)
     } yield updatedWorkspace
 
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
