@@ -24,7 +24,7 @@ import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -74,7 +74,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
-import org.scalatestplus.mockito.MockitoSugar.mock
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
@@ -87,6 +86,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
+import scala.util.Success
 
 class WorkspaceServiceSpec
     extends AnyFlatSpec
@@ -3962,4 +3962,195 @@ class WorkspaceServiceSpec
     verify(services.samDAO, never).addResourceAuthDomain(any, any, any, any)
     verify(services.gcsDAO, never).changeProjectOwnerBucketIamBinding(any, any, any)
   }
+
+  it should "not update workspace billing when source and destination billing are the same" in withTestDataServices {
+    services =>
+      val namespace = "testNamespace"
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          services.workspaceService.validateBillingProjectUpdate(WorkspaceName(namespace, "test-workspace"), namespace),
+          Duration.Inf
+        )
+      }
+      err.errorReport.message should include(s"Workspace billing is already set to $namespace")
+      err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "not update workspace billing when workspace does not exist" in withTestDataServices { services =>
+    val workspaceName = WorkspaceName(testData.billingProject.projectName.value, "fakeWorkspace")
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.validateBillingProjectUpdate(workspaceName, testData.testProject1.projectName.value),
+        Duration.Inf
+      )
+    }
+    err.errorReport.message should include(s"Workspace ${workspaceName.name} does not exist")
+    err.errorReport.statusCode.get shouldBe StatusCodes.NotFound
+  }
+
+  it should "not update workspace billing when either billing account does not exist" in withTestDataServices {
+    services =>
+      val workspaceName = testData.workspace.toWorkspaceName
+      val destBilling = RawlsBillingProjectName("fakeBillingProject")
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName, destBilling.value),
+                     Duration.Inf
+        )
+      }
+      err.errorReport.message should include(s"Billing Project $destBilling does not exist")
+      err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "not update workspace billing when either billing account is Azure" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+    val destBilling = testData.azureBillingProject.projectName
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName, destBilling.value),
+                   Duration.Inf
+      )
+    }
+    err.errorReport.message should include(s"Billing Project $destBilling does not exist")
+    err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "not update workspace billing if user is not a billing project owner" in withTestDataServices { services =>
+    val workspace = testData.workspace
+    val sourceProject = testData.billingProject
+    val targetProject = testData.testProject1
+
+    when(services.gcsDAO.isBillingAccountEnabled(targetProject.billingAccount.get))
+      .thenReturn(Future.successful(true))
+    when(
+      services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
+                                               sourceProject.projectName.value,
+                                               services.workspaceService.ctx
+      )
+    )
+      .thenReturn(Future.successful(Set.empty))
+
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.validateBillingProjectUpdate(workspace.toWorkspaceName,
+                                                                          targetProject.projectName.value
+                   ),
+                   Duration.Inf
+      )
+    }
+    err.errorReport.message should include(
+      s"Missing ${SamBillingProjectRoles.owner} role on billing project '${sourceProject.projectName}'."
+    )
+    err.errorReport.statusCode.get shouldBe StatusCodes.Forbidden
+  }
+
+  it should "not update workspace billing if source and destination billing have different service perimeters" in withTestDataServices {
+    services =>
+      val workspace = testData.workspace
+      val targetBilling = testData.testProject1
+
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(
+            targetBilling.projectName,
+            servicePerimeter = Option(ServicePerimeterName("test-service-perimeter"))
+          )
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1.projectName)
+        } yield ()
+      }
+
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          services.workspaceService.validateBillingProjectUpdate(workspace.toWorkspaceName,
+                                                                 testData.testProject1.projectName.value
+          ),
+          Duration.Inf
+        )
+      }
+      err.errorReport.message should include(
+        s"Source and destination billing must have the same service perimeter, if any"
+      )
+      err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "not update workspace billing if the destination billing namespace already has a workspace with the same workspace name" in withTestDataServices {
+    services =>
+      val workspaceName = WorkspaceName("source-billing", "test-ws")
+
+      when(services.workspaceRepository.getWorkspace(WorkspaceName("target-billing", "test-ws")))
+        .thenReturn(Future.successful(Some(mock[Workspace])))
+
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName,
+                                                                            testData.billingProject.projectName.value
+                     ),
+                     Duration.Inf
+        )
+      }
+      err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+      err.errorReport.message should include(
+        s"Workspace ${workspaceName.name} already exists under billing project ${workspaceName.namespace}"
+      )
+  }
+
+  it should "not update workspace billing if destination billing is not enabled" in withTestDataServices { services =>
+    when(services.gcsDAO.isBillingAccountEnabled(any[RawlsBillingAccountName]))
+      .thenReturn(Future.successful(false))
+
+    val workspaceName = testData.workspace.toWorkspaceName
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.validateBillingProjectUpdate(workspaceName, testData.testProject1.projectName.value),
+        Duration.Inf
+      )
+    }
+    err.errorReport.message should include(s"Billing account ${testData.testProject1.billingAccount} is not enabled")
+    err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "not update workspace billing if workspace project does not have Google storage APIs enabled" in withTestDataServices {
+    services =>
+      val storageAPIs = List(
+        "storage-api.googleapis.com",
+        "storage-component.googleapis.com"
+      )
+      when(services.gcsDAO.isBillingAccountEnabled(testData.workspace.currentBillingAccountOnGoogleProject.get))
+        .thenReturn(Future.successful(true))
+      when(services.gcsDAO.areServicesEnabled(GoogleProject(testData.workspace.googleProjectId.value), storageAPIs))
+        .thenReturn(false)
+
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          services.workspaceService.validateBillingProjectUpdate(testData.workspace.toWorkspaceName,
+                                                                 testData.testProject1.projectName.value
+          ),
+          Duration.Inf
+        )
+      }
+      err.errorReport.message should include(
+        s"Required GCS APIs ${storageAPIs.toString()} are not enabled on project ${testData.workspace.googleProjectId.value}."
+      )
+      err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "succeed when all validation checks are met" in withTestDataServices { services =>
+    val workspace = testData.workspace
+    val targetBilling = testData.testProject1
+    services.workspaceService.validateBillingProjectUpdate(workspace.toWorkspaceName, "target-billing").map {
+      case (ws, project) =>
+        ws shouldBe workspace
+        project.projectName.value shouldBe targetBilling.projectName.value
+    }
+  }
+
+  // TODO
+  it should "successfully update workspace billing" in withTestDataServicesCustomSamAndUser(testData.userOwner) {
+    services =>
+      val workspaceName = testData.workspace.toWorkspaceName
+      val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
+
+      val updatedWorkspace =
+        Await
+          .result(services.workspaceService.updateWorkspaceBilling(workspace, testData.testProject1), Duration.Inf)
+          .get
+      updatedWorkspace.namespace shouldBe testData.testProject1.projectName
+  }
+
 }
