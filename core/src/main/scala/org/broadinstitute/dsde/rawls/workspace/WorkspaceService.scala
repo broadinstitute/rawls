@@ -809,17 +809,19 @@ class WorkspaceService(
   ): Future[Unit] =
     for {
       // Add new billing project owner email to workspace owner policy and remove old owner
-      _ <- samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
-                                  workspace.workspaceId,
-                                  SamWorkspacePolicyNames.projectOwner,
-                                  newBillingProjectOwnerPolicyEmail.value,
-                                  ctx
+      _ <- samDAO.addUserToPolicy(
+        SamResourceTypeNames.workspace,
+        workspace.workspaceId,
+        SamWorkspacePolicyNames.projectOwner,
+        newBillingProjectOwnerPolicyEmail.value,
+        samDAO.rawlsSAContext
       )
-      _ <- samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
-                                       workspace.workspaceId,
-                                       SamWorkspacePolicyNames.projectOwner,
-                                       oldBillingProjectOwnerPolicyEmail.value,
-                                       ctx
+      _ <- samDAO.removeUserFromPolicy(
+        SamResourceTypeNames.workspace,
+        workspace.workspaceId,
+        SamWorkspacePolicyNames.projectOwner,
+        oldBillingProjectOwnerPolicyEmail.value,
+        samDAO.rawlsSAContext
       )
 
       // Remove and re-add fastpass grants
