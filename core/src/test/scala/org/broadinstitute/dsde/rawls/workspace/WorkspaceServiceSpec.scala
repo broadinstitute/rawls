@@ -3963,7 +3963,7 @@ class WorkspaceServiceSpec
     verify(services.gcsDAO, never).changeProjectOwnerBucketIamBinding(any, any, any)
   }
 
-  it should "not update workspace billing when source and destination billing are the same" in withTestDataServices {
+  "validateBillingProjectUpdate" should "not update workspace billing when source and destination billing are the same" in withTestDataServices {
     services =>
       val namespace = "testNamespace"
       val err = intercept[RawlsExceptionWithErrorReport] {
@@ -4140,17 +4140,18 @@ class WorkspaceServiceSpec
     }
   }
 
-  // TODO
-  it should "successfully update workspace billing" in withTestDataServicesCustomSamAndUser(testData.userOwner) {
-    services =>
-      val workspaceName = testData.workspace.toWorkspaceName
-      val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
+  "updateWorkspaceBilling" should "successfully update workspace billing" in withTestDataServicesCustomSamAndUser(
+    testData.userOwner
+  ) { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+    val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
 
-      val updatedWorkspace =
-        Await
-          .result(services.workspaceService.updateWorkspaceBilling(workspace, testData.testProject1), Duration.Inf)
-          .get
-      updatedWorkspace.namespace shouldBe testData.testProject1.projectName
+    val updatedWorkspace =
+      Await
+        .result(services.workspaceService.updateWorkspaceBilling(workspace, testData.testProject1), Duration.Inf)
+        .get
+    updatedWorkspace.namespace shouldBe testData.testProject1.projectName.value
+    updatedWorkspace.currentBillingAccountOnGoogleProject shouldBe testData.testProject1.billingAccount
   }
 
 }

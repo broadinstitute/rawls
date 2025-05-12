@@ -643,7 +643,9 @@ class WorkspaceService(
       }
     }
 
-  def updateWorkspaceBillingProject(workspaceName: WorkspaceName, newBillingProjectName: String): Future[Workspace] =
+  def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
+                                    newBillingProjectName: String
+  ): Future[Option[Workspace]] =
     for {
       (workspace, destBillingProject) <- validateBillingProjectUpdate(workspaceName, newBillingProjectName)
       updated <- updateWorkspaceBilling(workspace, destBillingProject)
@@ -813,7 +815,7 @@ class WorkspaceService(
       _ <- fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace)
     } yield ()
 
-  def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Workspace] =
+  def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Option[Workspace]] =
     for {
       oldBillingProjectOwnerPolicyEmail <- samDAO
         .getPolicySyncStatus(SamResourceTypeNames.billingProject,
@@ -881,8 +883,8 @@ class WorkspaceService(
             )
           )
         }
-
-    } yield workspace
+      updatedWorkspace <- workspaceRepository.getWorkspace(workspace.toWorkspaceName)
+    } yield updatedWorkspace
 
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     for {
