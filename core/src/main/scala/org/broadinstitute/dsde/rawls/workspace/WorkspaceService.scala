@@ -761,7 +761,7 @@ class WorkspaceService(
       // If there is no auth domain on the workspace, add the billing project owner emails directly to bucket
       sourceAuthDomains <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
       _ <-
-        if (sourceAuthDomains.nonEmpty) {
+        if (sourceAuthDomains.isEmpty) {
           gcsDAO.changeProjectOwnerBucketIamBinding(
             GcsBucketName(workspace.bucketName),
             Identity.group(oldBillingProjectOwnerPolicyEmail.value),
