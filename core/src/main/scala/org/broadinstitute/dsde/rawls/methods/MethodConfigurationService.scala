@@ -466,7 +466,7 @@ class MethodConfigurationService(
                                           workspaceContext: Workspace
   ): Future[ValidatedMethodConfiguration] =
     for {
-      entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
+      entityProvider <- getEntityProvider(workspaceContext)
       gatherInputsResult <- MethodConfigurationUtils.gatherMethodConfigInputs(ctx,
                                                                               methodRepoDAO,
                                                                               methodConfiguration,
@@ -475,11 +475,9 @@ class MethodConfigurationService(
       vmc = entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
     } yield vmc
 
-  private def getEntityProviderForMethodConfig(workspaceContext: Workspace,
-                                               methodConfiguration: MethodConfiguration
-  ): Future[EntityProvider] =
+  private def getEntityProvider(workspaceContext: Workspace): Future[EntityProvider] =
     entityManager.resolveProviderFuture(
-      EntityRequestArguments(workspaceContext, ctx, methodConfiguration.dataReferenceName, None)
+      EntityRequestArguments(workspaceContext, ctx)
     )
 
 }

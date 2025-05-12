@@ -45,7 +45,7 @@ class HttpDataRepoDAOSpec
           .withStatusCode(StatusCodes.OK.intValue)
       )
 
-    val dataRepoDAO = new HttpDataRepoDAO("mock", s"http://localhost:$mockPort")
+    val dataRepoDAO = new HttpDataRepoDAO(s"http://localhost:$mockPort")
     val snapshotResponse = dataRepoDAO.getSnapshot(snapshotUUID, userInfo.accessToken)
     mockServer.stopAsync()
 

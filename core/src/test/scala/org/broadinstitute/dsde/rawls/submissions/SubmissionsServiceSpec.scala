@@ -134,7 +134,7 @@ class SubmissionsServiceSpec
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
     )
       .thenReturn(Future.successful())
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
 
     val notificationTopic = "test-notification-topic"

@@ -192,18 +192,18 @@ class BatchUpsertScalingSpec
         } else {
           val (loadDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource),
               waitDuration
             )
           }
           val (changeDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource),
               waitDuration
             )
           }
           val (deleteDuration, _) = profile {
-            Await.result(testApiService.entityService.deleteEntities(minimalTestData.wsName, refsToDelete, None, None),
+            Await.result(testApiService.entityService.deleteEntities(minimalTestData.wsName, refsToDelete),
                          waitDuration
             )
           }

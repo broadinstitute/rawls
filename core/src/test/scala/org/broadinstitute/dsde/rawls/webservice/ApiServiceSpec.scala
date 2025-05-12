@@ -172,7 +172,7 @@ trait ApiServiceSpec
     )
       .thenReturn(Future.successful())
 
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 

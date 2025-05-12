@@ -140,10 +140,7 @@ trait DataRepoEntityProviderSpecSupport {
    * Mock for DataRepoDAO that allows the caller to specify behavior for the getSnapshot and getBaseURL methods.
    *  method.
    */
-  class SpecDataRepoDAO(getSnapshotResponse: Either[Throwable, SnapshotModel], baseURL: String = dataRepoInstanceName)
-      extends MockDataRepoDAO(baseURL) {
-
-    override def getInstanceName: String = baseURL
+  class SpecDataRepoDAO(getSnapshotResponse: Either[Throwable, SnapshotModel]) extends MockDataRepoDAO() {
 
     override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel =
       getSnapshotResponse match {
