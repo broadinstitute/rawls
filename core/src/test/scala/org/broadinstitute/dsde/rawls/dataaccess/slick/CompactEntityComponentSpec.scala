@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
+  AttributeNull,
   AttributeNumber,
   AttributeString,
   AttributeValue,
@@ -14,11 +15,15 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityColumnFilter,
   EntityQuery,
   FilterOperators,
-  SortDirections
+  SortDirections,
+  WorkspaceFieldSpecs
 }
+import slick.dbio.Effect.Read
+import slick.sql.SqlStreamingAction
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.sql.SQLIntegrityConstraintViolationException
 import java.util.UUID
 import scala.util.Random
 
@@ -27,6 +32,74 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   // shorthand vars for tests below to enhance readability
   private val wsid = minimalTestData.workspace.workspaceIdAsUUID
   private val q = compactEntityQuery
+
+  behavior of "batchCreateEntities and getEntity"
+
+  // tests both batchCreateEntities and getEntity
+  it should "handle entities with no attributes" in withMinimalTestDatabase { _ =>
+    val entities = Seq(
+      Entity("entityName1", "entityType1", Map()),
+      Entity("entityName2", "entityType2", Map()),
+      Entity("entityName3", "entityType3", Map())
+    )
+    insertAndGetAll(entities)
+  }
+
+  it should "handle entities with simple attributes" in withMinimalTestDatabase { _ =>
+    val entities = Seq(
+      Entity("entityName1",
+             "entityType1",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      ),
+      Entity("entityName2",
+             "entityType2",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      ),
+      Entity("entityName3",
+             "entityType3",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      )
+    )
+    insertAndGetAll(entities)
+  }
+
+  // TODO CORE-428: behavior of this test will change once batch updates are implemented
+  it should "make no db changes if any of the entities exist" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGet(entity2)
+
+    val entities = Seq(entity1, entity2, entity3)
+
+    // should throw a primary key violation error
+    intercept[SQLIntegrityConstraintViolationException](runAndWait(q.batchCreateEntities(wsid, entities)))
+
+    // entity 2 should still exist
+    val rec2 = runAndWait(q.getEntity(wsid, entity2.entityType, entity2.name))
+    rec2 shouldBe defined
+    rec2.get.toEntity shouldBe entity2
+
+    // entities 1 and 3 should not exist
+    runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name)) shouldBe empty
+    runAndWait(q.getEntity(wsid, entity3.entityType, entity3.name)) shouldBe empty
+  }
+
+  // TODO CORE-428: behavior of this test will change once batch updates are implemented
+  it should "make no db changes if input contains repeated entities" in withMinimalTestDatabase { _ =>
+    val entities = Seq(
+      Entity("entityName1", "entityType1", Map()),
+      Entity("entityName2", "entityType2", Map()),
+      Entity("entityName1", "entityType1", Map()) // duplicate of the first entity
+    )
+
+    // should throw a primary key violation error
+    intercept[SQLIntegrityConstraintViolationException](insertAndGetAll(entities))
+
+    runAndWait(q.getEntity(wsid, "entityType1", "entityName1")) shouldBe empty
+    runAndWait(q.getEntity(wsid, "entityType2", "entityName2")) shouldBe empty
+  }
 
   behavior of "createEntity and getEntity"
 
@@ -63,6 +136,57 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
     )
     insertAndGet(entity)
+  }
+
+  behavior of "getEntityRefs"
+
+  it should "return nothing if asked for nothing" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(q.getEntityRefs(wsid, Set.empty))
+    actual shouldBe empty
+  }
+
+  it should "return existent entities" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(q.getEntityRefs(wsid, Set(entity1.toReference, entity2.toReference)))
+
+    val expected = Set(entity1.toReference, entity2.toReference)
+
+    // map CompactEntityRefRecord to AttributeEntityReference when comparing, since
+    // CompactEntityRefRecord contains an id which can be different every time
+    actual.map(_.toAttributeEntityReference) should contain theSameElementsAs expected
+  }
+
+  it should "return what it found even if not all entities exist" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(
+      q.getEntityRefs(wsid,
+                      Set(entity1.toReference,
+                          AttributeEntityReference(entity2.entityType, "nonexistent-2"),
+                          entity2.toReference
+                      )
+      )
+    )
+    val expected = Set(entity1.toReference, entity2.toReference)
+
+    // map CompactEntityRefRecord to AttributeEntityReference when comparing, since
+    // CompactEntityRefRecord contains an id which can be different every time
+    actual.map(_.toAttributeEntityReference) should contain theSameElementsAs expected
   }
 
   behavior of "ENTITY_KEYS population triggers"
@@ -140,10 +264,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
     // insert rows
-    runAndWait(q.upsertReferences(fromId, toIds)) shouldBe toIds.size
+    runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIds)))) shouldBe toIds.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIds
     // delete rows
-    runAndWait(q.deleteReferences(fromId, Set())) shouldBe toIds.size
+    runAndWait(q.deleteReferencesWithFilter(fromId, Set())) shouldBe toIds.size
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
   }
 
@@ -153,11 +277,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
     // insert rows
-    runAndWait(q.upsertReferences(fromId, toIds)) shouldBe toIds.size
+    runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIds)))) shouldBe toIds.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIds
     // delete rows, keeping the first two from toIds
     val toKeep = toIds.take(2)
-    runAndWait(q.deleteReferences(fromId, toKeep)) shouldBe toIds.size - toKeep.size
+    runAndWait(q.deleteReferencesWithFilter(fromId, toKeep)) shouldBe toIds.size - toKeep.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toKeep
   }
 
@@ -168,11 +292,152 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
     // insert rows for set one
-    runAndWait(q.upsertReferences(fromId, toIdsOne)) shouldBe toIdsOne.size
+    runAndWait(q.upsertReferences(Set(RefPointers(fromId, toIdsOne)))) shouldBe toIdsOne.size
     runAndWait(q.getReferencedIds(fromId)) should contain theSameElementsAs toIdsOne
     // delete rows, specifying to keep those in set two (which has no overlap with set one)
-    runAndWait(q.deleteReferences(fromId, toIdsTwo)) shouldBe toIdsOne.size
+    runAndWait(q.deleteReferencesWithFilter(fromId, toIdsTwo)) shouldBe toIdsOne.size
     runAndWait(q.getReferencedIds(fromId)) shouldBe empty
+  }
+
+  it should "upsert for multiple source entities" in withMinimalTestDatabase { _ =>
+    val fromIdOne: Long = 1 // id of the entity doing the referencing: the "source"
+    val fromIdTwo: Long = 2 // id of the entity doing the referencing: the "source"
+    val toIdsOne: Set[Long] = Set(101, 102, 103, 104, 105) // ids of entities being referenced: the "targets"
+    val toIdsTwo: Set[Long] = Set(201, 202, 203, 104) // notice the overlap for target 104
+    // sources should have no rows in ENTITY_REFS table
+    runAndWait(q.getReferencedIds(fromIdOne)) shouldBe empty
+    runAndWait(q.getReferencedIds(fromIdTwo)) shouldBe empty
+    // insert
+    runAndWait(
+      q.upsertReferences(Set(RefPointers(fromIdOne, toIdsOne), RefPointers(fromIdTwo, toIdsTwo)))
+    ) shouldBe toIdsOne.size + toIdsTwo.size
+    runAndWait(q.getReferencedIds(fromIdOne)) should contain theSameElementsAs toIdsOne
+    runAndWait(q.getReferencedIds(fromIdTwo)) should contain theSameElementsAs toIdsTwo
+  }
+
+  behavior of "deleteAllReferencesFrom"
+
+  it should "delete references for multiple entities" in withMinimalTestDatabase { _ =>
+    // referencing/source entities
+    val sourceType1 = "source1"
+    val sourceType2 = "source2"
+    val source1 = insertAndGet(Entity("source1", sourceType1, Map()))
+    val source2 = insertAndGet(Entity("source2", sourceType1, Map()))
+    val source3 = insertAndGet(Entity("source3", sourceType2, Map()))
+    // referenced/target entities
+    val targetType = "target"
+    val target1 = insertAndGet(Entity("target1", targetType, Map()))
+    val target2 = insertAndGet(Entity("target2", targetType, Map()))
+    val target3 = insertAndGet(Entity("target3", targetType, Map()))
+    val target4 = insertAndGet(Entity("target4", targetType, Map()))
+    val target5 = insertAndGet(Entity("target5", targetType, Map()))
+    val target6 = insertAndGet(Entity("target6", targetType, Map()))
+    // source should have no rows in ENTITY_REFS table
+    runAndWait(q.getReferencedIds(source1.id)) shouldBe empty
+    runAndWait(q.getReferencedIds(source2.id)) shouldBe empty
+    runAndWait(q.getReferencedIds(source3.id)) shouldBe empty
+    val toIds1: Set[Long] = Set(target1.id, target2.id)
+    val toIds2: Set[Long] = Set(target3.id, target4.id, target5.id)
+    val toIds3: Set[Long] = Set(target1.id, target3.id, target6.id)
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(source1.id, toIds1), RefPointers(source2.id, toIds2), RefPointers(source3.id, toIds3))
+      )
+    ) shouldBe (toIds1.size + toIds2.size + toIds3.size)
+    runAndWait(q.getReferencedIds(source1.id)) should contain theSameElementsAs toIds1
+    runAndWait(q.getReferencedIds(source2.id)) should contain theSameElementsAs toIds2
+    runAndWait(q.getReferencedIds(source3.id)) should contain theSameElementsAs toIds3
+    // delete rows
+    runAndWait(
+      q.deleteAllReferencesFrom(
+        wsid,
+        Set(
+          AttributeEntityReference(sourceType1, source1.name),
+          AttributeEntityReference(sourceType1, source2.name),
+          AttributeEntityReference(sourceType2, source3.name)
+        )
+      )
+    ) shouldBe (toIds1.size + toIds2.size + toIds3.size)
+    runAndWait(q.getReferencedIds(source1.id)) shouldBe empty
+    runAndWait(q.getReferencedIds(source2.id)) shouldBe empty
+    runAndWait(q.getReferencedIds(source3.id)) shouldBe empty
+  }
+
+  it should "only delete references in the given workspace" in withMinimalTestDatabase { _ =>
+    // referencing/source entities
+    val sourceType = "source"
+    val sourceWorkspace1 = insertAndGet(Entity("source", sourceType, Map()))
+    val sourceWorkspace2 =
+      insertAndGet(Entity("source", sourceType, Map()), minimalTestData.workspace2.workspaceIdAsUUID)
+    // referenced/target entities
+    val targetType = "target"
+    val targetWorkspace1 = insertAndGet(Entity("target", targetType, Map()))
+    val targetWorkspace2 =
+      insertAndGet(Entity("target", targetType, Map()), minimalTestData.workspace2.workspaceIdAsUUID)
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(sourceWorkspace1.id, Set(targetWorkspace1.id)),
+            RefPointers(sourceWorkspace2.id, Set(targetWorkspace2.id))
+        )
+      )
+    )
+    runAndWait(q.getReferencedIds(sourceWorkspace1.id)) should contain theSameElementsAs Seq(targetWorkspace1.id)
+    runAndWait(q.getReferencedIds(sourceWorkspace2.id)) should contain theSameElementsAs Seq(targetWorkspace2.id)
+    // delete rows
+    runAndWait(
+      q.deleteAllReferencesFrom(
+        wsid,
+        Set(
+          AttributeEntityReference(sourceType, sourceWorkspace1.name)
+        )
+      )
+    ) shouldBe 1
+    runAndWait(q.getReferencedIds(sourceWorkspace1.id)) shouldBe empty
+    runAndWait(q.getReferencedIds(sourceWorkspace2.id)) should contain theSameElementsAs Seq(targetWorkspace2.id)
+  }
+
+  behavior of "deleteAllReferencesFromType"
+
+  it should "only delete references for the given type" in withMinimalTestDatabase { _ =>
+    // referencing/source entities
+    val sourceType1 = "source1"
+    val sourceType2 = "source2"
+    val source1 = insertAndGet(Entity("source1", sourceType1, Map()))
+    val source2 = insertAndGet(Entity("source2", sourceType1, Map()))
+    val source3 = insertAndGet(Entity("source3", sourceType2, Map()))
+    // referenced/target entities
+    val targetType = "target"
+    val target1 = insertAndGet(Entity("target1", targetType, Map()))
+    val target2 = insertAndGet(Entity("target2", targetType, Map()))
+    val target3 = insertAndGet(Entity("target3", targetType, Map()))
+    val target4 = insertAndGet(Entity("target4", targetType, Map()))
+    val target5 = insertAndGet(Entity("target5", targetType, Map()))
+    val target6 = insertAndGet(Entity("target6", targetType, Map()))
+    // source should have no rows in ENTITY_REFS table
+    val toIds1: Set[Long] = Set(target1.id, target2.id)
+    val toIds2: Set[Long] = Set(target3.id, target4.id, target5.id)
+    val toIds3: Set[Long] = Set(target1.id, target3.id, target6.id)
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(source1.id, toIds1), RefPointers(source2.id, toIds2), RefPointers(source3.id, toIds3))
+      )
+    ) shouldBe (toIds1.size + toIds2.size + toIds3.size)
+    runAndWait(q.getReferencedIds(source1.id)) should contain theSameElementsAs toIds1
+    runAndWait(q.getReferencedIds(source2.id)) should contain theSameElementsAs toIds2
+    runAndWait(q.getReferencedIds(source3.id)) should contain theSameElementsAs toIds3
+    // delete rows
+    runAndWait(
+      q.deleteAllReferencesFromType(
+        wsid,
+        sourceType1
+      )
+    ) shouldBe (toIds1.size + toIds2.size)
+    runAndWait(q.getReferencedIds(source1.id)) shouldBe empty
+    runAndWait(q.getReferencedIds(source2.id)) shouldBe empty
+    runAndWait(q.getReferencedIds(source3.id)) should not be empty
   }
 
   behavior of "listEntityKeys"
@@ -263,6 +528,359 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual should contain theSameElementsAs List(EntityTypeAndCount(entityType1, 2), EntityTypeAndCount(entityType2, 1))
   }
 
+  behavior of "batchHide"
+
+  it should "mark the entities as deleted and remove attributes" in withMinimalTestDatabase { _ =>
+    // create entities to "delete"
+    val entity1 = Entity("entityName1",
+                         "entityType1",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
+                         )
+    )
+    val entity2 = Entity(
+      "entityName2",
+      "entityType2",
+      Map(
+        AttributeName.withDefaultNS("hello") -> AttributeString("world"),
+        AttributeName.withDefaultNS("num") -> AttributeNumber(1)
+      )
+    )
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+
+    runAndWait(q.batchHide(wsid, Seq(entity1.toReference, entity2.toReference)))
+    val actual1 = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    actual1 shouldBe empty
+    val actual2 = runAndWait(q.getEntity(wsid, entity2.entityType, entity2.name))
+    actual2 shouldBe empty
+
+    val hidden1 = runAndWait(q.getDeletedEntity(wsid, entity1.entityType, entity1.name))
+    hidden1 should not be empty
+    hidden1.get.attributes shouldBe empty
+
+    val hidden2 = runAndWait(q.getDeletedEntity(wsid, entity2.entityType, entity2.name))
+    hidden2 should not be empty
+    hidden2.get.attributes shouldBe empty
+
+  }
+
+  it should "not affect entities in other workspaces" in withMinimalTestDatabase { _ =>
+    // create the entity to "delete"
+    val entity = Entity("entityName",
+                        "entityType",
+                        Map(
+                          AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                          AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
+                        )
+    )
+    insertAndGet(entity)
+
+    // create a similar entity in another workspace
+    insertAndGet(entity, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    runAndWait(q.batchHide(wsid, Seq(entity.toReference)))
+    val actual = runAndWait(q.getEntity(wsid, entity.entityType, entity.name))
+    actual shouldBe empty
+
+    val twin = runAndWait(q.getEntity(minimalTestData.workspace2.workspaceIdAsUUID, entity.entityType, entity.name))
+    twin should not be empty
+    twin.get.attributes should not be empty
+    twin.get.name shouldBe entity.name
+
+  }
+
+  behavior of "batchHideType"
+
+  it should "only hide entities of the given type" in withMinimalTestDatabase { _ =>
+    // create entities to "delete"
+    val entity1 = Entity("entityName1",
+                         "entityType1",
+                         Map(
+                           AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                           AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
+                         )
+    )
+    val entity2 = Entity(
+      "entityName2",
+      "entityType2",
+      Map(
+        AttributeName.withDefaultNS("hello") -> AttributeString("world"),
+        AttributeName.withDefaultNS("num") -> AttributeNumber(1)
+      )
+    )
+    val entity3 = Entity(
+      "entityName3",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("foo") -> AttributeString("bah"),
+        AttributeName.withDefaultNS("baz") -> AttributeNumber(24)
+      )
+    )
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+
+    runAndWait(q.batchHideType(wsid, entity1.entityType))
+    val actual1 = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    actual1 shouldBe empty
+    val actual2 = runAndWait(q.getEntity(wsid, entity2.entityType, entity2.name))
+    actual2 should not be empty
+    actual2.get.attributes should not be empty
+    val actual3 = runAndWait(q.getEntity(wsid, entity3.entityType, entity3.name))
+    actual3 shouldBe empty
+
+    val hidden1 = runAndWait(q.getDeletedEntity(wsid, entity1.entityType, entity1.name))
+    hidden1 should not be empty
+    hidden1.get.attributes shouldBe empty
+
+    val hidden3 = runAndWait(q.getDeletedEntity(wsid, entity3.entityType, entity3.name))
+    hidden3 should not be empty
+    hidden3.get.attributes shouldBe empty
+
+  }
+
+  behavior of "getReferencesTo"
+
+  it should "find entities" in withMinimalTestDatabase { _ =>
+    // create referenced/target entities
+    val targetType1 = "targetType1"
+    val targetType2 = "targetType2"
+    val targetEntity1 = Entity("target1", targetType1, Map())
+    val targetEntity2 = Entity("target2", targetType1, Map())
+    val targetEntity3 = Entity("target3", targetType2, Map())
+    val target1 = insertAndGet(targetEntity1)
+    val target2 = insertAndGet(targetEntity2)
+    val target3 = insertAndGet(targetEntity3)
+
+    // create referencing/source entities
+    val sourceEntity1 = Entity(
+      "entity1",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType2, "target3")
+      )
+    )
+    val sourceEntity2 =
+      Entity("entity2",
+             "entityType1",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target2"))
+      )
+    val sourceEntity3 =
+      Entity("entity3",
+             "entityType2",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"))
+      )
+    val entity1 = insertAndGet(sourceEntity1)
+    val entity2 = insertAndGet(sourceEntity2)
+    val entity3 = insertAndGet(sourceEntity3)
+
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target1.id, target3.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(entity3.id, Set(target1.id))
+        )
+      )
+    )
+
+    val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference, sourceEntity3.toReference)
+    runAndWait(
+      q.getReferencesTo(wsid, Seq(targetEntity1.toReference, targetEntity2.toReference))
+    ) should contain theSameElementsAs expected
+
+  }
+
+  it should "not find entities in other workspaces" in withMinimalTestDatabase { _ =>
+    // create referenced/target entity
+    val targetType = "targetType"
+    val targetEntity = Entity("target1", targetType, Map())
+    val targetWorkspace1 = insertAndGet(targetEntity)
+    val targetWorkspace2 = insertAndGet(targetEntity, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    // create referencing/source entities
+    val sourceEntity = Entity(
+      "source",
+      "entityType",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType, "target1")
+      )
+    )
+    val entityWorkspace1 = insertAndGet(sourceEntity)
+    val entityWorkspace2 = insertAndGet(sourceEntity, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entityWorkspace1.id, Set(targetWorkspace1.id)),
+            RefPointers(entityWorkspace2.id, Set(targetWorkspace2.id))
+        )
+      )
+    )
+
+    val expected = Set(sourceEntity.toReference)
+    runAndWait(
+      q.getReferencesTo(wsid, Seq(targetEntity.toReference))
+    ) should contain theSameElementsAs expected
+
+  }
+
+  it should "exclude entities included in the search" in withMinimalTestDatabase { _ =>
+    // create referenced/target entities
+    val targetType1 = "targetType1"
+    val targetType2 = "targetType2"
+    val targetEntity1 = Entity("target1", targetType1, Map())
+    val targetEntity2 = Entity("target2", targetType1, Map())
+    val targetEntity3 =
+      Entity("target3",
+             targetType2,
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"))
+      )
+    val target1 = insertAndGet(targetEntity1)
+    val target2 = insertAndGet(targetEntity2)
+    val target3 = insertAndGet(targetEntity3)
+
+    // create referencing/source entities
+    val sourceEntity1 = Entity(
+      "entity1",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target2"),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType2, "target3")
+      )
+    )
+    val sourceEntity2 =
+      Entity("entity2",
+             "entityType1",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target2"))
+      )
+    val entity1 = insertAndGet(sourceEntity1)
+    val entity2 = insertAndGet(sourceEntity2)
+
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target3.id, target2.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(target3.id, Set(target1.id))
+        )
+      )
+    )
+
+    val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference)
+    runAndWait(
+      q.getReferencesTo(wsid, Seq(targetEntity1.toReference, targetEntity2.toReference, targetEntity3.toReference))
+    ) should contain theSameElementsAs expected
+
+  }
+
+  behavior of "getReferencesToType"
+
+  it should "find entities" in withMinimalTestDatabase { _ =>
+    // create referenced/target entities
+    val targetType1 = "targetType1"
+    val targetType2 = "targetType2"
+    val targetEntity1 = Entity("target1", targetType1, Map())
+    val targetEntity2 = Entity("target2", targetType1, Map())
+    val targetEntity3 = Entity("target3", targetType2, Map())
+    val target1 = insertAndGet(targetEntity1)
+    val target2 = insertAndGet(targetEntity2)
+    val target3 = insertAndGet(targetEntity3)
+
+    // create referencing/source entities
+    val sourceEntity1 = Entity(
+      "entity1",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType2, "target3")
+      )
+    )
+    val sourceEntity2 =
+      Entity("entity2",
+             "entityType1",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target2"))
+      )
+    val sourceEntity3 =
+      Entity("entity3",
+             "entityType2",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"))
+      )
+    val entity1 = insertAndGet(sourceEntity1)
+    val entity2 = insertAndGet(sourceEntity2)
+    val entity3 = insertAndGet(sourceEntity3)
+
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target1.id, target3.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(entity3.id, Set(target1.id))
+        )
+      )
+    )
+
+    val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference, sourceEntity3.toReference)
+    runAndWait(
+      q.getReferencesToType(wsid, targetType1)
+    ) should contain theSameElementsAs expected
+
+  }
+
+  it should "not return source entities of the same type" in withMinimalTestDatabase { _ =>
+    // create referenced/target entities
+    val targetType1 = "targetType1"
+    val targetType2 = "targetType2"
+    val targetEntity1 = Entity("target1", targetType1, Map())
+    val targetEntity2 = Entity("target2", targetType1, Map())
+    val targetEntity3 = Entity("target3", targetType2, Map())
+    val target1 = insertAndGet(targetEntity1)
+    val target2 = insertAndGet(targetEntity2)
+    val target3 = insertAndGet(targetEntity3)
+
+    // create referencing/source entities
+    val sourceEntity1 = Entity(
+      "entity1",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"),
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType2, "target3")
+      )
+    )
+    val sourceEntity2 =
+      Entity("entity2",
+             "entityType1",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target2"))
+      )
+    val sourceEntity3 =
+      Entity("entity3",
+             "entityType2",
+             Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference(targetType1, "target1"))
+      )
+    val entity1 = insertAndGet(sourceEntity1)
+    val entity2 = insertAndGet(sourceEntity2)
+    val entity3 = insertAndGet(sourceEntity3)
+
+    // insert rows
+    runAndWait(
+      q.upsertReferences(
+        Set(RefPointers(entity1.id, Set(target1.id, target3.id)),
+            RefPointers(entity2.id, Set(target2.id)),
+            RefPointers(entity3.id, Set(target1.id))
+        )
+      )
+    )
+
+    val expected = Set(sourceEntity1.toReference, sourceEntity2.toReference, sourceEntity3.toReference)
+    runAndWait(
+      q.getReferencesToType(wsid, targetType1)
+    ) should contain theSameElementsAs expected
+
+  }
+
   private val columnFilterCases = List(
     (AttributeNumber(42), "42"),
     (AttributeString("foo"), "foo"),
@@ -340,7 +958,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
           columnFilter
         )
       )
-      actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
+      actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
     }
   }
 
@@ -395,7 +1013,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
           columnFilter
         )
       )
-      actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
+      actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
         _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
       )
     }
@@ -454,7 +1072,19 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         columnFilter
       )
     )
-    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
+    actual should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
+  }
+
+  it should "respect desired fields" in withMinimalTestDatabase { _ =>
+    val columnFilter = EntityColumnFilter(AttributeName.withDefaultNS("foo"), "foo")
+    testDesiredFields(None, Some(columnFilter)) { (entityType, entityQuery) =>
+      q.queryEntitiesWithColumnFilter(
+        wsid,
+        entityType,
+        entityQuery,
+        columnFilter
+      )
+    }
   }
 
   behavior of "queryEntitiesWithFilterTerms"
@@ -500,10 +1130,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.And
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
-    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
+    actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
   }
 
   it should "return the entities with filter terms FilterOperators.Or sorted by name" in withMinimalTestDatabase { _ =>
@@ -534,10 +1165,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.Or
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
-    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
+    actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
   }
 
   it should "return the entities with filter terms FilterOperators.And sorted by attribute" in withMinimalTestDatabase {
@@ -599,12 +1231,24 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                       SortDirections.Ascending,
                       Some("foo bAr"),
                       FilterOperators.And
-          )
+          ),
+          Seq("foo", "bAr")
         )
       )
-      actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
+      actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
         _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
       )
+  }
+
+  it should "respect desired fields" in withMinimalTestDatabase { _ =>
+    testDesiredFields(Some("foo"), None) { (entityType, entityQuery) =>
+      q.queryEntitiesWithFilterTerms(
+        wsid,
+        entityType,
+        entityQuery,
+        entityQuery.filterTerms.map(_.split(" ").toSeq).getOrElse(Seq.empty)
+      )
+    }
   }
 
   behavior of "countEntitiesWithFilterTerms"
@@ -650,7 +1294,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.And
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
     actual shouldBe 2
@@ -684,7 +1329,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     SortDirections.Ascending,
                     Some("foo bAr"),
                     FilterOperators.Or
-        )
+        ),
+        Seq("foo", "bAr")
       )
     )
     actual shouldBe 2
@@ -734,7 +1380,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         EntityQuery(1, 10, Attributable.nameReservedAttribute, SortDirections.Ascending, None)
       )
     )
-    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity3, entity4).sortBy(_.name)
+    actual should contain theSameElementsInOrderAs List(entity1, entity3, entity4).sortBy(_.name)
   }
 
   it should "return the entities with no filter sorted by attribute" in withMinimalTestDatabase { _ =>
@@ -762,7 +1408,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         EntityQuery(1, 10, toDelimitedName(sortAttrName), SortDirections.Ascending, None)
       )
     )
-    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity1, entity3, entity4).sortBy(
+    actual should contain theSameElementsInOrderAs List(entity1, entity3, entity4).sortBy(
       _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
     )
   }
@@ -802,19 +1448,32 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         EntityQuery(1, 10, toDelimitedName(sortAttrName), SortDirections.Ascending, None)
       )
     )
-    actual.map(_.toEntity) should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
+    actual should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
+  }
+
+  it should "respect desired fields" in withMinimalTestDatabase { _ =>
+    testDesiredFields(None, None) { (entityType, entityQuery) =>
+      q.queryEntitiesWithNoFilter(
+        wsid,
+        entityType,
+        entityQuery
+      )
+    }
   }
 
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================
 
+  // this does NOT delegate to insertAndGetAll. This helper uses createEntity.
   private def insertAndGet(entity: Entity, workspaceId: UUID = wsid): CompactEntityRecord = {
     // row should not exist before inserting
     runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name)) shouldBe empty
-    // insert the entity
+
+    // insert the entities
     runAndWait(q.createEntity(workspaceId, entity)) shouldBe 1
-    // retrieve the entity; retrieved value includes its id
+    // retrieve the entities; retrieved value includes its id
+
     val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
     actual should not be empty
     val rec = actual.get
@@ -827,4 +1486,71 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     rec
   }
 
+  // This helper uses batchCreateEntities.
+  private def insertAndGetAll(entities: Seq[Entity], workspaceId: UUID = wsid): Seq[CompactEntityRecord] = {
+    // rows should not exist before inserting
+    entities.foreach { entity =>
+      runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name)) shouldBe empty
+    }
+
+    // insert the entities
+    runAndWait(q.batchCreateEntities(workspaceId, entities)) shouldBe entities.size
+    // retrieve the entities; retrieved value includes its id
+    entities.map { entity =>
+      val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
+      actual should not be empty
+      val rec = actual.get
+      // check entityType, name, and attributes
+      rec.toEntity shouldBe entity
+      // check other db columns which are not present in the Entity object
+      rec.deleted shouldBe false
+      rec.recordVersion shouldBe 0
+
+      rec
+    }
+  }
+
+  def testDesiredFields(filterTerms: Option[String], columnFilter: Option[EntityColumnFilter])(
+    testQuery: (String, EntityQuery) => SqlStreamingAction[Seq[Entity], Entity, Read]
+  ): Unit = {
+    val entityType = "entityType"
+    val columnFilterAttr = AttributeName.withDefaultNS("foo")
+    val desiredColumnAttr1 = AttributeName.withDefaultNS("bar")
+    val desiredColumnAttr2 = AttributeName.withDefaultNS("baz")
+    val entity1 =
+      Entity(UUID.randomUUID().toString,
+             entityType,
+             Map(columnFilterAttr -> AttributeString("foo"), desiredColumnAttr1 -> AttributeString("bar"))
+      )
+    val entity2 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType,
+        Map(columnFilterAttr -> AttributeString("foo"),
+            desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
+        )
+      )
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+
+    val entityQuery = EntityQuery(
+      1,
+      10,
+      Attributable.nameReservedAttribute,
+      SortDirections.Ascending,
+      filterTerms,
+      columnFilter = columnFilter,
+      fields = WorkspaceFieldSpecs(Some(Set(toDelimitedName(desiredColumnAttr1), toDelimitedName(desiredColumnAttr2))))
+    )
+    val actual = runAndWait(testQuery(entityType, entityQuery))
+
+    actual should contain theSameElementsAs List(
+      entity1.copy(attributes = Map(desiredColumnAttr1 -> AttributeString("bar"), desiredColumnAttr2 -> AttributeNull)),
+      entity2.copy(attributes =
+        Map(desiredColumnAttr1 -> AttributeNull,
+            desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
+        )
+      )
+    )
+  }
 }

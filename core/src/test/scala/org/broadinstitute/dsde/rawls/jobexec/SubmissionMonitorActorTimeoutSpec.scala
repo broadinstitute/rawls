@@ -2,35 +2,35 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit}
-import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
+import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
-import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType.Workspace
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
+  MockBigQueryServiceFactory,
   MockGoogleServicesDAO,
   MockShardedExecutionServiceCluster,
   SlickDataSource
 }
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
   AttributeName,
   AttributeString,
   Entity,
   RawlsTracingContext,
   WorkflowStatuses
 }
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-
-import java.sql.BatchUpdateException
 import slick.jdbc.TransactionIsolation
 
+import java.sql.BatchUpdateException
 import java.util.UUID
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
 class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
@@ -72,6 +72,27 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
                                            enableEmailNotifications = false,
                                            enableCostEstimatesForAllWorkflows = true
       )
+
+      val entityService = EntityService.constructor(
+        dataSource,
+        mockSamDAO,
+        "metric",
+        EntityManager.defaultEntityManager(
+          dataSource,
+          new MockWorkspaceManagerDAO(),
+          new WorkspaceSettingRepository(dataSource),
+          new MockDataRepoDAO(""),
+          mockSamDAO,
+          MockBigQueryServiceFactory.ioFactory(),
+          DataRepoEntityProviderConfig(100, 10, 0),
+          false,
+          java.time.Duration.ofSeconds(1),
+          "metric"
+        ),
+        1000,
+        None
+      ) _
+
       val submissionMonitorActorRef = TestActorRef[SubmissionMonitorActor](
         SubmissionMonitorActor.props(
           testData.wsName,
@@ -82,9 +103,10 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
           mockNotificationDAO,
           MockShardedExecutionServiceCluster
             .fromDAO(new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString), dataSource),
+          entityService,
           config,
-          Duration.create(1, SECONDS),
-          "test"
+          "test",
+          petUserInfo = userInfo
         )
       )
 

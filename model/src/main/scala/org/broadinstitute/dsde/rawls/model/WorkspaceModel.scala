@@ -441,7 +441,6 @@ case class EntityQuery(page: Int,
 ) {
   // these are defs so the json formatter will ignore them
   def offset: Int = (page - 1) * pageSize
-  def filterTermsList: Seq[String] = filterTerms.map(_.split(" ").toSeq).getOrElse(Seq.empty)
 }
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)

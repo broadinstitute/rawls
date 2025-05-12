@@ -42,7 +42,7 @@ class FilterByNameStrategySpec
       results <- countAndSource.source.runWith(Sink.seq)
     } yield (countAndSource.count, results)
     Await.result(testFuture, Duration.Inf)._1 shouldBe 1
-    Await.result(testFuture, Duration.Inf)._2 should contain theSameElementsAs Seq(testValue)
+    Await.result(testFuture, Duration.Inf)._2 should contain theSameElementsAs Seq(testValue.toEntity)
   }
 
   it should "return 0 and empty when there is no match" in {
