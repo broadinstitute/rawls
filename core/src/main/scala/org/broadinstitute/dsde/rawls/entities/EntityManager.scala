@@ -32,7 +32,7 @@ import scala.util.{Failure, Success}
  *
  *    Subclasses are:
  *      - LocalEntityProvider: the default. Legacy Rawls/CloudSQL implementation.
- *      - DataRepoEntityProvider: for working with Terra Data Repo snapshots.
+ *      - CompactEntityProvider: "Quicksilver" data tables, using JSON features in CloudSQL
  *
  * EntityProviderBuilder:
  *    since we create many instances of EntityProvider, we want a factory pattern. These builders are responsible
@@ -64,22 +64,17 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
       )
     }
 
-    // soon: look up the reference name to ensure it exists.
-    // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
-    val targetTagFuture = if (requestArguments.dataReference.isDefined) {
-      Future.successful(typeTag[DataRepoEntityProvider])
-    } else {
-      val compactDataTables =
-        workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
-                                                             CompactDataTables
-        ) map {
-          case Some(qs: CompactDataTablesSetting) => qs.config.enabled
-          case _                                  => false
-        }
-      compactDataTables map {
-        case true  => typeTag[CompactEntityProvider]
-        case false => typeTag[LocalEntityProvider]
+    // If the workspace has the CompactDataTables setting enabled, use CompactEntityProvider; else use LocalEntityProvider.
+    val compactDataTables =
+      workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
+                                                           CompactDataTables
+      ) map {
+        case Some(qs: CompactDataTablesSetting) => qs.config.enabled
+        case _                                  => false
       }
+    val targetTagFuture = compactDataTables map {
+      case true  => typeTag[CompactEntityProvider]
+      case false => typeTag[LocalEntityProvider]
     }
 
     targetTagFuture map { targetTag =>
@@ -103,12 +98,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 
 object EntityManager {
   def defaultEntityManager(dataSource: SlickDataSource,
-                           workspaceManagerDAO: WorkspaceManagerDAO,
                            workspaceSettingRepository: WorkspaceSettingRepository,
-                           dataRepoDAO: DataRepoDAO,
-                           samDAO: SamDAO,
-                           bqServiceFactory: GoogleBigQueryServiceFactory,
-                           config: DataRepoEntityProviderConfig,
                            cacheEnabled: Boolean,
                            queryTimeout: Duration,
                            metricsPrefix: String
@@ -122,16 +112,10 @@ object EntityManager {
                                      queryTimeout,
                                      metricsPrefix
       ) // implicit executionContext, system
-    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO,
-                                                                          dataRepoDAO,
-                                                                          samDAO,
-                                                                          bqServiceFactory,
-                                                                          config
-    ) // implicit executionContext
     val compactEntityProviderBuilder = new CompactEntityProviderBuilder(dataSource)
 
     new EntityManager(
-      Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, compactEntityProviderBuilder),
+      Set(defaultEntityProviderBuilder, compactEntityProviderBuilder),
       workspaceSettingRepository
     )
   }
