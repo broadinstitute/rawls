@@ -643,7 +643,15 @@ class WorkspaceService(
       }
     }
 
-  def updateWorkspaceBillingProject(workspaceName: WorkspaceName, newBillingProjectName: String): Future[Workspace] = {
+  def updateWorkspaceBillingProject(workspaceName: WorkspaceName, newBillingProjectName: String): Future[Workspace] =
+    for {
+      (workspace, destBillingProject) <- validateBillingProjectUpdate(workspaceName, newBillingProjectName)
+      updated <- updateWorkspaceBilling(workspace, destBillingProject)
+    } yield updated
+
+  def validateBillingProjectUpdate(workspaceName: WorkspaceName,
+                                   newBillingProjectName: String
+  ): Future[(Workspace, RawlsBillingProject)] = {
     val sourceBillingProjectName = RawlsBillingProjectName(workspaceName.namespace)
     val destBillingProjectName = RawlsBillingProjectName(newBillingProjectName)
     for {
@@ -655,11 +663,22 @@ class WorkspaceService(
             )
           )
         else Future.unit
+
+      // Source workspace must exist
+      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
+      workspace <- workspaceOpt match {
+        case Some(ws) => Future.successful(ws)
+        case None =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+            )
+          )
+      }
+
+      // Source and destination billing accounts must exist in GCP
       sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
       destBillingProject <- getBillingProjectContext(destBillingProjectName)
-      // Source and destination billing must be GCP
-      _ <- requireBillingProjectIsGCP(sourceBillingProject)
-      _ <- requireBillingProjectIsGCP(destBillingProject)
 
       // User must be an owner of both the source and destination billing projects
       _ <- requireBillingProjectOwnerAccess(sourceBillingProjectName, ctx)
@@ -676,7 +695,7 @@ class WorkspaceService(
         case Some(ws) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound,
+              ErrorReport(StatusCodes.BadRequest,
                           s"Workspace ${workspaceName.name} already exists under billing project $newBillingProjectName"
               )
             )
@@ -686,25 +705,25 @@ class WorkspaceService(
 
       // Check if the destination billing account is enabled
       _ <- destBillingProject.billingAccount match {
-        case Some(accountName) => gcsDAO.isBillingAccountEnabled(accountName)
+        case Some(accountName) =>
+          gcsDAO.isBillingAccountEnabled(accountName).flatMap {
+            case true => Future.unit
+            case false =>
+              Future.failed(
+                RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.BadRequest,
+                    s"Billing account $accountName is not enabled"
+                  )
+                )
+              )
+          }
         case None =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.BadRequest,
                           s"No billing account found for billing project ${destBillingProject.projectName}"
               )
-            )
-          )
-      }
-
-      // Source workspace must exist
-      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
-      workspace <- workspaceOpt match {
-        case Some(ws) => Future.successful(ws)
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
             )
           )
       }
@@ -728,14 +747,13 @@ class WorkspaceService(
             )
           )
 
-      updatedWorkspace <- updateWorkspaceBilling(workspace, destBillingProject)
-    } yield updatedWorkspace
+    } yield (workspace, destBillingProject)
   }
 
-  private def updateWorkspaceBillingInGCP(workspace: Workspace,
-                                          destBillingAccountName: Option[RawlsBillingAccountName],
-                                          oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
-                                          newBillingProjectOwnerPolicyEmail: WorkbenchEmail
+  def updateWorkspaceBillingInGCP(workspace: Workspace,
+                                  destBillingAccountName: Option[RawlsBillingAccountName],
+                                  oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                                  newBillingProjectOwnerPolicyEmail: WorkbenchEmail
   ): Future[Unit] =
     for {
       // If there is no auth domain on the workspace, add the billing project owner emails directly to bucket
@@ -795,7 +813,7 @@ class WorkspaceService(
       _ <- fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace)
     } yield ()
 
-  private def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Workspace] =
+  def updateWorkspaceBilling(workspace: Workspace, destBillingProject: RawlsBillingProject): Future[Workspace] =
     for {
       oldBillingProjectOwnerPolicyEmail <- samDAO
         .getPolicySyncStatus(SamResourceTypeNames.billingProject,
