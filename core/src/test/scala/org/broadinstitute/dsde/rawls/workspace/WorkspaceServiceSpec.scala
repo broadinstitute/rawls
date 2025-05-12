@@ -259,12 +259,7 @@ class WorkspaceServiceSpec
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
-      workspaceManagerDAO,
       new WorkspaceSettingRepository(dataSource),
-      dataRepoDAO,
-      samDAO,
-      bigQueryServiceFactory,
-      DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName

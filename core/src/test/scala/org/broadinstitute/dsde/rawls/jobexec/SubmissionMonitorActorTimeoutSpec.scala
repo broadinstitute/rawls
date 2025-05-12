@@ -79,12 +79,7 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
         "metric",
         EntityManager.defaultEntityManager(
           dataSource,
-          new MockWorkspaceManagerDAO(),
           new WorkspaceSettingRepository(dataSource),
-          new MockDataRepoDAO(""),
-          mockSamDAO,
-          MockBigQueryServiceFactory.ioFactory(),
-          DataRepoEntityProviderConfig(100, 10, 0),
           false,
           java.time.Duration.ofSeconds(1),
           "metric"

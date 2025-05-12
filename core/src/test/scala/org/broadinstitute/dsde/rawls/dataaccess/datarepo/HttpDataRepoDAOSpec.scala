@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.datarepo
 import akka.http.scaladsl.model.StatusCodes
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoBigQuerySupport, DataRepoEntityProviderSpecSupport}
+import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.mockserver.integration.ClientAndServer.startClientAndServer
 import org.mockserver.model.Header
 import org.mockserver.model.HttpRequest.request
@@ -51,7 +51,7 @@ class HttpDataRepoDAOSpec
 
     snapshotResponse.getId shouldBe snapshotUUID
     snapshotResponse.getTables().foreach {
-      _.getColumns.filter(col => col.getName() == DataRepoBigQuerySupport.datarepoRowIdColumn) should not be empty
+      _.getColumns.filter(col => col.getName() == "datarepo_row_id") should not be empty
     }
   }
 }

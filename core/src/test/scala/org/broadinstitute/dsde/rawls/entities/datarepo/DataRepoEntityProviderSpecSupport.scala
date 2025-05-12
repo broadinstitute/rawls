@@ -57,31 +57,6 @@ trait DataRepoEntityProviderSpecSupport {
   val maxInputsPerSubmission: Int = 1000
   val maxBigQueryResponseSizeBytes: Int = 500000
 
-  /* A "factory" method to create a DataRepoEntityProvider, with defaults.
-   * Individual unit tests should call this to reduce boilerplate.
-   */
-  def createTestProvider(
-    snapshotModel: SnapshotModel = createSnapshotModel(),
-    samDAO: SamDAO = new MockSamDAO(slickDataSource),
-    bqFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory(),
-    entityRequestArguments: EntityRequestArguments =
-      EntityRequestArguments(workspace, RawlsRequestContext(userInfo), Some(DataReferenceName("referenceName"))),
-    config: DataRepoEntityProviderConfig =
-      DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
-  ): DataRepoEntityProvider =
-    // we may find that tests need to override the DataReferenceDescription provided by createDataRepoSnapshotResource() on the next line
-    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, config)
-
-  def createTestBuilder(
-    workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource())),
-    dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
-    samDAO: SamDAO = new MockSamDAO(slickDataSource),
-    bqServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory(),
-    config: DataRepoEntityProviderConfig =
-      DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
-  ): DataRepoEntityProviderBuilder =
-    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, config)
-
   /* A "factory" method to create DataRepoSnapshotResource objects, with defaults.
    * Allows callers to only specify the arguments they want to override.
    */

@@ -76,12 +76,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     workbenchMetricBaseName,
     EntityManager.defaultEntityManager(
       slickDataSource,
-      new MockWorkspaceManagerDAO(),
       new WorkspaceSettingRepository(slickDataSource),
-      new MockDataRepoDAO(""),
-      mockSamDAO,
-      MockBigQueryServiceFactory.ioFactory(),
-      DataRepoEntityProviderConfig(100, 10, 0),
       false,
       java.time.Duration.ofMinutes(2),
       workbenchMetricBaseName

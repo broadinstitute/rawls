@@ -111,12 +111,7 @@ class BatchUpsertScalingSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        new MockWorkspaceManagerDAO(),
         new WorkspaceSettingRepository(dataSource),
-        new MockDataRepoDAO(mockServer.mockServerBaseUrl),
-        samDAO,
-        bigQueryServiceFactory,
-        DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName

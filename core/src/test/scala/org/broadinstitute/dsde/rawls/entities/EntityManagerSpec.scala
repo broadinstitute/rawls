@@ -64,12 +64,7 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
 
     val entityManager: EntityManager = EntityManager.defaultEntityManager(
       mockDataSource,
-      mockWorkspaceManagerDAO,
       workspaceSettingRepository,
-      mockDataRepoDAO,
-      samDAO,
-      mockGoogleBigQueryServiceFactory,
-      mockDataRepoEntityProviderConfig,
       cacheEnabled = false,
       queryTimeout = java.time.Duration.ofSeconds(1),
       metricsPrefix = "metrics-prefix"

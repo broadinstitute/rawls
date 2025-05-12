@@ -19,7 +19,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
@@ -68,8 +67,7 @@ class SubmissionSpec(_system: ActorSystem)
     with Eventually
     with MockitoTestUtils
     with StatsDTestUtils
-    with RawlsTestUtils
-    with DataRepoEntityProviderSpecSupport {
+    with RawlsTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("SubmissionSpec"))
@@ -526,12 +524,7 @@ class SubmissionSpec(_system: ActorSystem)
       val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
         dataSource,
-        workspaceManagerDAO,
         new WorkspaceSettingRepository(dataSource),
-        dataRepoDAO,
-        samDAO,
-        bigQueryServiceFactory,
-        DataRepoEntityProviderConfig(100, 10000, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName

@@ -12,7 +12,7 @@ import java.util.UUID
 class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) extends DataRepoDAO {
 
   private val datareporow_id =
-    new ColumnModel().name(DataRepoBigQuerySupport.datarepoRowIdColumn).datatype(TableDataType.STRING)
+    new ColumnModel().name("datarepo_row_id").datatype(TableDataType.STRING)
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()

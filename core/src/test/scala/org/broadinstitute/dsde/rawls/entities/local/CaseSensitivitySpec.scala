@@ -942,12 +942,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       workbenchMetricBaseName = "test",
       EntityManager.defaultEntityManager(
         dataSource,
-        new MockWorkspaceManagerDAO(),
         new WorkspaceSettingRepository(dataSource),
-        new MockDataRepoDAO("mockrepo"),
-        samDAO,
-        bigQueryServiceFactory,
-        DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         "testMetricBaseName"
