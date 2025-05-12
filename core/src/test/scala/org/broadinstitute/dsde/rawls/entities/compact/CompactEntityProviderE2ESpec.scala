@@ -146,7 +146,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   it should "create entities across multiple batches" in withMinimalTestDatabase { _ =>
     val repository = new CompactEntityRepository(slickDataSource)
-    val config = CompactEntityProviderConfig(maxSqlBatchSizeBytes = 2048) // pretty small to force batching
+    val config = CompactEntityProviderConfig(batchUpsertBatchSize = 250) // pretty small to force batching
 
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, repository, config)(ec, system)
 
@@ -175,7 +175,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   it should "roll back all writes, even across batches, on error" in withMinimalTestDatabase { _ =>
     val repository = new CompactEntityRepository(slickDataSource)
-    val config = CompactEntityProviderConfig(maxSqlBatchSizeBytes = 1) // should execute one update per batch
+    val config = CompactEntityProviderConfig(batchUpsertBatchSize = 1) // should execute one update per batch
 
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, repository, config)(ec, system)
 

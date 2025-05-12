@@ -25,6 +25,7 @@ case class CompactEntityRecord(id: Long,
                                deleted: Boolean,
                                attributes: Option[String]
 ) {
+  def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
   def toEntity: Entity = {
     val attrs: AttributeMap = Try(CompactEntitySerialization.fromSql(attributes)) match {
       case Success(attrMap) => attrMap

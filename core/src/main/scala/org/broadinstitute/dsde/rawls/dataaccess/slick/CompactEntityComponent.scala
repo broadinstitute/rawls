@@ -118,6 +118,32 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           and entity_type = $entityType
           and name = $entityName"""
 
+  /** Given a set of entity type/name pairs, return the CompactEntityRecord for those pairs.
+    *
+    * `execution plan: index range scan on idx_entity_type_name`
+    */
+  def getEntities(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRecord]] =
+    // short-circuit
+    if (refs.isEmpty) {
+      DBIO.successful(Seq())
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.as[CompactEntityRecord]
+    }
+
   /** Given a set of entity type/name pairs, return the CompactEntityRefRecord for those pairs.
     * The CompactEntityRefRecord includes the internal database id for these entities.
     *

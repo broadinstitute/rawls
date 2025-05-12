@@ -95,6 +95,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
@@ -118,9 +119,10 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
-    val config = CompactEntityProviderConfig(maxSqlBatchSizeBytes = 2048) // pretty small to force batching
+    val config = CompactEntityProviderConfig(batchUpsertBatchSize = 25) // pretty small to force batching
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery, config = config)
@@ -159,6 +161,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         )
       )
     )
+    when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks

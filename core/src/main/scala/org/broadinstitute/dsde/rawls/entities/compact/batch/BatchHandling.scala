@@ -2,21 +2,23 @@ package org.broadinstitute.dsde.rawls.entities.compact.batch
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, RefPointers}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, ReadWriteAction, RefPointers}
 import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProvider,
   CompactEntityProviderConfig,
   CompactEntityRepository,
   CompactEntitySerialization
 }
+import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 
+import scala.annotation.tailrec
 import scala.concurrent.Future
 
 /**
@@ -38,25 +40,56 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
                     config: CompactEntityProviderConfig,
                     parentContext: RawlsRequestContext
   ): Future[Int] = {
-    // Translate the input stream entityUpdates to a stream of Entity by applying the updates to
-    // a pre-existing entity (for updates) or a blank entity (for inserts)
-    val entitySource: Source[Entity, _] = entityUpdates.map { updateDefinition =>
-      // TODO CORE-428: for updates, look ahead (some quantity) in the update definitions and
-      //   retrieve the existing entities from the db
-      // for inserts, start with an empty entity
-      val baseEntity = Entity(updateDefinition.name, updateDefinition.entityType, Map())
-      // update the starting entity with the user's operations
-      applyOperationsToEntity(baseEntity, updateDefinition.operations)
-    }
 
-    // Group the entities-to-be-saved into batches to optimize our SQL interactions
-    val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(config.maxSqlBatchSizeBytes)(calculateEntitySize)
+    /** Given input of some EntityUpdateDefinitions, apply those updates to any pre-existing entities, then
+      * persist the result back to the database. */
+    val applyOperations: Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Seq[Entity]], _] =
+      Flow[Seq[EntityUpdateDefinition]].map { updates =>
+        // extract the entity type and name from each update
+        val updateIdentifiers = updates.map(update => AttributeEntityReference(update.entityType, update.name))
+        // how many updates do we have for each entity being updated?
+        val updateCounts = updateIdentifiers
+          .groupBy(identity)
+          .map { case (updateIdentifier, updateDefinitions) =>
+            updateIdentifier -> updateDefinitions.size
+          }
+
+        for {
+          // query the database for any pre-existing entities being updated
+          existingEntities <- repository.queries.getEntities(workspaceId, updateIdentifiers.toSet)
+          // if this invocation does NOT allow upserts, validate that we found all entities being updated
+          _ = if (!allowUpsert && existingEntities.size != updateIdentifiers.size) {
+            throw new EntityNotFoundException()
+          }
+          // TODO CORE-428: save a data structure of the expected record_versions for each entity
+          // massage the existing entities so they're easier to look up later
+          existingEntitiesByIdentifier = existingEntities
+            .map(rec => rec.toAttributeEntityReference -> rec.toEntity)
+            .toMap
+          // apply the incoming operations to the existing entities (or to an empty entity if none pre-existed)
+          updatedEntities = applyAll(updates, existingEntitiesByIdentifier)
+
+        } yield updatedEntities
+      }
+
+    // Group the updates into batches
+    val batchedUpdates: Source[Seq[EntityUpdateDefinition], _] = entityUpdates.grouped(config.batchUpsertBatchSize)
+
+    // apply the incoming operations to a pre-existing entity (for updates) or a blank entity (for inserts)
+    val updatedEntities: Source[ReadWriteAction[Seq[Entity]], _] = batchedUpdates.via(applyOperations)
 
     // For each batch, generate the db action to write it to the database
-    val batchActionsSource: Source[ReadWriteAction[Int], _] = batches
-      .map { batch =>
-        logger.info(s"batch upsert: batch of ${batch.size} entities")
-        insertBatch(batch)
+    val batchActionsSource: Source[ReadWriteAction[Int], _] = updatedEntities
+      .map { batchAction =>
+        for {
+          batch <- batchAction
+          writeCount <- insertBatch(batch)
+          // TODO CORE-428: re-retrieve the saved entities and compare their actual record_version
+          //   against their expected record_version
+        } yield {
+          logger.info(s"batch upsert: batch of $writeCount entities")
+          writeCount
+        }
       }
 
     // Materialize the batch actions into a sequence and convert to a single DBIO action
@@ -77,9 +110,40 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     dbResults
   }
 
-  /** approximate the byte size of this entity by looking at the character length of its JSONized attributes */
-  private def calculateEntitySize(entity: Entity): Int =
-    CompactEntitySerialization.toSql(entity.attributes).compactPrint.length
+  /** Helper method to apply batch operations to pre-existing entities.
+    * This is a recursive call to handle the case where multiple subsequent operations modify
+    * the same pre-existing entity. */
+  def applyAll(updates: Seq[EntityUpdateDefinition],
+               existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity]
+  ): Seq[Entity] = {
+
+    @tailrec
+    def applyOne(updates: Seq[EntityUpdateDefinition],
+                 existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity],
+                 accum: Seq[Entity]
+    ): Seq[Entity] =
+      if (updates.isEmpty) {
+        //  end of updates; return the accumulator
+        accum
+      } else {
+        val thisUpdate = updates.head
+        val thisBaseEntity = existingEntitiesByIdentifier.getOrElse(
+          AttributeEntityReference(thisUpdate.entityType, thisUpdate.name),
+          Entity(thisUpdate.name, thisUpdate.entityType, Map())
+        )
+
+        val updatedEntity = applyOperationsToEntity(thisBaseEntity, thisUpdate.operations)
+
+        applyOne(updates.tail,
+                 existingEntitiesByIdentifier + (updatedEntity.toReference -> updatedEntity),
+                 accum :+ updatedEntity
+        )
+
+      }
+
+    applyOne(updates, existingEntitiesByIdentifier, Seq())
+
+  }
 
   /** write this batch of Entity to the database */
   private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Int] = {
