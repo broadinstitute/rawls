@@ -7,15 +7,7 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.TpsPaoGetResult
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{
-  AzureContext,
-  GcpContext,
-  WorkspaceDescription,
-  WorkspaceStageModel,
-  WsmPolicyInput,
-  WsmPolicyInputs,
-  WsmPolicyPair
-}
+import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WorkspaceStageModel, WsmPolicyInput, WsmPolicyInputs, WsmPolicyPair}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -54,16 +46,12 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  RawlsTestUtils,
-  TestExecutionContext
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -4018,8 +4006,6 @@ class WorkspaceServiceSpec
     val sourceProject = testData.billingProject
     val targetProject = testData.testProject1
 
-    when(services.gcsDAO.isBillingAccountEnabled(targetProject.billingAccount.get))
-      .thenReturn(Future.successful(true))
     when(
       services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
                                                sourceProject.projectName.value,
@@ -4073,16 +4059,18 @@ class WorkspaceServiceSpec
   it should "not update workspace billing if the destination billing namespace already has a workspace with the same workspace name" in withTestDataServices {
     services =>
       val workspaceName = testData.workspace.toWorkspaceName
+      val targetProject = testData.testProject2 // Test project that contains a workspace with workspace.name
+
       val err = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName,
-                                                                            testData.testProject1.projectName.value
+                                                                            targetProject.projectName.value
                      ),
                      Duration.Inf
         )
       }
       err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
       err.errorReport.message should include(
-        s"Workspace ${workspaceName.name} already exists under billing project ${testData.testProject1.projectName.value}"
+        s"Workspace ${workspaceName.name} already exists under billing project ${targetProject.projectName.value}"
       )
   }
 
@@ -4138,18 +4126,86 @@ class WorkspaceServiceSpec
     }
   }
 
-  "updateWorkspaceBilling" should "successfully update workspace billing" in withTestDataServicesCustomSamAndUser(
-    testData.userOwner
-  ) { services =>
+  "updateWorkspaceBilling" should "successfully update workspace billing" in withTestDataServices { services =>
     val workspaceName = testData.workspace.toWorkspaceName
     val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
-
+    val targetBilling = testData.testProject1
     val updatedWorkspace =
       Await
-        .result(services.workspaceService.updateWorkspaceBilling(workspace, testData.testProject1), Duration.Inf)
+        .result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
         .get
-    updatedWorkspace.namespace shouldBe testData.testProject1.projectName.value
-    updatedWorkspace.currentBillingAccountOnGoogleProject shouldBe testData.testProject1.billingAccount
+
+    val oldBillingProjectOwnerPolicyEmail = Await.result(services.samDAO
+      .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+        workspace.namespace,
+        SamBillingProjectPolicyNames.owner,
+        services.workspaceService.ctx
+      )
+      .map(_.email),
+      Duration.Inf)
+
+    val newBillingProjectOwnerPolicyEmail = Await.result(services.samDAO
+      .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+        targetBilling.projectName.value,
+        SamBillingProjectPolicyNames.owner,
+        services.workspaceService.ctx
+      )
+      .map(_.email),
+      Duration.Inf)
+
+    // Verify GCP updates
+    val projectIAMRoles = Set(services.workspaceService.terraBillingProjectOwnerRole,
+      services.workspaceService.terraWorkspaceCanComputeRole,
+      services.workspaceService.terraWorkspaceNextflowRole)
+    verify(services.gcsDAO).changeProjectOwnerBucketIamBinding(any(), any(), any())
+    verify(services.googleIamDAO).addRoles(
+      GoogleProject(workspace.googleProjectId.value),
+      newBillingProjectOwnerPolicyEmail,
+      IamMemberTypes.Group,
+      projectIAMRoles,
+      retryIfGroupDoesNotExist = true)
+    verify(services.googleIamDAO).removeRoles(
+      GoogleProject(workspace.googleProjectId.value),
+      oldBillingProjectOwnerPolicyEmail,
+      IamMemberTypes.Group,
+      projectIAMRoles,
+      retryIfGroupDoesNotExist = true)
+    verify(services.gcsDAO).setBillingAccount(workspace.googleProjectId,
+      targetBilling.billingAccount,
+      services.workspaceService.ctx.toTracingContext)
+
+    // Verify Sam updates
+    verify(services.samDAO, atLeastOnce()).addUserToPolicy(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspacePolicyNames.projectOwner,
+      newBillingProjectOwnerPolicyEmail.value,
+      services.samDAO.rawlsSAContext
+    )
+    verify(services.samDAO, atLeastOnce()).removeUserFromPolicy(
+      SamResourceTypeNames.workspace,
+      workspace.workspaceId,
+      SamWorkspacePolicyNames.projectOwner,
+      oldBillingProjectOwnerPolicyEmail.value,
+      services.samDAO.rawlsSAContext
+    )
+    // Verify FastPass syncing
+//    val workspaceFastPassGrants =
+//      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+//    val userSubjectId = WorkbenchUserId(userInfo.userSubjectId.value)
+//    val ownerRoles = Vector(
+//      services.terraWorkspaceCanComputeRole,
+//      services.terraWorkspaceNextflowRole,
+//      services.terraBucketWriterRole
+//    )
+//    workspaceFastPassGrants should not be empty
+//    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+//    workspaceFastPassGrants.map(_.userSubjectId) should contain only userSubjectId
+
+
+    // Verify Rawls updates
+    updatedWorkspace.namespace shouldBe targetBilling.projectName.value
+    updatedWorkspace.currentBillingAccountOnGoogleProject shouldBe targetBilling.billingAccount
   }
 
 }
