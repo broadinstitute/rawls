@@ -4072,26 +4072,22 @@ class WorkspaceServiceSpec
 
   it should "not update workspace billing if the destination billing namespace already has a workspace with the same workspace name" in withTestDataServices {
     services =>
-      val workspaceName = WorkspaceName("source-billing", "test-ws")
-
-      when(services.workspaceRepository.getWorkspace(WorkspaceName("target-billing", "test-ws")))
-        .thenReturn(Future.successful(Some(mock[Workspace])))
-
+      val workspaceName = testData.workspace.toWorkspaceName
       val err = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName,
-                                                                            testData.billingProject.projectName.value
+                                                                            testData.testProject1.projectName.value
                      ),
                      Duration.Inf
         )
       }
       err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
       err.errorReport.message should include(
-        s"Workspace ${workspaceName.name} already exists under billing project ${workspaceName.namespace}"
+        s"Workspace ${workspaceName.name} already exists under billing project ${testData.testProject1.projectName.value}"
       )
   }
 
   it should "not update workspace billing if destination billing is not enabled" in withTestDataServices { services =>
-    when(services.gcsDAO.isBillingAccountEnabled(any[RawlsBillingAccountName]))
+    when(services.gcsDAO.isBillingAccountEnabled(testData.testProject1.billingAccount.get))
       .thenReturn(Future.successful(false))
 
     val workspaceName = testData.workspace.toWorkspaceName
@@ -4101,7 +4097,9 @@ class WorkspaceServiceSpec
         Duration.Inf
       )
     }
-    err.errorReport.message should include(s"Billing account ${testData.testProject1.billingAccount} is not enabled")
+    err.errorReport.message should include(
+      s"Billing account ${testData.testProject1.billingAccount.get} is not enabled"
+    )
     err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
   }
 

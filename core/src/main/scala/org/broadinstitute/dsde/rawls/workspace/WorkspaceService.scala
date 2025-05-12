@@ -693,7 +693,7 @@ class WorkspaceService(
       workspaceWithNameExists <- workspaceRepository.getWorkspace(
         WorkspaceName(newBillingProjectName, workspaceName.name)
       )
-      _ = workspaceWithNameExists match {
+      _ <- workspaceWithNameExists match {
         case Some(ws) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
