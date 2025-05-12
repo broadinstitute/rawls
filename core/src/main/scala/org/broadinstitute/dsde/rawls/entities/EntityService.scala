@@ -121,7 +121,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             )
           }
           .recover(sqlLoggingRecover(s"getEntity: $workspaceName $entityType/$entityName"))
-          .recover(bigQueryRecover)
+          .recover(queryRecover)
       }
     }
 
@@ -183,7 +183,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
               delEx.referringEntities
             }
             .recover(sqlLoggingRecover(s"deleteEntities: $workspaceName ${entRefs.size} entities"))
-            .recover(bigQueryRecover)
+            .recover(queryRecover)
         }
       }
     }
@@ -222,7 +222,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             )
           }
           .recover(sqlLoggingRecover(s"deleteEntitiesOfType: $workspaceName $entityType"))
-          .recover(bigQueryRecover)
+          .recover(queryRecover)
       }
     }
 
@@ -340,7 +340,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
         } yield metadata
 
-        metadataFuture.recover(bigQueryRecover)
+        metadataFuture.recover(queryRecover)
       }).recover(
         sqlLoggingRecover(s"entityTypeMetadata: $workspaceName")
       )
@@ -394,7 +394,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
         } yield metadataAndEntitySource
 
-        queryFuture.recover(bigQueryRecover)
+        queryFuture.recover(queryRecover)
       }
     }
 
@@ -432,7 +432,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           linkExistingEntities,
                           s
             )
-            .recover(bigQueryRecover)
+            .recover(queryRecover)
         }
       } yield entityCopyResponse)
         .recover(
@@ -552,20 +552,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
       throw sqlException;
   }
 
-  private def bigQueryRecover[U]: PartialFunction[Throwable, U] = {
+  private def queryRecover[U]: PartialFunction[Throwable, U] = {
     case dee: DataEntityException =>
       throw new RawlsExceptionWithErrorReport(ErrorReport(dee.code, dee.getMessage))
-    case bqe: BigQueryException =>
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage)
-      )
-    case gjre: GoogleJsonResponseException =>
-      // unlikely to hit this case; we should see BigQueryExceptions instead of GoogleJsonResponseExceptions
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError),
-                    gjre.getMessage
-        )
-      )
     case report: RawlsExceptionWithErrorReport =>
       throw report // don't rewrap these, just rethrow
     case ex: Exception =>

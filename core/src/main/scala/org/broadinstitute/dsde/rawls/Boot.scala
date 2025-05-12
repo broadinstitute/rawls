@@ -282,9 +282,7 @@ object Boot extends IOApp with LazyLogging {
         )
 
       val dataRepoDAO =
-        new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstanceName"),
-                            appConfigManager.conf.getString("dataRepo.terraInstance")
-        )
+        new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstance"))
 
       val userServiceConstructor: RawlsRequestContext => UserService =
         UserService.constructor(
