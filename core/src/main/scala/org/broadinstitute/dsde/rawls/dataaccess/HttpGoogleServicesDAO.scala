@@ -574,8 +574,13 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         executeGoogleRequest(fetcher)
       }
       response.getOpen.booleanValue()
-    } {
-      case gjre: GoogleJsonResponseException if gjre.getStatusCode / 100 == 4 => false // any 4xx error means no access
+    } { case e: GoogleJsonResponseException =>
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.InternalServerError,
+          s"Failed to check if billing account ${billingAccount.value} is enabled: ${StringUtils.abbreviate(e.getMessage, 50)}"
+        )
+      )
     }
   }
 
@@ -1333,7 +1338,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     executionContext: ExecutionContext
   ): Boolean = {
     val client: ServiceUsage = getServiceUsageClient(getServiceUsageServiceAccountCredential)
-    val request: ServiceUsage#Services#List = client.services().list(s"projects/${project.value}").setFilter("state:ENABLED")
+    val request: ServiceUsage#Services#List =
+      client.services().list(s"projects/${project.value}").setFilter("state:ENABLED")
     val enabledServices = blocking {
       val result: ListServicesResponse = request.execute()
       result.getServices.asScala.map(_.getConfig.getName).toSet
