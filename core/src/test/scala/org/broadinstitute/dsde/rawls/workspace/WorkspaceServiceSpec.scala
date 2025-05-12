@@ -4052,14 +4052,14 @@ class WorkspaceServiceSpec
             targetBilling.projectName,
             servicePerimeter = Option(ServicePerimeterName("test-service-perimeter"))
           )
-          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1.projectName)
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(targetBilling.projectName)
         } yield ()
       }
 
       val err = intercept[RawlsExceptionWithErrorReport] {
         Await.result(
           services.workspaceService.validateBillingProjectUpdate(workspace.toWorkspaceName,
-                                                                 testData.testProject1.projectName.value
+                                                                 targetBilling.projectName.value
           ),
           Duration.Inf
         )

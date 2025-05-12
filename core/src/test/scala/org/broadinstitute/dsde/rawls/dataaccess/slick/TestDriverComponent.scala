@@ -552,7 +552,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                            false
     )
 
-    val workspaceDifferentBilling = makeWorkspaceWithUsers(testProject1,
+    val workspaceDifferentBilling = makeWorkspaceWithUsers(testProject2,
                                                            wsName.name,
                                                            UUID.randomUUID().toString,
                                                            "aBucket",
