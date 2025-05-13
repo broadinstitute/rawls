@@ -237,9 +237,8 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
         mockedEnumerateSnapshotsResponse
       )
     case ProviderState(States.snapshotCreatePolicy, _) =>
-      mockCreateSnapshot(
-        mockSnapshotServiceConstructor(RawlsRequestContext(userInfo = mockUserInfo, otelContext = mockOtelContext)),
-        dataRepoSnapshotResource
+      mockCreateSnapshots(
+        mockSnapshotServiceConstructor(RawlsRequestContext(userInfo = mockUserInfo, otelContext = mockOtelContext))
       )
     case _ =>
       loggerIO.debug("State not found")
@@ -260,6 +259,12 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
       mockSnapshotService.createSnapshotByWorkspaceId(anyString(), any[NamedDataRepoSnapshot])
     } thenReturn
       Future.successful(mockResponse)
+
+  private def mockCreateSnapshots(mockSnapshotService: SnapshotService): OngoingStubbing[Future[Unit]] =
+    when {
+      mockSnapshotService.createSnapshotsByWorkspaceIdV3(anyString(), any[Set[UUID]])
+    } thenReturn
+      Future.successful()
 
   lazy val pactBrokerUrl: String =
     sys.env.getOrElse("PACT_BROKER_URL", "")
