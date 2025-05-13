@@ -6,7 +6,13 @@ import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
+  AddListMember,
+  AddUpdateAttribute,
+  CreateAttributeEntityReferenceList,
+  EntityUpdateDefinition,
+  RemoveAttribute
+}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
@@ -142,6 +148,81 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     runAndWait(q.getReferencedIds(name3Id)) should contain theSameElementsAs Seq(
       name1Id,
       name2Id
+    )
+
+  }
+
+  it should "update entities with references" in withMinimalTestDatabase { dataSource =>
+    val provider = defaultProvider()
+
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    // create target entities
+    Await.result(provider.createEntity(Entity("targetName1", "targetType", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("targetName2", "targetType", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("targetName3", "targetType", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("targetName4", "targetType", Map()), defaultRequestContext), atMost)
+
+    // create the entity we'll be updating; give it two references
+    Await.result(
+      provider.createEntity(
+        Entity(
+          "sourceName",
+          "sourceType",
+          Map(
+            AttributeName.withDefaultNS("ref1") -> AttributeEntityReference("targetType", "targetName1"),
+            AttributeName.withDefaultNS("ref2") -> AttributeEntityReference("targetType", "targetName2")
+          )
+        ),
+        defaultRequestContext
+      ),
+      atMost
+    )
+
+    // validate the starting references before our batchUpsert
+    val initialReferences =
+      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
+        .map(_.toAttributeEntityReference)
+
+    initialReferences shouldBe Seq(AttributeEntityReference("targetType", "targetName1"),
+                                   AttributeEntityReference("targetType", "targetName2")
+    )
+
+    // perform the batchUpsert - delete one existing reference, add two more
+    val updates = Source(
+      Seq(
+        EntityUpdateDefinition(
+          "sourceName",
+          "sourceType",
+          Seq(
+            CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("refList")),
+            AddListMember(AttributeName.withDefaultNS("refList"),
+                          AttributeEntityReference("targetType", "targetName3")
+            ),
+            AddListMember(AttributeName.withDefaultNS("refList"), AttributeEntityReference("targetType", "targetName4"))
+          )
+        ),
+        EntityUpdateDefinition("sourceName",
+                               "sourceType",
+                               Seq(
+                                 RemoveAttribute(AttributeName.withDefaultNS("ref2"))
+                               )
+        )
+      )
+    )
+
+    Await.result(provider.batchUpsertEntities(updates, defaultRequestContext), atMost)
+
+    // validate the references after our batchUpsert
+    val finalReferences =
+      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
+        .map(_.toAttributeEntityReference)
+
+    finalReferences.toSet shouldBe Set(
+      AttributeEntityReference("targetType", "targetName1"),
+      AttributeEntityReference("targetType", "targetName3"),
+      AttributeEntityReference("targetType", "targetName4")
     )
 
   }

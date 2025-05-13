@@ -693,4 +693,18 @@ and r.to_id in (select id from ENTITY where entity_type = $entityType and worksp
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
 
+  /** look up the types&names of all entities references by the given entity */
+  @VisibleForTesting
+  def getReferenceTargets(workspaceId: UUID,
+                          sourceType: String,
+                          sourceName: String
+  ): ReadAction[Seq[CompactEntityRefRecord]] =
+    sql"""select t.id, t.name, t.entity_type
+         from ENTITY t, ENTITY_REFS refs, ENTITY s
+         where s.workspace_id = $workspaceId
+         and s.entity_type = $sourceType
+         and s.name = $sourceName
+         and s.id = refs.from_id
+         and t.id = refs.to_id""".as[CompactEntityRefRecord]
+
 }
