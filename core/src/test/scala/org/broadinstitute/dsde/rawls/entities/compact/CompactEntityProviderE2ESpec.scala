@@ -11,13 +11,14 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReferenceList,
   AttributeName,
   AttributeString,
+  Entity,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
   UserInfo
 }
 
-import java.sql.SQLIntegrityConstraintViolationException
+import java.sql.SQLException
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -179,12 +180,12 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     val provider = new CompactEntityProvider(defaultEntityRequestArguments, repository, config)(ec, system)
 
-    // the fourth update in this list will conflict with the first update
+    // the fourth update in this list has an unsupported character in its name and will cause a SQL error
     val updates: Seq[EntityUpdateDefinition] = Seq(
       EntityUpdateDefinition("name1", "typeA", Seq()),
       EntityUpdateDefinition("name2", "typeA", Seq()),
       EntityUpdateDefinition("name3", "typeA", Seq()),
-      EntityUpdateDefinition("name1", "typeA", Seq())
+      EntityUpdateDefinition("name\uD83D\uDE0E", "typeA", Seq())
     )
 
     // no entities should exist before the batchUpsert
@@ -192,13 +193,100 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataBefore shouldBe empty
 
     // perform the batchUpsert
-    intercept[SQLIntegrityConstraintViolationException] {
+    intercept[SQLException] {
       Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
     }
 
     // everything should be rolled back; no entities should exist after the upsert
     val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
     metadataAfter shouldBe empty
+  }
+
+  it should "create or update entities as appropriate" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    // create two entities
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition("name3",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val3")))
+      )
+    )
+
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // cursory validation of the entity creation
+    val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataAfter.size shouldBe 1
+    metadataAfter.keys should contain theSameElementsAs Seq("typeA")
+    metadataAfter("typeA").count shouldBe 2
+
+    // now perform an upsert of 4 entities: 2 new, 2 updated. "name1" and "name3" were already created above.
+    val upserts: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1, updated")))
+      ),
+      EntityUpdateDefinition("name2",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val2")))
+      ),
+      EntityUpdateDefinition(
+        "name3",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val3, updated")))
+      ),
+      EntityUpdateDefinition("name4",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val4")))
+      )
+    )
+
+    Await.result(provider.batchUpsertEntities(Source(upserts), defaultRequestContext), atMost)
+
+    // validate the upserts
+    val metadataAfterUpsert = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataAfterUpsert.size shouldBe 1
+    metadataAfterUpsert.keys should contain theSameElementsAs Seq("typeA")
+    metadataAfterUpsert("typeA").count shouldBe 4
+
+    Await.result(provider.getEntity("typeA", "name1", defaultRequestContext), atMost) shouldBe Entity(
+      "name1",
+      "typeA",
+      Map(
+        AttributeName.withDefaultNS("col1") -> AttributeString("val1, updated")
+      )
+    )
+    Await.result(provider.getEntity("typeA", "name2", defaultRequestContext), atMost) shouldBe Entity(
+      "name2",
+      "typeA",
+      Map(
+        AttributeName.withDefaultNS("col1") -> AttributeString("val2")
+      )
+    )
+    Await.result(provider.getEntity("typeA", "name3", defaultRequestContext), atMost) shouldBe Entity(
+      "name3",
+      "typeA",
+      Map(
+        AttributeName.withDefaultNS("col1") -> AttributeString("val3, updated")
+      )
+    )
+    Await.result(provider.getEntity("typeA", "name4", defaultRequestContext), atMost) shouldBe Entity(
+      "name4",
+      "typeA",
+      Map(
+        AttributeName.withDefaultNS("col1") -> AttributeString("val4")
+      )
+    )
+
   }
 
   // ====================================================================================================

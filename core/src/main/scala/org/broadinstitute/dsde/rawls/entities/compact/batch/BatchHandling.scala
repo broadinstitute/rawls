@@ -163,7 +163,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     for {
       // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
       // has a reference to another entity in the same batch.
-      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch)
+      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, allowUpsert = true)
 
       // find all requested references within this batch
       allReferences = findAllReferences(batch)
