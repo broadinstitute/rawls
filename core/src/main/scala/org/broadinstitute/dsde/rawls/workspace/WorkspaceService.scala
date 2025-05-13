@@ -883,7 +883,7 @@ class WorkspaceService(
           )
           Future.failed(
             RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.InternalServerError, "Billing update failed in SAM", ex)
+              ErrorReport(StatusCodes.InternalServerError, "Billing update failed in Sam", ex)
             )
           )
         }

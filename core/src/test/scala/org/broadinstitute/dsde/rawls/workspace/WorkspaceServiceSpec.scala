@@ -7,7 +7,15 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.TpsPaoGetResult
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WorkspaceStageModel, WsmPolicyInput, WsmPolicyInputs, WsmPolicyPair}
+import bio.terra.workspace.model.{
+  AzureContext,
+  GcpContext,
+  WorkspaceDescription,
+  WorkspaceStageModel,
+  WsmPolicyInput,
+  WsmPolicyInputs,
+  WsmPolicyPair
+}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -46,7 +54,12 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  RawlsTestUtils,
+  TestExecutionContext
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
@@ -4061,11 +4074,17 @@ class WorkspaceServiceSpec
       val workspaceName = testData.workspace.toWorkspaceName
       val targetProject = testData.testProject2 // Test project that contains a workspace with workspace.name
 
+      val workspaceWithSameName = testData.workspace.copy(
+        namespace = targetProject.projectName.value,
+        workspaceId = UUID.randomUUID().toString,
+        googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
+      )
+      runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(workspaceWithSameName))
+
       val err = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName,
-                                                                            targetProject.projectName.value
-                     ),
-                     Duration.Inf
+        Await.result(
+          services.workspaceService.validateBillingProjectUpdate(workspaceName, targetProject.projectName.value),
+          Duration.Inf
         )
       }
       err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
@@ -4135,46 +4154,59 @@ class WorkspaceServiceSpec
         .result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
         .get
 
-    val oldBillingProjectOwnerPolicyEmail = Await.result(services.samDAO
-      .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-        workspace.namespace,
-        SamBillingProjectPolicyNames.owner,
-        services.workspaceService.ctx
-      )
-      .map(_.email),
-      Duration.Inf)
+    val oldBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             workspace.namespace,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
 
-    val newBillingProjectOwnerPolicyEmail = Await.result(services.samDAO
-      .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-        targetBilling.projectName.value,
-        SamBillingProjectPolicyNames.owner,
-        services.workspaceService.ctx
-      )
-      .map(_.email),
-      Duration.Inf)
+    val newBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             targetBilling.projectName.value,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
 
-    // Verify GCP updates
-    val projectIAMRoles = Set(services.workspaceService.terraBillingProjectOwnerRole,
-      services.workspaceService.terraWorkspaceCanComputeRole,
-      services.workspaceService.terraWorkspaceNextflowRole)
-    verify(services.gcsDAO).changeProjectOwnerBucketIamBinding(any(), any(), any())
-    verify(services.googleIamDAO).addRoles(
-      GoogleProject(workspace.googleProjectId.value),
-      newBillingProjectOwnerPolicyEmail,
-      IamMemberTypes.Group,
-      projectIAMRoles,
-      retryIfGroupDoesNotExist = true)
-    verify(services.googleIamDAO).removeRoles(
-      GoogleProject(workspace.googleProjectId.value),
-      oldBillingProjectOwnerPolicyEmail,
-      IamMemberTypes.Group,
-      projectIAMRoles,
-      retryIfGroupDoesNotExist = true)
-    verify(services.gcsDAO).setBillingAccount(workspace.googleProjectId,
-      targetBilling.billingAccount,
-      services.workspaceService.ctx.toTracingContext)
+    verifyGCPBillingUpdate(workspace,
+                           oldBillingProjectOwnerPolicyEmail,
+                           newBillingProjectOwnerPolicyEmail,
+                           targetBilling.billingAccount,
+                           services
+    )
+    verifySamUpdate(oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail, services)
+    // Verify FastPass syncing
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
-    // Verify Sam updates
+    val userSubjectId = services.ctx1.userInfo.userSubjectId
+    val ownerRoles = Vector(
+      services.terraWorkspaceCanComputeRole,
+      services.terraWorkspaceNextflowRole,
+      services.terraBucketWriterRole
+    )
+    workspaceFastPassGrants should not be empty
+    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+//    TODO: Fix mismatched user subject ID
+//    workspaceFastPassGrants.map(_.userSubjectId) should contain only userSubjectId
+
+    // Verify Rawls updates
+    updatedWorkspace.namespace shouldBe targetBilling.projectName.value
+    updatedWorkspace.currentBillingAccountOnGoogleProject shouldBe targetBilling.billingAccount
+  }
+
+  def verifySamUpdate(oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                      newBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                      services: TestApiService
+  ): Unit = {
     verify(services.samDAO, atLeastOnce()).addUserToPolicy(
       SamResourceTypeNames.workspace,
       workspace.workspaceId,
@@ -4189,23 +4221,138 @@ class WorkspaceServiceSpec
       oldBillingProjectOwnerPolicyEmail.value,
       services.samDAO.rawlsSAContext
     )
-    // Verify FastPass syncing
-//    val workspaceFastPassGrants =
-//      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
-//    val userSubjectId = WorkbenchUserId(userInfo.userSubjectId.value)
-//    val ownerRoles = Vector(
-//      services.terraWorkspaceCanComputeRole,
-//      services.terraWorkspaceNextflowRole,
-//      services.terraBucketWriterRole
-//    )
-//    workspaceFastPassGrants should not be empty
-//    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
-//    workspaceFastPassGrants.map(_.userSubjectId) should contain only userSubjectId
+  }
 
+  it should "revert workspace billing update if update fails in GCP" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+    val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
+    val targetBilling = testData.testProject1
 
-    // Verify Rawls updates
-    updatedWorkspace.namespace shouldBe targetBilling.projectName.value
-    updatedWorkspace.currentBillingAccountOnGoogleProject shouldBe targetBilling.billingAccount
+    doReturn(Future.failed(new Exception("Fake error from Google")), null)
+      .when(services.gcsDAO)
+      .setBillingAccountName(
+        ArgumentMatchers.eq(workspace.googleProjectId),
+        ArgumentMatchers.eq(targetBilling.billingAccount.get),
+        any[RawlsTracingContext]
+      )
+
+    val oldBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             workspace.namespace,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
+
+    val newBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             targetBilling.projectName.value,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
+
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
+    }
+
+    verifyGCPBillingUpdate(workspace,
+                           oldBillingProjectOwnerPolicyEmail,
+                           newBillingProjectOwnerPolicyEmail,
+                           targetBilling.billingAccount,
+                           services
+    )
+    verifyGCPBillingUpdate(workspace,
+                           newBillingProjectOwnerPolicyEmail,
+                           oldBillingProjectOwnerPolicyEmail,
+                           workspace.currentBillingAccountOnGoogleProject,
+                           services
+    )
+
+    err.errorReport.message should include("Billing update failed in GCP")
+    err.errorReport.statusCode.get shouldBe StatusCodes.InternalServerError
+  }
+
+  def verifyGCPBillingUpdate(workspace: Workspace,
+                             oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                             newBillingProjectOwnerPolicyEmail: WorkbenchEmail,
+                             targetBillingAccount: Option[RawlsBillingAccountName],
+                             services: TestApiService
+  ): Unit = {
+    val projectIAMRoles = Set(
+      services.workspaceService.terraBillingProjectOwnerRole,
+      services.workspaceService.terraWorkspaceCanComputeRole,
+      services.workspaceService.terraWorkspaceNextflowRole
+    )
+    verify(services.gcsDAO, atLeastOnce()).changeProjectOwnerBucketIamBinding(any(), any(), any())
+    verify(services.googleIamDAO, atLeastOnce()).addRoles(GoogleProject(workspace.googleProjectId.value),
+                                                          newBillingProjectOwnerPolicyEmail,
+                                                          IamMemberTypes.Group,
+                                                          projectIAMRoles,
+                                                          retryIfGroupDoesNotExist = true
+    )
+    verify(services.googleIamDAO, atLeastOnce()).removeRoles(GoogleProject(workspace.googleProjectId.value),
+                                                             oldBillingProjectOwnerPolicyEmail,
+                                                             IamMemberTypes.Group,
+                                                             projectIAMRoles,
+                                                             retryIfGroupDoesNotExist = true
+    )
+    verify(services.gcsDAO, atLeastOnce()).setBillingAccount(workspace.googleProjectId,
+                                                             targetBillingAccount,
+                                                             services.workspaceService.ctx.toTracingContext
+    )
+  }
+
+  it should "revert workspace billing update if update fails in Sam" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+    val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
+    val targetBilling = testData.testProject1
+
+    val oldBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             workspace.namespace,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
+
+    val newBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             targetBilling.projectName.value,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
+
+    doReturn(Future.failed(new Exception("Fake error from Sam")), Future.successful())
+      .when(services.samDAO)
+      .addUserToPolicy(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        ArgumentMatchers.eq(SamWorkspacePolicyNames.projectOwner),
+        ArgumentMatchers.eq(newBillingProjectOwnerPolicyEmail.value),
+        any[RawlsRequestContext]
+      )
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
+    }
+    err.errorReport.message should include("Billing update failed in Sam")
+    err.errorReport.statusCode.get shouldBe StatusCodes.InternalServerError
+
+    verifySamUpdate(oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail, services)
+    verifySamUpdate(newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail, services)
   }
 
 }

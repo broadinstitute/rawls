@@ -552,18 +552,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                            false
     )
 
-    val workspaceDifferentBilling = makeWorkspaceWithUsers(testProject2,
-                                                           wsName.name,
-                                                           UUID.randomUUID().toString,
-                                                           "aBucket",
-                                                           Some("workflow-collection"),
-                                                           currentTime(),
-                                                           currentTime(),
-                                                           "testUser",
-                                                           wsAttrs,
-                                                           false
-    )
-
     val workspaceLocked = makeWorkspaceWithUsers(
       billingProject,
       wsName.name + "_locked",
@@ -1716,7 +1704,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val allWorkspaces = Seq(
       workspace,
-      workspaceDifferentBilling,
       workspaceLocked,
       controlledWorkspace,
       workspacePublished,
