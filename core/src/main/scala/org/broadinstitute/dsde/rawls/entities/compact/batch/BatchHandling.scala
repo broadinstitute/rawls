@@ -83,7 +83,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       .map { batchAction =>
         for {
           batch <- batchAction
-          writeCount <- insertBatch(batch)
+          writeCount <- insertBatch(batch, allowUpsert)
           // TODO CORE-428: re-retrieve the saved entities and compare their actual record_version
           //   against their expected record_version
         } yield {
@@ -146,7 +146,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
   }
 
   /** write this batch of Entity to the database */
-  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Int] = {
+  private def insertBatch(batch: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
 
     // nested helper method for building error responses
     def generateReferenceError(message: String, notFounds: Set[AttributeEntityReference]) =
@@ -163,7 +163,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     for {
       // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
       // has a reference to another entity in the same batch.
-      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, allowUpsert = true)
+      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, allowUpsert = allowUpsert)
 
       // find all requested references within this batch
       allReferences = findAllReferences(batch)

@@ -80,10 +80,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID,
-                          entities: Seq[Entity],
-                          allowUpsert: Boolean = false
-  ): ReadWriteAction[Int] = {
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -110,7 +107,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity))
+    batchCreateEntities(workspaceId, Seq(entity), allowUpsert = false)
 
   /**
     * Read a single entity from the db

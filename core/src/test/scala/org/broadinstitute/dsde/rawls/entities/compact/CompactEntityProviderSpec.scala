@@ -93,7 +93,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
   it should "issue one insert statement for multiple entities" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
@@ -110,14 +110,14 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
     // entities have no references, so the input to upsertReferences should be empty
     verify(mockQuery, times(1)).upsertReferences(Set())
   }
 
   it should "issue multiple insert statements when given large batches" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
@@ -142,7 +142,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called batchCreateEntities multiple times to write the entities
-    verify(mockQuery, Mockito.atLeast(2)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    verify(mockQuery, Mockito.atLeast(2))
+      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
     // entities have no references, so the input to upsertReferences should be empty
     verify(mockQuery, Mockito.atLeast(2)).upsertReferences(Set())
 
@@ -150,7 +151,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
   it should "ask to insert references" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
     // this response must be exactly what is expected from the input to batchUpsertEntities
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(
       DBIO.successful(
@@ -195,7 +196,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
     // entities found references, so should ask to upsert those.
     // given the mock response defined above, we expect references from 2->4 and 3->4
     verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(4)), RefPointers(3, Set(4))))
