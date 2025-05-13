@@ -1103,6 +1103,110 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     error.code shouldBe StatusCodes.BadRequest
   }
 
+  behavior of "BatchHandling.applyAll"
+
+  it should "apply subsequent updates to the same non-existent base" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1, updated")),
+          AddUpdateAttribute(AttributeName.withDefaultNS("col2"), AttributeString("val2"))
+        )
+      )
+    )
+
+    val existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity] = Map(
+      AttributeEntityReference("typeA", "some-other-entity") -> Entity(
+        "some-other-entity",
+        "typeA",
+        Map(
+          AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      )
+    )
+
+    val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
+    // The actual result is two entities, because we applied the two sets of operations in order
+    actual shouldBe Seq(
+      Entity(
+        "name1",
+        "typeA",
+        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"))
+      ),
+      Entity(
+        "name1",
+        "typeA",
+        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1, updated"),
+            AttributeName.withDefaultNS("col2") -> AttributeString("val2")
+        )
+      )
+    )
+  }
+
+  it should "apply subsequent updates to the same existent base" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1, updated")),
+          AddUpdateAttribute(AttributeName.withDefaultNS("col2"), AttributeString("val2"))
+        )
+      )
+    )
+
+    val existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity] = Map(
+      AttributeEntityReference("typeA", "name1") -> Entity(
+        "name1",
+        "typeA",
+        Map(
+          AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      )
+    )
+
+    val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
+    // The actual result is two entities, because we applied the two sets of operations in order
+    actual shouldBe Seq(
+      Entity(
+        "name1",
+        "typeA",
+        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"),
+            AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      ),
+      Entity(
+        "name1",
+        "typeA",
+        Map(
+          AttributeName.withDefaultNS("col1") -> AttributeString("val1, updated"),
+          AttributeName.withDefaultNS("col2") -> AttributeString("val2"),
+          AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      )
+    )
+  }
+
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================

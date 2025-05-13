@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
@@ -287,6 +288,29 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       )
     )
 
+  }
+
+  it should "error for update-only on missing entities" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    Await.result(provider.createEntity(Entity("name1", "typeA", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("name2", "typeA", Map()), defaultRequestContext), atMost)
+
+    // batch update attempts to write to "name1" and "name3", which should fail
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition("name3",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val3")))
+      )
+    )
+
+    intercept[EntityNotFoundException] {
+      Await.result(provider.batchUpdateEntities(Source(updates), defaultRequestContext), atMost)
+    }
   }
 
   // ====================================================================================================
