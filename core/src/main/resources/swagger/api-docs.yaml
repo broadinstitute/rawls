@@ -4283,14 +4283,14 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
-        description: Request for new workspace
+        description: Request for updating workspace billing project
         content:
           'application/json':
             schema:
               $ref: '#/components/schemas/WorkspaceRequestUpdateBilling'
         required: true
       responses:
-        201:
+        200:
           description: Successful Request
           headers:
             Location:
@@ -4308,7 +4308,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Source workspace not found
+          description: Workspace not found
           content:
             'application/json':
               schema:
