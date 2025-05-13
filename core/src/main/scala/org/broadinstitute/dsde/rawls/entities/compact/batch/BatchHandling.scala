@@ -6,14 +6,18 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, ReadWriteAction, RefPointers}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  RawlsConcurrentModificationException,
+  ReadWriteAction,
+  RefPointers
+}
 import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProvider,
   CompactEntityProviderConfig,
   CompactEntityRepository,
   CompactEntitySerialization
 }
-import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
@@ -46,22 +50,9 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     val batchedUpdates: Source[Seq[EntityUpdateDefinition], _] = entityUpdates.grouped(config.batchUpsertBatchSize)
 
     // Apply the incoming operations to a pre-existing entity (for updates) or a blank entity (for inserts)
-    val updatedEntities: Source[ReadWriteAction[Seq[Entity]], _] =
+    // and create the DBIO actions to persist the results.
+    val batchActionsSource: Source[ReadWriteAction[Int], _] =
       batchedUpdates.via(flowOperationsToEntities(allowUpsert))
-
-    // For each batch, generate the db action to write it to the database
-    val batchActionsSource: Source[ReadWriteAction[Int], _] = updatedEntities
-      .map { batchAction =>
-        for {
-          batch <- batchAction
-          writeCount <- insertBatch(batch, allowUpsert)
-          // TODO CORE-428: re-retrieve the saved entities and compare their actual record_version
-          //   against their expected record_version
-        } yield {
-          logger.info(s"batch upsert: batch of $writeCount entities")
-          writeCount
-        }
-      }
 
     // Materialize the batch actions into a sequence and convert to a single DBIO action
     val batchActionsF: Future[ReadWriteAction[Int]] = batchActionsSource
@@ -82,36 +73,68 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
   }
 
   /** Stream component to accept a seq of batch updates, look for any pre-existing entities targeted by those updates,
-    * then apply the updates to those entities. Emits the entities, with operations applied, as DBIOs. */
+    * apply the updates to those entities, then persist those entities. Emits the count of rows written as a DBIO. */
   private def flowOperationsToEntities(
     allowUpsert: Boolean
-  ): Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Seq[Entity]], _] =
+  ): Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Int], _] =
     Flow[Seq[EntityUpdateDefinition]].map { updates =>
-      // extract the entity type and name from each update
+      // Extract the entity type and name from each update
       val updateIdentifiers = updates.map(update => AttributeEntityReference(update.entityType, update.name))
-      // how many updates do we have for each entity being updated?
-      val updateCounts = updateIdentifiers
-        .groupBy(identity)
-        .map { case (updateIdentifier, updateDefinitions) =>
-          updateIdentifier -> updateDefinitions.size
-        }
 
       for {
-        // query the database for any pre-existing entities being updated
+        // Query the database for any pre-existing entities being updated
         existingEntities <- repository.queries.getEntities(workspaceId, updateIdentifiers.toSet)
-        // if this invocation does NOT allow upserts, validate that we found all entities being updated
+        // If this invocation does NOT allow upserts, validate that we found all entities being updated
         _ = if (!allowUpsert && existingEntities.size != updateIdentifiers.size) {
           throw new EntityNotFoundException()
         }
-        // TODO CORE-428: save a data structure of the expected record_versions for each entity
-        // massage the existing entities so they're easier to look up later
+
+        // Massage the existing entities so they're easier to look up later
         existingEntitiesByIdentifier = existingEntities
           .map(rec => rec.toAttributeEntityReference -> rec.toEntity)
           .toMap
-        // apply the incoming operations to the existing entities (or to an empty entity if none pre-existed)
+
+        // How many updates do we have for each entity being updated?
+        updateCounts = updateIdentifiers
+          .groupBy(identity)
+          .map { case (updateIdentifier, updateDefinitions) =>
+            updateIdentifier -> updateDefinitions.size
+          }
+        // what are the existing record_versions?
+        existingVersionsByIdentifier = existingEntities
+          .map(rec => rec.toAttributeEntityReference -> rec.recordVersion)
+          .toMap
+        // Increment the existing record_version values with the number of updates for each entity.
+        // This gives us the final record_version we should expect for each entity.
+        expectedRecordVersions: Map[AttributeEntityReference, Long] = updateCounts.map {
+          case (identifier, updateCount) =>
+            val existingVersion = existingVersionsByIdentifier.getOrElse(identifier, -1L)
+            identifier -> (existingVersion + updateCount)
+        }
+
+        // Apply the incoming operations to the existing entities (or to an empty entity if none pre-existed)
         updatedEntities = applyAll(updates, existingEntitiesByIdentifier)
 
-      } yield updatedEntities
+        // Persist the updated entities to the database
+        writeCount <- insertBatch(updatedEntities, allowUpsert)
+
+        // Re-retrieve the entities we just wrote. This gets the actual record_version values.
+        finalRecordVersions <- repository.queries.getEntityVersions(workspaceId, updateIdentifiers.toSet)
+
+        // Compare the actual record versions, after writing the entities, to the expected record versions
+        _ = finalRecordVersions.foreach { rec =>
+          val expected = expectedRecordVersions.getOrElse(rec.toAttributeEntityReference, 0)
+          val actual = rec.recordVersion
+          if (actual != expected) {
+            throw new RawlsConcurrentModificationException(
+              s"Detected concurrent modifications to entity ${rec.toAttributeEntityReference.entityType}/${rec.toAttributeEntityReference.entityName}. " +
+                s"Expected $expected; got $actual." +
+                "Please retry this operation."
+            )
+          }
+        }
+
+      } yield writeCount
     }
 
   /** Helper method to apply batch operations to pre-existing entities.

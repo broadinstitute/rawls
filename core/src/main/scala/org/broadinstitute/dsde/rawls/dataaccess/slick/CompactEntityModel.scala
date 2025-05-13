@@ -46,6 +46,13 @@ case class CompactEntityRefRecord(id: Long, name: String, entityType: String) {
 }
 
 /**
+  * abbreviated model for rows in the ENTITY table when we need the record_version but don't need other columns
+  */
+case class CompactEntityVersionRecord(id: Long, name: String, entityType: String, recordVersion: Long) {
+  def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
+}
+
+/**
   * model class for rows in the ENTITY_KEYS table
   */
 case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)

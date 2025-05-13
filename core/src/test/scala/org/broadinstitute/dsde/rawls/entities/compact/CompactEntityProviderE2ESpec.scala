@@ -290,6 +290,33 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   }
 
+  it should "update entities multiple times if necessary" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    // issue multiple updates to the same entity
+    val updates = Range(1, 10).map { idx =>
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS(s"col$idx"), AttributeString(s"val$idx")))
+      )
+    }
+
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    val actual = Await.result(provider.getEntity("typeA", "name1", defaultRequestContext), atMost)
+
+    val expectedAttributes = Range(1, 10).map { idx =>
+      AttributeName.withDefaultNS(s"col$idx") -> AttributeString(s"val$idx")
+    }.toMap
+
+    actual shouldBe Entity("name1", "typeA", expectedAttributes)
+
+  }
+
   it should "error for update-only on missing entities" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
 

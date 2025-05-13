@@ -96,6 +96,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
@@ -110,7 +111,10 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
+                                                    any(),
+                                                    mockitoEq(true)
+    )
     // entities have no references, so the input to upsertReferences should be empty
     verify(mockQuery, times(1)).upsertReferences(Set())
   }
@@ -120,6 +124,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     val config = CompactEntityProviderConfig(batchUpsertBatchSize = 25) // pretty small to force batching
@@ -143,7 +148,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     // should have called batchCreateEntities multiple times to write the entities
     verify(mockQuery, Mockito.atLeast(2))
-      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), mockitoEq(true))
     // entities have no references, so the input to upsertReferences should be empty
     verify(mockQuery, Mockito.atLeast(2)).upsertReferences(Set())
 
@@ -163,6 +168,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
     )
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
@@ -196,7 +202,10 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
+                                                    any(),
+                                                    mockitoEq(true)
+    )
     // entities found references, so should ask to upsert those.
     // given the mock response defined above, we expect references from 2->4 and 3->4
     verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(4)), RefPointers(3, Set(4))))
