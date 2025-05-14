@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit}
-import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{

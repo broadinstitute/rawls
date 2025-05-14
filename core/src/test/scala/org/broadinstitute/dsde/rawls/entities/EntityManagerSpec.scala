@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.entities
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
@@ -55,12 +54,7 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
     val workspaceId = workspace.workspaceIdAsUUID
 
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
-    val samDAO = mock[SamDAO]
     val mockDataSource = mock[SlickDataSource]
-    val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO]
-    val mockDataRepoDAO = mock[DataRepoDAO]
-    val mockGoogleBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory]
-    val mockDataRepoEntityProviderConfig = mock[DataRepoEntityProviderConfig]
 
     val entityManager: EntityManager = EntityManager.defaultEntityManager(
       mockDataSource,
