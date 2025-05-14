@@ -4187,17 +4187,6 @@ class WorkspaceServiceSpec
     val workspaceFastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
-    when(services.samDAO.getUserIdInfo(any(), any()))
-      .thenReturn(
-        Future.successful(
-          SamDAO.User(
-            UserIdInfo(services.ctx1.userInfo.userSubjectId.value,
-                       userInfo.userEmail.value,
-                       Option(services.ctx1.userInfo.userSubjectId.value)
-            )
-          )
-        )
-      )
     val userSubjectId = services.ctx1.userInfo.userSubjectId.value
     val ownerRoles = Vector(
       services.terraWorkspaceCanComputeRole,
@@ -4207,7 +4196,7 @@ class WorkspaceServiceSpec
     workspaceFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
 //    TODO: Fix mismatched user subject ID
-//    workspaceFastPassGrants.map(_.userSubjectId) should contain only userSubjectId
+    workspaceFastPassGrants.map(_.userSubjectId) should contain only userSubjectId
 
     // Verify Rawls updates
     updatedWorkspace.namespace shouldBe targetBilling.projectName.value
