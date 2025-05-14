@@ -60,6 +60,7 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   setTraceSpanAttribute,
@@ -73,7 +74,6 @@ import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
-import org.joda.time.DateTime
 import org.typelevel.log4cats.SelfAwareStructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
@@ -82,8 +82,8 @@ import java.io._
 import java.util.UUID
 import scala.collection.mutable
 import scala.concurrent._
-import scala.io.Source
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             clientEmail: String,
@@ -575,12 +575,12 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       }
       response.getOpen.booleanValue()
     } { case e: GoogleJsonResponseException =>
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.InternalServerError,
-          s"Failed to check if billing account ${billingAccount.value} is enabled: ${StringUtils.abbreviate(e.getMessage, 50)}"
-        )
-      )
+      val response = Option(e.getContent).getOrElse(e.getMessage)
+      val errorReport = Try(response.parseJson.convertTo[ErrorReport]).recover { case _: Throwable =>
+        val sc = Try(StatusCode.int2StatusCode(e.getStatusCode)).getOrElse(StatusCodes.InternalServerError)
+        ErrorReport(sc, s"Google list billingAccounts failed with error '$response'", e)
+      }.get
+      throw new RawlsExceptionWithErrorReport(errorReport)
     }
   }
 
