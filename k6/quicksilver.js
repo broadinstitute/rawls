@@ -88,8 +88,9 @@ export const options = {
 // paginated search; this is the API that populates data tables in the UI
 export function entityQuery() {
   group(`${__ENV.TEST_GROUP}`, function() {
+    // page size 100 replicates what Terra UI asks for
     let res = http.get(
-      `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/target?page=1&pageSize=10&sortField=name&sortDirection=asc&filterOperator=and`,
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/file_inventory?page=1&pageSize=100&sortField=name&sortDirection=asc&filterOperator=and`,
       defaultParams);
     check(res, { "status is 200": (res) => res.status === 200 });
     sleep(.1);
