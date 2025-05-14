@@ -293,6 +293,31 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     }
 
   /**
+    * Delete all rows in ENTITY_REFS for the specified entity ids
+    *
+    * Returns the number of rows deleted
+    *
+    * `execution plan: index range scan; nested loop; using where & index: idx_entity_type_name, unq_from_to`
+    */
+  def deleteAllReferencesFrom(fromIds: Set[Long]): ReadWriteAction[Int] =
+    if (fromIds.isEmpty) {
+      DBIO.successful(0)
+    } else {
+
+      val sqlIds = fromIds.map(id => sql"$id")
+
+      val query =
+        concatSqlActions(
+          sql"""delete from ENTITY_REFS
+                where from_id in (""",
+          reduceSqlActionsWithDelim(sqlIds.toSeq),
+          sql""");"""
+        )
+
+      query.asUpdate
+    }
+
+  /**
    * Delete all rows in ENTITY_REFS for all entities of the given type
    *
    * Returns the number of rows deleted

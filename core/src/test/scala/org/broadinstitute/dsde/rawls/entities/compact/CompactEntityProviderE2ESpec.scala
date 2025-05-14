@@ -58,7 +58,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   // Note that this class does not have extensive coverage of the various operations possible in a batchUpsert, such as
   // removing attributes or creating attribute lists. Those batch upsert features rely on
-  // AttributeSuppport.applyOperationsToEntity, which is tested elsewhere.
+  // AttributeSupport.applyOperationsToEntity, which is tested elsewhere.
 
   it should "create entities" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
@@ -81,7 +81,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataAfter("typeB").count shouldBe 1
   }
 
-  it should "create entities with references" in withMinimalTestDatabase { dataSource =>
+  it should "create entities with references" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
 
     val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
@@ -152,7 +152,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   }
 
-  it should "update entities with references" in withMinimalTestDatabase { dataSource =>
+  it should "update entities with references" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
 
     val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
@@ -224,6 +224,52 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       AttributeEntityReference("targetType", "targetName3"),
       AttributeEntityReference("targetType", "targetName4")
     )
+
+  }
+
+  it should "remove obsolete references for entities during update" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    // create target entity
+    Await.result(provider.createEntity(Entity("targetName", "targetType", Map()), defaultRequestContext), atMost)
+
+    // create the entity we'll be updating; give it a reference
+    Await.result(
+      provider.createEntity(
+        Entity("sourceName",
+               "sourceType",
+               Map(AttributeName.withDefaultNS("ref") -> AttributeEntityReference("targetType", "targetName"))
+        ),
+        defaultRequestContext
+      ),
+      atMost
+    )
+
+    // validate the starting reference before our batchUpsert
+    val initialReferences =
+      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
+        .map(_.toAttributeEntityReference)
+
+    initialReferences shouldBe Seq(AttributeEntityReference("targetType", "targetName"))
+
+    // perform the batchUpsert - delete the existing reference, don't add any
+    val updates = Source(
+      Seq(
+        EntityUpdateDefinition("sourceName", "sourceType", Seq(RemoveAttribute(AttributeName.withDefaultNS("ref"))))
+      )
+    )
+
+    Await.result(provider.batchUpsertEntities(updates, defaultRequestContext), atMost)
+
+    // validate the references after our batchUpsert
+    val finalReferences =
+      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
+        .map(_.toAttributeEntityReference)
+
+    finalReferences.toSet shouldBe empty
 
   }
 

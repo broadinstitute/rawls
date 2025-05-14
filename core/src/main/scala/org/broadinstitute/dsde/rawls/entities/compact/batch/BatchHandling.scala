@@ -14,10 +14,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProvider,
   CompactEntityProviderConfig,
-  CompactEntityRepository,
-  CompactEntitySerialization
+  CompactEntityRepository
 }
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
@@ -193,16 +192,18 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       // has a reference to another entity in the same batch.
       entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, allowUpsert = allowUpsert)
 
-      // find all requested references within this batch
+      // Find all requested references within this batch
       allReferences = findAllReferences(batch)
 
-      // generate a combined list of entity type/name pairs for both reference sources and targets
-      lookupCriteria: Set[AttributeEntityReference] = allReferences.keys.toSet ++ allReferences.values.flatten.toSet
+      // To handle references, we need the ids of all entities we just wrote, as well as all the entities
+      // they reference. Generate a combined list of entity type/name pairs to use as lookup criteria
+      writtenEntityRefs = batch.map(_.toReference).toSet
+      lookupCriteria: Set[AttributeEntityReference] = writtenEntityRefs ++ allReferences.values.flatten.toSet
 
-      // look up the ids for both reference sources and targets
+      // look up the ids
       foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
 
-      // did we find all the reference sources and targets?
+      // did we find everything we just looked up?
       _ = if (foundIds.size != lookupCriteria.size) {
         // here's what the query actually returned; turn this into a Set
         val actuallyFound = foundIds.map(_.toAttributeEntityReference).toSet
@@ -211,10 +212,10 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
         if (notFoundReferenceTargets.nonEmpty) {
           throw generateReferenceError("Could not resolve some entity references", notFoundReferenceTargets)
         }
-        // did we find all the reference sources? This should never happen, but let's be defensive
-        val notFoundReferenceSources = allReferences.keys.toSet diff actuallyFound
-        if (notFoundReferenceSources.nonEmpty)
-          throw generateReferenceError("Could not resolve some entity sources", notFoundReferenceSources)
+        // did we find all the entities we originally wrote? This should never happen, but let's be defensive
+        val notFoundWrittenEntities = writtenEntityRefs diff actuallyFound
+        if (notFoundWrittenEntities.nonEmpty)
+          throw generateReferenceError("Could not resolve some entity sources", notFoundWrittenEntities)
       }
 
       // build a lookup table for the ids we found
@@ -222,13 +223,17 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
         rec.toAttributeEntityReference -> rec.id
       }.toMap
 
-      // rehydrate the looked-up ids into sources and targets (from_id, to_id)
+      // rehydrate the looked-up ids for the entities we wrote in this batch
+      referenceSourcesToDelete: Set[Long] = writtenEntityRefs.map(ref => idLookup(ref))
+      // rehydrate the looked-up ids into sources and targets for the references to insert (from_id, to_id)
       referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
         val toIds = tos.map(idLookup).toSet
         RefPointers(idLookup(from), toIds)
       }.toSet
       // insert the references into the ENTITY_REFS table.
-      // TODO CORE-482: need to delete any references which are no longer valid
+      // TODO CORE-482: what about the case where an entity that previously had references
+      //    now has zero, and therefore isn't included in `referencesToInsert`?
+      _ <- repository.queries.deleteAllReferencesFrom(referenceSourcesToDelete)
       _ <- repository.queries.upsertReferences(referencesToInsert)
     } yield entitiesCreated
   }
