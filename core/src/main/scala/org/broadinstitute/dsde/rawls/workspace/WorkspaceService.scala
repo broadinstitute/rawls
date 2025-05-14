@@ -11,7 +11,7 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
-import org.broadinstitute.dsde.rawls._
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, _}
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -668,15 +668,11 @@ class WorkspaceService(
 
       // Source workspace must exist
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
-      workspace <- workspaceOpt match {
-        case Some(ws) => Future.successful(ws)
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
-            )
-          )
-      }
+      workspace = workspaceOpt.getOrElse(
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+        )
+      )
 
       // Source and destination billing accounts must exist in GCP
       sourceBillingProject <- getBillingProjectContext(sourceBillingProjectName)
@@ -687,44 +683,42 @@ class WorkspaceService(
       _ <- requireBillingProjectOwnerAccess(destBillingProjectName, ctx)
 
       // Source and destination billing projects must have the same service perimeter (or no service perimeter)
-      _ <- requireSameServicePerimeter(sourceBillingProject, destBillingProject)
+      _ = requireSameServicePerimeter(sourceBillingProject, destBillingProject)
 
       // Destination billing/namespace must not contain a workspace with this workspace name
-      workspaceWithNameExists <- workspaceRepository.getWorkspace(
-        WorkspaceName(newBillingProjectName, workspaceName.name)
-      )
-      _ <- workspaceWithNameExists match {
-        case Some(ws) =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest,
-                          s"Workspace ${workspaceName.name} already exists under billing project $newBillingProjectName"
-              )
-            )
-          )
-        case None => Future.successful()
-      }
-
-      // Check if the destination billing account is enabled
-      _ <- destBillingProject.billingAccount match {
-        case Some(accountName) =>
-          gcsDAO.isBillingAccountEnabled(accountName).flatMap {
-            case true => Future.unit
-            case false =>
-              Future.failed(
-                RawlsExceptionWithErrorReport(
-                  ErrorReport(
-                    StatusCodes.BadRequest,
-                    s"Billing account $accountName is not enabled"
-                  )
+      _ <- workspaceRepository
+        .getWorkspace(
+          WorkspaceName(newBillingProjectName, workspaceName.name)
+        )
+        .flatMap {
+          case Some(_) =>
+            Future.failed(
+              RawlsExceptionWithErrorReport(
+                ErrorReport(
+                  StatusCodes.BadRequest,
+                  s"Workspace ${workspaceName.name} already exists under billing project $newBillingProjectName"
                 )
               )
-          }
-        case None =>
+            )
+          case None => Future.unit
+        }
+
+      // Check if the destination billing account is enabled
+      accountName = destBillingProject.billingAccount.getOrElse(
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest,
+                      s"No billing account found for billing project ${destBillingProject.projectName}"
+          )
+        )
+      )
+      _ <- gcsDAO.isBillingAccountEnabled(accountName).flatMap {
+        case true => Future.unit
+        case false =>
           Future.failed(
             RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest,
-                          s"No billing account found for billing project ${destBillingProject.projectName}"
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Billing account $accountName is not enabled"
               )
             )
           )
@@ -735,20 +729,20 @@ class WorkspaceService(
         "storage-api.googleapis.com",
         "storage-component.googleapis.com"
       )
-      servicesEnabled <- Future(gcsDAO.areServicesEnabled(GoogleProject(workspace.googleProjectId.value), storageAPIs))
+      servicesEnabled = gcsDAO.areServicesEnabled(GoogleProject(workspace.googleProjectId.value), storageAPIs)
       _ <-
-        if (servicesEnabled) Future.unit
+        if (servicesEnabled)
+          Future.unit
         else
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(
                 StatusCodes.BadRequest,
                 s"Required GCS APIs ${storageAPIs.toString()} are not enabled on project ${workspace.googleProjectId.value}." +
-                  s"Contact Terra-Support@firecloud.org for assistance."
+                  s" Contact Terra-Support@firecloud.org for assistance."
               )
             )
           )
-
     } yield (workspace, destBillingProject)
   }
 

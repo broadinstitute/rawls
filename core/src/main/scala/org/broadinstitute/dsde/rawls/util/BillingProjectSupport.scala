@@ -69,17 +69,15 @@ trait BillingProjectSupport {
 
   def requireSameServicePerimeter(sourceBillingProject: RawlsBillingProject,
                                   destBillingProject: RawlsBillingProject
-  ): Future[Unit] =
+  ): Unit =
     if (sourceBillingProject.servicePerimeter != destBillingProject.servicePerimeter) {
-      Future.failed(
-        RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.BadRequest,
-            s"Source and destination billing must have the same service perimeter, if any"
-          )
+      throw RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          s"Source and destination billing must have the same service perimeter, if any"
         )
       )
-    } else Future.successful(())
+    }
 
   /**
     * Load the specified billing project, throwing if the billing project is not ready.
