@@ -231,8 +231,6 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
         RefPointers(idLookup(from), toIds)
       }.toSet
       // insert the references into the ENTITY_REFS table.
-      // TODO CORE-482: what about the case where an entity that previously had references
-      //    now has zero, and therefore isn't included in `referencesToInsert`?
       _ <- repository.queries.deleteAllReferencesFrom(referenceSourcesToDelete)
       _ <- repository.queries.upsertReferences(referencesToInsert)
     } yield entitiesCreated
