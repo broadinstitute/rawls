@@ -4187,7 +4187,18 @@ class WorkspaceServiceSpec
     val workspaceFastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
-    val userSubjectId = services.ctx1.userInfo.userSubjectId
+    when(services.samDAO.getUserIdInfo(any(), any()))
+      .thenReturn(
+        Future.successful(
+          SamDAO.User(
+            UserIdInfo(services.ctx1.userInfo.userSubjectId.value,
+                       userInfo.userEmail.value,
+                       Option(services.ctx1.userInfo.userSubjectId.value)
+            )
+          )
+        )
+      )
+    val userSubjectId = services.ctx1.userInfo.userSubjectId.value
     val ownerRoles = Vector(
       services.terraWorkspaceCanComputeRole,
       services.terraWorkspaceNextflowRole,
