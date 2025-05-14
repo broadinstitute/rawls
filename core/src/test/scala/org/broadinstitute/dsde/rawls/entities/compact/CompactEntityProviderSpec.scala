@@ -94,9 +94,18 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   it should "issue one insert statement for multiple entities" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
-    when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
+      DBIO.successful(
+        Seq(
+          CompactEntityRefRecord(1, "name1", "typeA"),
+          CompactEntityRefRecord(2, "name2", "typeA"),
+          CompactEntityRefRecord(3, "name3", "typeB")
+        )
+      )
+    )
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
@@ -122,9 +131,14 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   it should "issue multiple insert statements when given large batches" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
-    when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
+      DBIO.successful(
+        Range(0, 100) map { idx => CompactEntityRefRecord(idx, s"name$idx", "typeA") }
+      )
+    )
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     val config = CompactEntityProviderConfig(batchUpsertBatchSize = 25) // pretty small to force batching
@@ -161,6 +175,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(
       DBIO.successful(
         Seq(
+          CompactEntityRefRecord(1, "name1", "typeA"),
           CompactEntityRefRecord(2, "name2", "typeA"),
           CompactEntityRefRecord(3, "name3", "typeB"),
           CompactEntityRefRecord(4, "targetName", "targetType")
@@ -169,6 +184,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     )
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
