@@ -263,7 +263,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
    * performance and memory reasons.
    *
    * @param entityType the type of entities to return in the result set
-   * @param query criteria for filtering and paginating the result set
+   * @param entityQuery criteria for filtering and paginating the result set
    * @param parentContext tracing context into which this method will add traces
    * @return a tuple of 1) the fully materialized metadata, and 2) a streaming Source of Entity objects
    */

@@ -1,11 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities.compact.batch
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   RawlsConcurrentModificationException,
   ReadWriteAction,
@@ -18,7 +16,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.{
 }
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 
