@@ -173,19 +173,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
   }
 
   /** write this batch of Entity to the database */
-  private def insertBatch(batch: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
-
-    // nested helper method for building error responses
-    def generateReferenceError(message: String, notFounds: Set[AttributeEntityReference]) =
-      new RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.BadRequest,
-          message,
-          notFounds.map { notFound =>
-            ErrorReport(s"${notFound.entityType} ${notFound.entityName} not found", Seq.empty)
-          }.toSeq
-        )
-      )
+  private def insertBatch(batch: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] =
 
     for {
       // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
@@ -204,10 +192,9 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
 
       referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
         RefPointers(from, tos.toSet)
-      }
+      }.toSet
       _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toReference).toSet)
-      _ <- repository.queries.upsertReferences(workspaceId, referencesToInsert)
+      _ <- repository.queries.insertReferences(workspaceId, referencesToInsert)
     } yield entitiesCreated
-  }
 
 }

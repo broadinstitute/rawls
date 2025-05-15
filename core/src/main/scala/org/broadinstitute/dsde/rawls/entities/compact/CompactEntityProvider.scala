@@ -41,7 +41,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
@@ -67,7 +66,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def entityStoreId: Option[String] = None // unused
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
-  val workspaceContext = requestArguments.workspace
+  val workspaceContext: Workspace = requestArguments.workspace
 
   override def batchUpdateEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
@@ -143,8 +142,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         // normalized version.
         savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
+
+        _ = if (savedEntityRecord.recordVersion != 0L)
+          throw new RawlsConcurrentModificationException(
+            s"Detected concurrent modifications to entity ${savedEntityRecord.toAttributeEntityReference.entityType}/${savedEntityRecord.toAttributeEntityReference.entityName}."
+          )
+
         // save all references from this entity to other entities
-        _ <- repository.queries.upsertReferences(workspaceId, refPointers)
+        _ <- repository.queries.insertReferences(workspaceId, refPointers)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
@@ -163,7 +168,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                                                  entityRefs
         )
         // getReferencesTo already excludes the entities that are being deleted
-        _ = if (referencingEntities.size != 0) {
+        _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesConflictException(referencingEntities.toSet)
         }
         // remove all references from these entities
@@ -180,7 +185,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                                                      entityType
         )
         // The getReferencesToType query already disregards references of the type to be deleted
-        _ = if (referencingEntities.size > 0) {
+        _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
         // remove all references from these entities
@@ -327,7 +332,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   // ====================================================================================================
 
   // Given an entity, finds all references in that entity. Returns a map of source entity -> target entities
-  // TODO: return Set[RefPointers] instead
+  // TODO CORE-497: return Set[RefPointers] instead
   protected[compact] def findAllReferences(
     entity: Entity
   ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
@@ -335,7 +340,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   // Given a Seq of entities, finds all references in those entities. Returns a map of source entity -> target entities
   // representing all references.
-  // TODO: return Set[RefPointers] instead
+  // TODO CORE-497: return Set[RefPointers] instead
   protected[compact] def findAllReferences(
     entities: Seq[Entity]
   ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
