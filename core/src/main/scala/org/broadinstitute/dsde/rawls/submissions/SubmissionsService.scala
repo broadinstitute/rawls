@@ -543,7 +543,7 @@ class SubmissionsService(
       _ <- getSetToDelete(submissionRequest)
         .map { setToDelete =>
           entityServiceConstructor(ctx)
-            .deleteEntities(workspaceName, Seq(setToDelete), None, None)
+            .deleteEntities(workspaceName, Seq(setToDelete))
             .recover { case e =>
               logger.error(s"Failed to delete entities: ", e)
             }
@@ -621,7 +621,7 @@ class SubmissionsService(
       )
       _ = SubmissionRequestValidation.staticValidation(submissionRequest, methodConfig)
 
-      entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfig)
+      entityProvider <- getEntityProvider(workspaceContext)
 
       gatherInputsResult <- MethodConfigurationUtils.gatherMethodConfigInputs(ctx,
                                                                               methodRepoDAO,
@@ -792,11 +792,9 @@ class SubmissionsService(
       }
     }
 
-  private def getEntityProviderForMethodConfig(workspaceContext: Workspace,
-                                               methodConfiguration: MethodConfiguration
-  ): Future[EntityProvider] =
+  private def getEntityProvider(workspaceContext: Workspace): Future[EntityProvider] =
     entityManager.resolveProviderFuture(
-      EntityRequestArguments(workspaceContext, ctx, methodConfiguration.dataReferenceName, None)
+      EntityRequestArguments(workspaceContext, ctx)
     )
 
   private def saveSubmission(workspaceContext: Workspace,

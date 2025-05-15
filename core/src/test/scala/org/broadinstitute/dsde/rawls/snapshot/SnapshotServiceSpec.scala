@@ -282,7 +282,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])
       ).thenAnswer(_ => throw new ApiException(404, "Workspace does not exist"))
 
-      val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+      val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
       val workspace = minimalTestData.workspace
 
@@ -329,7 +329,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
         val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
 
-        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
         val workspace = minimalTestData.workspace
 
@@ -395,7 +395,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           mockWorkspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])
         ).thenAnswer(_ => throw new ApiException(404, "Workspace does not exist"))
 
-        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
         val workspace = minimalTestData.workspace
 
@@ -458,7 +458,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
         val mockWorkspaceManagerDAO = defaultMockWorkspaceManagerDao()
 
-        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
         val workspace = minimalTestData.workspace
 
@@ -535,7 +535,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
           new WorkspaceDescription().stage(WorkspaceStageModel.RAWLS_WORKSPACE).policies(existingPolicyInputs.getInputs)
         )
 
-        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO("mockDataRepo")
+        val mockDataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
         val workspace = minimalTestData.workspace
 
@@ -869,7 +869,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockWorkspaceManagerDAO,
         "fake-terra-data-repo-dev",
         // snapshots are assumed to be GCP unless they belong to a Dataset with the Azure cloudPlatform
-        new MockDataRepoDAO("mockDataRepo"),
+        new MockDataRepoDAO(),
         defaultWorkspaceServiceConstructor,
         defaultPolicyService
       )(testContext)
@@ -928,7 +928,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockWorkspaceManagerDAO,
         "fake-terra-data-repo-dev",
         // snapshots are assumed to be GCP unless they belong to a Dataset with the Azure cloudPlatform
-        new MockDataRepoDAO("mockDataRepo"),
+        new MockDataRepoDAO(),
         defaultWorkspaceServiceConstructor,
         defaultPolicyService
       )(testContext)
