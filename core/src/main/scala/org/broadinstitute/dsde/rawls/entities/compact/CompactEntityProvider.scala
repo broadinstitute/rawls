@@ -142,7 +142,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         // normalized version.
         savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
-
+        // verify that nobody else saved this same record in the meantime
         _ = if (savedEntityRecord.recordVersion != 0L)
           throw new RawlsConcurrentModificationException(
             s"Detected concurrent modifications to entity ${savedEntityRecord.toAttributeEntityReference.entityType}/${savedEntityRecord.toAttributeEntityReference.entityName}."
