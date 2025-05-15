@@ -134,7 +134,7 @@ class SubmissionsServiceSpec
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
     )
       .thenReturn(Future.successful())
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
 
     val notificationTopic = "test-notification-topic"
@@ -228,12 +228,7 @@ class SubmissionsServiceSpec
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
-      workspaceManagerDAO,
       new WorkspaceSettingRepository(dataSource),
-      dataRepoDAO,
-      samDAO,
-      bigQueryServiceFactory,
-      DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName

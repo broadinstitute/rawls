@@ -15,7 +15,7 @@ import java.nio.charset.Charset
 import scala.concurrent.ExecutionContext
 
 /**
- * DataRepoEntityProvider, and potential future callers of this class, need to create a new
+ * Callers of this class need to create a new
  * GoogleBigQueryService for every request. They do this because they need to set different
  * user credentials for each request.
  *
