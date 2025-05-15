@@ -205,7 +205,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
         RefPointers(from, tos.toSet)
       }
-      _ <- repository.queries.deleteAllReferencesFrom(referencesToInsert)
+      _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toReference).toSet)
       _ <- repository.queries.upsertReferences(workspaceId, referencesToInsert)
     } yield entitiesCreated
   }
