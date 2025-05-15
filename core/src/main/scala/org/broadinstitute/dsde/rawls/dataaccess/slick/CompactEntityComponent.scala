@@ -56,6 +56,9 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   implicit val getJsonEntityRefRecord: GetResult[CompactEntityRefRecord] =
     GetResult(r => CompactEntityRefRecord(r.<<, r.<<, r.<<))
 
+  implicit val getJsonEntityVersionRecord: GetResult[CompactEntityVersionRecord] =
+    GetResult(r => CompactEntityVersionRecord(r.<<, r.<<, r.<<, r.<<))
+
   implicit val getKeysRecord: GetResult[KeysRecord] =
     GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
@@ -80,7 +83,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity]): ReadWriteAction[Int] = {
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -90,7 +93,13 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
     }
 
-    concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql",")).asUpdate
+    val upsertSql = if (allowUpsert) {
+      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
+    } else {
+      sql""
+    }
+
+    concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql","), upsertSql).asUpdate
   }
 
   /**
@@ -101,7 +110,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity))
+    batchCreateEntities(workspaceId, Seq(entity), allowUpsert = false)
 
   /**
     * Read a single entity from the db
@@ -117,6 +126,60 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           and workspace_id = $workspaceId
           and entity_type = $entityType
           and name = $entityName"""
+
+  /** Given a set of entity type/name pairs, return the CompactEntityRecord for those pairs.
+    *
+    * `execution plan: index range scan on idx_entity_type_name`
+    */
+  def getEntities(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRecord]] =
+    // short-circuit
+    if (refs.isEmpty) {
+      DBIO.successful(Seq())
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.as[CompactEntityRecord]
+    }
+
+  /** Given a set of entity type/name pairs, return the CompactEntityVersionRecord for those pairs.
+    *
+    * `execution plan: index range scan on idx_entity_type_name`
+    */
+  def getEntityVersions(workspaceId: UUID,
+                        refs: Set[AttributeEntityReference]
+  ): ReadAction[Seq[CompactEntityVersionRecord]] =
+    // short-circuit
+    if (refs.isEmpty) {
+      DBIO.successful(Seq())
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""select id, name, entity_type, record_version
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.as[CompactEntityVersionRecord]
+    }
 
   /** Given a set of entity type/name pairs, return the CompactEntityRefRecord for those pairs.
     * The CompactEntityRefRecord includes the internal database id for these entities.
@@ -195,6 +258,31 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
     concatSqlActions(baseSql, reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "), sql")").asUpdate
   }
+
+  /**
+    * Delete all rows in ENTITY_REFS for the specified entity ids
+    *
+    * Returns the number of rows deleted
+    *
+    * `execution plan: index range scan; nested loop; using where & index: idx_entity_type_name, unq_from_to`
+    */
+  def deleteAllReferencesFrom(fromIds: Set[Long]): ReadWriteAction[Int] =
+    if (fromIds.isEmpty) {
+      DBIO.successful(0)
+    } else {
+
+      val sqlIds = fromIds.map(id => sql"$id")
+
+      val query =
+        concatSqlActions(
+          sql"""delete from ENTITY_REFS
+                where from_id in (""",
+          reduceSqlActionsWithDelim(sqlIds.toSeq),
+          sql""");"""
+        )
+
+      query.asUpdate
+    }
 
   /**
    * Delete all rows in ENTITY_REFS for all entities of the given type
@@ -570,5 +658,19 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
+
+  /** look up the types&names of all entities references by the given entity */
+  @VisibleForTesting
+  def getReferenceTargets(workspaceId: UUID,
+                          sourceType: String,
+                          sourceName: String
+  ): ReadAction[Seq[CompactEntityRefRecord]] =
+    sql"""select t.id, t.name, t.entity_type
+         from ENTITY t, ENTITY_REFS refs, ENTITY s
+         where s.workspace_id = $workspaceId
+         and s.entity_type = $sourceType
+         and s.name = $sourceName
+         and s.id = refs.from_id
+         and t.id = refs.to_id""".as[CompactEntityRefRecord]
 
 }
