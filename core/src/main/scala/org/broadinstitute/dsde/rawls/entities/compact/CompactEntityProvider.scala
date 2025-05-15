@@ -160,7 +160,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new DeleteEntitiesConflictException(referencingEntities.toSet)
         }
         // remove all references from these entities
-        // TODO CORE-497: update
         _ <- repository.queries.deleteAllReferencesFrom(workspaceId, entityRefs.toSet)
         res <- repository.queries.batchHide(workspaceId, entityRefs)
       } yield res
@@ -178,7 +177,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
         // remove all references from these entities
-        // TODO CORE-497: update
         _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
         res <- repository.queries.batchHideType(
           workspaceId,
