@@ -108,6 +108,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       lookupCriteria: Set[AttributeEntityReference] = allReferences.keys.toSet ++ allReferences.values.flatten.toSet
 
       // look up the ids for both reference sources and targets
+      // TODO CORE-497: update
       foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
 
       // did we find all the reference sources and targets?
@@ -136,6 +137,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
         RefPointers(idLookup(from), toIds)
       }.toSet
       // insert the references into the ENTITY_REFS table.
+      // TODO CORE-497: update
       _ <- repository.queries.upsertReferences(referencesToInsert)
     } yield entitiesCreated
   }

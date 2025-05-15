@@ -185,24 +185,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     */
   // The index range scan is caused by the "not in" clause. I believe this is still optimal as compared to
   // performing a select, performing a diff in the Scala layer, then sending an optimized delete query back to MySQL
-  def deleteReferencesWithFilter(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = {
-    val query = if (idsToKeep.isEmpty) {
-      sql"""delete from ENTITY_REFS where from_id = $fromId;"""
-    } else {
-      val allValues =
-        reduceSqlActionsWithDelim(idsToKeep.map(x => sql"$x").toSeq, sql",")
-
-      concatSqlActions(
-        sql"""delete from ENTITY_REFS
-           where from_id = $fromId
-           and to_id not in (""",
-        allValues,
-        sql""");"""
-      )
-    }
-
-    query.asUpdate
-  }
+  // TODO CORE-497: update
+  def deleteReferencesWithFilter(fromId: Long, idsToKeep: Set[Long]): ReadWriteAction[Int] = ???
 
   /**
    * Delete all rows in ENTITY_REFS for the specified entities
@@ -211,23 +195,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    * 
    * `execution plan: index range scan; nested loop; using where & index: idx_entity_type_name, unq_from_to`
    */
-  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] =
-    if (fromRefs.isEmpty) {
-      DBIO.successful(0)
-    } else {
-
-      val clauses = generateTypeNameSql(fromRefs)
-
-      val query =
-        concatSqlActions(
-          sql"""delete r from ENTITY_REFS r join ENTITY e on r.from_id = e.id
-                where e.workspace_id = $workspaceId and (""",
-          reduceSqlActionsWithDelim(clauses.toSeq, sql" or "),
-          sql""");"""
-        )
-
-      query.asUpdate
-    }
+  // TODO CORE-497: update
+  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] = ???
 
   /**
    * Delete all rows in ENTITY_REFS for all entities of the given type
@@ -236,13 +205,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * `execution plan: 1 nested loop; using where & index: idx_entity_type_name & unq_from_to`
    */
-  def deleteAllReferencesFromType(workspaceId: UUID, fromType: String): ReadWriteAction[Int] = {
-    val query =
-      sql"""delete r from ENTITY_REFS r join ENTITY e on r.from_id = e.id
-                where e.workspace_id = $workspaceId and e.entity_type = $fromType """
-
-    query.asUpdate
-  }
+  // TODO CORE-497: update
+  def deleteAllReferencesFromType(workspaceId: UUID, fromType: String): ReadWriteAction[Int] = ???
 
   /**
     * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
@@ -251,31 +215,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: batched insert (one statement, multiple rows)`
     */
-  def upsertReferences(references: Set[RefPointers]): ReadWriteAction[Int] =
-    // short-circuit
-    if (references.isEmpty) {
-      DBIO.successful(0)
-    } else {
-      val insertValues: Set[SQLActionBuilder] = references.flatMap { refPointers =>
-        refPointers.toIds.map { toId =>
-          sql"(${refPointers.fromId},$toId)"
-        }
-      }
-      val allInsertValues = reduceSqlActionsWithDelim(insertValues.toSeq, sql",")
-
-      val query = concatSqlActions(
-        sql"""insert into ENTITY_REFS(from_id, to_id)
-              values
-              """,
-        allInsertValues,
-        sql"""
-              on duplicate key update from_id=from_id;"""
-      )
-      // The `on duplicate key update ...` makes this `insert` an upsert, not throwing errors on any
-      // pre-existing rows. The `update from_id=from_id` is a noop update, saying "leave this row alone"
-
-      query.asUpdate
-    }
+  // TODO CORE-497: update
+  def upsertReferences(references: Set[RefPointers]): ReadWriteAction[Int] = ???
 
   /**
    * Get all entity attribute keys for a workspace.
@@ -343,43 +284,16 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
   // `execution plan: 3 nested loops; 4 rows; using where, temporary & index: idx_entity_type_name, unq_trom_to, PRIMARY`
+  // TODO CORE-497: update
   def getReferencesTo(workspaceId: UUID,
                       refs: Seq[AttributeEntityReference]
-  ): ReadAction[Seq[AttributeEntityReference]] = {
-    val subqueryClauses = generateTypeNameSql(refs.toSet)
-
-    // Build the subquery
-    val subquery = concatSqlActions(
-      sql"""select id from ENTITY where """,
-      reduceSqlActionsWithDelim(subqueryClauses.toSeq, sql" or ")
-    )
-
-    // build the overall query
-    val query = concatSqlActions(
-      sql"""with TargetEntities as (""",
-      subquery,
-      sql""" ) select distinct e.entity_type, e.name
-from ENTITY e, ENTITY_REFS r
-where r.from_id = e.id
-and e.workspace_id = $workspaceId
-and r.to_id in (select id from TargetEntities) and r.from_id not in (select id from TargetEntities)"""
-    )
-
-    query.as[AttributeEntityReference]
-  }
+  ): ReadAction[Seq[AttributeEntityReference]] = ???
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
   // `execution plan: 2 nested loops, full index scan: idx_entity_type_name; 3 simple selects; using where & index`
-  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] =
-    sql"""select e.entity_type, e.name
-from ENTITY e, ENTITY_REFS r
-where r.from_id = e.id
-and deleted = 0
-and e.workspace_id = $workspaceId
-and e.entity_type != $entityType
-and r.to_id in (select id from ENTITY where entity_type = $entityType and workspace_id = $workspaceId );"""
-      .as[AttributeEntityReference]
+  // TODO CORE-497: update
+  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = ???
 
   /*
    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
@@ -578,6 +492,7 @@ and r.to_id in (select id from ENTITY where entity_type = $entityType and worksp
           set all_attribute_values = null
           where workspace_id = $workspaceId;""".asUpdate
 
+  // TODO CORE-497: update
   def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
     sql"""insert into ENTITY_REFS(from_id, to_id)
          select e.id, ea.value_entity_ref
@@ -601,8 +516,8 @@ and r.to_id in (select id from ENTITY where entity_type = $entityType and worksp
   // return all reference targets for a given reference source
   // `execution plan: non-unique key lookup; fully indexed by unq_from_to`
   @VisibleForTesting
-  def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] =
-    sql"""select to_id from ENTITY_REFS where from_id = $fromId;""".as[Long]
+  // TODO CORE-497: update
+  def getReferencedIds(fromId: Long): ReadAction[Seq[Long]] = ???
 
   // return the ENTITY_KEYS row for a given entity
   // `execution plan: single row constant; fully indexed by primary key`

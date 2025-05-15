@@ -45,7 +45,6 @@ import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
-import java.util
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -135,6 +134,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
         // save all references from this entity to other entities
+        // TODO CORE-497: update
         _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
       } yield savedEntityRecord.toEntity
     }
@@ -158,6 +158,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new DeleteEntitiesConflictException(referencingEntities.toSet)
         }
         // remove all references from these entities
+        // TODO CORE-497: update
         _ <- repository.queries.deleteAllReferencesFrom(workspaceId, entityRefs.toSet)
         res <- repository.queries.batchHide(workspaceId, entityRefs)
       } yield res
@@ -175,6 +176,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
         // remove all references from these entities
+        // TODO CORE-497: update
         _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
         res <- repository.queries.batchHideType(
           workspaceId,
@@ -345,6 +347,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
   // entity
+  // TODO CORE-497: update
   protected[compact] def replaceReferences(fromId: Long,
                                            toIds: Set[Long],
                                            isInsert: Boolean

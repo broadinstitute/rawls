@@ -55,7 +55,7 @@ case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attribute
 case class RefPointerRecord(fromId: Long, toId: Long)
 
 /** all reference pointers from one entity to all its reference targets */
-case class RefPointers(fromId: Long, toIds: Set[Long])
+case class RefPointers(from: AttributeEntityReference, to: Set[AttributeEntityReference])
 
 case class EntityTypeAndAttributeKey(
   entityType: String,
