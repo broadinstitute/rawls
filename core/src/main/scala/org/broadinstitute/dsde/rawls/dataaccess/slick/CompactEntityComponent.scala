@@ -361,16 +361,22 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def getReferencesTo(workspaceId: UUID,
                       refs: Seq[AttributeEntityReference]
   ): ReadAction[Seq[AttributeEntityReference]] = {
-    val typeNameClauses = generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name")
+    val toNameClause = reduceSqlActionsWithDelim(
+      generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
+      sql" or "
+    )
+    val fromNameClause = reduceSqlActionsWithDelim(
+      generateTypeNameSql(refs.toSet, typeColumn = "from_entity_type", nameColumn = "from_name").toSeq,
+      sql" or "
+    )
 
-    // TODO CORE-497: exclude entities that are in the supplied ${refs}
     val baseSql =
       sql"""select from_entity_type, from_name
             from ENTITY_REFS
         where workspace_id = $workspaceId
         and ("""
 
-    concatSqlActions(baseSql, reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "), sql")")
+    concatSqlActions(baseSql, toNameClause, sql") and NOT (", fromNameClause, sql")")
       .as[AttributeEntityReference]
   }
 
@@ -585,15 +591,17 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           set all_attribute_values = null
           where workspace_id = $workspaceId;""".asUpdate
 
-  // TODO CORE-497: update
   def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
-    sql"""insert into ENTITY_REFS(from_id, to_id)
-         select e.id, ea.value_entity_ref
-         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
+    sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name)
+         select e.workspace_id,
+          e.entity_type, e.name,
+          r.entity_type, r.name
+         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea, ENTITY r
          where ea.owner_id = e.id
          and e.workspace_id = $workspaceId
          and e.deleted = 0
-         and ea.value_entity_ref is not null;""".asUpdate
+         and ea.value_entity_ref is not null
+         and ea.value_entity_ref = r.id;""".asUpdate
 
   // note this cleans up legacy attributes for soft-deleted entities as well as active entities
   def migrationDeleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =

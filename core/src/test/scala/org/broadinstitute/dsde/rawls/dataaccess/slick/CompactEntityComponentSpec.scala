@@ -681,7 +681,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // asking for references to entity1 and entity2 should exclude entity2 because entity2 is in the search criteria,
     //  even though entity2 references entity1
     val expected = Set(entity3)
-    runAndWait(q.getReferencesTo(wsid, Seq(entity1, entity2))) should contain theSameElementsAs expected
+    runAndWait(q.getReferencesTo(wsid, Seq(entity1, entity2))).toSet should contain theSameElementsAs expected
 
   }
 
