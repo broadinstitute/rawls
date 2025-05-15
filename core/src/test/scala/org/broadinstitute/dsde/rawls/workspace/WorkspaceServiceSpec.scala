@@ -35,7 +35,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverCom
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
+import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPassService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -384,6 +384,27 @@ class WorkspaceServiceSpec
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
   }
 
+  class TestApiServiceWithMockFastPassService(dataSource: SlickDataSource, override val user: RawlsUser)
+      extends TestApiService(dataSource, user) {
+    val (mockFastPassService, fastPassMockGcsDAO, fastPassMockSamDAO) =
+      MockFastPassService
+        .setup(
+          user,
+          Seq(testData.userOwner, testData.userWriter, testData.userReader),
+          fastPassConfig,
+          googleIamDAO,
+          googleStorageDAO,
+          terraBillingProjectOwnerRole,
+          terraWorkspaceCanComputeRole,
+          terraWorkspaceNextflowRole,
+          terraBucketReaderRole,
+          terraBucketWriterRole
+        )(ctx1, dataSource)
+
+    override val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassServiceImpl =
+      (_: RawlsRequestContext, _: SlickDataSource) => mockFastPassService
+  }
+
   def withTestDataServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
@@ -397,6 +418,15 @@ class WorkspaceServiceSpec
   def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T =
     withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
 
+  def withTestDataServicesCustomFastPassAndUser[T](
+    user: RawlsUser
+  )(testCode: TestApiServiceWithMockFastPassService => T): T =
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServicesCustomFastPass(dataSource, user)(testCode)
+    }
+  def withTestDataServicesCustomFastPass[T](testCode: TestApiServiceWithMockFastPassService => T): T =
+    withTestDataServicesCustomFastPassAndUser(testData.userOwner)(testCode)
+
   def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user)
     try
@@ -409,6 +439,17 @@ class WorkspaceServiceSpec
     testCode: TestApiServiceWithCustomSamDAO => T
   ) = {
     val apiService = new TestApiServiceWithCustomSamDAO(dataSource, user)
+
+    try
+      testCode(apiService)
+    finally
+      apiService.cleanupSupervisor
+  }
+
+  private def withServicesCustomFastPass[T](dataSource: SlickDataSource, user: RawlsUser)(
+    testCode: TestApiServiceWithMockFastPassService => T
+  ) = {
+    val apiService = new TestApiServiceWithMockFastPassService(dataSource, user)
 
     try
       testCode(apiService)
@@ -4145,62 +4186,71 @@ class WorkspaceServiceSpec
     }
   }
 
-  "updateWorkspaceBilling" should "successfully update workspace billing" in withTestDataServices { services =>
-    val workspaceName = testData.workspace.toWorkspaceName
-    val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
-    val targetBilling = testData.testProject1
-    val updatedWorkspace =
-      Await
-        .result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
-        .get
+  "updateWorkspaceBilling" should "successfully update workspace billing" in withTestDataServicesCustomFastPass {
+    services =>
+      val workspaceName = testData.workspace.toWorkspaceName
+      val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
+      val targetBilling = testData.testProject1
 
-    val oldBillingProjectOwnerPolicyEmail = Await.result(
-      services.samDAO
-        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-                             workspace.namespace,
-                             SamBillingProjectPolicyNames.owner,
-                             services.workspaceService.ctx
+//    val userSubjectId = WorkbenchUserId(userInfo.userSubjectId.value)
+      val updatedWorkspace =
+        Await
+          .result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
+          .get
+
+      val oldBillingProjectOwnerPolicyEmail = Await.result(
+        services.samDAO
+          .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                               workspace.namespace,
+                               SamBillingProjectPolicyNames.owner,
+                               services.workspaceService.ctx
+          )
+          .map(_.email),
+        Duration.Inf
+      )
+
+      val newBillingProjectOwnerPolicyEmail = Await.result(
+        services.samDAO
+          .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                               targetBilling.projectName.value,
+                               SamBillingProjectPolicyNames.owner,
+                               services.workspaceService.ctx
+          )
+          .map(_.email),
+        Duration.Inf
+      )
+
+      verifyGCPBillingUpdate(workspace,
+                             oldBillingProjectOwnerPolicyEmail,
+                             newBillingProjectOwnerPolicyEmail,
+                             targetBilling.billingAccount,
+                             services
+      )
+      verifySamUpdate(oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail, services)
+      verify(services.mockFastPassService, atLeastOnce()).removeFastPassGrantsForWorkspace(workspace)
+      verify(services.mockFastPassService, atLeastOnce()).syncFastPassesForUserInWorkspace(workspace)
+
+      val workspaceFastPassGrants =
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+
+      val samUserStatus = Await
+        .result(services.fastPassMockSamDAO.getUserIdInfoForEmail(WorkbenchEmail(services.user.userEmail.value)),
+                Duration.Inf
         )
-        .map(_.email),
-      Duration.Inf
-    )
+      val userSubjectId = WorkbenchUserId(samUserStatus.userSubjectId)
 
-    val newBillingProjectOwnerPolicyEmail = Await.result(
-      services.samDAO
-        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-                             targetBilling.projectName.value,
-                             SamBillingProjectPolicyNames.owner,
-                             services.workspaceService.ctx
-        )
-        .map(_.email),
-      Duration.Inf
-    )
+      val ownerRoles = Vector(
+        services.terraWorkspaceCanComputeRole,
+        services.terraWorkspaceNextflowRole,
+        services.terraBucketWriterRole
+      )
+      workspaceFastPassGrants should not be empty
+      workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+      workspaceFastPassGrants.map(_.userSubjectId) should contain only userSubjectId
 
-    verifyGCPBillingUpdate(workspace,
-                           oldBillingProjectOwnerPolicyEmail,
-                           newBillingProjectOwnerPolicyEmail,
-                           targetBilling.billingAccount,
-                           services
-    )
-    verifySamUpdate(oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail, services)
-    // Verify FastPass syncing
-    val workspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
-
-    val userSubjectId = services.ctx1.userInfo.userSubjectId.value
-    val ownerRoles = Vector(
-      services.terraWorkspaceCanComputeRole,
-      services.terraWorkspaceNextflowRole,
-      services.terraBucketWriterRole
-    )
-    workspaceFastPassGrants should not be empty
-    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
-//    TODO: Fix mismatched user subject ID
-    workspaceFastPassGrants.map(_.userSubjectId) should contain only userSubjectId
-
-    // Verify Rawls updates
-    updatedWorkspace.namespace shouldBe targetBilling.projectName.value
-    updatedWorkspace.currentBillingAccountOnGoogleProject shouldBe targetBilling.billingAccount
+      // Verify Rawls updates
+      updatedWorkspace.namespace shouldBe targetBilling.projectName.value
+      updatedWorkspace.currentBillingAccountOnGoogleProject shouldBe targetBilling.billingAccount
   }
 
   def verifySamUpdate(oldBillingProjectOwnerPolicyEmail: WorkbenchEmail,
