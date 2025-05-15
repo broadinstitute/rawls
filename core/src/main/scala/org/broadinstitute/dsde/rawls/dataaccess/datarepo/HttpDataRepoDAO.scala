@@ -4,15 +4,14 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableDataType}
-import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport
 
 import java.util.stream.Collectors
 import java.util.UUID
 
-class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) extends DataRepoDAO {
+class HttpDataRepoDAO(dataRepoInstanceBasePath: String) extends DataRepoDAO {
 
   private val datareporow_id =
-    new ColumnModel().name(DataRepoBigQuerySupport.datarepoRowIdColumn).datatype(TableDataType.STRING)
+    new ColumnModel().name("datarepo_row_id").datatype(TableDataType.STRING)
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
@@ -24,8 +23,6 @@ class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: St
 
   private def getRepositoryApi(accessToken: OAuth2BearerToken) =
     new RepositoryApi(getApiClient(accessToken.token))
-
-  override def getInstanceName: String = dataRepoInstanceName
 
   override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel =
     // future enhancement: allow callers to specify the list of SnapshotRetrieveIncludeModel to retrieve

@@ -6,7 +6,6 @@ import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
@@ -76,12 +75,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     workbenchMetricBaseName,
     EntityManager.defaultEntityManager(
       slickDataSource,
-      new MockWorkspaceManagerDAO(),
       new WorkspaceSettingRepository(slickDataSource),
-      new MockDataRepoDAO(""),
-      mockSamDAO,
-      MockBigQueryServiceFactory.ioFactory(),
-      DataRepoEntityProviderConfig(100, 10, 0),
       false,
       java.time.Duration.ofMinutes(2),
       workbenchMetricBaseName

@@ -6,8 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 
 import java.util.UUID
 
-class MockDataRepoDAO(instanceName: String) extends DataRepoDAO {
-  override def getInstanceName: String = instanceName
+class MockDataRepoDAO extends DataRepoDAO {
 
   override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel =
     new SnapshotModel()
