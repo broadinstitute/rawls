@@ -7,7 +7,6 @@ import breeze.stats._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
@@ -126,12 +125,7 @@ class BatchUpsertScalingSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        new MockWorkspaceManagerDAO(),
         mockWorkspaceSettingRepository,
-        new MockDataRepoDAO(mockServer.mockServerBaseUrl),
-        samDAO,
-        bigQueryServiceFactory,
-        DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -212,18 +206,18 @@ class BatchUpsertScalingSpec
         } else {
           val (loadDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource),
               waitDuration
             )
           }
           val (changeDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource),
               waitDuration
             )
           }
           val (deleteDuration, _) = profile {
-            Await.result(testApiService.entityService.deleteEntities(minimalTestData.wsName, refsToDelete, None, None),
+            Await.result(testApiService.entityService.deleteEntities(minimalTestData.wsName, refsToDelete),
                          waitDuration
             )
           }

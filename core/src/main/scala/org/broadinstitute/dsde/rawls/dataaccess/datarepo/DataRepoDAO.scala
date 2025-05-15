@@ -7,7 +7,5 @@ import java.util.UUID
 
 trait DataRepoDAO {
 
-  def getInstanceName: String
-
   def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel
 }
