@@ -233,9 +233,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   }
 
   override def listEntities(entityType: String): Source[Entity, NotUsed] =
-    throw new DataEntityException("list all entities not supported for compact data tables.",
-                                  code = StatusCodes.NotImplemented
-    )
+    Source
+      .future(repository.dataSource.inTransaction(ReadOnly) { _ =>
+        repository.queries.listEntities(workspaceId, entityType)
+      })
+      .mapConcat { entityRec =>
+        entityRec.map(_.toEntity).toList
+      }
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
