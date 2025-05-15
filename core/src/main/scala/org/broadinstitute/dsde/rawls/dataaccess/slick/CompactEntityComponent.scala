@@ -145,6 +145,39 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       query.as[CompactEntityRefRecord]
     }
 
+  /** Given a set of entity type/name pairs, return the count of those entities that exist.
+    *
+    * `execution plan: index range scan on idx_entity_type_name`
+    */
+  def countExisting(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Int] =
+    // short-circuit
+    if (refs.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""select count(*)
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.as[Int].head
+    }
+
+  /** Given a set of entity type/name pairs, determine if all of those pairs exist.
+    *
+    * `execution plan: index range scan on idx_entity_type_name`
+    */
+  def existsAll(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Boolean] =
+    countExisting(workspaceId, refs).map(count => count == refs.size)
+
   /** Given a set of entity references, return the ids being referenced.
     * Ignores deleted entities.
     *
@@ -209,14 +242,24 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def deleteAllReferencesFromType(workspaceId: UUID, fromType: String): ReadWriteAction[Int] = ???
 
   /**
-    * Insert into ENTITY_REFS(from_id, to_id) values(...) on duplicate key update from_id=from_id
+    * Insert references into ENTITY_REFS.
     *
     * Returns the number of rows upserted.
     *
-    * `execution plan: batched insert (one statement, multiple rows)`
+    * TODO: `execution plan: ???`
     */
-  // TODO CORE-497: update
-  def upsertReferences(references: Set[RefPointers]): ReadWriteAction[Int] = ???
+  def upsertReferences(workspaceId: UUID, references: Set[RefPointers]): ReadWriteAction[Int] = {
+    val baseSql =
+      sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name) values("""
+
+    val valuesSql = references.flatMap { refPointers =>
+      refPointers.to.map { toEntity =>
+        sql"($workspaceId, ${refPointers.from.entityType}, ${refPointers.from.entityName}, ${toEntity.entityType}, ${toEntity.entityName})"
+      }
+    }
+
+    concatSqlActions(baseSql, reduceSqlActionsWithDelim(valuesSql.toSeq, sql")")).asUpdate
+  }
 
   /**
    * Get all entity attribute keys for a workspace.

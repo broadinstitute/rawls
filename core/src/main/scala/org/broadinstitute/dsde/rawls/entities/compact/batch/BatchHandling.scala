@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityRepository,
   CompactEntitySerialization
 }
+import org.broadinstitute.dsde.rawls.entities.exceptions.EntityReferenceNotFoundException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
@@ -104,41 +105,20 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       // find all requested references within this batch
       allReferences = findAllReferences(batch)
 
-      // generate a combined list of entity type/name pairs for both reference sources and targets
-      lookupCriteria: Set[AttributeEntityReference] = allReferences.keys.toSet ++ allReferences.values.flatten.toSet
-
-      // look up the ids for both reference sources and targets
-      // TODO CORE-497: update
-      foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
+      // verify all requested references exist
+      isExists <- repository.queries.existsAll(workspaceId, allReferences.values.flatten.toSet)
 
       // did we find all the reference sources and targets?
-      _ = if (foundIds.size != lookupCriteria.size) {
-        // here's what the query actually returned; turn this into a Set
-        val actuallyFound = foundIds.map(_.toAttributeEntityReference).toSet
-        // did we find all the reference targets?
-        val notFoundReferenceTargets = allReferences.values.flatten.toSet diff actuallyFound
-        if (notFoundReferenceTargets.nonEmpty) {
-          throw generateReferenceError("Could not resolve some entity references", notFoundReferenceTargets)
-        }
-        // did we find all the reference sources? This should never happen, but let's be defensive
-        val notFoundReferenceSources = allReferences.keys.toSet diff actuallyFound
-        if (notFoundReferenceSources.nonEmpty)
-          throw generateReferenceError("Could not resolve some entity sources", notFoundReferenceSources)
-      }
-
-      // build a lookup table for the ids we found
-      idLookup: Map[AttributeEntityReference, Long] = foundIds.map { rec =>
-        rec.toAttributeEntityReference -> rec.id
-      }.toMap
+      _ = if (!isExists)
+        throw new EntityReferenceNotFoundException("Some entity references do not exist")
 
       // rehydrate the looked-up ids into sources and targets (from_id, to_id)
       referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
-        val toIds = tos.map(idLookup).toSet
-        RefPointers(idLookup(from), toIds)
+        RefPointers(from, tos.toSet)
       }.toSet
       // insert the references into the ENTITY_REFS table.
       // TODO CORE-497: update
-      _ <- repository.queries.upsertReferences(referencesToInsert)
+      _ <- repository.queries.upsertReferences(workspaceId, referencesToInsert)
     } yield entitiesCreated
   }
 

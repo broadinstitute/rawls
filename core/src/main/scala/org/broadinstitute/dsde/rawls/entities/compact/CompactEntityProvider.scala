@@ -120,11 +120,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           )
         // find all references in this entity
         refs: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = findAllReferences(entity)
-        // find all unique references in this entity
-        uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
+        // translate to RefPointers
+        refPointers: Set[RefPointers] = refs.map { case (from, to) =>
+          RefPointers(from, to.toSet)
+        }.toSet
+
         // verify that all references in the entity-to-be-saved actually exist
-        referencedIds <- repository.queries.getReferencedIds(workspaceId, uniqueRefs)
-        _ = if (uniqueRefs.size != referencedIds.size)
+        referencesExist <- repository.queries.existsAll(workspaceId, refs.values.flatten.toSet)
+        _ = if (!referencesExist)
           throw new EntityReferenceNotFoundException("Some entity references do not exist")
         // save the entity
         _ <- repository.queries.createEntity(workspaceId, entity)
@@ -134,8 +137,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
         // save all references from this entity to other entities
-        // TODO CORE-497: update
-        _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
+        _ <- repository.queries.upsertReferences(workspaceId, refPointers)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
@@ -320,6 +322,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   // ====================================================================================================
 
   // Given an entity, finds all references in that entity. Returns a map of source entity -> target entities
+  // TODO: return Set[RefPointers] instead
   protected[compact] def findAllReferences(
     entity: Entity
   ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
@@ -327,6 +330,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   // Given a Seq of entities, finds all references in those entities. Returns a map of source entity -> target entities
   // representing all references.
+  // TODO: return Set[RefPointers] instead
   protected[compact] def findAllReferences(
     entities: Seq[Entity]
   ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
@@ -344,36 +348,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }
       .filter(_._2.nonEmpty)
       .toMap
-
-  // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
-  // entity
-  // TODO CORE-497: update
-  protected[compact] def replaceReferences(fromId: Long,
-                                           toIds: Set[Long],
-                                           isInsert: Boolean
-  ): ReadWriteAction[(Int, Int)] = {
-    // short-circuit
-    if (isInsert && toIds.isEmpty) {
-      DBIO.successful((0, 0))
-    }
-
-    for {
-      // delete any reference pointers that should no longer exist
-      deletes <-
-        if (isInsert) {
-          DBIO.successful(0)
-        } else {
-          repository.queries.deleteReferencesWithFilter(fromId, toIds)
-        }
-      // upsert all reference pointers that do exist
-      upserts <-
-        if (toIds.isEmpty) {
-          DBIO.successful(0)
-        } else {
-          repository.queries.upsertReferences(Set(RefPointers(fromId, toIds)))
-        }
-    } yield (deletes, upserts)
-  }
 
   /**
     * Update the workspace's last-modified timestamp - in a separate transaction - upon successful
