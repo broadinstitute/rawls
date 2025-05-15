@@ -575,12 +575,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       }
       response.getOpen.booleanValue()
     } { case e: GoogleJsonResponseException =>
-      val response = Option(e.getContent).getOrElse(e.getMessage)
-      val errorReport = Try(response.parseJson.convertTo[ErrorReport]).recover { case _: Throwable =>
-        val sc = Try(StatusCode.int2StatusCode(e.getStatusCode)).getOrElse(StatusCodes.InternalServerError)
-        ErrorReport(sc, s"Google list billingAccounts failed with error '$response'", e)
-      }.get
-      throw new RawlsExceptionWithErrorReport(errorReport)
+      val sc = Try(StatusCode.int2StatusCode(e.getStatusCode)).getOrElse(StatusCodes.InternalServerError)
+      throw new RawlsExceptionWithErrorReport(ErrorReport(sc, s"Error listing google billing accounts", e))
     }
   }
 

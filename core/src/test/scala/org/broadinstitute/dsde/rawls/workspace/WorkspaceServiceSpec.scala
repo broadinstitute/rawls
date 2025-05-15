@@ -4192,7 +4192,6 @@ class WorkspaceServiceSpec
       val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
       val targetBilling = testData.testProject1
 
-//    val userSubjectId = WorkbenchUserId(userInfo.userSubjectId.value)
       val updatedWorkspace =
         Await
           .result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
@@ -4226,9 +4225,23 @@ class WorkspaceServiceSpec
                              targetBilling.billingAccount,
                              services
       )
-      verifySamUpdate(oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail, services)
-      verify(services.mockFastPassService, atLeastOnce()).removeFastPassGrantsForWorkspace(workspace)
-      verify(services.mockFastPassService, atLeastOnce()).syncFastPassesForUserInWorkspace(workspace)
+      val mockRawlsSAContext = services.samDAO.rawlsSAContext
+      verify(services.samDAO).addUserToPolicy(
+        SamResourceTypeNames.workspace,
+        workspace.workspaceId,
+        SamWorkspacePolicyNames.projectOwner,
+        newBillingProjectOwnerPolicyEmail.value,
+        mockRawlsSAContext
+      )
+      verify(services.samDAO).removeUserFromPolicy(
+        SamResourceTypeNames.workspace,
+        workspace.workspaceId,
+        SamWorkspacePolicyNames.projectOwner,
+        oldBillingProjectOwnerPolicyEmail.value,
+        mockRawlsSAContext
+      )
+      verify(services.mockFastPassService).removeFastPassGrantsForWorkspace(workspace)
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(workspace)
 
       val workspaceFastPassGrants =
         runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
@@ -4403,6 +4416,7 @@ class WorkspaceServiceSpec
 
     verifySamUpdate(oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail, services)
     verifySamUpdate(newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail, services)
+
   }
 
 }
