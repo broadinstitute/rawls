@@ -153,7 +153,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       query.as[CompactEntityRecord]
     }
 
-  /** Given a set of entity type/name pairs, return the CompactEntityRecord for those pairs.
+  /** Given a set of entity type/name pairs, return the CompactEntityVersionRecord for those pairs.
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
