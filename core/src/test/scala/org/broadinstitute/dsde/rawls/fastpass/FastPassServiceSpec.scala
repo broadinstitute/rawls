@@ -158,7 +158,7 @@ class FastPassServiceSpec
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     val leonardoDAO = Mockito.spy(new MockLeonardoDAO())
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
     when(policyService.mergeWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
@@ -256,7 +256,12 @@ class FastPassServiceSpec
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
+      workspaceManagerDAO,
       new WorkspaceSettingRepository(dataSource),
+      dataRepoDAO,
+      samDAO,
+      bigQueryServiceFactory,
+      DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName

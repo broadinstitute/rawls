@@ -198,6 +198,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
         any[WorkspaceName],
         any[Source[EntityUpdateDefinition, _]],
         any[Boolean],
+        any[Option[DataReferenceName]],
+        any[Option[GoogleProjectId]],
         any[RawlsRequestContext]
       )
     ).thenReturn(Future(0))
@@ -1095,6 +1097,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
           any[WorkspaceName],
           any[Source[EntityUpdateDefinition, _]],
           ArgumentMatchers.eq(expectation.isUpsert),
+          any[Option[DataReferenceName]],
+          any[Option[GoogleProjectId]],
           any[RawlsRequestContext]
         )
       }

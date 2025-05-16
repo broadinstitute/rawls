@@ -1814,6 +1814,8 @@ paths:
             type: array
             items:
               type: string
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: List of entities in workspace
@@ -1974,6 +1976,7 @@ paths:
           schema:
             type: boolean
             default: true
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
       responses:
         200:
           description: Successful Request
@@ -2113,6 +2116,8 @@ paths:
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/entityTypePathParam'
         - $ref: '#/components/parameters/entityNamePathParam'
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -7364,6 +7369,12 @@ components:
       required: true
       schema:
         type: string
+    billingProjectQueryParam:
+      name: billingProject
+      in: query
+      description: Billing project to use for queries to the data reference
+      schema:
+        type: string
     configNamespacePathParam:
       name: configNamespace
       in: path
@@ -7376,6 +7387,12 @@ components:
       in: path
       description: Method Configuration Name
       required: true
+      schema:
+        type: string
+    dataReferenceQueryParam:
+      name: dataReference
+      in: query
+      description: Data reference name to query for entity metadata
       schema:
         type: string
     entityNamePathParam:

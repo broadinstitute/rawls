@@ -282,7 +282,9 @@ object Boot extends IOApp with LazyLogging {
         )
 
       val dataRepoDAO =
-        new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstance"))
+        new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstanceName"),
+                            appConfigManager.conf.getString("dataRepo.terraInstance")
+        )
 
       val userServiceConstructor: RawlsRequestContext => UserService =
         UserService.constructor(
@@ -368,7 +370,12 @@ object Boot extends IOApp with LazyLogging {
       // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(
         slickDataSource,
+        workspaceManagerDAO,
         new WorkspaceSettingRepository(slickDataSource),
+        dataRepoDAO,
+        samDAO,
+        appDependencies.bigQueryServiceFactory,
+        DataRepoEntityProviderConfig(appConfigManager.conf.getConfig("dataRepoEntityProvider")),
         appConfigManager.conf.getBoolean("entityStatisticsCache.enabled"),
         entityQueryTimeout,
         metricsPrefix

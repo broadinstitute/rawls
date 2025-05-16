@@ -172,7 +172,7 @@ trait ApiServiceSpec
     )
       .thenReturn(Future.successful())
 
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
@@ -303,7 +303,12 @@ trait ApiServiceSpec
 
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
+      workspaceManagerDAO,
       new WorkspaceSettingRepository(dataSource),
+      dataRepoDAO,
+      samDAO,
+      bigQueryServiceFactory,
+      DataRepoEntityProviderConfig(100, 10, 0),
       testConf.getBoolean("entityStatisticsCache.enabled"),
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName

@@ -2,27 +2,21 @@ package org.broadinstitute.dsde.rawls.entities.compact.batch
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.{Flow, Sink, Source}
-import com.google.common.annotations.VisibleForTesting
+import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  RawlsConcurrentModificationException,
-  ReadWriteAction,
-  RefPointers
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, RefPointers}
 import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProvider,
   CompactEntityProviderConfig,
-  CompactEntityRepository
+  CompactEntityRepository,
+  CompactEntitySerialization
 }
-import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 
-import scala.annotation.tailrec
 import scala.concurrent.Future
 
 /**
@@ -44,14 +38,26 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
                     config: CompactEntityProviderConfig,
                     parentContext: RawlsRequestContext
   ): Future[Int] = {
+    // Translate the input stream entityUpdates to a stream of Entity by applying the updates to
+    // a pre-existing entity (for updates) or a blank entity (for inserts)
+    val entitySource: Source[Entity, _] = entityUpdates.map { updateDefinition =>
+      // TODO CORE-428: for updates, look ahead (some quantity) in the update definitions and
+      //   retrieve the existing entities from the db
+      // for inserts, start with an empty entity
+      val baseEntity = Entity(updateDefinition.name, updateDefinition.entityType, Map())
+      // update the starting entity with the user's operations
+      applyOperationsToEntity(baseEntity, updateDefinition.operations)
+    }
 
-    // Group the updates into batches for efficiency
-    val batchedUpdates: Source[Seq[EntityUpdateDefinition], _] = entityUpdates.grouped(config.batchUpsertBatchSize)
+    // Group the entities-to-be-saved into batches to optimize our SQL interactions
+    val batches: Source[Seq[Entity], _] = entitySource.groupedWeighted(config.maxSqlBatchSizeBytes)(calculateEntitySize)
 
-    // Apply the incoming operations to a pre-existing entity (for updates) or a blank entity (for inserts)
-    // and create the DBIO actions to persist the results.
-    val batchActionsSource: Source[ReadWriteAction[Int], _] =
-      batchedUpdates.via(flowOperationsToEntities(allowUpsert))
+    // For each batch, generate the db action to write it to the database
+    val batchActionsSource: Source[ReadWriteAction[Int], _] = batches
+      .map { batch =>
+        logger.info(s"batch upsert: batch of ${batch.size} entities")
+        insertBatch(batch)
+      }
 
     // Materialize the batch actions into a sequence and convert to a single DBIO action
     val batchActionsF: Future[ReadWriteAction[Int]] = batchActionsSource
@@ -71,109 +77,12 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     dbResults
   }
 
-  /** Stream component to accept a seq of batch updates, look for any pre-existing entities targeted by those updates,
-    * apply the updates to those entities, then persist those entities. Emits the count of rows written as a DBIO. */
-  private def flowOperationsToEntities(
-    allowUpsert: Boolean
-  ): Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Int], _] =
-    Flow[Seq[EntityUpdateDefinition]].map { updates =>
-      // Extract the entity type and name from each update
-      val updateIdentifiers = updates.map(update => AttributeEntityReference(update.entityType, update.name))
-
-      for {
-        // Query the database for any pre-existing entities being updated
-        existingEntities <- repository.queries.getEntities(workspaceId, updateIdentifiers.toSet)
-        // If this invocation does NOT allow upserts, validate that we found all entities being updated
-        _ = if (!allowUpsert && existingEntities.size != updateIdentifiers.size) {
-          throw new EntityNotFoundException()
-        }
-
-        // Massage the existing entities so they're easier to look up later
-        existingEntitiesByIdentifier = existingEntities
-          .map(rec => rec.toAttributeEntityReference -> rec.toEntity)
-          .toMap
-
-        // How many updates do we have for each entity being updated?
-        updateCounts = updateIdentifiers
-          .groupBy(identity)
-          .map { case (updateIdentifier, updateDefinitions) =>
-            updateIdentifier -> updateDefinitions.size
-          }
-        // what are the existing record_versions?
-        existingVersionsByIdentifier = existingEntities
-          .map(rec => rec.toAttributeEntityReference -> rec.recordVersion)
-          .toMap
-        // Increment the existing record_version values with the number of updates for each entity.
-        // This gives us the final record_version we should expect for each entity.
-        expectedRecordVersions: Map[AttributeEntityReference, Long] = updateCounts.map {
-          case (identifier, updateCount) =>
-            val existingVersion = existingVersionsByIdentifier.getOrElse(identifier, -1L)
-            identifier -> (existingVersion + updateCount)
-        }
-
-        // Apply the incoming operations to the existing entities (or to an empty entity if none pre-existed)
-        updatedEntities = applyAll(updates, existingEntitiesByIdentifier)
-
-        // Persist the updated entities to the database
-        writeCount <- insertBatch(updatedEntities, allowUpsert)
-
-        // Re-retrieve the entities we just wrote. This gets the actual record_version values.
-        finalRecordVersions <- repository.queries.getEntityVersions(workspaceId, updateIdentifiers.toSet)
-
-        // Compare the actual record versions, after writing the entities, to the expected record versions
-        _ = finalRecordVersions.foreach { rec =>
-          val expected = expectedRecordVersions.getOrElse(rec.toAttributeEntityReference, 0)
-          val actual = rec.recordVersion
-          if (actual != expected) {
-            throw new RawlsConcurrentModificationException(
-              s"Detected concurrent modifications to entity ${rec.toAttributeEntityReference.entityType}/${rec.toAttributeEntityReference.entityName}. " +
-                s"Expected $expected; got $actual." +
-                "Please retry this operation."
-            )
-          }
-        }
-
-      } yield writeCount
-    }
-
-  /** Helper method to apply batch operations to pre-existing entities.
-    * This is a recursive call to handle the case where multiple subsequent operations modify
-    * the same pre-existing entity. */
-  @VisibleForTesting
-  def applyAll(updates: Seq[EntityUpdateDefinition],
-               existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity]
-  ): Seq[Entity] = {
-
-    @tailrec
-    def applyOne(updates: Seq[EntityUpdateDefinition],
-                 existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity],
-                 accum: Seq[Entity]
-    ): Seq[Entity] =
-      if (updates.isEmpty) {
-        //  end of updates; return the accumulator
-        accum
-      } else {
-        val thisUpdate = updates.head
-        val thisBaseEntity = existingEntitiesByIdentifier.getOrElse(
-          AttributeEntityReference(thisUpdate.entityType, thisUpdate.name),
-          Entity(thisUpdate.name, thisUpdate.entityType, Map())
-        )
-
-        val updatedEntity = applyOperationsToEntity(thisBaseEntity, thisUpdate.operations)
-
-        applyOne(updates.tail,
-                 existingEntitiesByIdentifier + (updatedEntity.toReference -> updatedEntity),
-                 accum :+ updatedEntity
-        )
-
-      }
-
-    applyOne(updates, existingEntitiesByIdentifier, Seq())
-
-  }
+  /** approximate the byte size of this entity by looking at the character length of its JSONized attributes */
+  private def calculateEntitySize(entity: Entity): Int =
+    CompactEntitySerialization.toSql(entity.attributes).compactPrint.length
 
   /** write this batch of Entity to the database */
-  private def insertBatch(batch: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
+  private def insertBatch(batch: Seq[Entity]): ReadWriteAction[Int] = {
 
     // nested helper method for building error responses
     def generateReferenceError(message: String, notFounds: Set[AttributeEntityReference]) =
@@ -190,20 +99,18 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     for {
       // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
       // has a reference to another entity in the same batch.
-      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, allowUpsert = allowUpsert)
+      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch)
 
-      // Find all requested references within this batch
+      // find all requested references within this batch
       allReferences = findAllReferences(batch)
 
-      // To handle references, we need the ids of all entities we just wrote, as well as all the entities
-      // they reference. Generate a combined list of entity type/name pairs to use as lookup criteria
-      writtenEntityRefs = batch.map(_.toReference).toSet
-      lookupCriteria: Set[AttributeEntityReference] = writtenEntityRefs ++ allReferences.values.flatten.toSet
+      // generate a combined list of entity type/name pairs for both reference sources and targets
+      lookupCriteria: Set[AttributeEntityReference] = allReferences.keys.toSet ++ allReferences.values.flatten.toSet
 
-      // look up the ids
+      // look up the ids for both reference sources and targets
       foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
 
-      // did we find everything we just looked up?
+      // did we find all the reference sources and targets?
       _ = if (foundIds.size != lookupCriteria.size) {
         // here's what the query actually returned; turn this into a Set
         val actuallyFound = foundIds.map(_.toAttributeEntityReference).toSet
@@ -212,10 +119,10 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
         if (notFoundReferenceTargets.nonEmpty) {
           throw generateReferenceError("Could not resolve some entity references", notFoundReferenceTargets)
         }
-        // did we find all the entities we originally wrote? This should never happen, but let's be defensive
-        val notFoundWrittenEntities = writtenEntityRefs diff actuallyFound
-        if (notFoundWrittenEntities.nonEmpty)
-          throw generateReferenceError("Could not resolve some entity sources", notFoundWrittenEntities)
+        // did we find all the reference sources? This should never happen, but let's be defensive
+        val notFoundReferenceSources = allReferences.keys.toSet diff actuallyFound
+        if (notFoundReferenceSources.nonEmpty)
+          throw generateReferenceError("Could not resolve some entity sources", notFoundReferenceSources)
       }
 
       // build a lookup table for the ids we found
@@ -223,15 +130,12 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
         rec.toAttributeEntityReference -> rec.id
       }.toMap
 
-      // rehydrate the looked-up ids for the entities we wrote in this batch
-      referenceSourcesToDelete: Set[Long] = writtenEntityRefs.map(ref => idLookup(ref))
-      // rehydrate the looked-up ids into sources and targets for the references to insert (from_id, to_id)
+      // rehydrate the looked-up ids into sources and targets (from_id, to_id)
       referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
         val toIds = tos.map(idLookup).toSet
         RefPointers(idLookup(from), toIds)
       }.toSet
       // insert the references into the ENTITY_REFS table.
-      _ <- repository.queries.deleteAllReferencesFrom(referenceSourcesToDelete)
       _ <- repository.queries.upsertReferences(referencesToInsert)
     } yield entitiesCreated
   }

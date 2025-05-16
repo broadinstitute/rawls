@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
 case class CompactEntityProviderConfig(
-  // number of entities to handle in a single SQL statement when processing batchUpsert/batchUpdate
-  batchUpsertBatchSize: Int = 2500
+  // Controls approximately how large a single batch-insert SQL statement will be for the batchUpsert/batchUpdate APIs.
+  // Default is 100 Mb, well under the 1Gb packet size we have set for MySQL
+  maxSqlBatchSizeBytes: Int = 100 * 1024 * 1024
 )

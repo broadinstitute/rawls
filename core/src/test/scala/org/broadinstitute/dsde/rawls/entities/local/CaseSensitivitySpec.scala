@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.config.ConfigFactory
 import cromwell.client.model.{ToolInputParameter, ValueType}
+import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
@@ -117,7 +118,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
           // get metadata
           val metadata =
-            services.entityService.entityTypeMetadata(testWorkspace.wsName, useCache = true).futureValue
+            services.entityService.entityTypeMetadata(testWorkspace.wsName, None, None, useCache = true).futureValue
           metadata.keySet shouldBe exemplarTypes
 
           // assert cache is populated and up-to-date
@@ -128,7 +129,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           cachedTypes.keySet shouldBe exemplarTypes
           // get metadata again, should come from cache, and verify
           val cachedMetadata =
-            services.entityService.entityTypeMetadata(testWorkspace.wsName, useCache = true).futureValue
+            services.entityService.entityTypeMetadata(testWorkspace.wsName, None, None, useCache = true).futureValue
           cachedMetadata.keySet shouldBe exemplarTypes
 
           runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) should contain(0)
@@ -941,7 +942,12 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       workbenchMetricBaseName = "test",
       EntityManager.defaultEntityManager(
         dataSource,
+        new MockWorkspaceManagerDAO(),
         new WorkspaceSettingRepository(dataSource),
+        new MockDataRepoDAO("mockrepo"),
+        samDAO,
+        bigQueryServiceFactory,
+        DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         "testMetricBaseName"

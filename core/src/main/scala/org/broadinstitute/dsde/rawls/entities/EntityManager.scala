@@ -4,8 +4,12 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
+import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
@@ -28,7 +32,7 @@ import scala.util.{Failure, Success}
  *
  *    Subclasses are:
  *      - LocalEntityProvider: the default. Legacy Rawls/CloudSQL implementation.
- *      - CompactEntityProvider: "Quicksilver" data tables, using JSON features in CloudSQL
+ *      - DataRepoEntityProvider: for working with Terra Data Repo snapshots.
  *
  * EntityProviderBuilder:
  *    since we create many instances of EntityProvider, we want a factory pattern. These builders are responsible
@@ -60,17 +64,22 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
       )
     }
 
-    // If the workspace has the CompactDataTables setting enabled, use CompactEntityProvider; else use LocalEntityProvider.
-    val compactDataTables =
-      workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
-                                                           CompactDataTables
-      ) map {
-        case Some(qs: CompactDataTablesSetting) => qs.config.enabled
-        case _                                  => false
+    // soon: look up the reference name to ensure it exists.
+    // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
+    val targetTagFuture = if (requestArguments.dataReference.isDefined) {
+      Future.successful(typeTag[DataRepoEntityProvider])
+    } else {
+      val compactDataTables =
+        workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
+                                                             CompactDataTables
+        ) map {
+          case Some(qs: CompactDataTablesSetting) => qs.config.enabled
+          case _                                  => false
+        }
+      compactDataTables map {
+        case true  => typeTag[CompactEntityProvider]
+        case false => typeTag[LocalEntityProvider]
       }
-    val targetTagFuture = compactDataTables map {
-      case true  => typeTag[CompactEntityProvider]
-      case false => typeTag[LocalEntityProvider]
     }
 
     targetTagFuture map { targetTag =>
@@ -94,7 +103,12 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 
 object EntityManager {
   def defaultEntityManager(dataSource: SlickDataSource,
+                           workspaceManagerDAO: WorkspaceManagerDAO,
                            workspaceSettingRepository: WorkspaceSettingRepository,
+                           dataRepoDAO: DataRepoDAO,
+                           samDAO: SamDAO,
+                           bqServiceFactory: GoogleBigQueryServiceFactory,
+                           config: DataRepoEntityProviderConfig,
                            cacheEnabled: Boolean,
                            queryTimeout: Duration,
                            metricsPrefix: String
@@ -108,10 +122,16 @@ object EntityManager {
                                      queryTimeout,
                                      metricsPrefix
       ) // implicit executionContext, system
+    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO,
+                                                                          dataRepoDAO,
+                                                                          samDAO,
+                                                                          bqServiceFactory,
+                                                                          config
+    ) // implicit executionContext
     val compactEntityProviderBuilder = new CompactEntityProviderBuilder(dataSource)
 
     new EntityManager(
-      Set(defaultEntityProviderBuilder, compactEntityProviderBuilder),
+      Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, compactEntityProviderBuilder),
       workspaceSettingRepository
     )
   }

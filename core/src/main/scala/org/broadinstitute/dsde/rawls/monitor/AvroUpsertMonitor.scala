@@ -460,6 +460,8 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
             workspace.toWorkspaceName,
             entityUpdateStream,
             upsert = isUpsert,
+            None,
+            None,
             requestContext
           )
         } yield upsertResults

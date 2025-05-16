@@ -52,7 +52,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val service = mock[EntityService]
     override val entityServiceConstructor = RawlsRequestContext => service
     when(
-      service.entityTypeMetadata(any[WorkspaceName], any[Boolean])
+      service.entityTypeMetadata(any[WorkspaceName],
+                                 any[Option[DataReferenceName]],
+                                 any[Option[GoogleProjectId]],
+                                 any[Boolean]
+      )
     )
       .thenReturn(
         Future.successful(Map("Test" -> EntityTypeMetadata(5000, "for-test", List("Attribute1", "Attribute2"))))
@@ -4065,7 +4069,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
     val argumentCaptor = captor[Boolean]
-    verify(services.service).entityTypeMetadata(any[WorkspaceName], argumentCaptor.capture())
+    verify(services.service).entityTypeMetadata(any[WorkspaceName],
+                                                any[Option[DataReferenceName]],
+                                                any[Option[GoogleProjectId]],
+                                                argumentCaptor.capture()
+    )
     assert(argumentCaptor.getValue)
   }
 
@@ -4078,7 +4086,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
     val argumentCaptor = captor[Boolean]
-    verify(services.service).entityTypeMetadata(any[WorkspaceName], argumentCaptor.capture())
+    verify(services.service).entityTypeMetadata(any[WorkspaceName],
+                                                any[Option[DataReferenceName]],
+                                                any[Option[GoogleProjectId]],
+                                                argumentCaptor.capture()
+    )
     assert(!argumentCaptor.getValue)
   }
 
@@ -4091,7 +4103,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
     val argumentCaptor = captor[Boolean]
-    verify(services.service).entityTypeMetadata(any[WorkspaceName], argumentCaptor.capture())
+    verify(services.service).entityTypeMetadata(any[WorkspaceName],
+                                                any[Option[DataReferenceName]],
+                                                any[Option[GoogleProjectId]],
+                                                argumentCaptor.capture()
+    )
     assert(argumentCaptor.getValue)
   }
 

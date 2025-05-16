@@ -25,7 +25,6 @@ case class CompactEntityRecord(id: Long,
                                deleted: Boolean,
                                attributes: Option[String]
 ) {
-  def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
   def toEntity: Entity = {
     val attrs: AttributeMap = Try(CompactEntitySerialization.fromSql(attributes)) match {
       case Success(attrMap) => attrMap
@@ -42,13 +41,6 @@ case class CompactEntityRecord(id: Long,
   * abbreviated model for rows in the ENTITY table when we don't need all the columns
   */
 case class CompactEntityRefRecord(id: Long, name: String, entityType: String) {
-  def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
-}
-
-/**
-  * abbreviated model for rows in the ENTITY table when we need the record_version but don't need other columns
-  */
-case class CompactEntityVersionRecord(id: Long, name: String, entityType: String, recordVersion: Long) {
   def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
 }
 

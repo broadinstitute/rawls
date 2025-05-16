@@ -73,14 +73,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def batchUpdateEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
     parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    // perform the updates
-    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowUpsert = false, config, parentContext)
-    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
-    withWorkspaceLastModified(dbResults)
-    // and return
-    dbResults
-  }
+  ): Future[Int] = ???
 
   override def batchUpsertEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],

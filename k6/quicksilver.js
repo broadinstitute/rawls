@@ -88,9 +88,8 @@ export const options = {
 // paginated search; this is the API that populates data tables in the UI
 export function entityQuery() {
   group(`${__ENV.TEST_GROUP}`, function() {
-    // page size 100 replicates what Terra UI asks for
     let res = http.get(
-      `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/file_inventory?page=1&pageSize=100&sortField=name&sortDirection=asc&filterOperator=and`,
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/target?page=1&pageSize=10&sortField=name&sortDirection=asc&filterOperator=and`,
       defaultParams);
     check(res, { "status is 200": (res) => res.status === 200 });
     sleep(.1);
@@ -158,30 +157,12 @@ export function getEntityMetadata() {
   });
 }
 
-// delete all entities of a given type
-export function deleteTable(testGroup, tableName) {
-  let res = http.del(
-      `${workspaceRoot(testGroup)}/entityTypes/${tableName}`, null, defaultParams);
-  return res.status;
-}
-
 export function setup() {
   // setup code, such as inserting test data before the test scenarios run
 }
 
-// teardown code, runs after all test scenarios are done
 export function teardown(data) {
-
-  const testGroups = ['baseline', 'test'];
-  const tablesToDelete = ['loadTestPuts'];
-
-  for (const testGroup of testGroups) {
-    for (const table of tablesToDelete) {
-      console.log(`deleting table '${table}' for test group '${testGroup}' ...`)
-      const statusCode = deleteTable(testGroup, table);
-      console.log(`... deleteTable ${testGroup}/${table} result is ${statusCode}`)
-    }
-  }
+  // teardown code, such as deleting data created by test scenarios
 }
 
 // helper functions
