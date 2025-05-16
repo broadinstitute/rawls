@@ -210,7 +210,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   /** Given a set of entity type/name pairs, return the count of those entities that exist.
     *
-    * TODO CORE-497: `execution plan: ???`
+    * `execution plan: uses idx_entity_type_name index. Extra: Using index condition; Using where`
     */
   def countExisting(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Int] =
     // short-circuit
@@ -236,7 +236,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   /** Given a set of entity type/name pairs, determine if all of those pairs exist.
     *
-    * TODO CORE-497: `execution plan: ???`
+    * `execution plan: uses idx_entity_type_name index. Extra: Using index condition; Using where` (always the same as countExisting())
     */
   def existsAll(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Boolean] =
     countExisting(workspaceId, refs).map(count => count == refs.size)
@@ -246,7 +246,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * Returns the number of rows deleted
    *
-   * TODO CORE-497: `execution plan: ???`
+   * `execution plan: Uses unq_from_to index. Extra: Using where`
    */
   def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] = {
     val typeNameClauses = generateTypeNameSql(fromRefs, typeColumn = "from_entity_type", nameColumn = "from_name")
@@ -263,7 +263,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    * Delete all rows in ENTITY_REFS for all entities of the given type
    *
    * Returns the number of rows deleted
-   * TODO CORE-497: `execution plan: ???`
+   *
+   * `execution plan: Uses unq_from_to index. Extra: Using where`
    */
   def deleteAllReferencesFromType(workspaceId: UUID, fromType: String): ReadWriteAction[Int] =
     sql"""delete from ENTITY_REFS where workspace_id = $workspaceId and from_entity_type = $fromType""".asUpdate
@@ -273,7 +274,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * Returns the number of rows upserted.
     *
-    * TODO CORE-497: `execution plan: ???`
+    * `execution plan: multi-row insert`
     */
   def insertReferences(workspaceId: UUID, references: Set[RefPointers]): ReadWriteAction[Int] =
     // short-circuit
@@ -357,7 +358,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
-  // TODO CORE-497: `execution plan: ???`
+  // `execution plan: uses idx_to index. Extra: Using where; Using index` (I think this may also use unq_from_to in some cases)
   def getReferencesTo(workspaceId: UUID,
                       refs: Seq[AttributeEntityReference]
   ): ReadAction[Seq[AttributeEntityReference]] = {
@@ -382,7 +383,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
-  // TODO CORE-497: `execution plan: ???`
+  // `execution plan: Uses unq_from_to index. Extra: Using where`
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] =
     sql"""select from_entity_type, from_name
          from ENTITY_REFS
