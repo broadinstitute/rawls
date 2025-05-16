@@ -1,11 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities.compact.batch
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   RawlsConcurrentModificationException,
   ReadWriteAction,
@@ -16,9 +14,9 @@ import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProviderConfig,
   CompactEntityRepository
 }
-import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 
@@ -173,19 +171,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
   }
 
   /** write this batch of Entity to the database */
-  private def insertBatch(batch: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
-
-    // nested helper method for building error responses
-    def generateReferenceError(message: String, notFounds: Set[AttributeEntityReference]) =
-      new RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.BadRequest,
-          message,
-          notFounds.map { notFound =>
-            ErrorReport(s"${notFound.entityType} ${notFound.entityName} not found", Seq.empty)
-          }.toSeq
-        )
-      )
+  private def insertBatch(batch: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] =
 
     for {
       // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
@@ -195,45 +181,18 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       // Find all requested references within this batch
       allReferences = findAllReferences(batch)
 
-      // To handle references, we need the ids of all entities we just wrote, as well as all the entities
-      // they reference. Generate a combined list of entity type/name pairs to use as lookup criteria
-      writtenEntityRefs = batch.map(_.toReference).toSet
-      lookupCriteria: Set[AttributeEntityReference] = writtenEntityRefs ++ allReferences.values.flatten.toSet
+      // verify all requested references exist
+      allExist <- repository.queries.existsAll(workspaceId, allReferences.values.flatten.toSet)
 
-      // look up the ids
-      foundIds <- repository.queries.getEntityRefs(workspaceId, lookupCriteria)
+      // did we find all the reference sources and targets?
+      _ = if (!allExist)
+        throw new EntityReferenceNotFoundException("Some entity references do not exist")
 
-      // did we find everything we just looked up?
-      _ = if (foundIds.size != lookupCriteria.size) {
-        // here's what the query actually returned; turn this into a Set
-        val actuallyFound = foundIds.map(_.toAttributeEntityReference).toSet
-        // did we find all the reference targets?
-        val notFoundReferenceTargets = allReferences.values.flatten.toSet diff actuallyFound
-        if (notFoundReferenceTargets.nonEmpty) {
-          throw generateReferenceError("Could not resolve some entity references", notFoundReferenceTargets)
-        }
-        // did we find all the entities we originally wrote? This should never happen, but let's be defensive
-        val notFoundWrittenEntities = writtenEntityRefs diff actuallyFound
-        if (notFoundWrittenEntities.nonEmpty)
-          throw generateReferenceError("Could not resolve some entity sources", notFoundWrittenEntities)
-      }
-
-      // build a lookup table for the ids we found
-      idLookup: Map[AttributeEntityReference, Long] = foundIds.map { rec =>
-        rec.toAttributeEntityReference -> rec.id
-      }.toMap
-
-      // rehydrate the looked-up ids for the entities we wrote in this batch
-      referenceSourcesToDelete: Set[Long] = writtenEntityRefs.map(ref => idLookup(ref))
-      // rehydrate the looked-up ids into sources and targets for the references to insert (from_id, to_id)
       referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
-        val toIds = tos.map(idLookup).toSet
-        RefPointers(idLookup(from), toIds)
+        RefPointers(from, tos.toSet)
       }.toSet
-      // insert the references into the ENTITY_REFS table.
-      _ <- repository.queries.deleteAllReferencesFrom(referenceSourcesToDelete)
-      _ <- repository.queries.upsertReferences(referencesToInsert)
+      _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toReference).toSet)
+      _ <- repository.queries.insertReferences(workspaceId, referencesToInsert)
     } yield entitiesCreated
-  }
 
 }
