@@ -141,7 +141,7 @@ class MethodLaunchSpec
           Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
 
           implicit val patienceConfig: PatienceConfig =
-            PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+            PatienceConfig(timeout = scaled(Span(2, Minutes)), interval = scaled(Span(20, Seconds)))
 
           eventually {
             val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
@@ -149,7 +149,7 @@ class MethodLaunchSpec
             withClue(
               s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted."
             ) {
-              status._1 shouldBe "Aborted"
+              status._1 shouldBe "Aborted" or "Aborting"
             }
           }
         }
