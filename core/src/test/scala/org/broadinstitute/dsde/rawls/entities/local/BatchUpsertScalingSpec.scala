@@ -7,7 +7,6 @@ import breeze.stats._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
@@ -27,9 +26,12 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeString,
+  CompactDataTablesSetting,
   RawlsRequestContext,
   RawlsUser,
   UserInfo
@@ -38,6 +40,8 @@ import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
@@ -45,9 +49,10 @@ import org.scalatest.matchers.should.Matchers
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.io.Source
 
 /**
@@ -105,18 +110,22 @@ class BatchUpsertScalingSpec
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
+    // when EntityManager asks if the workspace should use Quicksilver data tables, answer yes
+    val mockWorkspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(
+      mockWorkspaceSettingRepository.getWorkspaceSettingOfType(ArgumentMatchers.any[UUID](),
+                                                               ArgumentMatchers.any[WorkspaceSettingType]()
+      )
+    )
+      .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+
     val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        new MockWorkspaceManagerDAO(),
-        new WorkspaceSettingRepository(dataSource),
-        new MockDataRepoDAO(mockServer.mockServerBaseUrl),
-        samDAO,
-        bigQueryServiceFactory,
-        DataRepoEntityProviderConfig(100, 10, 0),
+        mockWorkspaceSettingRepository,
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -197,18 +206,18 @@ class BatchUpsertScalingSpec
         } else {
           val (loadDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource),
               waitDuration
             )
           }
           val (changeDuration, _) = profile {
             Await.result(
-              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource, None, None),
+              testApiService.entityService.batchUpsertEntities(minimalTestData.wsName, initialUpsertSource),
               waitDuration
             )
           }
           val (deleteDuration, _) = profile {
-            Await.result(testApiService.entityService.deleteEntities(minimalTestData.wsName, refsToDelete, None, None),
+            Await.result(testApiService.entityService.deleteEntities(minimalTestData.wsName, refsToDelete),
                          waitDuration
             )
           }

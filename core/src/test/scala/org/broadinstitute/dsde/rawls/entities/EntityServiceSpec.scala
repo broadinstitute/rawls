@@ -7,7 +7,6 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   EntityAndAttributesResult,
   EntityAttributeRecord,
@@ -144,12 +143,7 @@ class EntityServiceSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        new MockWorkspaceManagerDAO(),
         new WorkspaceSettingRepository(dataSource),
-        new MockDataRepoDAO(mockServer.mockServerBaseUrl),
-        samDAO,
-        bigQueryServiceFactory,
-        DataRepoEntityProviderConfig(100, 10, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -396,12 +390,7 @@ class EntityServiceSpec
       withClue(s"for page size '$pageSize':") {
         val entityQuery = EntityQuery(1, pageSize, "name", SortDirections.Ascending, None)
         val (_, entitySource) = Await.result(
-          services.entityService.queryEntitiesSource(testData.wsName,
-                                                     None,
-                                                     testData.sample1.entityType,
-                                                     entityQuery,
-                                                     None
-          ),
+          services.entityService.queryEntitiesSource(testData.wsName, testData.sample1.entityType, entityQuery),
           waitDuration
         )
         val actualEntities = Await.result(entitySource.runWith(Sink.seq), waitDuration)
@@ -414,12 +403,7 @@ class EntityServiceSpec
         val entityQuery = EntityQuery(1, pageSize, "name", SortDirections.Ascending, None)
         val ex = intercept[RawlsExceptionWithErrorReport] {
           Await.result(
-            services.entityService.queryEntitiesSource(testData.wsName,
-                                                       None,
-                                                       testData.sample1.entityType,
-                                                       entityQuery,
-                                                       None
-            ),
+            services.entityService.queryEntitiesSource(testData.wsName, testData.sample1.entityType, entityQuery),
             waitDuration
           )
         }
@@ -486,20 +470,16 @@ class EntityServiceSpec
     val waitDuration = Duration(10, SECONDS)
     // get metadata for all entities in this workspace before calling deleteEntities()
     val metadataBefore =
-      Await.result(services.entityService.entityTypeMetadata(testData.wsName, None, None, useCache = false),
-                   waitDuration
-      )
+      Await.result(services.entityService.entityTypeMetadata(testData.wsName, useCache = false), waitDuration)
 
     // call deleteEntities() with an empty input, should return zero entities deleted
     assertResult(Set.empty) {
-      Await.result(services.entityService.deleteEntities(testData.wsName, Seq.empty, None, None), waitDuration)
+      Await.result(services.entityService.deleteEntities(testData.wsName, Seq.empty), waitDuration)
     }
 
     // get metadata for all entities in this workspace after calling deleteEntities()
     val metadataAfter =
-      Await.result(services.entityService.entityTypeMetadata(testData.wsName, None, None, useCache = false),
-                   waitDuration
-      )
+      Await.result(services.entityService.entityTypeMetadata(testData.wsName, useCache = false), waitDuration)
 
     // metadata should be the same before and after
     metadataAfter shouldBe metadataBefore

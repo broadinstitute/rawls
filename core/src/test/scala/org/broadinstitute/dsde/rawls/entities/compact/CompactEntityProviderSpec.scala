@@ -93,8 +93,19 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
   it should "issue one insert statement for multiple entities" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
-    when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
+      DBIO.successful(
+        Seq(
+          CompactEntityRefRecord(1, "name1", "typeA"),
+          CompactEntityRefRecord(2, "name2", "typeA"),
+          CompactEntityRefRecord(3, "name3", "typeB")
+        )
+      )
+    )
+    when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
@@ -109,18 +120,28 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
+                                                    any(),
+                                                    mockitoEq(true)
+    )
     // entities have no references, so the input to upsertReferences should be empty
     verify(mockQuery, times(1)).upsertReferences(Set())
   }
 
   it should "issue multiple insert statements when given large batches" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(0))
-    when(mockQuery.getEntityRefs(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
+      DBIO.successful(
+        Range(0, 100) map { idx => CompactEntityRefRecord(idx, s"name$idx", "typeA") }
+      )
+    )
+    when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
-    val config = CompactEntityProviderConfig(maxSqlBatchSizeBytes = 2048) // pretty small to force batching
+    val config = CompactEntityProviderConfig(batchUpsertBatchSize = 25) // pretty small to force batching
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery, config = config)
@@ -140,7 +161,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called batchCreateEntities multiple times to write the entities
-    verify(mockQuery, Mockito.atLeast(2)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    verify(mockQuery, Mockito.atLeast(2))
+      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), mockitoEq(true))
     // entities have no references, so the input to upsertReferences should be empty
     verify(mockQuery, Mockito.atLeast(2)).upsertReferences(Set())
 
@@ -148,17 +170,21 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
   it should "ask to insert references" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.batchCreateEntities(any(), any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
     // this response must be exactly what is expected from the input to batchUpsertEntities
     when(mockQuery.getEntityRefs(any(), any())).thenReturn(
       DBIO.successful(
         Seq(
+          CompactEntityRefRecord(1, "name1", "typeA"),
           CompactEntityRefRecord(2, "name2", "typeA"),
           CompactEntityRefRecord(3, "name3", "typeB"),
           CompactEntityRefRecord(4, "targetName", "targetType")
         )
       )
     )
+    when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
@@ -192,7 +218,10 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
+                                                    any(),
+                                                    mockitoEq(true)
+    )
     // entities found references, so should ask to upsert those.
     // given the mock response defined above, we expect references from 2->4 and 3->4
     verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(4)), RefPointers(3, Set(4))))
@@ -1180,6 +1209,110 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       provider.prepareQueryEntitiesResult(query, unfilteredCount, CountAndSource(filteredCount, Source.empty))
     }
     error.code shouldBe StatusCodes.BadRequest
+  }
+
+  behavior of "BatchHandling.applyAll"
+
+  it should "apply subsequent updates to the same non-existent base" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1, updated")),
+          AddUpdateAttribute(AttributeName.withDefaultNS("col2"), AttributeString("val2"))
+        )
+      )
+    )
+
+    val existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity] = Map(
+      AttributeEntityReference("typeA", "some-other-entity") -> Entity(
+        "some-other-entity",
+        "typeA",
+        Map(
+          AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      )
+    )
+
+    val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
+    // The actual result is two entities, because we applied the two sets of operations in order
+    actual shouldBe Seq(
+      Entity(
+        "name1",
+        "typeA",
+        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"))
+      ),
+      Entity(
+        "name1",
+        "typeA",
+        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1, updated"),
+            AttributeName.withDefaultNS("col2") -> AttributeString("val2")
+        )
+      )
+    )
+  }
+
+  it should "apply subsequent updates to the same existent base" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1, updated")),
+          AddUpdateAttribute(AttributeName.withDefaultNS("col2"), AttributeString("val2"))
+        )
+      )
+    )
+
+    val existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity] = Map(
+      AttributeEntityReference("typeA", "name1") -> Entity(
+        "name1",
+        "typeA",
+        Map(
+          AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      )
+    )
+
+    val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
+    // The actual result is two entities, because we applied the two sets of operations in order
+    actual shouldBe Seq(
+      Entity(
+        "name1",
+        "typeA",
+        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"),
+            AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      ),
+      Entity(
+        "name1",
+        "typeA",
+        Map(
+          AttributeName.withDefaultNS("col1") -> AttributeString("val1, updated"),
+          AttributeName.withDefaultNS("col2") -> AttributeString("val2"),
+          AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
+        )
+      )
+    )
   }
 
   // ====================================================================================================

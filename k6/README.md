@@ -35,5 +35,7 @@ To test against different workspaces, change the value of the
 *IMPORTANT:*
 * The performance tests assume that three entities of type `target` with names `one`, `two`,
 and `three` already exist in the workspaces under test. Without those entities, tests will fail.
+* The performance tests assume that some entities of type `file_inventory` already exist in the
+workspaces under test. Without those entities, tests will fail.
 * The performance tests assume that the "test" workspace has Quicksilver data tables enabled; you can
 enable them via the `CompactDataTables` workspace setting.
