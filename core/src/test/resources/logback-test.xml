@@ -35,6 +35,12 @@
     </logger>
     -->
     <!--
+    <logger name="slick.jdbc.JdbcBackend.parameter" level="DEBUG" additivity="false">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="console"/>
+    </logger>
+    -->
+    <!--
     <logger name="slick.jdbc.StatementInvoker.result" level="DEBUG" additivity="false">
         <appender-ref ref="FILE"/>
         <appender-ref ref="console"/>

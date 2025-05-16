@@ -41,11 +41,9 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
-import java.util
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -68,7 +66,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def entityStoreId: Option[String] = None // unused
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
-  val workspaceContext = requestArguments.workspace
+  val workspaceContext: Workspace = requestArguments.workspace
 
   override def batchUpdateEntities(
     entityUpdates: Source[EntityUpdateDefinition, _],
@@ -128,11 +126,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           )
         // find all references in this entity
         refs: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = findAllReferences(entity)
-        // find all unique references in this entity
-        uniqueRefs: Set[AttributeEntityReference] = refs.values.flatten.toSet
+        // translate to RefPointers
+        refPointers: Set[RefPointers] = refs.map { case (from, to) =>
+          RefPointers(from, to.toSet)
+        }.toSet
+
         // verify that all references in the entity-to-be-saved actually exist
-        referencedIds <- repository.queries.getReferencedIds(workspaceId, uniqueRefs)
-        _ = if (uniqueRefs.size != referencedIds.size)
+        referencesExist <- repository.queries.existsAll(workspaceId, refs.values.flatten.toSet)
+        _ = if (!referencesExist)
           throw new EntityReferenceNotFoundException("Some entity references do not exist")
         // save the entity
         _ <- repository.queries.createEntity(workspaceId, entity)
@@ -141,8 +142,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         // normalized version.
         savedEntityRecordOption <- repository.queries.getEntity(workspaceId, entity.entityType, entity.name)
         savedEntityRecord = savedEntityRecordOption.getOrElse(throw new DataEntityException("Could not save entity"))
+        // verify that nobody else saved this same record in the meantime
+        _ = if (savedEntityRecord.recordVersion != 0L)
+          throw new RawlsConcurrentModificationException(
+            s"Detected concurrent modifications to entity ${savedEntityRecord.toAttributeEntityReference.entityType}/${savedEntityRecord.toAttributeEntityReference.entityName}."
+          )
+
         // save all references from this entity to other entities
-        _ <- replaceReferences(savedEntityRecord.id, referencedIds.toSet, isInsert = true)
+        _ <- repository.queries.insertReferences(workspaceId, refPointers)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
@@ -161,7 +168,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                                                  entityRefs
         )
         // getReferencesTo already excludes the entities that are being deleted
-        _ = if (referencingEntities.size != 0) {
+        _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesConflictException(referencingEntities.toSet)
         }
         // remove all references from these entities
@@ -178,7 +185,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                                                      entityType
         )
         // The getReferencesToType query already disregards references of the type to be deleted
-        _ = if (referencingEntities.size > 0) {
+        _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
         // remove all references from these entities
@@ -256,7 +263,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
    * performance and memory reasons.
    *
    * @param entityType the type of entities to return in the result set
-   * @param query criteria for filtering and paginating the result set
+   * @param entityQuery criteria for filtering and paginating the result set
    * @param parentContext tracing context into which this method will add traces
    * @return a tuple of 1) the fully materialized metadata, and 2) a streaming Source of Entity objects
    */
@@ -325,6 +332,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   // ====================================================================================================
 
   // Given an entity, finds all references in that entity. Returns a map of source entity -> target entities
+  // TODO CORE-497: return Set[RefPointers] instead
   protected[compact] def findAllReferences(
     entity: Entity
   ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
@@ -332,6 +340,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   // Given a Seq of entities, finds all references in those entities. Returns a map of source entity -> target entities
   // representing all references.
+  // TODO CORE-497: return Set[RefPointers] instead
   protected[compact] def findAllReferences(
     entities: Seq[Entity]
   ): Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
@@ -349,35 +358,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }
       .filter(_._2.nonEmpty)
       .toMap
-
-  // given already-validated references, represented as target ids, update the ENTITY_REFS table for a given source
-  // entity
-  protected[compact] def replaceReferences(fromId: Long,
-                                           toIds: Set[Long],
-                                           isInsert: Boolean
-  ): ReadWriteAction[(Int, Int)] = {
-    // short-circuit
-    if (isInsert && toIds.isEmpty) {
-      DBIO.successful((0, 0))
-    }
-
-    for {
-      // delete any reference pointers that should no longer exist
-      deletes <-
-        if (isInsert) {
-          DBIO.successful(0)
-        } else {
-          repository.queries.deleteReferencesWithFilter(fromId, toIds)
-        }
-      // upsert all reference pointers that do exist
-      upserts <-
-        if (toIds.isEmpty) {
-          DBIO.successful(0)
-        } else {
-          repository.queries.upsertReferences(Set(RefPointers(fromId, toIds)))
-        }
-    } yield (deletes, upserts)
-  }
 
   /**
     * Update the workspace's last-modified timestamp - in a separate transaction - upon successful
