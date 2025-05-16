@@ -147,7 +147,7 @@ class MethodLaunchSpec
             val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
             logger.info(s"Status is $status in Submission $billingProject/$workspaceName/$submissionId")
             withClue(
-              s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted."
+              s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted or Aborting."
             ) {
               status._1 shouldBe "Aborted" or "Aborting"
             }
