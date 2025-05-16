@@ -271,7 +271,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
     // insert rows
-    runAndWait(q.insertReferences(wsid, Set(RefPointers(from, tos.toSet)))) shouldBe tos.size
+    runAndWait(q.insertReferences(wsid, Set(RefMapping(from, tos.toSet)))) shouldBe tos.size
     runAndWait(q.getReferencesFrom(wsid, from)) should contain theSameElementsAs tos
     // delete rows
     runAndWait(q.deleteAllReferencesFrom(wsid, Set(from))) shouldBe tos.size
@@ -294,7 +294,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
     // insert
     runAndWait(
-      q.insertReferences(wsid, Set(RefPointers(from1, tos1.toSet), RefPointers(from2, tos2.toSet)))
+      q.insertReferences(wsid, Set(RefMapping(from1, tos1.toSet), RefMapping(from2, tos2.toSet)))
     ) shouldBe tos1.size + tos2.size
     runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs tos1
     runAndWait(q.getReferencesFrom(wsid, from2)) should contain theSameElementsAs tos2
@@ -319,9 +319,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.getReferencesFrom(wsid, from3)) shouldBe empty
 
     // references to insert
-    val pointers1 = RefPointers(from1, Set(target1, target2))
-    val pointers2 = RefPointers(from2, Set(target2, target3, target4))
-    val pointers3 = RefPointers(from3, Set(target4, target5, target6))
+    val pointers1 = RefMapping(from1, Set(target1, target2))
+    val pointers2 = RefMapping(from2, Set(target2, target3, target4))
+    val pointers3 = RefMapping(from3, Set(target4, target5, target6))
 
     // insert rows
     runAndWait(
@@ -350,10 +350,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // Insert references into different workspaces. Note that both workspaces reuse the "from" entity type/name
     runAndWait(
-      q.insertReferences(wsid, Set(RefPointers(from1, Set(target1))))
+      q.insertReferences(wsid, Set(RefMapping(from1, Set(target1))))
     )
     runAndWait(
-      q.insertReferences(wsid2, Set(RefPointers(from1, Set(target2))))
+      q.insertReferences(wsid2, Set(RefMapping(from1, Set(target2))))
     )
     runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs Set(target1)
     runAndWait(q.getReferencesFrom(wsid2, from1)) should contain theSameElementsAs Set(target2)
@@ -381,9 +381,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val target5 = AttributeEntityReference("targetType", "targetName5")
     val target6 = AttributeEntityReference("targetType", "targetName6")
     // source should have no rows in ENTITY_REFS table
-    val pointers1 = RefPointers(source1, Set(target1, target2))
-    val pointers2 = RefPointers(source2, Set(target3, target4, target5))
-    val pointers3 = RefPointers(source3, Set(target1, target3, target6))
+    val pointers1 = RefMapping(source1, Set(target1, target2))
+    val pointers2 = RefMapping(source2, Set(target3, target4, target5))
+    val pointers3 = RefMapping(source3, Set(target1, target3, target6))
     // insert rows
     runAndWait(
       q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
@@ -622,9 +622,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val target5 = AttributeEntityReference("targetType", "targetName5")
     val target6 = AttributeEntityReference("targetType", "targetName6")
     // source should have no rows in ENTITY_REFS table
-    val pointers1 = RefPointers(source1, Set(target1, target2))
-    val pointers2 = RefPointers(source2, Set(target3, target4, target5))
-    val pointers3 = RefPointers(source3, Set(target1, target3, target6))
+    val pointers1 = RefMapping(source1, Set(target1, target2))
+    val pointers2 = RefMapping(source2, Set(target3, target4, target5))
+    val pointers3 = RefMapping(source3, Set(target1, target3, target6))
     // insert rows
     runAndWait(
       q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
@@ -655,8 +655,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // referenced/target entities
     val target1 = AttributeEntityReference("targetType", "targetName1")
 
-    val pointers1 = RefPointers(source1, Set(target1))
-    val pointers2 = RefPointers(source2, Set(target1))
+    val pointers1 = RefMapping(source1, Set(target1))
+    val pointers2 = RefMapping(source2, Set(target1))
     // insert rows for workspace 1
     runAndWait(q.insertReferences(wsid, Set(pointers1))) shouldBe pointers1.to.size
     // insert rows for workspace 2
@@ -673,8 +673,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val entity3 = AttributeEntityReference("entityType", "name3")
 
     // entity2 references entity1; entity3 references both entity1 and entity2
-    val pointers1 = RefPointers(entity2, Set(entity1))
-    val pointers2 = RefPointers(entity3, Set(entity1, entity2))
+    val pointers1 = RefMapping(entity2, Set(entity1))
+    val pointers2 = RefMapping(entity3, Set(entity1, entity2))
 
     runAndWait(q.insertReferences(wsid, Set(pointers1, pointers2))) shouldBe pointers1.to.size + pointers2.to.size
 
@@ -700,9 +700,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val source2 = AttributeEntityReference("entityType1", "entity2")
     val source3 = AttributeEntityReference("entityType2", "entity3") // source 3 is a different type
 
-    val pointers1 = RefPointers(source1, Set(target3))
-    val pointers2 = RefPointers(source2, Set(target2))
-    val pointers3 = RefPointers(source3, Set(target1))
+    val pointers1 = RefMapping(source1, Set(target3))
+    val pointers2 = RefMapping(source2, Set(target2))
+    val pointers3 = RefMapping(source3, Set(target1))
 
     runAndWait(
       q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
@@ -719,8 +719,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val entity3 = AttributeEntityReference("entityTypeB", "name3")
 
     // entity2 references entity1; entity3 references both entity1 and entity2
-    val pointers1 = RefPointers(entity2, Set(entity1))
-    val pointers2 = RefPointers(entity3, Set(entity1, entity2))
+    val pointers1 = RefMapping(entity2, Set(entity1))
+    val pointers2 = RefMapping(entity3, Set(entity1, entity2))
 
     // insert rows
     runAndWait(
