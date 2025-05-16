@@ -33,7 +33,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   private val wsid = minimalTestData.workspace.workspaceIdAsUUID
   private val q = compactEntityQuery
 
-  behavior of "batchCreateEntities and getEntity"
+  behavior of "batchCreateEntities, getEntity and listEntities"
 
   // tests both batchCreateEntities and getEntity
   it should "handle entities with no attributes" in withMinimalTestDatabase { _ =>
@@ -1496,18 +1496,24 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // insert the entities
     runAndWait(q.batchCreateEntities(workspaceId, entities)) shouldBe entities.size
     // retrieve the entities; retrieved value includes its id
-    entities.map { entity =>
+    val recs = entities.map { entity =>
       val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
       actual should not be empty
       val rec = actual.get
-      // check entityType, name, and attributes
       rec.toEntity shouldBe entity
-      // check other db columns which are not present in the Entity object
       rec.deleted shouldBe false
       rec.recordVersion shouldBe 0
-
       rec
     }
+
+    // List all entities of the first entity type and check they match
+    if (entities.nonEmpty) {
+      val entityType = entities.head.entityType
+      val listed = runAndWait(q.listEntities(workspaceId, entityType))
+      listed.map(_.toEntity) should contain theSameElementsAs entities.filter(_.entityType == entityType)
+    }
+
+    recs
   }
 
   def testDesiredFields(filterTerms: Option[String], columnFilter: Option[EntityColumnFilter])(

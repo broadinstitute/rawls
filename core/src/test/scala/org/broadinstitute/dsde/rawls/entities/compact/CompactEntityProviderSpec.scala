@@ -785,7 +785,90 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe a[EntityNotFoundException]
   }
 
-  "listEntities" should "have tests" is pending
+  behavior of "listEntities"
+
+  it should "return entityType Entities when exists in db" in {
+    val recs: List[CompactEntityRecord] = List(
+      CompactEntityRecord(1, "name1", "type", UUID.randomUUID(), -1, deleted = false, Some("{}")),
+      CompactEntityRecord(2, "name2", "type", UUID.randomUUID(), -1, deleted = false, Some("{}")),
+      CompactEntityRecord(3, "name3", "type", UUID.randomUUID(), -1, deleted = false, Some("{}"))
+    )
+
+    // mocks
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.listEntities(any[UUID], anyString()))
+      .thenReturn(DBIO.successful(recs))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual = Await.result(
+      provider.listEntities("nonexistent-type").runFold(List.empty[Entity])(_ :+ _),
+      atMost
+    )
+    val expected = recs.map(rec => Entity(rec.name, rec.entityType, Map()))
+
+    actual shouldBe expected
+  }
+
+  it should "return entityType Entities with their attributes" in {
+    val attrString1 = """{"foo":"bar", "baz": 42}"""
+    val attrString2 = """{"alpha":"beta", "num": 99}"""
+    val recs: List[CompactEntityRecord] = List(
+      CompactEntityRecord(1, "name", "type", UUID.randomUUID(), -1, deleted = false, Some(attrString1)),
+      CompactEntityRecord(2, "name2", "type2", UUID.randomUUID(), -1, deleted = false, Some(attrString2))
+    )
+
+    // mocks
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.listEntities(any[UUID], anyString()))
+      .thenReturn(DBIO.successful(recs))
+
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual = Await.result(
+      provider.listEntities("nonexistent-type").runFold(List.empty[Entity])(_ :+ _),
+      atMost
+    )
+
+    val expected = List(
+      Entity(
+        recs(0).name,
+        recs(0).entityType,
+        Map(
+          AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+          AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
+        )
+      ),
+      Entity(
+        recs(1).name,
+        recs(1).entityType,
+        Map(
+          AttributeName.withDefaultNS("alpha") -> AttributeString("beta"),
+          AttributeName.withDefaultNS("num") -> AttributeNumber(99)
+        )
+      )
+    )
+
+    actual shouldBe expected
+  }
+
+  it should "return empty result if entityType Entities not found in db" in {
+    // mocks
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    when(mockQuery.listEntities(any[UUID], anyString()))
+      .thenReturn(DBIO.successful(List.empty))
+    // provider using mocks
+    val provider = providerWithMocks(mockQuery)
+
+    val actual = Await.result(
+      provider.listEntities("nonexistent-type").runFold(List.empty[Entity])(_ :+ _),
+      atMost
+    )
+    actual shouldBe List.empty
+  }
+
   "queryEntities" should "have tests" is pending
   "queryEntitiesSource" should "have tests" is pending
   "renameAttribute" should "have tests" is pending

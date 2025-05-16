@@ -256,8 +256,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
         Get(s"/workspaces/${compactWs.namespace}/${compactWs.name}/entities/some-type") ~>
           withHandlers(services.entityRoutes()) ~>
           check {
-            status shouldBe StatusCodes.NotImplemented
-            responseAs[ErrorReport].message shouldBe "list all entities not supported for compact data tables."
+            status shouldBe StatusCodes.OK
           }
       }
   }
