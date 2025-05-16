@@ -182,10 +182,10 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       allReferences = findAllReferences(batch)
 
       // verify all requested references exist
-      isExists <- repository.queries.existsAll(workspaceId, allReferences.values.flatten.toSet)
+      allExist <- repository.queries.existsAll(workspaceId, allReferences.values.flatten.toSet)
 
       // did we find all the reference sources and targets?
-      _ = if (!isExists)
+      _ = if (!allExist)
         throw new EntityReferenceNotFoundException("Some entity references do not exist")
 
       referencesToInsert: Set[RefPointers] = allReferences.map { case (from, tos) =>
