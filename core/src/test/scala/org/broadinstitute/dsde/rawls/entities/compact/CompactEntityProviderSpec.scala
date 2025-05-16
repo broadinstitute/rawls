@@ -193,8 +193,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     // given the mock response defined above, we expect references from name2->targetName and name3->targetName
     verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID,
                                                  Set(
-                                                   RefPointers(ref2, Set(refTarget)),
-                                                   RefPointers(ref3, Set(refTarget))
+                                                   RefMapping(ref2, Set(refTarget)),
+                                                   RefMapping(ref3, Set(refTarget))
                                                  )
     )
   }
@@ -347,7 +347,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     verify(mockQuery, times(1)).insertReferences(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
-        RefPointers(
+        RefMapping(
           entityToCreate.toReference,
           Set(
             AttributeEntityReference("referencedType", "referencedName0"),
@@ -843,7 +843,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val actual = provider.findAllReferences(entity)
 
     val expected = Set(
-      RefPointers(
+      RefMapping(
         AttributeEntityReference("type", "name"),
         Set(
           AttributeEntityReference("refTypeA", "refName1"),
@@ -925,7 +925,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       provider.findAllReferences(Seq(entity1, entity2, entity3))
 
     val expected = Set(
-      RefPointers(
+      RefMapping(
         entity1.toReference,
         Set(
           AttributeEntityReference("refTypeA", "refName1"),
@@ -933,7 +933,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
           AttributeEntityReference("refTypeB", "refName3")
         )
       ),
-      RefPointers(entity3.toReference, Set(AttributeEntityReference("refTypeC", "refName4")))
+      RefMapping(entity3.toReference, Set(AttributeEntityReference("refTypeC", "refName4")))
     )
 
     actual shouldBe expected
@@ -969,7 +969,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       provider.findAllReferences(Seq(entity1, entity2, entity3))
 
     val expected = Set(
-      RefPointers(
+      RefMapping(
         entity1.toReference,
         Set(
           AttributeEntityReference("targetType", "targetName3")

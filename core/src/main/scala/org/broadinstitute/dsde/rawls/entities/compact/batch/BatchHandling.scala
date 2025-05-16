@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   RawlsConcurrentModificationException,
   ReadWriteAction,
-  RefPointers
+  RefMapping
 }
 import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProvider,
@@ -179,7 +179,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, allowUpsert = allowUpsert)
 
       // Find all requested references within this batch
-      allReferences: Set[RefPointers] = findAllReferences(batch)
+      allReferences: Set[RefMapping] = findAllReferences(batch)
 
       // verify all requested references exist
       allExist <- repository.queries.existsAll(workspaceId, allReferences.flatMap(_.to))
