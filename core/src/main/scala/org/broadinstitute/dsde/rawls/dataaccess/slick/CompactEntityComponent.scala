@@ -187,13 +187,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    * `execution plan: index range scan; using where. Index: idx_entity_type_name`
    */
   def listEntities(workspaceId: UUID, entityType: String): ReadAction[Seq[CompactEntityRecord]] =
-    multipleEntityQuery(workspaceId, entityType).as[CompactEntityRecord]
-
-  private def multipleEntityQuery(workspaceId: UUID, entityType: String) =
     sql"""#$basicCompactEntitySelect
-          #$fromEntityWhereNotDeleted
-          and workspace_id = $workspaceId
-          and entity_type = $entityType"""
+        #$fromEntityWhereNotDeleted
+        and workspace_id = $workspaceId
+        and entity_type = $entityType""".as[CompactEntityRecord]
 
   /** Given a set of entity type/name pairs, return the CompactEntityRefRecord for those pairs.
     * The CompactEntityRefRecord includes the internal database id for these entities.
