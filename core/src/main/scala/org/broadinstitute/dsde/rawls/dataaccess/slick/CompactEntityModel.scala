@@ -63,8 +63,7 @@ case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attribute
 case class RefPointerRecord(fromId: Long, toId: Long)
 
 /** all reference pointers from one entity to all its reference targets */
-// TODO CORE-497: rename
-case class RefPointers(from: AttributeEntityReference, to: Set[AttributeEntityReference])
+case class RefMapping(from: AttributeEntityReference, to: Set[AttributeEntityReference])
 
 case class EntityTypeAndAttributeKey(
   entityType: String,
