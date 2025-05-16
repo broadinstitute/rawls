@@ -19,7 +19,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
@@ -68,8 +67,7 @@ class SubmissionSpec(_system: ActorSystem)
     with Eventually
     with MockitoTestUtils
     with StatsDTestUtils
-    with RawlsTestUtils
-    with DataRepoEntityProviderSpecSupport {
+    with RawlsTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("SubmissionSpec"))
@@ -526,12 +524,7 @@ class SubmissionSpec(_system: ActorSystem)
       val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
         dataSource,
-        workspaceManagerDAO,
         new WorkspaceSettingRepository(dataSource),
-        dataRepoDAO,
-        samDAO,
-        bigQueryServiceFactory,
-        DataRepoEntityProviderConfig(100, 10000, 0),
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -1400,59 +1393,6 @@ class SubmissionSpec(_system: ActorSystem)
       submissionData.submissionRoot should not include "intermediates"
     }
 
-  it should "create data repo submission" in {
-    val tableData = List.fill(3)(UUID.randomUUID().toString).map(rowId => rowId -> s"value $rowId").toMap
-    dataRepoSubmissionTest(tableData) { (submissionsService, methodConfig, snapshotId) =>
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = methodConfig.namespace,
-        methodConfigurationName = methodConfig.name,
-        entityType = None,
-        entityName = None,
-        expression = None,
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-
-      // change the expression to include both workspace and entity lookups
-      val workspaceAttrName = "attr"
-      val workspaceAttrValue = "foobar"
-      val inputsWithWorkspaceExpression = methodConfig.inputs.map { case (name, expr) =>
-        name -> AttributeString(s"""{"entity": ${expr.value}, "workspace": workspace.$workspaceAttrName}""")
-      }
-      runAndWait(
-        methodConfigurationQuery.upsert(minimalTestData.workspace,
-                                        methodConfig.copy(inputs = inputsWithWorkspaceExpression)
-        )
-      )
-      runAndWait(
-        workspaceQuery.createOrUpdate(
-          minimalTestData.workspace.copy(attributes =
-            Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue))
-          )
-        )
-      )
-
-      val resultSubmission =
-        Await.result(submissionsService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
-
-      resultSubmission.header.entityStoreId shouldBe Some(snapshotId.toString)
-      resultSubmission.header.entityType shouldBe methodConfig.rootEntityType
-
-      val expectedValidInputs = tableData.map { case (rowId, resultVal) =>
-        val expectedRawJson = s"""{"entity": "$resultVal", "workspace": "$workspaceAttrValue"}"""
-        SubmissionValidationEntityInputs(rowId,
-                                         Set(
-                                           SubmissionValidationValue(Option(AttributeValueRawJson(expectedRawJson)),
-                                                                     None,
-                                                                     methodConfig.inputs.keys.head
-                                           )
-                                         )
-        )
-      }
-      resultSubmission.workflows should contain theSameElementsAs expectedValidInputs
-    }
-  }
-
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
@@ -1657,65 +1597,6 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
-  def dataRepoSubmissionTest[T](
-    tableData: Map[String, String]
-  )(test: (SubmissionsService, MethodConfiguration, UUID) => T) = {
-    val tableResult: TableResult = prepareBqData(tableData)
-
-    val dataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
-
-    val snapshotUUID: UUID = UUID.randomUUID()
-    val tableName = "table1"
-    val columnName = "value"
-
-    when(dataRepoDAO.getSnapshot(snapshotUUID, userInfo.accessToken)).thenReturn(
-      createSnapshotModel(
-        List(
-          new TableModel()
-            .name(tableName)
-            .primaryKey(null)
-            .rowCount(0)
-            .columns(List(columnName).map(new ColumnModel().name(_)).asJava)
-        )
-      ).id(snapshotUUID)
-    )
-    when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
-
-    val dataReferenceName = DataReferenceName("dataref")
-    val dataReferenceDescription = Option(DataReferenceDescriptionField("description"))
-
-    val methodConfig = MethodConfiguration(
-      "dsde",
-      "DataRepoMethodConfig",
-      Some(tableName),
-      prerequisites = None,
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")),
-      outputs = Map.empty,
-      AgoraMethod("dsde", "three_step", 1),
-      dataReferenceName = Option(dataReferenceName)
-    )
-
-    withDataAndService(
-      { (submissionsService, workspaceManagerDAO) =>
-        workspaceManagerDAO.createDataRepoSnapshotReference(
-          minimalTestData.workspace.workspaceIdAsUUID,
-          snapshotUUID,
-          dataReferenceName,
-          dataReferenceDescription,
-          dataRepoDAO.getInstanceName,
-          CloningInstructionsEnum.NOTHING,
-          None,
-          testContext
-        )
-        runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
-        test(submissionsService, methodConfig, snapshotUUID)
-      },
-      withMinimalTestDatabase[Any],
-      bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)),
-      dataRepoDAO = dataRepoDAO
-    )
-  }
-
   private def prepareBqData(tableData: Map[String, String]) = {
     val rowIdField = Field.of("datarepo_row_id", LegacySQLTypeName.STRING)
     val valueField = Field.of("value", LegacySQLTypeName.STRING)
@@ -1736,134 +1617,6 @@ class SubmissionSpec(_system: ActorSystem)
     val tableResult: TableResult = new TableResult(schema, 1, page)
     tableResult
   }
-
-  it should "validate data repo submission" in {
-    val tableData = List.fill(3)(UUID.randomUUID().toString).map(rowId => rowId -> s"value $rowId").toMap
-    dataRepoSubmissionTest(tableData) { (submissionsService, methodConfig, snapshotId) =>
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = methodConfig.namespace,
-        methodConfigurationName = methodConfig.name,
-        entityType = None,
-        entityName = None,
-        expression = None,
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-
-      val vData =
-        Await.result(submissionsService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
-
-      val expectedValidInputs = tableData.map { case (rowId, resultVal) =>
-        SubmissionValidationEntityInputs(
-          rowId,
-          Set(SubmissionValidationValue(Option(AttributeString(resultVal)), None, methodConfig.inputs.keys.head))
-        )
-      }
-      vData.validEntities should contain theSameElementsAs expectedValidInputs
-      assert(vData.invalidEntities.isEmpty)
-    }
-  }
-
-  it should "detect invalid data repo submission" in {
-    val tableData = List.fill(3)(UUID.randomUUID().toString).map(rowId => rowId -> null).toMap
-    dataRepoSubmissionTest(tableData) { (submissionsService, methodConfig, snapshotId) =>
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = methodConfig.namespace,
-        methodConfigurationName = methodConfig.name,
-        entityType = None,
-        entityName = None,
-        expression = None,
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-
-      val vData =
-        Await.result(submissionsService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
-
-      assert(vData.validEntities.isEmpty)
-      val expectedInvalidInputs = tableData.keys.map(rowId =>
-        SubmissionValidationEntityInputs(
-          rowId,
-          Set(
-            SubmissionValidationValue(
-              None,
-              Some("Expected single value for workflow input, but evaluated result set was empty"),
-              methodConfig.inputs.keys.head
-            )
-          )
-        )
-      )
-      vData.invalidEntities should contain theSameElementsAs expectedInvalidInputs
-    }
-  }
-
-  it should "report error when data reference exists with entity name" in
-    dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = methodConfig.namespace,
-        methodConfigurationName = methodConfig.name,
-        entityType = methodConfig.rootEntityType,
-        entityName = Option("name"),
-        expression = None,
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-
-      val ex = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
-      }
-      ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
-      ex.errorReport.causes should have length 1
-      ex.errorReport.causes.head.message shouldBe "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."
-    }
-
-  it should "report error when data reference points to unknown snapshot" in
-    dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
-      runAndWait(
-        methodConfigurationQuery.upsert(minimalTestData.workspace,
-                                        methodConfig.copy(dataReferenceName = Some(DataReferenceName("unknown")))
-        )
-      )
-
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = methodConfig.namespace,
-        methodConfigurationName = methodConfig.name,
-        entityType = None,
-        entityName = None,
-        expression = None,
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-
-      val ex = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
-      }
-      ex.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
-      ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
-    }
-
-  it should "report error when root entity type does not refer to a table in the snapshot" in
-    dataRepoSubmissionTest(Map.empty) { (submissionsService, methodConfig, snapshotId) =>
-      runAndWait(
-        methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(rootEntityType = Some("unknown")))
-      )
-
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = methodConfig.namespace,
-        methodConfigurationName = methodConfig.name,
-        entityType = None,
-        entityName = None,
-        expression = None,
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-
-      val ex = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
-      }
-      ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
-      ex.errorReport.message shouldBe "Validation errors: Invalid inputs: three_step.cgrep.pattern -> Table `unknown` does not exist in snapshot"
-    }
 
   "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestSubmissionsService {
     submissionsService =>

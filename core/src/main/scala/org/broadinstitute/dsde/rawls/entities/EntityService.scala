@@ -4,8 +4,6 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
@@ -89,12 +87,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       }.recover(sqlLoggingRecover(s"createEntity: $workspaceName"))
     }
 
-  def getEntity(workspaceName: WorkspaceName,
-                entityType: String,
-                entityName: String,
-                dataReference: Option[DataReferenceName],
-                billingProject: Option[GoogleProjectId]
-  ): Future[Entity] =
+  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[Entity] =
     traceFutureWithParent("EntityService.getEntity", ctx) { localContext =>
       traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
         getV2WorkspaceContextAndPermissions(workspaceName,
@@ -105,7 +98,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         val entityFuture = for {
           entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
             entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+              EntityRequestArguments(workspaceContext, s)
             )
           }
           entity <- traceFutureWithParent("EntityProvider.getEntity", localContext) { s =>
@@ -121,7 +114,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             )
           }
           .recover(sqlLoggingRecover(s"getEntity: $workspaceName $entityType/$entityName"))
-          .recover(bigQueryRecover)
+          .recover(queryRecover)
       }
     }
 
@@ -152,9 +145,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def deleteEntities(workspaceName: WorkspaceName,
-                     entRefs: Seq[AttributeEntityReference],
-                     dataReference: Option[DataReferenceName],
-                     billingProject: Option[GoogleProjectId]
+                     entRefs: Seq[AttributeEntityReference]
   ): Future[Set[AttributeEntityReference]] =
     traceFutureWithParent("EntityService.deleteEntities", ctx) { localContext =>
       // short-circuit: if caller requested to delete nothing, then we do nothing
@@ -170,7 +161,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           val deleteFuture = for {
             entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
               entityManager.resolveProviderFuture(
-                EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+                EntityRequestArguments(workspaceContext, s)
               )
             }
             _ <- traceFutureWithParent("entityProvider.deleteEntities", localContext) { s =>
@@ -183,7 +174,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
               delEx.referringEntities
             }
             .recover(sqlLoggingRecover(s"deleteEntities: $workspaceName ${entRefs.size} entities"))
-            .recover(bigQueryRecover)
+            .recover(queryRecover)
         }
       }
     }
@@ -203,7 +194,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         val deleteFuture = for {
           entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
             entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+              EntityRequestArguments(workspaceContext, s)
             )
           }
           numberOfEntitiesDeleted <- traceFutureWithParent("EntityProvider.deleteEntitiesOfType", localContext) { s =>
@@ -222,7 +213,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             )
           }
           .recover(sqlLoggingRecover(s"deleteEntitiesOfType: $workspaceName $entityType"))
-          .recover(bigQueryRecover)
+          .recover(queryRecover)
       }
     }
 
@@ -317,11 +308,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
     }
 
-  def entityTypeMetadata(workspaceName: WorkspaceName,
-                         dataReference: Option[DataReferenceName],
-                         billingProject: Option[GoogleProjectId],
-                         useCache: Boolean
-  ): Future[Map[String, EntityTypeMetadata]] =
+  def entityTypeMetadata(workspaceName: WorkspaceName, useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     traceFutureWithParent("EntityService.entityTypeMetadata", ctx) { localContext =>
       (traceFutureWithParent("getV2WorkspaceContextAndPermissions", localContext) { _ =>
         getV2WorkspaceContextAndPermissions(workspaceName,
@@ -332,7 +319,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         val metadataFuture = for {
           entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
             entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+              EntityRequestArguments(workspaceContext, s)
             )
           }
           metadata <- traceFutureWithParent("EntityProvider.entityTypeMetadata", localContext) { s =>
@@ -340,7 +327,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
         } yield metadata
 
-        metadataFuture.recover(bigQueryRecover)
+        metadataFuture.recover(queryRecover)
       }).recover(
         sqlLoggingRecover(s"entityTypeMetadata: $workspaceName")
       )
@@ -365,10 +352,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def queryEntitiesSource(workspaceName: WorkspaceName,
-                          dataReference: Option[DataReferenceName],
                           entityType: String,
-                          query: EntityQuery,
-                          billingProject: Option[GoogleProjectId]
+                          query: EntityQuery
   ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
     traceFutureWithParent("EntityService.queryEntitiesSource", ctx) { localContext =>
       if (query.pageSize > pageSizeLimit) {
@@ -386,7 +371,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         val queryFuture = for {
           entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
             entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+              EntityRequestArguments(workspaceContext, s)
             )
           }
           metadataAndEntitySource <- traceFutureWithParent("EntityProvider.queryEntitiesSource", localContext) { s =>
@@ -394,7 +379,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
         } yield metadataAndEntitySource
 
-        queryFuture.recover(bigQueryRecover)
+        queryFuture.recover(queryRecover)
       }
     }
 
@@ -421,7 +406,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
         _ = authDomainCheck(sourceAD.toSet, destAD.toSet)
         entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(destWsCtx, s, None, None))
+          entityManager.resolveProviderFuture(EntityRequestArguments(destWsCtx, s))
         }
         entityCopyResponse <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
           entityProvider
@@ -432,7 +417,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                           linkExistingEntities,
                           s
             )
-            .recover(bigQueryRecover)
+            .recover(queryRecover)
         }
       } yield entityCopyResponse)
         .recover(
@@ -443,8 +428,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
                                   entityUpdates: Source[EntityUpdateDefinition, _],
                                   upsert: Boolean,
-                                  dataReference: Option[DataReferenceName],
-                                  billingProject: Option[GoogleProjectId],
                                   parentContext: RawlsRequestContext
   ): Future[Int] =
     traceFutureWithParent("getV2WorkspaceContextAndPermissions", parentContext) { _ =>
@@ -456,7 +439,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       for {
         entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", parentContext) { s =>
           entityManager.resolveProviderFuture(
-            EntityRequestArguments(workspaceContext, s, dataReference, billingProject)
+            EntityRequestArguments(workspaceContext, s)
           )
         }
         entities <-
@@ -472,25 +455,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
       } yield entities
     }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Source[EntityUpdateDefinition, _],
-                          dataReference: Option[DataReferenceName],
-                          billingProject: Option[GoogleProjectId]
-  ): Future[Int] =
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Source[EntityUpdateDefinition, _]): Future[Int] =
     traceFutureWithParent("EntityService.batchUpdateEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, s)
         .recover(
           sqlLoggingRecover(s"batchUpdateEntities: $workspaceName")
         )
     }
 
-  def batchUpsertEntities(workspaceName: WorkspaceName,
-                          entityUpdates: Source[EntityUpdateDefinition, _],
-                          dataReference: Option[DataReferenceName],
-                          billingProject: Option[GoogleProjectId]
-  ): Future[Int] =
+  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Source[EntityUpdateDefinition, _]): Future[Int] =
     traceFutureWithParent("EntityService.batchUpsertEntities", ctx) { s =>
-      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, s)
+      batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, s)
         .recover(
           sqlLoggingRecover(s"batchUpsertEntities: $workspaceName")
         )
@@ -552,20 +527,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
       throw sqlException;
   }
 
-  private def bigQueryRecover[U]: PartialFunction[Throwable, U] = {
+  private def queryRecover[U]: PartialFunction[Throwable, U] = {
     case dee: DataEntityException =>
       throw new RawlsExceptionWithErrorReport(ErrorReport(dee.code, dee.getMessage))
-    case bqe: BigQueryException =>
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage)
-      )
-    case gjre: GoogleJsonResponseException =>
-      // unlikely to hit this case; we should see BigQueryExceptions instead of GoogleJsonResponseExceptions
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError),
-                    gjre.getMessage
-        )
-      )
     case report: RawlsExceptionWithErrorReport =>
       throw report // don't rewrap these, just rethrow
     case ex: Exception =>
