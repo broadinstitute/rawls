@@ -149,7 +149,7 @@ class MethodLaunchSpec
             withClue(
               s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted or Aborting."
             ) {
-              status._1 shouldBe status._1 should (be("Aborted") or be("Aborting"))
+              status._1 should (be("Aborted") or be("Aborting"))
             }
           }
         }
