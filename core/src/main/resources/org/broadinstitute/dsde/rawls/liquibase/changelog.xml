@@ -141,4 +141,5 @@
     <include file="changesets/20250401_entity_json_support.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250425_entity_json_serdes_format.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250428_entity_keys_update_trigger.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250514_use_names_in_entity_refs.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
