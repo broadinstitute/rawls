@@ -289,7 +289,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: multi-row insert`
     */
-  def insertReferences(workspaceId: UUID, references: Set[RefPointers]): ReadWriteAction[Int] =
+  def insertReferences(workspaceId: UUID, references: Set[RefMapping]): ReadWriteAction[Int] =
     // short-circuit
     if (references.isEmpty) {
       DBIO.successful(0)

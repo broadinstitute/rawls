@@ -82,9 +82,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   // tests for CompactEntityProvider public implementations of EntityProvider methods
   // ====================================================================================================
 
-  "batchUpdateEntities" should "have tests" is pending
-
-  behavior of "batchUpsertEntities"
+  behavior of "batchUpsertEntities and batchUpdateEntities"
 
   it should "issue one insert statement for multiple entities" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
@@ -200,8 +198,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     // given the mock response defined above, we expect references from name2->targetName and name3->targetName
     verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID,
                                                  Set(
-                                                   RefPointers(ref2, Set(refTarget)),
-                                                   RefPointers(ref3, Set(refTarget))
+                                                   RefMapping(ref2, Set(refTarget)),
+                                                   RefMapping(ref3, Set(refTarget))
                                                  )
     )
   }
@@ -354,7 +352,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     verify(mockQuery, times(1)).insertReferences(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
-        RefPointers(
+        RefMapping(
           entityToCreate.toReference,
           Set(
             AttributeEntityReference("referencedType", "referencedName0"),
@@ -826,7 +824,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val entity = Entity("name", "type", attributes)
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
+    val actual = provider.findAllReferences(entity)
 
     actual shouldBe empty
   }
@@ -846,15 +844,17 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val entity = Entity("name", "type", attributes)
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
+    val actual = provider.findAllReferences(entity)
 
-    val expected = Map(
-      AttributeEntityReference("type", "name") ->
-        Seq(
+    val expected = Set(
+      RefMapping(
+        AttributeEntityReference("type", "name"),
+        Set(
           AttributeEntityReference("refTypeA", "refName1"),
           AttributeEntityReference("refTypeB", "refName2"),
           AttributeEntityReference("refTypeB", "refName3")
         )
+      )
     )
 
     actual shouldBe expected
@@ -867,7 +867,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(input)
+    val actual = provider.findAllReferences(input)
 
     actual shouldBe empty
   }
@@ -881,7 +881,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val entity2 = Entity("name2", "type", attributes)
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+    val actual =
       provider.findAllReferences(Seq(entity1, entity2))
 
     actual shouldBe empty
@@ -905,7 +905,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
     )
     // entity2 has no references
-    val entity2 = Entity("name1",
+    val entity2 = Entity("name2",
                          "type",
                          Map(
                            AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
@@ -914,7 +914,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     )
     // entity3 has a single reference
     val entity3 = Entity(
-      "name1",
+      "name3",
       "type",
       Map(
         AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
@@ -925,16 +925,60 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+    val actual =
       provider.findAllReferences(Seq(entity1, entity2, entity3))
 
-    val expected = Map(
-      entity1.toReference -> Seq(
-        AttributeEntityReference("refTypeA", "refName1"),
-        AttributeEntityReference("refTypeB", "refName2"),
-        AttributeEntityReference("refTypeB", "refName3")
+    val expected = Set(
+      RefMapping(
+        entity1.toReference,
+        Set(
+          AttributeEntityReference("refTypeA", "refName1"),
+          AttributeEntityReference("refTypeB", "refName2"),
+          AttributeEntityReference("refTypeB", "refName3")
+        )
       ),
-      entity3.toReference -> Seq(AttributeEntityReference("refTypeC", "refName4"))
+      RefMapping(entity3.toReference, Set(AttributeEntityReference("refTypeC", "refName4")))
+    )
+
+    actual shouldBe expected
+  }
+
+  it should "respect only the last entity if an entity is repeated in the input Seq" in {
+    // repeat the same entity three times in the input, each time with a different reference
+    val entity1 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("ref1") -> AttributeEntityReference("targetType", "targetName1")
+      )
+    )
+    val entity2 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("ref2") -> AttributeEntityReference("targetType", "targetName2")
+      )
+    )
+    val entity3 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("ref3") -> AttributeEntityReference("targetType", "targetName3")
+      )
+    )
+
+    val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
+
+    val actual =
+      provider.findAllReferences(Seq(entity1, entity2, entity3))
+
+    val expected = Set(
+      RefMapping(
+        entity1.toReference,
+        Set(
+          AttributeEntityReference("targetType", "targetName3")
+        )
+      )
     )
 
     actual shouldBe expected
