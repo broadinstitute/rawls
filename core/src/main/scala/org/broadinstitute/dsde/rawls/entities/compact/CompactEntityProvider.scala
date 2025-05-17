@@ -42,6 +42,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import slick.dbio.DBIO
+import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
@@ -241,12 +242,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   override def listEntities(entityType: String): Source[Entity, NotUsed] =
     Source
-      .future(repository.dataSource.inTransaction(ReadOnly) { _ =>
-        repository.queries.listEntities(workspaceId, entityType)
-      })
-      .mapConcat { entityRec =>
-        entityRec.map(_.toEntity).toList
-      }
+      .fromPublisher(
+        repository.dataSource.database.stream(
+          repository.queries.listEntities(workspaceId, entityType)
+        )
+      )
+      .map(_.toEntity)
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
