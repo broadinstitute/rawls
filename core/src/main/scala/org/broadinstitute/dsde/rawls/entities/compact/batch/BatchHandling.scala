@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.{
 }
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{Entity, EntityKey, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 
@@ -76,7 +76,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
   ): Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Int], _] =
     Flow[Seq[EntityUpdateDefinition]].map { updates =>
       // Extract the entity type and name from each update
-      val updateIdentifiers = updates.map(update => AttributeEntityReference(update.entityType, update.name))
+      val updateIdentifiers = updates.map(update => EntityKey(update.entityType, update.name))
 
       for {
         // Query the database for any pre-existing entities being updated
@@ -88,7 +88,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
 
         // Massage the existing entities so they're easier to look up later
         existingEntitiesByIdentifier = existingEntities
-          .map(rec => rec.toAttributeEntityReference -> rec.toEntity)
+          .map(rec => rec.toKey -> rec.toEntity)
           .toMap
 
         // How many updates do we have for each entity being updated?
@@ -99,14 +99,13 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
           }
         // what are the existing record_versions?
         existingVersionsByIdentifier = existingEntities
-          .map(rec => rec.toAttributeEntityReference -> rec.recordVersion)
+          .map(rec => rec.toKey -> rec.recordVersion)
           .toMap
         // Increment the existing record_version values with the number of updates for each entity.
         // This gives us the final record_version we should expect for each entity.
-        expectedRecordVersions: Map[AttributeEntityReference, Long] = updateCounts.map {
-          case (identifier, updateCount) =>
-            val existingVersion = existingVersionsByIdentifier.getOrElse(identifier, -1L)
-            identifier -> (existingVersion + updateCount)
+        expectedRecordVersions: Map[EntityKey, Long] = updateCounts.map { case (identifier, updateCount) =>
+          val existingVersion = existingVersionsByIdentifier.getOrElse(identifier, -1L)
+          identifier -> (existingVersion + updateCount)
         }
 
         // Apply the incoming operations to the existing entities (or to an empty entity if none pre-existed)
@@ -120,7 +119,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
 
         // Compare the actual record versions, after writing the entities, to the expected record versions
         _ = finalRecordVersions.foreach { rec =>
-          val expected = expectedRecordVersions.getOrElse(rec.toAttributeEntityReference, 0)
+          val expected = expectedRecordVersions.getOrElse(rec.toKey, 0)
           val actual = rec.recordVersion
           if (actual != expected) {
             throw new RawlsConcurrentModificationException(
@@ -139,12 +138,12 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     * the same pre-existing entity. */
   @VisibleForTesting
   def applyAll(updates: Seq[EntityUpdateDefinition],
-               existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity]
+               existingEntitiesByIdentifier: Map[EntityKey, Entity]
   ): Seq[Entity] = {
 
     @tailrec
     def applyOne(updates: Seq[EntityUpdateDefinition],
-                 existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity],
+                 existingEntitiesByIdentifier: Map[EntityKey, Entity],
                  accum: Seq[Entity]
     ): Seq[Entity] =
       if (updates.isEmpty) {
@@ -153,14 +152,14 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       } else {
         val thisUpdate = updates.head
         val thisBaseEntity = existingEntitiesByIdentifier.getOrElse(
-          AttributeEntityReference(thisUpdate.entityType, thisUpdate.name),
+          EntityKey(thisUpdate.entityType, thisUpdate.name),
           Entity(thisUpdate.name, thisUpdate.entityType, Map())
         )
 
         val updatedEntity = applyOperationsToEntity(thisBaseEntity, thisUpdate.operations)
 
         applyOne(updates.tail,
-                 existingEntitiesByIdentifier + (updatedEntity.toReference -> updatedEntity),
+                 existingEntitiesByIdentifier + (updatedEntity.toKey -> updatedEntity),
                  accum :+ updatedEntity
         )
 
@@ -188,7 +187,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       _ = if (!allExist)
         throw new EntityReferenceNotFoundException("Some entity references do not exist")
 
-      _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toReference).toSet)
+      _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toKey).toSet)
       _ <- repository.queries.insertReferences(workspaceId, allReferences)
     } yield entitiesCreated
 
