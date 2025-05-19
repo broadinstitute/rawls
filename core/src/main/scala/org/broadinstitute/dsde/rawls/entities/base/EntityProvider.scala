@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValue,
   Entity,
   EntityCopyResponse,
+  EntityPointer,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
@@ -64,7 +65,7 @@ trait EntityProvider {
 
   def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity]
 
-  def deleteEntities(entityRefs: Seq[AttributeEntityReference], parentContext: RawlsRequestContext): Future[Int]
+  def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int]
 
   def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int]
 

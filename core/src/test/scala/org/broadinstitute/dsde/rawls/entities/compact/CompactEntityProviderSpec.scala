@@ -8,8 +8,13 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
-import org.broadinstitute.dsde.rawls.entities.exceptions._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException
+}
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -18,6 +23,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeNumber,
   AttributeString,
   Entity,
+  EntityPointer,
   EntityQuery,
   EntityQueryResultMetadata,
   EntityTypeMetadata,
@@ -156,7 +162,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    val refTarget = AttributeEntityReference("targetType", "targetName")
+    val refTarget = EntityPointer("targetType", "targetName")
 
     val updates: Seq[EntityUpdateDefinition] = Seq(
       EntityUpdateDefinition("name1", "typeA", Seq()),
@@ -164,7 +170,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         "name2",
         "typeA",
         Seq(
-          AddUpdateAttribute(AttributeName.withDefaultNS("ref"), refTarget)
+          AddUpdateAttribute(AttributeName.withDefaultNS("ref"), refTarget.toAttributeEntityReference)
         )
       ),
       EntityUpdateDefinition(
@@ -173,7 +179,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         Seq(
           AddUpdateAttribute(
             AttributeName.withDefaultNS("refs"),
-            AttributeEntityReferenceList(Seq(refTarget))
+            AttributeEntityReferenceList(Seq(refTarget.toAttributeEntityReference))
           )
         )
       )
@@ -181,8 +187,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
-    val ref2 = AttributeEntityReference("typeA", "name2")
-    val ref3 = AttributeEntityReference("typeB", "name3")
+    val ref2 = EntityPointer("typeA", "name2")
+    val ref3 = EntityPointer("typeB", "name3")
 
     // should have called one batch-insert to write the entities
     verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
@@ -332,9 +338,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     verify(mockQuery, times(1)).existsAll(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
-        AttributeEntityReference("referencedType", "referencedName0"),
-        AttributeEntityReference("referencedType", "referencedName1"),
-        AttributeEntityReference("referencedType", "referencedName2")
+        EntityPointer("referencedType", "referencedName0"),
+        EntityPointer("referencedType", "referencedName1"),
+        EntityPointer("referencedType", "referencedName2")
       )
     )
     verify(mockQuery, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
@@ -348,11 +354,11 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       defaultWorkspace.workspaceIdAsUUID,
       Set(
         RefMapping(
-          entityToCreate.toReference,
+          entityToCreate.toPointer,
           Set(
-            AttributeEntityReference("referencedType", "referencedName0"),
-            AttributeEntityReference("referencedType", "referencedName1"),
-            AttributeEntityReference("referencedType", "referencedName2")
+            EntityPointer("referencedType", "referencedName0"),
+            EntityPointer("referencedType", "referencedName1"),
+            EntityPointer("referencedType", "referencedName2")
           )
         )
       )
@@ -394,9 +400,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     verify(mockQuery, times(1)).existsAll(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
-        AttributeEntityReference("referencedType", "referencedName0"),
-        AttributeEntityReference("referencedType", "referencedName1"),
-        AttributeEntityReference("referencedType", "referencedName2")
+        EntityPointer("referencedType", "referencedName0"),
+        EntityPointer("referencedType", "referencedName1"),
+        EntityPointer("referencedType", "referencedName2")
       )
     )
     verify(mockQuery, never()).createEntity(any(), any())
@@ -534,17 +540,15 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext), atMost)
+    Await.result(provider.deleteEntities(Seq(entity1.toPointer, entity2.toPointer), defaultRequestContext), atMost)
 
     verify(mockQuery, times(1)).getReferencesTo(defaultWorkspace.workspaceIdAsUUID,
-                                                Seq(entity1.toReference, entity2.toReference)
+                                                Seq(entity1.toPointer, entity2.toPointer)
     )
     verify(mockQuery, times(1)).deleteAllReferencesFrom(defaultWorkspace.workspaceIdAsUUID,
-                                                        Set(entity1.toReference, entity2.toReference)
+                                                        Set(entity1.toPointer, entity2.toPointer)
     )
-    verify(mockQuery, times(1)).batchHide(defaultWorkspace.workspaceIdAsUUID,
-                                          Seq(entity1.toReference, entity2.toReference)
-    )
+    verify(mockQuery, times(1)).batchHide(defaultWorkspace.workspaceIdAsUUID, Seq(entity1.toPointer, entity2.toPointer))
   }
 
   it should "throw error if entities are referenced" in {
@@ -591,7 +595,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
 
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toReference)))
+    when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toPointer)))
     when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(1))
     when(
       mockQuery.getEntity(any[UUID],
@@ -613,18 +617,14 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val provider = providerWithMocks(mockQuery)
 
     val result = intercept[DeleteEntitiesConflictException] {
-      Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext),
-                   atMost
-      )
+      Await.result(provider.deleteEntities(Seq(entity1.toPointer, entity2.toPointer), defaultRequestContext), atMost)
     }
     result shouldBe a[DeleteEntitiesConflictException]
 
     verify(mockQuery, never()).deleteAllReferencesFrom(defaultWorkspace.workspaceIdAsUUID,
-                                                       Set(entity1.toReference, entity2.toReference)
+                                                       Set(entity1.toPointer, entity2.toPointer)
     )
-    verify(mockQuery, never()).batchHide(defaultWorkspace.workspaceIdAsUUID,
-                                         Seq(entity1.toReference, entity2.toReference)
-    )
+    verify(mockQuery, never()).batchHide(defaultWorkspace.workspaceIdAsUUID, Seq(entity1.toPointer, entity2.toPointer))
   }
 
   behavior of "deleteEntitiesOfType"
@@ -665,7 +665,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
 
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toReference)))
+    when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toPointer)))
     when(mockQuery.deleteAllReferencesFromType(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
 
@@ -798,7 +798,6 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe a[EntityNotFoundException]
   }
 
-  "listEntities" should "have tests" is pending
   "queryEntities" should "have tests" is pending
   "queryEntitiesSource" should "have tests" is pending
   "renameAttribute" should "have tests" is pending
@@ -844,11 +843,11 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     val expected = Set(
       RefMapping(
-        AttributeEntityReference("type", "name"),
+        EntityPointer("type", "name"),
         Set(
-          AttributeEntityReference("refTypeA", "refName1"),
-          AttributeEntityReference("refTypeB", "refName2"),
-          AttributeEntityReference("refTypeB", "refName3")
+          EntityPointer("refTypeA", "refName1"),
+          EntityPointer("refTypeB", "refName2"),
+          EntityPointer("refTypeB", "refName3")
         )
       )
     )
@@ -926,14 +925,14 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     val expected = Set(
       RefMapping(
-        entity1.toReference,
+        entity1.toPointer,
         Set(
-          AttributeEntityReference("refTypeA", "refName1"),
-          AttributeEntityReference("refTypeB", "refName2"),
-          AttributeEntityReference("refTypeB", "refName3")
+          EntityPointer("refTypeA", "refName1"),
+          EntityPointer("refTypeB", "refName2"),
+          EntityPointer("refTypeB", "refName3")
         )
       ),
-      RefMapping(entity3.toReference, Set(AttributeEntityReference("refTypeC", "refName4")))
+      RefMapping(entity3.toPointer, Set(EntityPointer("refTypeC", "refName4")))
     )
 
     actual shouldBe expected
@@ -970,9 +969,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     val expected = Set(
       RefMapping(
-        entity1.toReference,
+        entity1.toPointer,
         Set(
-          AttributeEntityReference("targetType", "targetName3")
+          EntityPointer("targetType", "targetName3")
         )
       )
     )
@@ -1108,8 +1107,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
     )
 
-    val existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity] = Map(
-      AttributeEntityReference("typeA", "some-other-entity") -> Entity(
+    val existingEntitiesByIdentifier: Map[EntityPointer, Entity] = Map(
+      EntityPointer("typeA", "some-other-entity") -> Entity(
         "some-other-entity",
         "typeA",
         Map(
@@ -1157,8 +1156,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
     )
 
-    val existingEntitiesByIdentifier: Map[AttributeEntityReference, Entity] = Map(
-      AttributeEntityReference("typeA", "name1") -> Entity(
+    val existingEntitiesByIdentifier: Map[EntityPointer, Entity] = Map(
+      EntityPointer("typeA", "name1") -> Entity(
         "name1",
         "typeA",
         Map(

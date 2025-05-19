@@ -165,7 +165,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
               )
             }
             _ <- traceFutureWithParent("entityProvider.deleteEntities", localContext) { s =>
-              entityProvider.deleteEntities(entRefs, s)
+              entityProvider.deleteEntities(entRefs.map(_.toPointer), s)
             }
           } yield Set[AttributeEntityReference]()
 
