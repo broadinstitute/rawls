@@ -535,7 +535,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext), atMost)
+    Await.result(provider.deleteEntities(Seq(entity1.toKey, entity2.toKey), defaultRequestContext), atMost)
 
     verify(mockQuery, times(1)).getReferencesTo(defaultWorkspace.workspaceIdAsUUID, Seq(entity1.toKey, entity2.toKey))
     verify(mockQuery, times(1)).deleteAllReferencesFrom(defaultWorkspace.workspaceIdAsUUID,
@@ -610,9 +610,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val provider = providerWithMocks(mockQuery)
 
     val result = intercept[DeleteEntitiesConflictException] {
-      Await.result(provider.deleteEntities(Seq(entity1.toReference, entity2.toReference), defaultRequestContext),
-                   atMost
-      )
+      Await.result(provider.deleteEntities(Seq(entity1.toKey, entity2.toKey), defaultRequestContext), atMost)
     }
     result shouldBe a[DeleteEntitiesConflictException]
 

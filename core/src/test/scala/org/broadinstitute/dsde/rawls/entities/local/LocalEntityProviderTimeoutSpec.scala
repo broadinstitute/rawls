@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeString, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeString, Entity, EntityKey}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.dsl.ResultOfATypeInvocation
@@ -79,7 +79,7 @@ class LocalEntityProviderTimeoutSpec extends AnyWordSpecLike with Matchers with 
     "enforce on deleteEntities" in withLocalEntityProviderTestDatabase { dataSource =>
       lockedEntitiesTest(dataSource, a[MySQLTimeoutException]) { localEntityProvider =>
         localEntityProvider.deleteEntities(
-          Seq(AttributeEntityReference(entityType = "unitTestType", entityName = "deleteTimeoutTest")),
+          Seq(EntityKey(entityType = "unitTestType", entityName = "deleteTimeoutTest")),
           testContext
         )
       }

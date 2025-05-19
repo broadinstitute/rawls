@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeRename,
   AttributeString,
   Entity,
+  EntityKey,
   EntityQuery,
   EntityTypeRename,
   FilterOperators,
@@ -430,7 +431,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
             // delete two entities of target type
             val entRefs =
-              Seq(AttributeEntityReference(typeUnderTest, "001"), AttributeEntityReference(typeUnderTest, "002"))
+              Seq(EntityKey(typeUnderTest, "001"), EntityKey(typeUnderTest, "002"))
             provider.deleteEntities(entRefs, testContext).futureValue
 
             // count actual entities by type
@@ -684,7 +685,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         )
 
         // delete our test entity
-        provider.deleteEntities(Seq(AttributeEntityReference("cat", "005")), testContext).futureValue shouldBe 1
+        provider.deleteEntities(Seq(EntityKey("cat", "005")), testContext).futureValue shouldBe 1
 
         // make sure all attributes are marked as deleted
         import driver.api._

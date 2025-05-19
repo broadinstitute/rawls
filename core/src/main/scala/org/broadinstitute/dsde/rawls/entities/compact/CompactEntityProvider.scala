@@ -155,21 +155,18 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     createFuture
   }
 
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
-                              parentContext: RawlsRequestContext
-  ): Future[Int] =
+  override def deleteEntities(toDelete: Seq[EntityKey], parentContext: RawlsRequestContext): Future[Int] =
     repository.dataSource.inTransaction { _ =>
-      val keys = entityRefs.map(_.toKey)
       for {
         // check if any of these entities are referenced by someone else
-        referencingEntities: Seq[EntityKey] <- repository.queries.getReferencesTo(workspaceId, keys)
+        referencingEntities: Seq[EntityKey] <- repository.queries.getReferencesTo(workspaceId, toDelete)
         // getReferencesTo already excludes the entities that are being deleted
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesConflictException(referencingEntities.map(_.toAttributeEntityReference).toSet)
         }
         // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, keys.toSet)
-        res <- repository.queries.batchHide(workspaceId, keys)
+        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, toDelete.toSet)
+        res <- repository.queries.batchHide(workspaceId, toDelete)
       } yield res
     }
 
