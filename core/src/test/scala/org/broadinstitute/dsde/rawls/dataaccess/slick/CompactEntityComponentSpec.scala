@@ -1317,15 +1317,18 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "listEntities"
 
   it should "handle entities with simple attributes" in withMinimalTestDatabase { _ =>
+    val testEntityType = "testEntityType"
+    val entity1 = Entity("entityName1",
+                         testEntityType,
+                         Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+    )
+    val entity2 = Entity("entityName2",
+                         testEntityType,
+                         Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+    )
     val ws1Entities = Seq(
-      Entity("entityName1",
-             "testEntityType",
-             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
-      ),
-      Entity("entityName2",
-             "testEntityType",
-             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
-      ),
+      entity1,
+      entity2,
       Entity("entityName3",
              "otherEntityType",
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
@@ -1334,7 +1337,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val ws2Entities = Seq(
       Entity("entityName4",
-             "testEntityType",
+             testEntityType,
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
       )
     )
@@ -1344,7 +1347,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.batchCreateEntities(ws2id, ws2Entities, allowUpsert = false)) shouldBe ws2Entities.size
 
     // validate listed entities of entityType "testEntityType" in the first workspace
-    runAndWait(q.listEntities(wsid, "testEntityType")).size shouldBe 2
+    runAndWait(q.listEntities(wsid, testEntityType)).map(_.toEntity) should contain theSameElementsAs Seq(entity1,
+                                                                                                          entity2
+    )
   }
 
   // ====================================================================================================
