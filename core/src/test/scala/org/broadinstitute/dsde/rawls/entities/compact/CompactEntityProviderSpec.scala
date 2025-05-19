@@ -803,7 +803,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   "queryEntitiesSource" should "have tests" is pending
   "renameAttribute" should "have tests" is pending
   "renameEntity" should "have tests" is pending
-  "renameEntityType" should "have tests" is pending
+  // Tests for renameEntityType are implemented below
   "updateEntity" should "have tests" is pending
 
   // ====================================================================================================
@@ -1187,6 +1187,99 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         )
       )
     )
+  }
+
+  behavior of "renameEntityType"
+
+  it should "throw NotFound if the entity type doesn't exist" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQueryType]
+    val mockRepository = mock[CompactEntityRepository]
+    
+    // Mock the count for a non-existent entity type to return 0
+    when(mockRepository.queries).thenReturn(mockQueries)
+    when(mockQueries.countEntities(any[UUID], anyString())).thenReturn(DBIO.successful(0))
+    
+    val provider = providerWithMocks(
+      mockRepository,
+      EntityRequestArguments(testWorkspace, testContext)
+    )
+    
+    val oldType = "nonExistentType"
+    val newType = "newType"
+    
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameEntityType(oldType, EntityTypeRename(newType), testContext), atMost)
+    }
+    
+    exception.errorReport.statusCode.get shouldBe StatusCodes.NotFound
+    exception.errorReport.message should include(s"Can't find entity type $oldType")
+    
+    // Verify the counts were called but the rename was not
+    verify(mockQueries).countEntities(any[UUID], mockitoEq(oldType))
+    verify(mockQueries, never()).renameEntityType(any[UUID], anyString(), anyString())
+  }
+  
+  it should "throw Conflict if the new entity type already exists" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQueryType]
+    val mockRepository = mock[CompactEntityRepository]
+    
+    // Mock the counts
+    when(mockRepository.queries).thenReturn(mockQueries)
+    // The old type exists
+    when(mockQueries.countEntities(any[UUID], mockitoEq("existingType"))).thenReturn(DBIO.successful(2))
+    // The new type already exists
+    when(mockQueries.countEntities(any[UUID], mockitoEq("alreadyExistsType"))).thenReturn(DBIO.successful(3))
+    
+    val provider = providerWithMocks(
+      mockRepository,
+      EntityRequestArguments(testWorkspace, testContext)
+    )
+    
+    val oldType = "existingType"
+    val newType = "alreadyExistsType"
+    
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameEntityType(oldType, EntityTypeRename(newType), testContext), atMost)
+    }
+    
+    exception.errorReport.statusCode.get shouldBe StatusCodes.Conflict
+    exception.errorReport.message should include(s"$newType already exists as an entity type")
+    
+    // Verify the counts were called but the rename was not
+    verify(mockQueries).countEntities(any[UUID], mockitoEq(oldType))
+    verify(mockQueries).countEntities(any[UUID], mockitoEq(newType))
+    verify(mockQueries, never()).renameEntityType(any[UUID], anyString(), anyString())
+  }
+  
+  it should "successfully rename an entity type" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQueryType]
+    val mockRepository = mock[CompactEntityRepository]
+    
+    // Mock the counts and rename
+    when(mockRepository.queries).thenReturn(mockQueries)
+    when(mockRepository.dataSource).thenReturn(slickDataSource)
+    // The old type exists
+    when(mockQueries.countEntities(any[UUID], mockitoEq("oldType"))).thenReturn(DBIO.successful(5))
+    // The new type doesn't exist
+    when(mockQueries.countEntities(any[UUID], mockitoEq("newType"))).thenReturn(DBIO.successful(0))
+    // The rename operation will update 5 entities
+    when(mockQueries.renameEntityType(any[UUID], mockitoEq("oldType"), mockitoEq("newType"))).thenReturn(DBIO.successful(5))
+    
+    val provider = providerWithMocks(
+      mockRepository,
+      EntityRequestArguments(testWorkspace, testContext)
+    )
+    
+    val oldType = "oldType"
+    val newType = "newType"
+    
+    val result = Await.result(provider.renameEntityType(oldType, EntityTypeRename(newType), testContext), atMost)
+    
+    // Verify the result and that all methods were called
+    result shouldBe 5
+    verify(mockQueries).countEntities(any[UUID], mockitoEq(oldType))
+    verify(mockQueries).countEntities(any[UUID], mockitoEq(newType))
+    verify(mockQueries).renameEntityType(any[UUID], mockitoEq(oldType), mockitoEq(newType))
   }
 
   // ====================================================================================================

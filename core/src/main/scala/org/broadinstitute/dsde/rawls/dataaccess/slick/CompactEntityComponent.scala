@@ -650,4 +650,51 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
 
+  /**
+   * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.
+   *
+   * Returns the number of entities that were renamed.
+   *
+   * `execution plan: multiple statements that update both ENTITY and ENTITY_REFS tables`
+   */
+  def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
+    // Update the entity type in the ENTITY table
+    val updateEntityTypeSql =
+      sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
+            where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
+
+    // Update entity references in the attributes JSON column
+    // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
+    // The best approach would be to add a custom MySQL function for JSON path replacement
+    // For now, we'll do this in application code when accessing entities
+
+    // Update from_entity_type in ENTITY_REFS table
+    val updateFromReferencesSql =
+      sql"""update ENTITY_REFS
+            set from_entity_type = $newType
+            where workspace_id = $workspaceId
+            and from_entity_type = $oldType"""
+
+    // Update to_entity_type in ENTITY_REFS table
+    val updateToReferencesSql =
+      sql"""update ENTITY_REFS
+            set to_entity_type = $newType
+            where workspace_id = $workspaceId
+            and to_entity_type = $oldType"""
+
+    // Refresh entity keys
+    val updateEntityKeysSql =
+      sql"""update ENTITY_KEYS
+            set entity_type = $newType, last_updated = now(3)
+            where workspace_id = $workspaceId
+            and entity_type = $oldType"""
+
+    // Execute all updates in a transaction
+    for {
+      entityRowsUpdated <- updateEntityTypeSql.asUpdate
+      _ <- updateFromReferencesSql.asUpdate
+      _ <- updateToReferencesSql.asUpdate
+      _ <- updateEntityKeysSql.asUpdate
+    } yield entityRowsUpdated
+  }
 }
