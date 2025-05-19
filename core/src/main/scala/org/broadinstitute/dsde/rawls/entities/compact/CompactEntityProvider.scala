@@ -42,6 +42,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import slick.jdbc.ResultSetConcurrency.ReadOnly
+import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.util.UUID
@@ -242,14 +243,24 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
-  override def listEntities(entityType: String): Source[Entity, NotUsed] =
+  override def listEntities(entityType: String): Source[Entity, NotUsed] = {
+    import repository.dataSource.dataAccess.driver.api._
+
     Source
       .fromPublisher(
         repository.dataSource.database.stream(
-          repository.queries.listEntities(workspaceId, entityType)
+          repository.queries
+            .listEntities(workspaceId, entityType)
+            .transactionally
+            .withTransactionIsolation(ReadCommitted)
+            .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                                     rsConcurrency = ResultSetConcurrency.ReadOnly,
+                                     fetchSize = repository.dataSource.fetchSize
+            )
         )
       )
       .map(_.toEntity)
+  }
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
