@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity, EntityKey}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity, EntityPointer}
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -25,7 +25,7 @@ case class CompactEntityRecord(id: Long,
                                deleted: Boolean,
                                attributes: Option[String]
 ) {
-  def toKey: EntityKey = EntityKey(entityType, name)
+  def toPointer: EntityPointer = EntityPointer(entityType, name)
   def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
   def toEntity: Entity = {
     val attrs: AttributeMap = Try(CompactEntitySerialization.fromSql(attributes)) match {
@@ -43,7 +43,7 @@ case class CompactEntityRecord(id: Long,
   * abbreviated model for rows in the ENTITY table when we don't need all the columns
   */
 case class CompactEntityRefRecord(id: Long, name: String, entityType: String) {
-  def toKey: EntityKey = EntityKey(entityType, name)
+  def toPointer: EntityPointer = EntityPointer(entityType, name)
   def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
 }
 
@@ -51,7 +51,7 @@ case class CompactEntityRefRecord(id: Long, name: String, entityType: String) {
   * abbreviated model for rows in the ENTITY table when we need the record_version but don't need other columns
   */
 case class CompactEntityVersionRecord(id: Long, name: String, entityType: String, recordVersion: Long) {
-  def toKey: EntityKey = EntityKey(entityType, name)
+  def toPointer: EntityPointer = EntityPointer(entityType, name)
   def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
 }
 
@@ -66,7 +66,7 @@ case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attribute
 case class RefPointerRecord(fromId: Long, toId: Long)
 
 /** all reference pointers from one entity to all its reference targets */
-case class RefMapping(from: EntityKey, to: Set[EntityKey])
+case class RefMapping(from: EntityPointer, to: Set[EntityPointer])
 
 case class EntityTypeAndAttributeKey(
   entityType: String,

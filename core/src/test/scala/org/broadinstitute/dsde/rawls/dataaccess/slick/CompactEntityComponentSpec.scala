@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValueList,
   Entity,
   EntityColumnFilter,
-  EntityKey,
+  EntityPointer,
   EntityQuery,
   FilterOperators,
   SortDirections,
@@ -159,7 +159,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGetAll(Seq(entity1, entity2, entity3))
 
-    val actual = runAndWait(q.getEntityRefs(wsid, Set(entity1.toKey, entity2.toKey)))
+    val actual = runAndWait(q.getEntityRefs(wsid, Set(entity1.toPointer, entity2.toPointer)))
 
     val expected = Set(entity1.toReference, entity2.toReference)
 
@@ -176,7 +176,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(entity1, entity2, entity3))
 
     val actual = runAndWait(
-      q.getEntityRefs(wsid, Set(entity1.toKey, EntityKey(entity2.entityType, "nonexistent-2"), entity2.toKey))
+      q.getEntityRefs(wsid,
+                      Set(entity1.toPointer, EntityPointer(entity2.entityType, "nonexistent-2"), entity2.toPointer)
+      )
     )
     val expected = Set(entity1.toReference, entity2.toReference)
 
@@ -229,7 +231,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(entity3)
 
     // ask for those entities
-    val refs: Set[EntityKey] = Set(entity1.toKey, entity2.toKey, entity3.toKey)
+    val refs: Set[EntityPointer] = Set(entity1.toPointer, entity2.toPointer, entity3.toPointer)
     runAndWait(q.countExisting(wsid, refs)) shouldBe 3
     runAndWait(q.existsAll(wsid, refs)) shouldBe true
 
@@ -251,7 +253,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(entity3)
 
     // ask for those entities
-    val refs: Set[EntityKey] = Set(entity1.toKey, entity2.toKey, entity3.toKey)
+    val refs: Set[EntityPointer] = Set(entity1.toPointer, entity2.toPointer, entity3.toPointer)
     runAndWait(q.countExisting(wsid, refs)) shouldBe 2
     runAndWait(q.existsAll(wsid, refs)) shouldBe false
   }
@@ -260,9 +262,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "insert and delete all" in withMinimalTestDatabase { _ =>
     // the entity doing the referencing: the "source"
-    val from = EntityKey("fromType", "fromName")
+    val from = EntityPointer("fromType", "fromName")
     // entities being referenced: the "targets"
-    val tos: Seq[EntityKey] = Range(1, 5) map (idx => EntityKey("toType", s"toName$idx"))
+    val tos: Seq[EntityPointer] = Range(1, 5) map (idx => EntityPointer("toType", s"toName$idx"))
 
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
@@ -276,14 +278,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "insert for multiple source entities" in withMinimalTestDatabase { _ =>
     // the entities doing the referencing: the "sources"
-    val from1 = EntityKey("fromType", "fromName1")
-    val from2 = EntityKey("fromType", "fromName2")
+    val from1 = EntityPointer("fromType", "fromName1")
+    val from2 = EntityPointer("fromType", "fromName2")
 
     // entities being referenced: the "targets"
-    val tos1: Seq[EntityKey] =
-      Range(101, 105) map (idx => EntityKey("toType", s"toName$idx"))
-    val tos2: Seq[EntityKey] =
-      (Range(201, 203) map (idx => EntityKey("toType", s"toName$idx"))) ++ tos1 // notice the overlap
+    val tos1: Seq[EntityPointer] =
+      Range(101, 105) map (idx => EntityPointer("toType", s"toName$idx"))
+    val tos2: Seq[EntityPointer] =
+      (Range(201, 203) map (idx => EntityPointer("toType", s"toName$idx"))) ++ tos1 // notice the overlap
 
     // sources should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
@@ -298,16 +300,16 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "delete references for multiple entities" in withMinimalTestDatabase { _ =>
     // the entities doing the referencing: the "sources"
-    val from1 = EntityKey("fromType", "fromName1")
-    val from2 = EntityKey("fromType", "fromName2")
-    val from3 = EntityKey("fromType", "fromName3")
+    val from1 = EntityPointer("fromType", "fromName1")
+    val from2 = EntityPointer("fromType", "fromName2")
+    val from3 = EntityPointer("fromType", "fromName3")
     // referenced/target entities
-    val target1 = EntityKey("targetType", "targetName1")
-    val target2 = EntityKey("targetType", "targetName2")
-    val target3 = EntityKey("targetType", "targetName3")
-    val target4 = EntityKey("targetType", "targetName4")
-    val target5 = EntityKey("targetType", "targetName5")
-    val target6 = EntityKey("targetType", "targetName6")
+    val target1 = EntityPointer("targetType", "targetName1")
+    val target2 = EntityPointer("targetType", "targetName2")
+    val target3 = EntityPointer("targetType", "targetName3")
+    val target4 = EntityPointer("targetType", "targetName4")
+    val target5 = EntityPointer("targetType", "targetName5")
+    val target6 = EntityPointer("targetType", "targetName6")
 
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
@@ -337,10 +339,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "only delete references in the given workspace" in withMinimalTestDatabase { _ =>
     // the entities doing the referencing: the "sources"
-    val from1 = EntityKey("fromType", "fromName1")
+    val from1 = EntityPointer("fromType", "fromName1")
     // referenced/target entities
-    val target1 = EntityKey("targetType", "targetName1")
-    val target2 = EntityKey("targetType", "targetName2")
+    val target1 = EntityPointer("targetType", "targetName1")
+    val target2 = EntityPointer("targetType", "targetName2")
 
     val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
 
@@ -365,17 +367,17 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // referencing/source entities
     val sourceType1 = "source1"
     val sourceType2 = "source2"
-    val source1 = EntityKey(sourceType1, "source1") // source1 and source2 have the same type
-    val source2 = EntityKey(sourceType1, "source2")
-    val source3 = EntityKey(sourceType2, "source3") // source3 has a different type
+    val source1 = EntityPointer(sourceType1, "source1") // source1 and source2 have the same type
+    val source2 = EntityPointer(sourceType1, "source2")
+    val source3 = EntityPointer(sourceType2, "source3") // source3 has a different type
 
     // referenced/target entities
-    val target1 = EntityKey("targetType", "targetName1")
-    val target2 = EntityKey("targetType", "targetName2")
-    val target3 = EntityKey("targetType", "targetName3")
-    val target4 = EntityKey("targetType", "targetName4")
-    val target5 = EntityKey("targetType", "targetName5")
-    val target6 = EntityKey("targetType", "targetName6")
+    val target1 = EntityPointer("targetType", "targetName1")
+    val target2 = EntityPointer("targetType", "targetName2")
+    val target3 = EntityPointer("targetType", "targetName3")
+    val target4 = EntityPointer("targetType", "targetName4")
+    val target5 = EntityPointer("targetType", "targetName5")
+    val target6 = EntityPointer("targetType", "targetName6")
     // source should have no rows in ENTITY_REFS table
     val pointers1 = RefMapping(source1, Set(target1, target2))
     val pointers2 = RefMapping(source2, Set(target3, target4, target5))
@@ -509,7 +511,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(entity1)
     insertAndGet(entity2)
 
-    runAndWait(q.batchHide(wsid, Seq(entity1.toKey, entity2.toKey)))
+    runAndWait(q.batchHide(wsid, Seq(entity1.toPointer, entity2.toPointer)))
     val actual1 = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
     actual1 shouldBe empty
     val actual2 = runAndWait(q.getEntity(wsid, entity2.entityType, entity2.name))
@@ -539,7 +541,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // create a similar entity in another workspace
     insertAndGet(entity, minimalTestData.workspace2.workspaceIdAsUUID)
 
-    runAndWait(q.batchHide(wsid, Seq(entity.toKey)))
+    runAndWait(q.batchHide(wsid, Seq(entity.toPointer)))
     val actual = runAndWait(q.getEntity(wsid, entity.entityType, entity.name))
     actual shouldBe empty
 
@@ -606,17 +608,17 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // referencing/source entities
     val sourceType1 = "source1"
     val sourceType2 = "source2"
-    val source1 = EntityKey(sourceType1, "source1") // source1 and source2 have the same type
-    val source2 = EntityKey(sourceType1, "source2")
-    val source3 = EntityKey(sourceType2, "source3") // source3 has a different type
+    val source1 = EntityPointer(sourceType1, "source1") // source1 and source2 have the same type
+    val source2 = EntityPointer(sourceType1, "source2")
+    val source3 = EntityPointer(sourceType2, "source3") // source3 has a different type
 
     // referenced/target entities
-    val target1 = EntityKey("targetType", "targetName1")
-    val target2 = EntityKey("targetType", "targetName2")
-    val target3 = EntityKey("targetType", "targetName3")
-    val target4 = EntityKey("targetType", "targetName4")
-    val target5 = EntityKey("targetType", "targetName5")
-    val target6 = EntityKey("targetType", "targetName6")
+    val target1 = EntityPointer("targetType", "targetName1")
+    val target2 = EntityPointer("targetType", "targetName2")
+    val target3 = EntityPointer("targetType", "targetName3")
+    val target4 = EntityPointer("targetType", "targetName4")
+    val target5 = EntityPointer("targetType", "targetName5")
+    val target6 = EntityPointer("targetType", "targetName6")
     // source should have no rows in ENTITY_REFS table
     val pointers1 = RefMapping(source1, Set(target1, target2))
     val pointers2 = RefMapping(source2, Set(target3, target4, target5))
@@ -645,11 +647,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
 
     // referencing/source entities
-    val source1 = EntityKey("sourceType", "source1")
-    val source2 = EntityKey("sourceType", "source2")
+    val source1 = EntityPointer("sourceType", "source1")
+    val source2 = EntityPointer("sourceType", "source2")
 
     // referenced/target entities
-    val target1 = EntityKey("targetType", "targetName1")
+    val target1 = EntityPointer("targetType", "targetName1")
 
     val pointers1 = RefMapping(source1, Set(target1))
     val pointers2 = RefMapping(source2, Set(target1))
@@ -664,9 +666,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "exclude entities included in the search" in withMinimalTestDatabase { _ =>
     // define entities
-    val entity1 = EntityKey("entityType", "name1")
-    val entity2 = EntityKey("entityType", "name2")
-    val entity3 = EntityKey("entityType", "name3")
+    val entity1 = EntityPointer("entityType", "name1")
+    val entity2 = EntityPointer("entityType", "name2")
+    val entity3 = EntityPointer("entityType", "name3")
 
     // entity2 references entity1; entity3 references both entity1 and entity2
     val pointers1 = RefMapping(entity2, Set(entity1))
@@ -687,14 +689,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // create referenced/target entities
     val targetType1 = "targetType1"
     val targetType2 = "targetType2"
-    val target1 = EntityKey(targetType1, "target1") // target 1 and 2 use the same type
-    val target2 = EntityKey(targetType1, "target2")
-    val target3 = EntityKey(targetType2, "target3") // target 3 is a different type
+    val target1 = EntityPointer(targetType1, "target1") // target 1 and 2 use the same type
+    val target2 = EntityPointer(targetType1, "target2")
+    val target3 = EntityPointer(targetType2, "target3") // target 3 is a different type
 
     // create referencing/source entities
-    val source1 = EntityKey("entityType1", "entity1") // source 1 and 2 use the same type
-    val source2 = EntityKey("entityType1", "entity2")
-    val source3 = EntityKey("entityType2", "entity3") // source 3 is a different type
+    val source1 = EntityPointer("entityType1", "entity1") // source 1 and 2 use the same type
+    val source2 = EntityPointer("entityType1", "entity2")
+    val source3 = EntityPointer("entityType2", "entity3") // source 3 is a different type
 
     val pointers1 = RefMapping(source1, Set(target3))
     val pointers2 = RefMapping(source2, Set(target2))
@@ -710,9 +712,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "not return source entities of the same type" in withMinimalTestDatabase { _ =>
     // define entities
-    val entity1 = EntityKey("entityTypeA", "name1")
-    val entity2 = EntityKey("entityTypeA", "name2")
-    val entity3 = EntityKey("entityTypeB", "name3")
+    val entity1 = EntityPointer("entityTypeA", "name1")
+    val entity2 = EntityPointer("entityTypeA", "name2")
+    val entity3 = EntityPointer("entityTypeB", "name3")
 
     // entity2 references entity1; entity3 references both entity1 and entity2
     val pointers1 = RefMapping(entity2, Set(entity1))

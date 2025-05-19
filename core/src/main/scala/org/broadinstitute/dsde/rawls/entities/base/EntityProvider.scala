@@ -6,7 +6,23 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, R
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeRename, AttributeValue, Entity, EntityCopyResponse, EntityKey, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeEntityReference,
+  AttributeName,
+  AttributeRename,
+  AttributeValue,
+  Entity,
+  EntityCopyResponse,
+  EntityPointer,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  EntityTypeMetadata,
+  EntityTypeRename,
+  RawlsRequestContext,
+  SubmissionValidationEntityInputs,
+  Workspace
+}
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -49,7 +65,7 @@ trait EntityProvider {
 
   def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity]
 
-  def deleteEntities(toDelete: Seq[EntityKey], parentContext: RawlsRequestContext): Future[Int]
+  def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int]
 
   def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int]
 

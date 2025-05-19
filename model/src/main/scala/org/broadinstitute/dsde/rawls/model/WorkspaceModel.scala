@@ -364,7 +364,7 @@ case class AttributeRename(newAttributeName: AttributeName)
 
 case class EntityName(name: String)
 
-case class EntityKey(entityType: String, entityName: String) {
+case class EntityPointer(entityType: String, entityName: String) {
   def toAttributeEntityReference: AttributeEntityReference = AttributeEntityReference(entityType, entityName)
   override def toString = s"$entityType/$entityName"
 }
@@ -379,7 +379,7 @@ case class Entity(
   def path(workspace: Workspace): String = path(workspace.toWorkspaceName)
   def path(workspaceRequest: WorkspaceRequest): String = path(workspaceRequest.toWorkspaceName)
   def toReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
-  def toKey: EntityKey = EntityKey(entityType, name)
+  def toPointer: EntityPointer = EntityPointer(entityType, name)
 }
 
 case class EntityTypeMetadata(
@@ -1226,7 +1226,7 @@ case class AttributeValueList(list: Seq[AttributeValue]) extends AttributeList[A
 case class AttributeEntityReferenceList(list: Seq[AttributeEntityReference])
     extends AttributeList[AttributeEntityReference]
 case class AttributeEntityReference(entityType: String, entityName: String) extends AttributeListElementable {
-  def toKey: EntityKey = EntityKey(entityType, entityName)
+  def toPointer: EntityPointer = EntityPointer(entityType, entityName)
 }
 
 object AttributeStringifier {

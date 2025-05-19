@@ -33,7 +33,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValue,
   Entity,
   EntityCopyResponse,
-  EntityKey,
+  EntityPointer,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
@@ -179,9 +179,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     }
 
   // EntityApiServiceSpec has good test coverage for this api
-  override def deleteEntities(toDelete: Seq[EntityKey], parentContext: RawlsRequestContext): Future[Int] =
+  override def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int] =
     dataSource.inTransaction { dataAccess =>
-      val entRefs = toDelete.map(_.toAttributeEntityReference)
+      val entRefs = pointers.map(_.toAttributeEntityReference)
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       traceDBIOWithParent("LocalEntityProvider.deleteEntities", parentContext) { localContext =>
         setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)

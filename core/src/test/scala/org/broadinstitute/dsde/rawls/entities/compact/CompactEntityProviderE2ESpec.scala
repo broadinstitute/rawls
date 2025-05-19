@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,
   Entity,
-  EntityKey,
+  EntityPointer,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -120,9 +120,9 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataAfter("typeA").count shouldBe 2
     metadataAfter("typeB").count shouldBe 1
 
-    val ref1 = EntityKey("typeA", "name1")
-    val ref2 = EntityKey("typeA", "name2")
-    val ref3 = EntityKey("typeB", "name3")
+    val ref1 = EntityPointer("typeA", "name1")
+    val ref2 = EntityPointer("typeA", "name2")
+    val ref3 = EntityPointer("typeB", "name3")
 
     // entity with "name1" should have no references
     runAndWait(q.getReferencesFrom(wsid, ref1)) shouldBe empty
@@ -169,10 +169,10 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the starting references before our batchUpsert
     val initialReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, EntityKey("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
-    initialReferences shouldBe Seq(EntityKey("targetType", "targetName1"), EntityKey("targetType", "targetName2"))
+    initialReferences shouldBe Seq(EntityPointer("targetType", "targetName1"), EntityPointer("targetType", "targetName2"))
 
     // perform the batchUpsert - delete one existing reference, add two more
     val updates = Source(
@@ -202,13 +202,13 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the references after our batchUpsert
     val finalReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, EntityKey("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
     finalReferences.toSet shouldBe Set(
-      EntityKey("targetType", "targetName1"),
-      EntityKey("targetType", "targetName3"),
-      EntityKey("targetType", "targetName4")
+      EntityPointer("targetType", "targetName1"),
+      EntityPointer("targetType", "targetName3"),
+      EntityPointer("targetType", "targetName4")
     )
 
   }
@@ -237,10 +237,10 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the starting reference before our batchUpsert
     val initialReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, EntityKey("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
-    initialReferences shouldBe Seq(EntityKey("targetType", "targetName"))
+    initialReferences shouldBe Seq(EntityPointer("targetType", "targetName"))
 
     // perform the batchUpsert - delete the existing reference, don't add any
     val updates = Source(
@@ -254,7 +254,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the references after our batchUpsert
     val finalReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, EntityKey("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
     finalReferences.toSet shouldBe empty
