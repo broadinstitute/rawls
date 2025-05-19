@@ -158,6 +158,10 @@ trait GoogleServicesDAO extends ErrorReportable {
     executionContext: ExecutionContext
   ): Future[ProjectBillingInfo]
 
+  def isBillingAccountEnabled(billingAccount: RawlsBillingAccountName)(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean]
+
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
   def getResourceBufferServiceAccountCredential: Credential
@@ -316,6 +320,10 @@ trait GoogleServicesDAO extends ErrorReportable {
                                          oldIdentity: Identity,
                                          newIdentity: Identity
   ): Future[Unit]
+
+  def areServicesEnabled(project: GoogleProject, services: List[String])(implicit
+    executionContext: ExecutionContext
+  ): Boolean
 }
 
 object GoogleApiTypes {
