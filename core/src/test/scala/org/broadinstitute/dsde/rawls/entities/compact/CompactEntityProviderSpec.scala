@@ -7,18 +7,9 @@ import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
+import org.broadinstitute.dsde.rawls.entities.exceptions._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException,
-  EntityNotFoundException,
-  EntityReferenceNotFoundException
-}
-import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
-
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -39,9 +30,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
-import org.mockito.Mockito
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -87,26 +77,16 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
   // tests for CompactEntityProvider public implementations of EntityProvider methods
   // ====================================================================================================
 
-  "batchUpdateEntities" should "have tests" is pending
-
-  behavior of "batchUpsertEntities"
+  behavior of "batchUpsertEntities and batchUpdateEntities"
 
   it should "issue one insert statement for multiple entities" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
-    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
-      DBIO.successful(
-        Seq(
-          CompactEntityRefRecord(1, "name1", "typeA"),
-          CompactEntityRefRecord(2, "name2", "typeA"),
-          CompactEntityRefRecord(3, "name3", "typeB")
-        )
-      )
-    )
+    when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
-    when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.insertReferences(any(), any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -125,21 +105,17 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                                     mockitoEq(true)
     )
     // entities have no references, so the input to upsertReferences should be empty
-    verify(mockQuery, times(1)).upsertReferences(Set())
+    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
   }
 
   it should "issue multiple insert statements when given large batches" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
-    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
-      DBIO.successful(
-        Range(0, 100) map { idx => CompactEntityRefRecord(idx, s"name$idx", "typeA") }
-      )
-    )
+    when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
-    when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.insertReferences(any(), any())).thenReturn(DBIO.successful(-1))
 
     val config = CompactEntityProviderConfig(batchUpsertBatchSize = 25) // pretty small to force batching
 
@@ -164,31 +140,23 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     verify(mockQuery, Mockito.atLeast(2))
       .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), mockitoEq(true))
     // entities have no references, so the input to upsertReferences should be empty
-    verify(mockQuery, Mockito.atLeast(2)).upsertReferences(Set())
+    verify(mockQuery, Mockito.atLeast(2)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
 
   }
 
   it should "ask to insert references" in {
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
-    // this response must be exactly what is expected from the input to batchUpsertEntities
-    when(mockQuery.getEntityRefs(any(), any())).thenReturn(
-      DBIO.successful(
-        Seq(
-          CompactEntityRefRecord(1, "name1", "typeA"),
-          CompactEntityRefRecord(2, "name2", "typeA"),
-          CompactEntityRefRecord(3, "name3", "typeB"),
-          CompactEntityRefRecord(4, "targetName", "targetType")
-        )
-      )
-    )
+    when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFrom(any())).thenReturn(DBIO.successful(-1))
-    when(mockQuery.upsertReferences(any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.insertReferences(any(), any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
+
+    val refTarget = AttributeEntityReference("targetType", "targetName")
 
     val updates: Seq[EntityUpdateDefinition] = Seq(
       EntityUpdateDefinition("name1", "typeA", Seq()),
@@ -196,7 +164,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         "name2",
         "typeA",
         Seq(
-          AddUpdateAttribute(AttributeName.withDefaultNS("ref"), AttributeEntityReference("targetType", "targetName"))
+          AddUpdateAttribute(AttributeName.withDefaultNS("ref"), refTarget)
         )
       ),
       EntityUpdateDefinition(
@@ -205,11 +173,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         Seq(
           AddUpdateAttribute(
             AttributeName.withDefaultNS("refs"),
-            AttributeEntityReferenceList(
-              Seq(
-                AttributeEntityReference("targetType", "targetName")
-              )
-            )
+            AttributeEntityReferenceList(Seq(refTarget))
           )
         )
       )
@@ -217,14 +181,22 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
+    val ref2 = AttributeEntityReference("typeA", "name2")
+    val ref3 = AttributeEntityReference("typeB", "name3")
+
     // should have called one batch-insert to write the entities
     verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
                                                     any(),
                                                     mockitoEq(true)
     )
     // entities found references, so should ask to upsert those.
-    // given the mock response defined above, we expect references from 2->4 and 3->4
-    verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(4)), RefPointers(3, Set(4))))
+    // given the mock response defined above, we expect references from name2->targetName and name3->targetName
+    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID,
+                                                 Set(
+                                                   RefMapping(ref2, Set(refTarget)),
+                                                   RefMapping(ref3, Set(refTarget))
+                                                 )
+    )
   }
 
   "copyEntities" should "have tests" is pending
@@ -238,18 +210,20 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                           entityToCreate.name,
                           entityToCreate.entityType,
                           defaultWorkspace.workspaceIdAsUUID,
-                          1,
+                          0,
                           deleted = false,
                           Some("{}")
       )
 
     // mocks
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    when(mockQuery.insertReferences(any(), any()))
+      .thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -258,14 +232,13 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe entityToCreate
 
-    verify(mockQuery, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, times(1)).existsAll(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockQuery, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
     verify(mockQuery, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-    verify(mockQuery, never()).upsertReferences(any())
+    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
   }
 
   it should "persist an entity with simple attributes" in {
@@ -281,17 +254,19 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                           entityToCreate.name,
                           entityToCreate.entityType,
                           defaultWorkspace.workspaceIdAsUUID,
-                          1,
+                          0,
                           deleted = false,
                           Some("""{"baz":123,"foo":"bar"}""")
       )
 
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.getReferencedIds(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    when(mockQuery.insertReferences(any(), any()))
+      .thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -300,14 +275,13 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe entityToCreate
 
-    verify(mockQuery, times(1)).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, times(1)).existsAll(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockQuery, times(1)).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
     verify(mockQuery, times(2)).getEntity(defaultWorkspace.workspaceIdAsUUID,
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-    verify(mockQuery, never()).upsertReferences(any())
+    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
   }
 
   it should "persist an entity with references" in {
@@ -332,7 +306,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
         entityToCreate.name,
         entityToCreate.entityType,
         defaultWorkspace.workspaceIdAsUUID,
-        1,
+        0,
         deleted = false,
         Some(
           """{"foo":"bar","ref":{"entityName":"referencedName0","entityType":"referencedType"},"refs":[{"entityName":"referencedName1","entityType":"referencedType"},{"entityName":"referencedName2","entityType":"referencedType"}]}"""
@@ -340,13 +314,12 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
 
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.getReferencedIds(any(), any()))
-      .thenReturn(DBIO.successful(Seq(0, 1, 2))) // reference lookup returns ids
+    when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
-    when(mockQuery.upsertReferences(any()))
+    when(mockQuery.insertReferences(any(), any()))
       .thenReturn(DBIO.successful(2))
 
     // provider using mocks
@@ -356,7 +329,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe entityToCreate
 
-    verify(mockQuery, times(1)).getReferencedIds(
+    verify(mockQuery, times(1)).existsAll(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
         AttributeEntityReference("referencedType", "referencedName0"),
@@ -369,10 +342,22 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-    verify(mockQuery, times(1)).upsertReferences(
-      Set(RefPointers(42, Set(0, 1, 2)))
-    ) // 42 is the entity id from createdEntityRec; Set(0, 1, 2) are the ids returned from getReferencedIds
+    verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
+
+    verify(mockQuery, times(1)).insertReferences(
+      defaultWorkspace.workspaceIdAsUUID,
+      Set(
+        RefMapping(
+          entityToCreate.toReference,
+          Set(
+            AttributeEntityReference("referencedType", "referencedName0"),
+            AttributeEntityReference("referencedType", "referencedName1"),
+            AttributeEntityReference("referencedType", "referencedName2")
+          )
+        )
+      )
+    )
+
   }
 
   it should "throw EntityReferenceNotFoundException if this entity's references are missing" in {
@@ -395,8 +380,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
-    when(mockQuery.getReferencedIds(any(), any()))
-      .thenReturn(DBIO.successful(Seq(0, 1))) // reference lookup returns only two of the three desired references
+    when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(false)) // reference targets are missing
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -407,7 +391,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     actual shouldBe a[EntityReferenceNotFoundException]
 
-    verify(mockQuery, times(1)).getReferencedIds(
+    verify(mockQuery, times(1)).existsAll(
       defaultWorkspace.workspaceIdAsUUID,
       Set(
         AttributeEntityReference("referencedType", "referencedName0"),
@@ -420,8 +404,8 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-    verify(mockQuery, never()).upsertReferences(any())
+    verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
+    verify(mockQuery, never()).insertReferences(any(), any())
   }
 
   it should "throw RawlsExceptionWithErrorReport if this type & name already exists" in {
@@ -454,10 +438,10 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
                                           entityToCreate.name
     )
 
-    verify(mockQuery, never()).getReferencedIds(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, never()).existsAll(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockQuery, never()).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-    verify(mockQuery, never()).upsertReferences(any())
+    verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
+    verify(mockQuery, never()).insertReferences(any(), any())
   }
 
   private val illegalEntities = Map(
@@ -484,10 +468,10 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       actual shouldBe a[RawlsExceptionWithErrorReport]
 
       verify(mockQuery, never()).getEntity(any(), any(), any())
-      verify(mockQuery, never()).getReferencedIds(any(), any())
+      verify(mockQuery, never()).existsAll(any(), any())
       verify(mockQuery, never()).createEntity(any(), any())
-      verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-      verify(mockQuery, never()).upsertReferences(any())
+      verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
+      verify(mockQuery, never()).insertReferences(any(), any())
     }
   }
 
@@ -836,7 +820,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val entity = Entity("name", "type", attributes)
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
+    val actual = provider.findAllReferences(entity)
 
     actual shouldBe empty
   }
@@ -856,15 +840,17 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val entity = Entity("name", "type", attributes)
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(entity)
+    val actual = provider.findAllReferences(entity)
 
-    val expected = Map(
-      AttributeEntityReference("type", "name") ->
-        Seq(
+    val expected = Set(
+      RefMapping(
+        AttributeEntityReference("type", "name"),
+        Set(
           AttributeEntityReference("refTypeA", "refName1"),
           AttributeEntityReference("refTypeB", "refName2"),
           AttributeEntityReference("refTypeB", "refName3")
         )
+      )
     )
 
     actual shouldBe expected
@@ -877,7 +863,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = provider.findAllReferences(input)
+    val actual = provider.findAllReferences(input)
 
     actual shouldBe empty
   }
@@ -891,7 +877,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val entity2 = Entity("name2", "type", attributes)
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+    val actual =
       provider.findAllReferences(Seq(entity1, entity2))
 
     actual shouldBe empty
@@ -915,7 +901,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
       )
     )
     // entity2 has no references
-    val entity2 = Entity("name1",
+    val entity2 = Entity("name2",
                          "type",
                          Map(
                            AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
@@ -924,7 +910,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     )
     // entity3 has a single reference
     val entity3 = Entity(
-      "name1",
+      "name3",
       "type",
       Map(
         AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
@@ -935,92 +921,63 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual: Map[AttributeEntityReference, Seq[AttributeEntityReference]] =
+    val actual =
       provider.findAllReferences(Seq(entity1, entity2, entity3))
 
-    val expected = Map(
-      entity1.toReference -> Seq(
-        AttributeEntityReference("refTypeA", "refName1"),
-        AttributeEntityReference("refTypeB", "refName2"),
-        AttributeEntityReference("refTypeB", "refName3")
+    val expected = Set(
+      RefMapping(
+        entity1.toReference,
+        Set(
+          AttributeEntityReference("refTypeA", "refName1"),
+          AttributeEntityReference("refTypeB", "refName2"),
+          AttributeEntityReference("refTypeB", "refName3")
+        )
       ),
-      entity3.toReference -> Seq(AttributeEntityReference("refTypeC", "refName4"))
+      RefMapping(entity3.toReference, Set(AttributeEntityReference("refTypeC", "refName4")))
     )
 
     actual shouldBe expected
   }
 
-  behavior of "replaceReferences"
+  it should "respect only the last entity if an entity is repeated in the input Seq" in {
+    // repeat the same entity three times in the input, each time with a different reference
+    val entity1 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("ref1") -> AttributeEntityReference("targetType", "targetName1")
+      )
+    )
+    val entity2 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("ref2") -> AttributeEntityReference("targetType", "targetName2")
+      )
+    )
+    val entity3 = Entity(
+      "name1",
+      "type",
+      Map(
+        AttributeName.withDefaultNS("ref3") -> AttributeEntityReference("targetType", "targetName3")
+      )
+    )
 
-  it should "skip deletes and upserts when isInsert=true and references are empty" in {
-    // provider using mocks
-    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    val provider = providerWithMocks(mockQuery)
+    val provider = providerWithMocks(mock[slickDataSource.dataAccess.compactEntityQuery.type])
 
-    val actual = runAndWait(provider.replaceReferences(2, Set(), isInsert = true), atMost)
+    val actual =
+      provider.findAllReferences(Seq(entity1, entity2, entity3))
 
-    actual shouldBe (0, 0)
+    val expected = Set(
+      RefMapping(
+        entity1.toReference,
+        Set(
+          AttributeEntityReference("targetType", "targetName3")
+        )
+      )
+    )
 
-    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-    verify(mockQuery, never()).upsertReferences(any())
-  }
-
-  it should "skip deletes when isInsert=true and non-empty references" in {
-    // mocks
-    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.upsertReferences(any()))
-      .thenAnswer { invocation =>
-        DBIO.successful(invocation.getArgument[Set[RefPointers]](0).head.toIds.size)
-      }
-    when(mockQuery.deleteReferencesWithFilter(any(), any()))
-      .thenReturn(DBIO.successful(Int.MinValue))
-
-    // provider using mocks
-    val provider = providerWithMocks(mockQuery)
-
-    val actual = runAndWait(provider.replaceReferences(2, Set(7, 8, 9), isInsert = true), atMost)
-
-    actual shouldBe (0, 3)
-
-    verify(mockQuery, never()).deleteReferencesWithFilter(any(), any())
-    verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(7, 8, 9))))
-  }
-
-  it should "skip upserts when isInsert=false and references are empty" in {
-    // mocks
-    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.deleteReferencesWithFilter(any(), any()))
-      .thenReturn(DBIO.successful(Int.MinValue))
-    // provider using mocks
-    val provider = providerWithMocks(mockQuery)
-
-    val actual = runAndWait(provider.replaceReferences(2, Set(), isInsert = false), atMost)
-
-    actual shouldBe (Int.MinValue, 0)
-
-    verify(mockQuery, times(1)).deleteReferencesWithFilter(2, Set())
-    verify(mockQuery, never()).upsertReferences(any())
-  }
-
-  it should "both delete and upsert when isInsert=false and non-empty references" in {
-    // mocks
-    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
-    when(mockQuery.upsertReferences(any()))
-      .thenAnswer { invocation =>
-        DBIO.successful(invocation.getArgument[Set[RefPointers]](0).head.toIds.size)
-      }
-    when(mockQuery.deleteReferencesWithFilter(any(), any()))
-      .thenReturn(DBIO.successful(Int.MinValue))
-
-    // provider using mocks
-    val provider = providerWithMocks(mockQuery)
-
-    val actual = runAndWait(provider.replaceReferences(2, Set(7, 8, 9), isInsert = false), atMost)
-
-    actual shouldBe (Int.MinValue, 3)
-
-    verify(mockQuery, times(1)).deleteReferencesWithFilter(2, Set(7, 8, 9))
-    verify(mockQuery, times(1)).upsertReferences(Set(RefPointers(2, Set(7, 8, 9))))
+    actual shouldBe expected
   }
 
   behavior of "withWorkspaceLastModified"

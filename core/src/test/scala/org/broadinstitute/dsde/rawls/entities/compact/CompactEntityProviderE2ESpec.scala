@@ -119,35 +119,20 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataAfter("typeA").count shouldBe 2
     metadataAfter("typeB").count shouldBe 1
 
-    // find the ids for the three entities already created
-    val entityRecs = runAndWait(
-      q.getEntityRefs(wsid,
-                      Set(
-                        AttributeEntityReference("typeA", "name1"),
-                        AttributeEntityReference("typeA", "name2"),
-                        AttributeEntityReference("typeB", "name3")
-                      )
-      )
-    )
-
-    val recIdLookup: Map[AttributeEntityReference, Long] = entityRecs.map { rec =>
-      rec.toAttributeEntityReference -> rec.id
-    }.toMap
-
-    val name1Id = recIdLookup(AttributeEntityReference("typeA", "name1"))
-    val name2Id = recIdLookup(AttributeEntityReference("typeA", "name2"))
-    val name3Id = recIdLookup(AttributeEntityReference("typeB", "name3"))
+    val ref1 = AttributeEntityReference("typeA", "name1")
+    val ref2 = AttributeEntityReference("typeA", "name2")
+    val ref3 = AttributeEntityReference("typeB", "name3")
 
     // entity with "name1" should have no references
-    runAndWait(q.getReferencedIds(name1Id)) shouldBe empty
+    runAndWait(q.getReferencesFrom(wsid, ref1)) shouldBe empty
 
     // entity with "name2" should have a reference to "name1"
-    runAndWait(q.getReferencedIds(name2Id)) shouldBe Seq(name1Id)
+    runAndWait(q.getReferencesFrom(wsid, ref2)) shouldBe Seq(ref1)
 
     // entity with "name3" should have references to both "name1" and "name2"
-    runAndWait(q.getReferencedIds(name3Id)) should contain theSameElementsAs Seq(
-      name1Id,
-      name2Id
+    runAndWait(q.getReferencesFrom(wsid, ref3)) should contain theSameElementsAs Seq(
+      ref1,
+      ref2
     )
 
   }
@@ -182,8 +167,9 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     // validate the starting references before our batchUpsert
     val initialReferences =
-      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
-        .map(_.toAttributeEntityReference)
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+      )
 
     initialReferences shouldBe Seq(AttributeEntityReference("targetType", "targetName1"),
                                    AttributeEntityReference("targetType", "targetName2")
@@ -216,8 +202,9 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     // validate the references after our batchUpsert
     val finalReferences =
-      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
-        .map(_.toAttributeEntityReference)
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+      )
 
     finalReferences.toSet shouldBe Set(
       AttributeEntityReference("targetType", "targetName1"),
@@ -250,8 +237,9 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     // validate the starting reference before our batchUpsert
     val initialReferences =
-      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
-        .map(_.toAttributeEntityReference)
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+      )
 
     initialReferences shouldBe Seq(AttributeEntityReference("targetType", "targetName"))
 
@@ -266,8 +254,9 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     // validate the references after our batchUpsert
     val finalReferences =
-      runAndWait(provider.repository.queries.getReferenceTargets(wsid, "sourceType", "sourceName"))
-        .map(_.toAttributeEntityReference)
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+      )
 
     finalReferences.toSet shouldBe empty
 

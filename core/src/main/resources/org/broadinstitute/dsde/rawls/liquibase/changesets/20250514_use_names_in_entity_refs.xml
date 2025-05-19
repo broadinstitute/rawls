@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <!-- the ENTITY_REFS table tracks references between entities -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="recreate_entity_refs_with_names">
+        <dropTable tableName="ENTITY_REFS" />
+        <createTable tableName="ENTITY_REFS">
+            <column name="workspace_id" type="binary(16)">
+                <constraints nullable="false" />
+            </column>
+            <column name="from_entity_type" type="varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin">
+                <constraints nullable="false" />
+            </column>
+            <column name="from_name" type="varchar(254)">
+                <constraints nullable="false" />
+            </column>
+            <column name="to_entity_type" type="varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin">
+                <constraints nullable="false" />
+            </column>
+            <column name="to_name" type="varchar(254)">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <!-- index for lookups using to -->
+        <createIndex tableName="ENTITY_REFS" indexName="idx_to">
+            <column name="workspace_id" />
+            <column name="to_entity_type" />
+            <column name="to_name" />
+        </createIndex>
+        <!-- unique constraint for from+to, which covers lookups against from_id -->
+        <addUniqueConstraint columnNames="workspace_id, from_entity_type, from_name, to_entity_type, to_name" constraintName="unq_from_to" tableName="ENTITY_REFS"/>
+    </changeSet>
+
+
+
+</databaseChangeLog>
