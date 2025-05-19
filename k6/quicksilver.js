@@ -47,7 +47,16 @@ export const options = {
     getEntityMetadataBaseline: {
       exec: 'getEntityMetadata',
       tags: { rawlsApi: 'getEntityMetadata' },
-      env: { TEST_GROUP: 'baseline' },
+      env: { TEST_GROUP: 'baseline, cached' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '44s'
+    },
+    getEntityMetadataBaselineUncached: {
+      exec: 'getEntityMetadataUncached',
+      tags: { rawlsApi: 'getEntityMetadata' },
+      env: { TEST_GROUP: 'baseline, uncached' },
       executor: 'constant-vus',
       vus: 3,
       duration: '20s',
@@ -147,11 +156,18 @@ export function putEntity() {
   });
 }
 
-// get a single entity
+// get entity type metadata
 export function getEntityMetadata() {
+  metadataTest(true);
+}
+export function getEntityMetadataUncached() {
+  metadataTest(false);
+}
+
+function metadataTest(useCache) {
   group(`${__ENV.TEST_GROUP}`, function() {
     let res = http.get(
-        `${workspaceRoot(__ENV.TEST_GROUP)}/entities`,
+        `${workspaceRoot(__ENV.TEST_GROUP)}/entities?useCache=${useCache}`,
         defaultParams);
     check(res, { "status is 200": (res) => res.status === 200 });
     sleep(.1);
@@ -194,6 +210,8 @@ const defaultHeaders = {
 const defaultParams = {headers: defaultHeaders}
 
 const workspaceRoot = (testGroup) => {
-  return `${__ENV.QUICKSILVER_TERRA_INSTANCE}/api/workspaces/${__ENV.QUICKSILVER_WS_PREFIX}${testGroup}`;
+  // take everything up to the first comma, allowing for "annotations" to the testGroup
+  const groupBase = testGroup.split(",")[0];
+  return `${__ENV.QUICKSILVER_TERRA_INSTANCE}/api/workspaces/${__ENV.QUICKSILVER_WS_PREFIX}${groupBase}`;
 }
 

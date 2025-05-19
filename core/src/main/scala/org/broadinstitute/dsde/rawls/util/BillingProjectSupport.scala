@@ -67,6 +67,18 @@ trait BillingProjectSupport {
       }
     } yield ()
 
+  def requireSameServicePerimeter(sourceBillingProject: RawlsBillingProject,
+                                  destBillingProject: RawlsBillingProject
+  ): Unit =
+    if (sourceBillingProject.servicePerimeter != destBillingProject.servicePerimeter) {
+      throw RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          s"Source and destination billing must have the same service perimeter, if any"
+        )
+      )
+    }
+
   /**
     * Load the specified billing project, throwing if the billing project is not ready.
     */

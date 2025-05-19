@@ -304,4 +304,14 @@ class MockGoogleServicesDAO(groupsPrefix: String,
                                                   oldIdentity: Identity,
                                                   newIdentity: Identity
   ): Future[Unit] = Future.successful(())
+
+  override def isBillingAccountEnabled(billingAccount: RawlsBillingAccountName)(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean] =
+    Future.successful(billingAccount == accessibleBillingAccountName)
+
+  override def areServicesEnabled(project: GoogleProject, services: List[String])(implicit
+    executionContext: ExecutionContext
+  ): Boolean =
+    true
 }

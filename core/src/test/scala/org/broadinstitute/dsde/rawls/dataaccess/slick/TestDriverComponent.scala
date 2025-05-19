@@ -551,6 +551,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                            wsAttrs,
                                            false
     )
+
     val workspaceLocked = makeWorkspaceWithUsers(
       billingProject,
       wsName.name + "_locked",
