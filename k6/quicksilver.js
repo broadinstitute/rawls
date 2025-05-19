@@ -8,7 +8,7 @@ export const options = {
     // within 20 seconds.
     entityQueryBaseline: {
       exec: 'entityQuery',
-      tags: { rawlsApi: 'entityQuery' },
+      tags: { rawlsApi: 'entityQuery', feature: 'sorting' },
       env: { TEST_GROUP: 'baseline' },
       executor: 'constant-vus',
       vus: 3,
@@ -16,12 +16,51 @@ export const options = {
     },
     entityQueryTest: {
       exec: 'entityQuery',
-      tags: { rawlsApi: 'entityQuery' },
+      tags: { rawlsApi: 'entityQuery', feature: 'sorting' },
       env: { TEST_GROUP: 'test' },
       executor: 'constant-vus',
       vus: 3,
       duration: '20s'
     },
+    // entityQuery filter-by-column tests.
+    entityQueryFilterByColumnBaseline: {
+      exec: 'entityQueryFilterByColumn',
+      tags: { rawlsApi: 'entityQuery', feature: 'filter-by-column'  },
+      env: { TEST_GROUP: 'baseline' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '22s'
+    },
+    entityQueryFilterByColumnTest: {
+      exec: 'entityQueryFilterByColumn',
+      tags: { rawlsApi: 'entityQuery', feature: 'filter-by-column' },
+      env: { TEST_GROUP: 'test' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '22s'
+    },
+    // entityQuery all-column search
+    entityQueryAllColumnSearchBaseline: {
+      exec: 'entityQuery',
+      tags: { rawlsApi: 'entityQuery', feature: 'search' },
+      env: { TEST_GROUP: 'baseline' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '44s'
+    },
+    entityQueryAllColumnSearchTest: {
+      exec: 'entityQuery',
+      tags: { rawlsApi: 'entityQuery', feature: 'search' },
+      env: { TEST_GROUP: 'test' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '44s'
+    },
+
     // getEntity baseline and test run in parallel; each has three virtual users and makes as many requests as possible
     // within 20 seconds. The getEntity scenarios start after the entityQuery scenarios finish, by specifying startTime.
     getEntityBaseline: {
@@ -31,7 +70,7 @@ export const options = {
       executor: 'constant-vus',
       vus: 3,
       duration: '20s',
-      startTime: '22s'
+      startTime: '66s'
     },
     getEntityTest: {
       exec: 'getEntity',
@@ -40,36 +79,36 @@ export const options = {
       executor: 'constant-vus',
       vus: 3,
       duration: '20s',
-      startTime: '22s',
+      startTime: '66s',
     },
     // getEntityMetadata baseline and test run in parallel; each has three virtual users and makes as many requests as possible
     // within 20 seconds. The getEntityMetadata scenarios start after the getEntity scenarios finish, by specifying startTime.
     getEntityMetadataBaseline: {
       exec: 'getEntityMetadata',
-      tags: { rawlsApi: 'getEntityMetadata' },
-      env: { TEST_GROUP: 'baseline, cached' },
+      tags: { rawlsApi: 'getEntityMetadata', feature: 'cached' },
+      env: { TEST_GROUP: 'baseline' },
       executor: 'constant-vus',
       vus: 3,
       duration: '20s',
-      startTime: '44s'
+      startTime: '88s'
     },
     getEntityMetadataBaselineUncached: {
       exec: 'getEntityMetadataUncached',
-      tags: { rawlsApi: 'getEntityMetadata' },
-      env: { TEST_GROUP: 'baseline, uncached' },
+      tags: { rawlsApi: 'getEntityMetadata', feature: 'uncached' },
+      env: { TEST_GROUP: 'baseline' },
       executor: 'constant-vus',
       vus: 3,
       duration: '20s',
-      startTime: '44s'
+      startTime: '88s'
     },
     getEntityMetadataTest: {
       exec: 'getEntityMetadata',
-      tags: { rawlsApi: 'getEntityMetadata' },
+      tags: { rawlsApi: 'getEntityMetadata', feature: 'uncached' },
       env: { TEST_GROUP: 'test' },
       executor: 'constant-vus',
       vus: 3,
       duration: '20s',
-      startTime: '44s',
+      startTime: '88s',
     },
     // putEntity baseline and test run in parallel; each makes a total of 20 requests, using 2 virtual users.
     // The putEntity scenarios start after the getEntityMetadata scenarios finish, by specifying startTime.
@@ -80,7 +119,7 @@ export const options = {
       executor: 'shared-iterations',
       vus: 2,
       iterations: 20,
-      startTime: '66s'
+      startTime: '110s'
     },
     putEntityTest: {
       exec: 'putEntity',
@@ -89,22 +128,37 @@ export const options = {
       executor: 'shared-iterations',
       vus: 2,
       iterations: 20,
-      startTime: '66s',
+      startTime: '110s',
     },
   }
 }
 
 // paginated search; this is the API that populates data tables in the UI
 export function entityQuery() {
+  // custom sort column; no search or filter
+  entityQueryImpl('anvil_activity', 'page=1&pageSize=100&sortField=activity_id&sortDirection=asc&filterOperator=and');
+}
+
+export function entityQueryFilterByColumn() {
+  // filter on the `activity_type` column for the value `Unknown`; sort by name
+  entityQueryImpl('anvil_activity', 'columnFilter=activity_type%3DUnknown&page=1&pageSize=100&sortField=name&sortDirection=asc&filterOperator=and');
+}
+
+export function entityQueryAllColumnSearch() {
+  // search across all columns for the value `Unknown`; sort by name
+  entityQueryImpl('anvil_activity', 'filterTerms=Unknown&page=1&pageSize=100&sortField=name&sortDirection=asc&filterOperator=and');
+}
+
+function entityQueryImpl(entityType, queryString) {
   group(`${__ENV.TEST_GROUP}`, function() {
-    // page size 100 replicates what Terra UI asks for
     let res = http.get(
-      `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/file_inventory?page=1&pageSize=100&sortField=name&sortDirection=asc&filterOperator=and`,
-      defaultParams);
+        `${workspaceRoot(__ENV.TEST_GROUP)}/entityQuery/${entityType}?${queryString}`,
+        defaultParams);
     check(res, { "status is 200": (res) => res.status === 200 });
     sleep(.1);
   });
 }
+
 
 // get a single entity
 export function getEntity() {
