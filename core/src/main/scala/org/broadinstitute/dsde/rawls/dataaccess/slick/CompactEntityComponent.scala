@@ -3,15 +3,16 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
-  AttributeEntityReference,
   AttributeName,
   Entity,
   EntityColumnFilter,
+  EntityPointer,
   EntityQuery,
   FilterOperators,
   SortDirections
@@ -68,8 +69,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
     GetResult(r => EntityTypeAndCount(r.<<, r.<<))
 
-  implicit val getAttributeEntityReference: GetResult[AttributeEntityReference] =
-    GetResult(r => AttributeEntityReference(r.<<, r.<<))
+  implicit val getEntityPointer: GetResult[EntityPointer] =
+    GetResult(r => EntityPointer(r.<<, r.<<))
 
   implicit val getEntity: GetResult[Entity] =
     GetResult(r => Entity(r.<<, r.<<, fromSql(r.<<)))
@@ -131,7 +132,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
-  def getEntities(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRecord]] =
+  def getEntities(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Seq[CompactEntityRecord]] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(Seq())
@@ -157,9 +158,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
-  def getEntityVersions(workspaceId: UUID,
-                        refs: Set[AttributeEntityReference]
-  ): ReadAction[Seq[CompactEntityVersionRecord]] =
+  def getEntityVersions(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Seq[CompactEntityVersionRecord]] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(Seq())
@@ -199,7 +198,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
-  def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
+  def getEntityRefs(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Seq[CompactEntityRefRecord]] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(Seq())
@@ -225,7 +224,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: uses idx_entity_type_name index. Extra: Using index condition; Using where`
     */
-  def countExisting(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Int] =
+  def countExisting(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Int] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(0)
@@ -251,7 +250,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: uses idx_entity_type_name index. Extra: Using index condition; Using where` (always the same as countExisting())
     */
-  def existsAll(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Boolean] =
+  def existsAll(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Boolean] =
     countExisting(workspaceId, refs).map(count => count == refs.size)
 
   /**
@@ -261,7 +260,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * `execution plan: Uses unq_from_to index. Extra: Using where`
    */
-  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] = {
+  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[EntityPointer]): ReadWriteAction[Int] = {
     val typeNameClauses = generateTypeNameSql(fromRefs, typeColumn = "from_entity_type", nameColumn = "from_name")
 
     val baseSql =
@@ -334,7 +333,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
    */
-  def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
+  def batchHide(workspaceId: UUID, entities: Seq[EntityPointer]): ReadWriteAction[Int] = {
     // get unique suffix for renaming
     val renameSuffix = "_" + driverComponent.getSufficientlyRandomSuffix(1000000000) // 1 billion
     val deletedDate = new Timestamp(new Date().getTime)
@@ -372,9 +371,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
   // `execution plan: uses idx_to index. Extra: Using where; Using index` (I think this may also use unq_from_to in some cases)
-  def getReferencesTo(workspaceId: UUID,
-                      refs: Seq[AttributeEntityReference]
-  ): ReadAction[Seq[AttributeEntityReference]] = {
+  def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
       sql" or "
@@ -391,25 +388,25 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         and ("""
 
     concatSqlActions(baseSql, toNameClause, sql") and NOT (", fromNameClause, sql")")
-      .as[AttributeEntityReference]
+      .as[EntityPointer]
   }
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
   // `execution plan: Uses unq_from_to index. Extra: Using where`
-  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] =
+  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
     sql"""select from_entity_type, from_name
          from ENTITY_REFS
          where workspace_id = $workspaceId
          and to_entity_type = $entityType
          and from_entity_type != $entityType
-       """.as[AttributeEntityReference]
+       """.as[EntityPointer]
 
   /*
    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
-   * AttributeEntityReferences.
+   * EntityKeys.
    */
-  private def generateTypeNameSql(refs: Set[AttributeEntityReference],
+  private def generateTypeNameSql(refs: Set[EntityPointer],
                                   typeColumn: String = "entity_type",
                                   nameColumn: String = "name"
   ): Iterable[SQLActionBuilder] = {
@@ -630,12 +627,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   /** look up the types&names of all entities referenced by the given entity */
   @VisibleForTesting
-  def getReferencesFrom(workspaceId: UUID, from: AttributeEntityReference): ReadAction[Seq[AttributeEntityReference]] =
+  def getReferencesFrom(workspaceId: UUID, from: EntityPointer): ReadAction[Seq[EntityPointer]] =
     sql"""select to_entity_type, to_name
          from ENTITY_REFS
          where workspace_id = $workspaceId
          and from_entity_type = ${from.entityType}
-         and from_name = ${from.entityName}""".as[AttributeEntityReference]
+         and from_name = ${from.entityName}""".as[EntityPointer]
 
   // return the ENTITY_KEYS row for a given entity
   // `execution plan: single row constant; fully indexed by primary key`
