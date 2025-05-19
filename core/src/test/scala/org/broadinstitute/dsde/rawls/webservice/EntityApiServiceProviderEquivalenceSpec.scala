@@ -26,7 +26,6 @@ import org.broadinstitute.dsde.rawls.model.{
   CompactDataTablesSetting,
   Entity,
   EntityTypeMetadata,
-  ErrorReport,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -239,27 +238,33 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
     }
   }
 
-  behavior of "test assumptions via setupProviders helper"
+  behavior of "GET listEntities"
 
-  // this verifies that setup is correct; compactWs should use CompactEntityProvider and legacyWs should use
-  // LocalEntityProvider
-  it should " succeed for legacy, fail for compact on list_entities (not implemented yet)" in withProviderEquivalenceApiServices {
-    services =>
-      withClue("For legacy workspace,") {
-        Get(s"/workspaces/${legacyWs.namespace}/${legacyWs.name}/entities/some-type") ~>
-          withHandlers(services.entityRoutes()) ~>
-          check {
-            status shouldBe StatusCodes.OK
-          }
-      }
-      withClue("For compact workspace,") {
-        Get(s"/workspaces/${compactWs.namespace}/${compactWs.name}/entities/some-type") ~>
-          withHandlers(services.entityRoutes()) ~>
-          check {
-            status shouldBe StatusCodes.NotImplemented
-            responseAs[ErrorReport].message shouldBe "list all entities not supported for compact data tables."
-          }
-      }
+  it should "list entities" in withProviderEquivalenceApiServices { services =>
+    // Create entities in both workspaces
+    val entitiesToCreate = Seq(
+      Entity("ent1", "myType", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("ent2", "myType", Map(AttributeName.withDefaultNS("baz") -> AttributeString("qux")))
+    )
+    entitiesToCreate.foreach { entity =>
+      createEntity(compactWs, entity, services)
+      createEntity(legacyWs, entity, services)
+    }
+
+    // List entities in both workspaces
+    def listEntities(ws: Workspace): Seq[Entity] =
+      Get(s"/workspaces/${ws.namespace}/${ws.name}/entities/myType") ~>
+        withHandlers(services.entityRoutes()) ~>
+        check {
+          status shouldBe StatusCodes.OK
+          responseAs[Seq[Entity]]
+        }
+
+    val compactEntities = listEntities(compactWs)
+    val legacyEntities = listEntities(legacyWs)
+
+    compactEntities should contain theSameElementsAs legacyEntities
+    compactEntities.map(_.name) should contain theSameElementsAs entitiesToCreate.map(_.name)
   }
 
   // ====================================================================================================

@@ -457,6 +457,69 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     }
   }
 
+  behavior of "listEntities"
+
+  it should "list entities" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create entities
+    val updates = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition("name2", "typeA", Seq())
+    )
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // List entities
+    val entities = Await.result(
+      provider.listEntities("typeA").runFold(Seq.empty[Entity])(_ :+ _),
+      atMost
+    )
+
+    entities.map(_.name) should contain theSameElementsAs Seq("name1", "name2")
+  }
+
+  it should "list entities with attributes" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create entities with attributes
+    val updates = Seq(
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("bar")))
+      ),
+      EntityUpdateDefinition(
+        "name2",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("baz"), AttributeString("qux")))
+      )
+    )
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // List entities
+    val entities = Await.result(
+      provider.listEntities("typeA").runFold(Seq.empty[Entity])(_ :+ _),
+      atMost
+    )
+
+    entities should contain theSameElementsAs Seq(
+      Entity("name1", "typeA", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name2", "typeA", Map(AttributeName.withDefaultNS("baz") -> AttributeString("qux")))
+    )
+  }
+
+  it should "list entities when none" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // List entities when none exist
+    val entities = Await.result(
+      provider.listEntities("typeA").runFold(Seq.empty[Entity])(_ :+ _),
+      atMost
+    )
+
+    entities shouldBe empty
+  }
+
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================

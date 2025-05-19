@@ -180,6 +180,19 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       query.as[CompactEntityVersionRecord]
     }
 
+  /**
+   * Get all entities of a given type in a workspace.
+   *
+   * `execution plan: index range scan; using where. Index: idx_entity_type_name`
+   */
+  def listEntities(workspaceId: UUID,
+                   entityType: String
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+    sql"""#$basicCompactEntitySelect
+      #$fromEntityWhereNotDeleted
+      and workspace_id = $workspaceId
+      and entity_type = $entityType""".as[CompactEntityRecord]
+
   /** Given a set of entity type/name pairs, return the CompactEntityRefRecord for those pairs.
     * The CompactEntityRefRecord includes the internal database id for these entities.
     *

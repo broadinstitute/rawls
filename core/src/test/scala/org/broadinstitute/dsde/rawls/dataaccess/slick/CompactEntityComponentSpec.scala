@@ -31,6 +31,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   // shorthand vars for tests below to enhance readability
   private val wsid = minimalTestData.workspace.workspaceIdAsUUID
+  private val ws2id = minimalTestData.workspace2.workspaceIdAsUUID
   private val q = compactEntityQuery
 
   behavior of "batchCreateEntities and getEntity"
@@ -1309,6 +1310,44 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         entityQuery
       )
     }
+  }
+
+  behavior of "listEntities"
+
+  it should "handle entities with simple attributes" in withMinimalTestDatabase { _ =>
+    val testEntityType = "testEntityType"
+    val entity1 = Entity("entityName1",
+                         testEntityType,
+                         Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+    )
+    val entity2 = Entity("entityName2",
+                         testEntityType,
+                         Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+    )
+    val ws1Entities = Seq(
+      entity1,
+      entity2,
+      Entity("entityName3",
+             "otherEntityType",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      )
+    )
+
+    val ws2Entities = Seq(
+      Entity("entityName4",
+             testEntityType,
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      )
+    )
+
+    // insert the entities
+    runAndWait(q.batchCreateEntities(wsid, ws1Entities, allowUpsert = false)) shouldBe ws1Entities.size
+    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, allowUpsert = false)) shouldBe ws2Entities.size
+
+    // validate listed entities of entityType "testEntityType" in the first workspace
+    runAndWait(q.listEntities(wsid, testEntityType)).map(_.toEntity) should contain theSameElementsAs Seq(entity1,
+                                                                                                          entity2
+    )
   }
 
   // ====================================================================================================

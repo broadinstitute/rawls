@@ -8,8 +8,13 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
-import org.broadinstitute.dsde.rawls.entities.exceptions._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException
+}
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
@@ -793,7 +798,6 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     actual shouldBe a[EntityNotFoundException]
   }
 
-  "listEntities" should "have tests" is pending
   "queryEntities" should "have tests" is pending
   "queryEntitiesSource" should "have tests" is pending
   "renameAttribute" should "have tests" is pending
