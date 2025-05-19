@@ -30,6 +30,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   // shorthand vars for tests below to enhance readability
   private val wsid = minimalTestData.workspace.workspaceIdAsUUID
+  private val ws2id = minimalTestData.workspace2.workspaceIdAsUUID
   private val q = compactEntityQuery
 
   behavior of "batchCreateEntities and getEntity"
@@ -1315,17 +1316,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   behavior of "listEntities"
 
-  it should "handle entities with no attributes" in withMinimalTestDatabase { _ =>
-    val entities = Seq(
-      Entity("entityName1", "entityType1", Map()),
-      Entity("entityName2", "entityType2", Map()),
-      Entity("entityName3", "entityType3", Map())
-    )
-    insertAndListEntities(entities)
-  }
-
   it should "handle entities with simple attributes" in withMinimalTestDatabase { _ =>
-    val entities = Seq(
+    val ws1Entities = Seq(
       Entity("entityName1",
              "entityType1",
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
@@ -1339,7 +1331,38 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
       )
     )
-    insertAndListEntities(entities)
+
+    val ws2Entities = Seq(
+      Entity("entityName4",
+             "entityType4",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      ),
+      Entity("entityName5",
+             "entityType5",
+             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
+      )
+    )
+
+    // rows should not exist before inserting
+    ws1Entities.foreach { entity =>
+      runAndWait(q.getEntity(wsid, entity.entityType, entity.name)) shouldBe empty
+    }
+    ws2Entities.foreach { entity =>
+      runAndWait(q.getEntity(ws2id, entity.entityType, entity.name)) shouldBe empty
+    }
+
+    // insert the entities
+    runAndWait(q.batchCreateEntities(wsid, ws1Entities, allowUpsert = false)) shouldBe ws1Entities.size
+    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, allowUpsert = false)) shouldBe ws2Entities.size
+
+    // compare the listed entities for each workspace
+    val ws1EntityType = ws1Entities.head.entityType
+    val ws1Listed = runAndWait(q.listEntities(wsid, ws1EntityType))
+    ws1Listed.map(_.toEntity) should contain theSameElementsAs ws1Entities.filter(_.entityType == ws1EntityType)
+
+    val ws2EntityType = ws2Entities.head.entityType
+    val ws2Listed = runAndWait(q.listEntities(ws2id, ws2EntityType))
+    ws2Listed.map(_.toEntity) should contain theSameElementsAs ws2Entities.filter(_.entityType == ws2EntityType)
   }
 
   // ====================================================================================================
@@ -1389,19 +1412,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
       rec
     }
-  }
-
-  // This helper uses batchCreateEntities.
-  private def insertAndListEntities(entities: Seq[Entity], workspaceId: UUID = wsid): Seq[CompactEntityRecord] = {
-    entities.foreach { entity =>
-      runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name)) shouldBe empty
-    }
-
-    runAndWait(q.batchCreateEntities(workspaceId, entities, allowUpsert = false)) shouldBe entities.size
-    val entityType = entities.head.entityType
-    val listed = runAndWait(q.listEntities(workspaceId, entityType))
-    listed.map(_.toEntity) should contain theSameElementsAs entities.filter(_.entityType == entityType)
-    listed
   }
 
   def testDesiredFields(filterTerms: Option[String], columnFilter: Option[EntityColumnFilter])(
