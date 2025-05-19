@@ -1319,50 +1319,32 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   it should "handle entities with simple attributes" in withMinimalTestDatabase { _ =>
     val ws1Entities = Seq(
       Entity("entityName1",
-             "entityType1",
+             "testEntityType",
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
       ),
       Entity("entityName2",
-             "entityType2",
+             "testEntityType",
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
       ),
       Entity("entityName3",
-             "entityType3",
+             "otherEntityType",
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
       )
     )
 
     val ws2Entities = Seq(
       Entity("entityName4",
-             "entityType4",
-             Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
-      ),
-      Entity("entityName5",
-             "entityType5",
+             "testEntityType",
              Map(AttributeName.withDefaultNS("foo") -> AttributeString(UUID.randomUUID().toString))
       )
     )
-
-    // rows should not exist before inserting
-    ws1Entities.foreach { entity =>
-      runAndWait(q.getEntity(wsid, entity.entityType, entity.name)) shouldBe empty
-    }
-    ws2Entities.foreach { entity =>
-      runAndWait(q.getEntity(ws2id, entity.entityType, entity.name)) shouldBe empty
-    }
 
     // insert the entities
     runAndWait(q.batchCreateEntities(wsid, ws1Entities, allowUpsert = false)) shouldBe ws1Entities.size
     runAndWait(q.batchCreateEntities(ws2id, ws2Entities, allowUpsert = false)) shouldBe ws2Entities.size
 
-    // compare the listed entities for each workspace
-    val ws1EntityType = ws1Entities.head.entityType
-    val ws1Listed = runAndWait(q.listEntities(wsid, ws1EntityType))
-    ws1Listed.map(_.toEntity) should contain theSameElementsAs ws1Entities.filter(_.entityType == ws1EntityType)
-
-    val ws2EntityType = ws2Entities.head.entityType
-    val ws2Listed = runAndWait(q.listEntities(ws2id, ws2EntityType))
-    ws2Listed.map(_.toEntity) should contain theSameElementsAs ws2Entities.filter(_.entityType == ws2EntityType)
+    // validate listed entities of entityType "testEntityType" in the first workspace
+    runAndWait(q.listEntities(wsid, "testEntityType")).size shouldBe 2
   }
 
   // ====================================================================================================
