@@ -172,7 +172,9 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
         provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
-    initialReferences shouldBe Seq(EntityPointer("targetType", "targetName1"), EntityPointer("targetType", "targetName2"))
+    initialReferences shouldBe Seq(EntityPointer("targetType", "targetName1"),
+                                   EntityPointer("targetType", "targetName2")
+    )
 
     // perform the batchUpsert - delete one existing reference, add two more
     val updates = Source(

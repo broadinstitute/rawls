@@ -8,7 +8,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeString, Entity, EntityPointer}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeEntityReference,
+  AttributeName,
+  AttributeString,
+  Entity,
+  EntityPointer
+}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.dsl.ResultOfATypeInvocation
