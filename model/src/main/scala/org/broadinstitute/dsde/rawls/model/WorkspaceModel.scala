@@ -201,6 +201,10 @@ case class WorkspaceRequest(
   def path: String = toWorkspaceName.path
 }
 
+case class WorkspaceRequestUpdateBilling(
+  newBillingProjectName: String
+)
+
 case class GoogleProjectId(value: String) extends ValueObject
 
 // Google folder identifiers of the form "folders/123456789"
@@ -1382,6 +1386,10 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspacePolicyFormat: RootJsonFormat[WorkspacePolicy] = jsonFormat3(WorkspacePolicy.apply)
 
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat11(WorkspaceRequest)
+
+  implicit val WorkspaceRequestUpdateBillingFormat: RootJsonFormat[WorkspaceRequestUpdateBilling] = jsonFormat1(
+    WorkspaceRequestUpdateBilling
+  )
 
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
 
