@@ -220,10 +220,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                   entityName: String,
                                   expression: String,
                                   parentContext: RawlsRequestContext
-  ): Future[Seq[AttributeValue]] = {
+  ): Future[Seq[AttributeValue]] =
     // TODO presumably this can be created once for the whole provider
     new CompactExpressionEvaluator(repository).evaluateExpression(workspaceId, expression, entityType, entityName)
-  }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: MethodConfigResolver.GatherInputsResult,
