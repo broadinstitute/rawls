@@ -16,7 +16,6 @@ export const generateBatchUpsert = (entityType, numEntities) => {
  * Create a new EntityUpdateDefinition using specified parameters.
  */
 const generateUpdateDefinition = (entityType, entityName) => {
-  // append two arrays
   const operations = constantOperations
                       .concat(semiConstantOperations())
                       .concat(customizedOperations(entityName));
@@ -32,12 +31,7 @@ const generateUpdateDefinition = (entityType, entityName) => {
  * Generate a few operations whose values depend on the input.
  */
 const customizedOperations = (id) => {
-  // Randomly select a few values from a small set of possible values
-  const activity = ["Indexing", "Alignment", "Variant Calling", "Variant Annotation"][Math.floor(Math.random() * 4)];
-  const sampleType = ["Tumor", "Normal"][Math.floor(Math.random() * 2)];
-  const age = Math.floor(Math.random() * 100);
-  const qcPassed = ["true", "false"][Math.floor(Math.random() * 2)];
-  // return operations using the selected values
+  // return operations customized to the input id
   return [{
     "op": "AddUpdateAttribute",
     "attributeName": "bai",
