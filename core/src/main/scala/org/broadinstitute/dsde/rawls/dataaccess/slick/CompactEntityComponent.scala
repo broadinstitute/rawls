@@ -22,7 +22,8 @@ import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import spray.json._
-
+import org.broadinstitute.dsde.rawls.model.{AttributeNull, AttributeValue, WorkspaceJsonSupport}
+import spray.json._
 import scala.concurrent.ExecutionContext
 
 trait CompactEntityComponent extends LazyLogging {
@@ -463,6 +464,66 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
                                 entityQuery: EntityQuery
   ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
+
+  def queryEntityForAttribute(workspaceId: UUID,
+                              attributeName: String,
+                              entityType: String,
+                              entityName: String
+  ): ReadAction[AttributeValue] =
+    sql"""select json_extract(attributes, '$$.attrs.#$attributeName')
+      from ENTITY
+      where workspace_id = $workspaceId
+      and entity_type = $entityType
+      and name = $entityName""".as[String].headOption.map {
+      case Some(jsonString) if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
+        try
+          WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
+        catch {
+          case _: Exception => AttributeNull
+        }
+      case _ => AttributeNull
+    }
+
+  // Written by AI!
+  // Deals with both the case that the relation column is a single reference and a list of references
+  def queryRelationsForAttribute(workspaceId: UUID,
+                                 relation: String,
+                                 attributeName: String,
+                                 entityType: String,
+                                 entityName: String
+  ): ReadAction[Seq[AttributeValue]] =
+    sql"""SELECT JSON_EXTRACT(e2.attributes, '$$.attrs.#$attributeName') AS value
+    FROM ENTITY e1
+  JOIN JSON_TABLE(
+    CASE
+      WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'ARRAY'
+  THEN JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')
+  WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'OBJECT'
+  THEN JSON_ARRAY(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation'))
+  ELSE NULL
+    END,
+  '$$[*]' COLUMNS (
+    entityType VARCHAR(255) PATH '$$.entityType',
+  entityName VARCHAR(255) PATH '$$.entityName'
+  )
+  ) refs
+  ON 1=1
+  JOIN ENTITY e2
+  ON e2.entity_type = refs.entityType
+  AND e2.name = refs.entityName
+  WHERE e1.workspace_id = $workspaceId
+  AND e1.entity_type = $entityType
+  AND e1.name = $entityName""".as[String].map { seq =>
+      seq.map {
+        case jsonString if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
+          try
+            WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
+          catch {
+            case _: Exception => AttributeNull
+          }
+        case _ => AttributeNull
+      }
+    }
 
   // ====================================================================================================
   //  entity query helpers

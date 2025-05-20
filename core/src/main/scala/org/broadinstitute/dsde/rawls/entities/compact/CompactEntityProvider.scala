@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   EntityReferenceNotFoundException
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
+import org.broadinstitute.dsde.rawls.expressions.CompactExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{
@@ -219,7 +220,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                   entityName: String,
                                   expression: String,
                                   parentContext: RawlsRequestContext
-  ): Future[Seq[AttributeValue]] = ???
+  ): Future[Seq[AttributeValue]] = {
+    // TODO presumably this can be created once for the whole provider
+    new CompactExpressionEvaluator(repository).evaluateExpression(workspaceId, expression, entityType, entityName)
+  }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: MethodConfigResolver.GatherInputsResult,

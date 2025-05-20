@@ -436,6 +436,94 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
+  behavior of "queryEntitiesForAttributes"
+
+  it should "get the attribute from an entity" in withMinimalTestDatabase { _ =>
+    val sample1 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("attr5") -> AttributeString("value5"),
+          AttributeName.withDefaultNS("attr6") -> AttributeString("value6")
+      )
+    )
+
+    insertAndGet(
+      sample1
+    )
+    runAndWait(
+      q.queryEntityForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "attr5", "sample", "sample1")
+    ) shouldBe AttributeString("value5")
+
+  }
+
+  behavior of "queryRelationsForAttribute"
+
+  it should "get the attributes from a single reference" in withMinimalTestDatabase { _ =>
+    // Insert referenced entities
+    val sample1 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val sample2 = Entity(
+      "sample2",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    // Referencing entity
+    val set1 = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGetAll(
+      Seq(sample1, sample2, set1)
+    )
+
+    runAndWait(
+      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
+    ) shouldBe Seq(AttributeString("a"))
+
+  }
+
+  it should "get the attributes from a list of references" in withMinimalTestDatabase { _ =>
+    // Insert referenced entities
+    val sample1 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val sample2 = Entity(
+      "sample2",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    // Referencing entity
+    val set1 = Entity(
+      "set1",
+      "sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+        )
+      )
+    )
+
+    insertAndGetAll(
+      Seq(sample1, sample2, set1)
+    )
+
+    runAndWait(
+      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
+    ) shouldBe Seq(AttributeString("a"), AttributeString("b"))
+
+  }
+
   /**
    * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
    */
