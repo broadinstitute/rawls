@@ -257,69 +257,71 @@ export function putEntity() {
  * we always need entities to delete. So these go together well.
  */
 export function batchUpsertAndDelete() {
-  const testType = "batchUpsertTest";
-  const smallUpsertSize = 250;
-  const largeUpsertSize = 4000;
+  group(`${__ENV.TEST_GROUP}`, function() {
+    const testType = "batchUpsertTest";
+    const smallUpsertSize = 250;
+    const largeUpsertSize = 4000;
 
-  // note that each request below sends a separate set of tags
+    // note that each request below sends a separate set of tags
 
-  // generate a small batchUpsert payload and insert it
-  const smallInitialUpsert = generateBatchUpsert(testType, smallUpsertSize);
-  const res1 = http.post(
-    `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
-    JSON.stringify(smallInitialUpsert),
-    {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'insert', size: smallUpsertSize }});
-  check(res1, { "status is 204": (res) => res.status === 204 });
-  sleep(.1);
+    // generate a small batchUpsert payload and insert it
+    const smallInitialUpsert = generateBatchUpsert(testType, smallUpsertSize);
+    const res1 = http.post(
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
+      JSON.stringify(smallInitialUpsert),
+      {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'insert', size: smallUpsertSize }});
+    check(res1, { "status is 204": (res) => res.status === 204 });
+    sleep(.1);
 
-  // re-generate the small batchUpsert payload to get some changes, and update it
-  const smallUpdate = generateBatchUpsert(testType, smallUpsertSize);
-  const res2 = http.post(
-    `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
-    JSON.stringify(smallUpdate),
-    {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'update', size: smallUpsertSize }});
-  check(res2, { "status is 204": (res) => res.status === 204 });
-  sleep(.1);
+    // re-generate the small batchUpsert payload to get some changes, and update it
+    const smallUpdate = generateBatchUpsert(testType, smallUpsertSize);
+    const res2 = http.post(
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
+      JSON.stringify(smallUpdate),
+      {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'update', size: smallUpsertSize }});
+    check(res2, { "status is 204": (res) => res.status === 204 });
+    sleep(.1);
 
-  // translate the smallUpdate into {entityType, entityName} pairs
-  // for deleteByPointer
-  const deleteByPointer = smallUpdate.map((entity) => {
-     return {
-      entityType: entity.entityType,
-      entityName: entity.name
-    }
+    // translate the smallUpdate into {entityType, entityName} pairs
+    // for deleteByPointer
+    const deleteByPointer = smallUpdate.map((entity) => {
+      return {
+        entityType: entity.entityType,
+        entityName: entity.name
+      }
+    });
+    const res3 = http.post(
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entities/delete`,
+      JSON.stringify(deleteByPointer),
+      {headers: defaultHeaders, tags: { rawlsApi: 'deleteEntities', size: smallUpsertSize }});
+    check(res3, { "status is 204": (res) => res.status === 204 });
+    sleep(.1);
+
+    // generate a small batchUpsert payload and insert it
+    const largeInitialUpsert = generateBatchUpsert(testType, largeUpsertSize);
+    const res4 = http.post(
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
+      JSON.stringify(largeInitialUpsert),
+      {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'insert', size: largeUpsertSize }});
+    check(res4, { "status is 204": (res) => res.status === 204 });
+    sleep(.1);
+
+    // re-generate the small batchUpsert payload to get some changes, and update it
+    const largeUpdate = generateBatchUpsert(testType, largeUpsertSize);
+    const res5 = http.post(
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
+      JSON.stringify(largeUpdate),
+      {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'update', size: largeUpsertSize }});
+    check(res5, { "status is 204": (res) => res.status === 204 });
+    sleep(.1);
+
+    // delete by type
+    const res6 = http.del(
+      `${workspaceRoot(__ENV.TEST_GROUP)}/entityTypes/${testType}`, null,
+      {headers: defaultHeaders, tags: { rawlsApi: 'deleteEntitiesOfType' }});
+    check(res6, { "status is 204": (res) => res.status === 204 });
+    sleep(.1);
   });
-  const res3 = http.post(
-    `${workspaceRoot(__ENV.TEST_GROUP)}/entities/delete`,
-    JSON.stringify(deleteByPointer),
-    {headers: defaultHeaders, tags: { rawlsApi: 'deleteEntities', size: smallUpsertSize }});
-  check(res3, { "status is 204": (res) => res.status === 204 });
-  sleep(.1);
-
-  // generate a small batchUpsert payload and insert it
-  const largeInitialUpsert = generateBatchUpsert(testType, largeUpsertSize);
-  const res4 = http.post(
-    `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
-    JSON.stringify(largeInitialUpsert),
-    {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'insert', size: largeUpsertSize }});
-  check(res4, { "status is 204": (res) => res.status === 204 });
-  sleep(.1);
-
-  // re-generate the small batchUpsert payload to get some changes, and update it
-  const largeUpdate = generateBatchUpsert(testType, largeUpsertSize);
-  const res5 = http.post(
-    `${workspaceRoot(__ENV.TEST_GROUP)}/entities/batchUpsert`,
-    JSON.stringify(largeUpdate),
-    {headers: defaultHeaders, tags: { rawlsApi: 'batchUpsert', feature: 'update', size: largeUpsertSize }});
-  check(res5, { "status is 204": (res) => res.status === 204 });
-  sleep(.1);
-
-  // delete by type
-  const res6 = http.del(
-    `${workspaceRoot(__ENV.TEST_GROUP)}/entityTypes/${testType}`, null,
-    {headers: defaultHeaders, tags: { rawlsApi: 'deleteEntitiesOfType' }});
-  check(res6, { "status is 204": (res) => res.status === 204 });
-  sleep(.1);
 }
 
 
