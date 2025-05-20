@@ -325,7 +325,41 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def renameEntityType(oldName: String,
                                 renameInfo: EntityTypeRename,
                                 parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] = {
+    // Extract the new entity type name from the rename info
+    val newName = renameInfo.newName
+
+    // Perform the rename in a transaction
+    val renameFuture = repository.dataSource.inTransaction { dataAccess =>
+      for {
+        // First check if the old entity type exists
+        entityTypeCount <- repository.queries.countEntities(workspaceId, oldName)
+        _ = if (entityTypeCount == 0) {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type $oldName")
+          )
+        }
+
+        // Check if the new entity type already exists
+        newTypeCount <- repository.queries.countEntities(workspaceId, newName)
+        _ = if (newTypeCount > 0) {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Conflict, s"$newName already exists as an entity type")
+          )
+        }
+
+        // Call the renameEntityType method in CompactEntityComponent to update entity types and references
+        entityRowsUpdated <- repository.queries.renameEntityType(workspaceId, oldName, newName)
+
+      } yield entityRowsUpdated // Return the number of entities that were renamed
+    }
+
+    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(renameFuture)
+
+    // Return the future
+    renameFuture
+  }
 
   override def updateEntity(entityType: String,
                             entityName: String,
