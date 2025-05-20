@@ -331,8 +331,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
     // Perform the rename in a transaction
     val renameFuture = repository.dataSource.inTransaction { dataAccess =>
-      import dataAccess.driver.api._
-
       for {
         // First check if the old entity type exists
         entityTypeCount <- repository.queries.countEntities(workspaceId, oldName)
@@ -351,7 +349,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         }
 
         // Call the renameEntityType method in CompactEntityComponent to update entity types and references
-        entityRowsUpdated <- dataAccess.compactEntityQuery.renameEntityType(workspaceId, oldName, newName)
+        entityRowsUpdated <- repository.queries.renameEntityType(workspaceId, oldName, newName)
 
       } yield entityRowsUpdated // Return the number of entities that were renamed
     }

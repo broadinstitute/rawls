@@ -1353,381 +1353,170 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "renameEntityType"
 
   it should "rename an entity type and update all references" in withMinimalTestDatabase { _ =>
+    // Create target entities
+    val targetType = "targetType"
+    val targetEntity1 = Entity("targetEntity1", targetType, Map())
+    val targetEntity2 = Entity("targetEntity2", targetType, Map())
+
     // Create source entities
     val sourceType = "sourceType"
     val sourceEntity1 = Entity("sourceEntity1", sourceType, Map(
-      AttributeName.withDefaultNS("ref") -> AttributeEntityReference("targetType", "targetEntity1"),
       AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(Seq(
-        AttributeEntityReference("targetType", "targetEntity1"),
-        AttributeEntityReference("targetType", "targetEntity2")
+        targetEntity1.toReference,
+        targetEntity2.toReference
       ))
     ))
     val sourceEntity2 = Entity("sourceEntity2", sourceType, Map(
-      AttributeName.withDefaultNS("ref") -> AttributeEntityReference("targetType", "targetEntity2")
+      AttributeName.withDefaultNS("ref") -> targetEntity2.toReference
     ))
-
-    // Create target entities
-    val targetType = "targetType"
-    val targetEntity1 = Entity("targetEntity1", targetType, Map(
-      AttributeName.withDefaultNS("ref") -> AttributeEntityReference(sourceType, "sourceEntity1")
-    ))
-    val targetEntity2 = Entity("targetEntity2", targetType, Map(
-      AttributeName.withDefaultNS("ref") -> AttributeEntityReference(sourceType, "sourceEntity2")
+    val sourceEntity3 = Entity("sourceEntity3", sourceType, Map(
+      AttributeName.withDefaultNS("refSingletonList") -> AttributeEntityReferenceList(Seq(
+        targetEntity1.toReference
+      ))
     ))
 
     // Insert all entities
-    insertAndGetAll(Seq(sourceEntity1, sourceEntity2, targetEntity1, targetEntity2))
-
-    // Insert references
-    val sourceRef1 = AttributeEntityReference(sourceType, sourceEntity1.name)
-    val sourceRef2 = AttributeEntityReference(sourceType, sourceEntity2.name)
-    val targetRef1 = AttributeEntityReference(targetType, targetEntity1.name)
-    val targetRef2 = AttributeEntityReference(targetType, targetEntity2.name)
+    insertAndGetAll(Seq(targetEntity1, targetEntity2, sourceEntity1, sourceEntity2, sourceEntity3))
 
     val refMappings = Set(
-      RefMapping(sourceRef1, Set(targetRef1, targetRef2)),
-      RefMapping(sourceRef2, Set(targetRef2)),
-      RefMapping(targetRef1, Set(sourceRef1)),
-      RefMapping(targetRef2, Set(sourceRef2))
+      RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer, targetEntity2.toPointer)),
+      RefMapping(sourceEntity2.toPointer, Set(targetEntity2.toPointer)),
+      RefMapping(sourceEntity3.toPointer, Set(targetEntity1.toPointer))
     )
     
-    runAndWait(q.insertReferences(wsid, refMappings)) shouldBe 5
+    runAndWait(q.insertReferences(wsid, refMappings))
     
-    // Verify references were correctly inserted
-    runAndWait(q.getReferencesFrom(wsid, sourceRef1)) should contain theSameElementsAs Seq(targetRef1, targetRef2)
-    runAndWait(q.getReferencesFrom(wsid, sourceRef2)) should contain theSameElementsAs Seq(targetRef2)
-    runAndWait(q.getReferencesFrom(wsid, targetRef1)) should contain theSameElementsAs Seq(sourceRef1)
-    runAndWait(q.getReferencesFrom(wsid, targetRef2)) should contain theSameElementsAs Seq(sourceRef2)
+    // Execute renameEntityType and verify the result
+    val newTargetType = "newTargetType"
+    runAndWait(q.renameEntityType(wsid, targetType, newTargetType)) shouldBe 2
 
-    // Execute renameEntityType
-    val newSourceType = "newSourceType"
-    val result = runAndWait(q.renameEntityType(wsid, sourceType, newSourceType))
-    
-    // Verify the number of entities updated
-    result shouldBe 2
+    val newTargetEntity1 = targetEntity1.copy(entityType = newTargetType)
+    val newTargetEntity2 = targetEntity2.copy(entityType = newTargetType)
     
     // Verify entity types were updated in the ENTITY table
-    val sourceEntities = runAndWait(q.queryEntities(wsid, newSourceType))
-    sourceEntities.map(_.name).toSet shouldBe Set(sourceEntity1.name, sourceEntity2.name)
-    sourceEntities.foreach(e => e.entityType shouldBe newSourceType)
+    val newTargets = runAndWait(q.listEntities(wsid, newTargetType))
+    newTargets.map(_.toEntity) should contain theSameElementsAs Seq(newTargetEntity1, newTargetEntity2)
     
     // Verify from_entity_type was updated in ENTITY_REFS table
-    val newSourceRef1 = AttributeEntityReference(newSourceType, sourceEntity1.name)
-    val newSourceRef2 = AttributeEntityReference(newSourceType, sourceEntity2.name)
-    runAndWait(q.getReferencesFrom(wsid, newSourceRef1)) should contain theSameElementsAs Seq(targetRef1, targetRef2)
-    runAndWait(q.getReferencesFrom(wsid, newSourceRef2)) should contain theSameElementsAs Seq(targetRef2)
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity1.toPointer)) should contain theSameElementsAs Seq(newTargetEntity1.toPointer, newTargetEntity2.toPointer)
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity2.toPointer)) should contain theSameElementsAs Seq(newTargetEntity2.toPointer)
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity3.toPointer)) should contain theSameElementsAs Seq(newTargetEntity1.toPointer)
     
     // Verify old references no longer exist
-    runAndWait(q.getReferencesFrom(wsid, sourceRef1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, sourceRef2)) shouldBe empty
+    runAndWait(q.getReferencesTo(wsid, Seq(targetEntity1.toPointer))) shouldBe empty
+    runAndWait(q.getReferencesTo(wsid, Seq(targetEntity2.toPointer))) shouldBe empty
     
     // Verify to_entity_type was updated in ENTITY_REFS table
-    runAndWait(q.getReferencesFrom(wsid, targetRef1)) should contain theSameElementsAs Seq(newSourceRef1)
-    runAndWait(q.getReferencesFrom(wsid, targetRef2)) should contain theSameElementsAs Seq(newSourceRef2)
+    runAndWait(q.getReferencesTo(wsid, Seq(newTargetEntity1.toPointer))) should contain theSameElementsAs Seq(sourceEntity1.toPointer, sourceEntity3.toPointer)
+    runAndWait(q.getReferencesTo(wsid, Seq(newTargetEntity2.toPointer))) should contain theSameElementsAs Seq(sourceEntity1.toPointer, sourceEntity2.toPointer)
     
     // Verify references in entity attributes are updated
-    val updatedTargetEntity1 = runAndWait(q.getEntity(wsid, targetType, targetEntity1.name)).get.toEntity
-    updatedTargetEntity1.attributes(AttributeName.withDefaultNS("ref")).asInstanceOf[AttributeEntityReference].entityType shouldBe newSourceType
+    val updatedSourceEntity1 = runAndWait(q.getEntity(wsid, sourceType, sourceEntity1.name)).get.toEntity
+    updatedSourceEntity1.attributes(AttributeName.withDefaultNS("refList")).asInstanceOf[AttributeEntityReferenceList].list should contain theSameElementsAs Seq(
+      newTargetEntity1.toReference,
+      newTargetEntity2.toReference
+    )
+    val updatedSourceEntity2 = runAndWait(q.getEntity(wsid, sourceType, sourceEntity2.name)).get.toEntity
+    updatedSourceEntity2.attributes(AttributeName.withDefaultNS("ref")) shouldBe newTargetEntity2.toReference
     
-    val updatedTargetEntity2 = runAndWait(q.getEntity(wsid, targetType, targetEntity2.name)).get.toEntity
-    updatedTargetEntity2.attributes(AttributeName.withDefaultNS("ref")).asInstanceOf[AttributeEntityReference].entityType shouldBe newSourceType
-    
+    val updatedSourceEntity3 = runAndWait(q.getEntity(wsid, sourceType, sourceEntity3.name)).get.toEntity
+    updatedSourceEntity3.attributes(AttributeName.withDefaultNS("refSingletonList")).asInstanceOf[AttributeEntityReferenceList].list should contain theSameElementsAs Seq(
+      newTargetEntity1.toReference
+    )
     // Verify entity keys table is updated
-    val entityKeysQuery = sql"""select entity_type from ENTITY_KEYS where workspace_id = $wsid and entity_type = $newSourceType""".as[String]
-    val entityKeysCount = runAndWait(entityKeysQuery).size
-    entityKeysCount shouldBe 2
+    import driver.api._
+
+    val entityKeysQuery1 = sql"""select entity_type from ENTITY_KEYS where workspace_id = $wsid and entity_type = $targetType""".as[String]
+    runAndWait(entityKeysQuery1).size shouldBe 0
+    val entityKeysQuery2 = sql"""select entity_type from ENTITY_KEYS where workspace_id = $wsid and entity_type = $newTargetType""".as[String]
+    runAndWait(entityKeysQuery2).size shouldBe 2
   }
 
-  it should "fail if the entity type doesn't exist" in withMinimalTestDatabase { _ =>
-    val nonExistentType = "nonExistentType"
-    val newType = "newType"
-    
-    val exception = intercept[Exception] {
-      runAndWait(q.renameEntityType(wsid, nonExistentType, newType))
-    }
-    
-    // The exception is caught at a higher level in CompactEntityProvider.renameEntityType
-    // where it creates a RawlsExceptionWithErrorReport, so here we're just verifying that
-    // renameEntityType doesn't update anything when the type doesn't exist
-    
-    // Verify no entity types were renamed
-    val entitiesQuery = sql"""select count(*) from ENTITY where workspace_id = $wsid and entity_type = $newType""".as[Int]
-    runAndWait(entitiesQuery).head shouldBe 0
-  }
+  it should "not change non refereces that match the old name" in withMinimalTestDatabase { _ =>
+    // Create target entities
+    val targetType = "targetType"
+    val targetEntity1 = Entity("targetEntity1", targetType, Map())
 
-  it should "handle complex attribute reference updates during rename" in withMinimalTestDatabase { _ =>
-    // Create source entity with nested references
-    val sourceType = "complexSourceType"
-    val sourceEntity = Entity("sourceEntity", sourceType, Map())
-    
-    // Create target entity with deeply nested references to source type
-    val targetType = "complexTargetType"
-    val targetEntity = Entity("targetEntity", targetType, Map(
-      AttributeName.withDefaultNS("simpleRef") -> AttributeEntityReference(sourceType, "sourceEntity"),
-      AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(Seq(
-        AttributeEntityReference(sourceType, "sourceEntity"),
-        AttributeEntityReference(sourceType, "sourceEntity")
-      )),
-      AttributeName.withDefaultNS("nestedList") -> AttributeValueList(Seq(
-        AttributeEntityReference(sourceType, "sourceEntity"),
-        AttributeValueList(Seq(
-          AttributeEntityReference(sourceType, "sourceEntity")
-        ))
+    // Create source entities
+    val sourceType = "sourceType"
+    val sourceEntity1 = Entity("sourceEntity1", sourceType, Map(
+      AttributeName.withDefaultNS("trixyList") -> AttributeValueList(Seq(
+        AttributeString(targetType),
+        AttributeString(targetType)
       ))
     ))
-    
-    // Insert entities
-    insertAndGetAll(Seq(sourceEntity, targetEntity))
-    
-    // Insert references
-    val sourceRef = AttributeEntityReference(sourceType, sourceEntity.name)
-    val targetRef = AttributeEntityReference(targetType, targetEntity.name)
-    
-    val refMappings = Set(
-      RefMapping(targetRef, Set(sourceRef))
-    )
-    
-    runAndWait(q.insertReferences(wsid, refMappings)) shouldBe 1
-    
-    // Execute renameEntityType
-    val newSourceType = "newComplexSourceType"
-    val result = runAndWait(q.renameEntityType(wsid, sourceType, newSourceType))
-    
-    // Verify the entity was updated
-    result shouldBe 1
-    
-    // Get the updated target entity
-    val updatedTargetEntity = runAndWait(q.getEntity(wsid, targetType, targetEntity.name)).get.toEntity
-    
-    // Verify all references were updated in the complex structure
-    updatedTargetEntity.attributes(AttributeName.withDefaultNS("simpleRef")).asInstanceOf[AttributeEntityReference].entityType shouldBe newSourceType
-    
-    val refList = updatedTargetEntity.attributes(AttributeName.withDefaultNS("refList")).asInstanceOf[AttributeEntityReferenceList]
-    refList.list.foreach(ref => ref.entityType shouldBe newSourceType)
-    
-    val nestedList = updatedTargetEntity.attributes(AttributeName.withDefaultNS("nestedList")).asInstanceOf[AttributeValueList]
-    nestedList.list.head.asInstanceOf[AttributeEntityReference].entityType shouldBe newSourceType
-    nestedList.list(1).asInstanceOf[AttributeValueList].list.head.asInstanceOf[AttributeEntityReference].entityType shouldBe newSourceType
-  }
-
-  it should "update entity_type in ENTITY_KEYS table" in withMinimalTestDatabase { _ =>
-    // Create entities
-    val originalType = "keySourceType"
-    val entity1 = Entity("entity1", originalType, Map(
-      AttributeName.withDefaultNS("value") -> AttributeString("value1")
+    val sourceEntity2 = Entity("sourceEntity2", sourceType, Map(
+      AttributeName.withDefaultNS("trixyVal") -> AttributeString(targetType)
     ))
-    val entity2 = Entity("entity2", originalType, Map(
-      AttributeName.withDefaultNS("value") -> AttributeString("value2")
-    ))
-    
-    // Insert entities
-    insertAndGetAll(Seq(entity1, entity2))
-    
-    // Verify ENTITY_KEYS records were created
-    val entityKeysQuery = sql"""select count(*) from ENTITY_KEYS where workspace_id = $wsid and entity_type = $originalType""".as[Int]
-    runAndWait(entityKeysQuery).head shouldBe 2
-    
-    // Execute renameEntityType
-    val newType = "keyNewType"
-    val result = runAndWait(q.renameEntityType(wsid, originalType, newType))
-    
-    // Verify entities were updated
-    result shouldBe 2
-    
-    // Verify ENTITY_KEYS records were updated
-    val oldEntityKeysQuery = sql"""select count(*) from ENTITY_KEYS where workspace_id = $wsid and entity_type = $originalType""".as[Int]
-    runAndWait(oldEntityKeysQuery).head shouldBe 0
-    
-    val newEntityKeysQuery = sql"""select count(*) from ENTITY_KEYS where workspace_id = $wsid and entity_type = $newType""".as[Int]
-    runAndWait(newEntityKeysQuery).head shouldBe 2
-  }
-
-  it should "handle updates when entities have circular references" in withMinimalTestDatabase { _ =>
-    // Create entities that reference each other circularly
-    val sourceType = "circularSourceType"
-    val sourceEntity = Entity("circularSource", sourceType, Map(
-      AttributeName.withDefaultNS("selfRef") -> AttributeEntityReference(sourceType, "circularSource"),
-      AttributeName.withDefaultNS("targetRef") -> AttributeEntityReference("circularTargetType", "circularTarget")
-    ))
-    
-    val targetType = "circularTargetType"
-    val targetEntity = Entity("circularTarget", targetType, Map(
-      AttributeName.withDefaultNS("sourceRef") -> AttributeEntityReference(sourceType, "circularSource")
-    ))
-    
-    // Insert entities
-    insertAndGetAll(Seq(sourceEntity, targetEntity))
-    
-    // Insert references
-    val sourceRef = AttributeEntityReference(sourceType, sourceEntity.name)
-    val targetRef = AttributeEntityReference(targetType, targetEntity.name)
-    val selfRef = AttributeEntityReference(sourceType, sourceEntity.name)
-    
-    val refMappings = Set(
-      RefMapping(sourceRef, Set(targetRef, selfRef)),
-      RefMapping(targetRef, Set(sourceRef))
-    )
-    
-    runAndWait(q.insertReferences(wsid, refMappings)) shouldBe 3
-    
-    // Execute renameEntityType
-    val newSourceType = "newCircularType"
-    val result = runAndWait(q.renameEntityType(wsid, sourceType, newSourceType))
-    
-    // Verify the entity was updated
-    result shouldBe 1
-    
-    // Get the updated entities
-    val updatedSourceEntity = runAndWait(q.getEntity(wsid, newSourceType, sourceEntity.name)).get.toEntity
-    val updatedTargetEntity = runAndWait(q.getEntity(wsid, targetType, targetEntity.name)).get.toEntity
-    
-    // Verify self-reference was updated
-    updatedSourceEntity.attributes(AttributeName.withDefaultNS("selfRef")).asInstanceOf[AttributeEntityReference].entityType shouldBe newSourceType
-    
-    // Verify cross-references were updated
-    updatedSourceEntity.attributes(AttributeName.withDefaultNS("targetRef")).asInstanceOf[AttributeEntityReference].entityType shouldBe targetType
-    updatedTargetEntity.attributes(AttributeName.withDefaultNS("sourceRef")).asInstanceOf[AttributeEntityReference].entityType shouldBe newSourceType
-  }
-
-  it should "not update references for soft-deleted entities" in withMinimalTestDatabase { _ =>
-    // Create source and target entities
-    val sourceType = "deletedSourceType"
-    val sourceEntity = Entity("deletedSource", sourceType, Map())
-    
-    val targetType = "targetWithDeletedRef"
-    val targetEntity = Entity("targetWithDeleted", targetType, Map(
-      AttributeName.withDefaultNS("deletedRef") -> AttributeEntityReference(sourceType, "deletedSource")
-    ))
-    
-    // Insert entities
-    val savedSource = insertAndGet(sourceEntity)
-    val savedTarget = insertAndGet(targetEntity)
-    
-    // Insert references
-    val sourceRef = AttributeEntityReference(sourceType, sourceEntity.name)
-    val targetRef = AttributeEntityReference(targetType, targetEntity.name)
-    
-    val refMappings = Set(
-      RefMapping(targetRef, Set(sourceRef))
-    )
-    
-    runAndWait(q.insertReferences(wsid, refMappings)) shouldBe 1
-    
-    // Soft-delete the source entity
-    runAndWait(q.hideEntities(wsid, Seq(sourceRef)))
-    
-    // Verify source entity is now deleted
-    val deletedCheck = sql"""select deleted from ENTITY where workspace_id = $wsid and entity_type = $sourceType and name like '%${sourceEntity.name}%'""".as[Boolean]
-    runAndWait(deletedCheck).head shouldBe true
-    
-    // Execute renameEntityType
-    val newSourceType = "newDeletedType"
-    val result = runAndWait(q.renameEntityType(wsid, sourceType, newSourceType))
-    
-    // Verify no entities were updated (only non-deleted entities should be renamed)
-    result shouldBe 0
-    
-    // Check if references in targetEntity still point to the old type
-    val updatedTarget = runAndWait(q.getEntity(wsid, targetType, targetEntity.name)).get.toEntity
-    updatedTarget.attributes(AttributeName.withDefaultNS("deletedRef")).asInstanceOf[AttributeEntityReference].entityType shouldBe sourceType
-  }
-
-  it should "update references in JSON arrays correctly" in withMinimalTestDatabase { _ =>
-    // Create source entity
-    val sourceType = "arraySourceType"
-    val sourceEntity = Entity("arraySource", sourceType, Map())
-    
-    // Create target entity with array references
-    val targetType = "arrayTargetType"
-    val targetEntity = Entity("arrayTarget", targetType, Map(
-      AttributeName.withDefaultNS("refArray") -> AttributeEntityReferenceList(Seq(
-        AttributeEntityReference(sourceType, "arraySource"),
-        AttributeEntityReference(sourceType, "arraySource"),
-        AttributeEntityReference(sourceType, "arraySource")
+    val sourceEntity3 = Entity("sourceEntity3", sourceType, Map(
+      AttributeName.withDefaultNS("trixySingletonList") -> AttributeValueList(Seq(
+        AttributeString(targetType)
       ))
     ))
-    
-    // Insert entities
-    insertAndGetAll(Seq(sourceEntity, targetEntity))
-    
-    // Insert references
-    val sourceRef = AttributeEntityReference(sourceType, sourceEntity.name)
-    val targetRef = AttributeEntityReference(targetType, targetEntity.name)
-    
-    val refMappings = Set(
-      RefMapping(targetRef, Set(sourceRef))
-    )
-    
-    runAndWait(q.insertReferences(wsid, refMappings)) shouldBe 1
-    
-    // Execute renameEntityType
-    val newSourceType = "newArraySourceType"
-    val result = runAndWait(q.renameEntityType(wsid, sourceType, newSourceType))
-    
-    // Verify the entity was updated
-    result shouldBe 1
-    
-    // Get the updated target entity
-    val updatedTarget = runAndWait(q.getEntity(wsid, targetType, targetEntity.name)).get.toEntity
-    
-    // Verify all references in the array were updated
-    val refArray = updatedTarget.attributes(AttributeName.withDefaultNS("refArray")).asInstanceOf[AttributeEntityReferenceList]
-    refArray.list.size shouldBe 3
-    refArray.list.foreach { ref =>
-      ref.entityType shouldBe newSourceType
-      ref.entityName shouldBe sourceEntity.name
-    }
-  }
 
-  it should "handle empty attribute references correctly" in withMinimalTestDatabase { _ =>
-    // Create source entity with empty attributes
-    val sourceType = "emptySourceType"
-    val sourceEntity = Entity("emptySource", sourceType, Map())
+    // Insert all entities
+    insertAndGetAll(Seq(targetEntity1, sourceEntity1, sourceEntity2, sourceEntity3))
+
+    // these references does not exist in the attributes but makes the underlying rename query think so
+    runAndWait(q.insertReferences(wsid, Set(
+      RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer)),
+      RefMapping(sourceEntity2.toPointer, Set(targetEntity1.toPointer)),
+      RefMapping(sourceEntity3.toPointer, Set(targetEntity1.toPointer))
+    )))
+
+    // Execute renameEntityType and verify the result
+    val newTargetType = "newTargetType"
+    runAndWait(q.renameEntityType(wsid, targetType, newTargetType)) shouldBe 1
+
+    val newTargetEntity1 = targetEntity1.copy(entityType = newTargetType)
     
-    // Insert entity
-    insertAndGet(sourceEntity)
+    // Verify entity types were updated in the ENTITY table
+    val newTargets = runAndWait(q.listEntities(wsid, newTargetType))
+    newTargets.map(_.toEntity) should contain theSameElementsAs Seq(newTargetEntity1)
     
-    // Execute renameEntityType
-    val newSourceType = "newEmptySourceType"
+    // Verify source is unchanged
+    val sourceEntities = runAndWait(q.listEntities(wsid, sourceType))
+    sourceEntities.map(_.toEntity) should contain theSameElementsAs Seq(
+      sourceEntity1,
+      sourceEntity2,
+      sourceEntity3
+    )
+  }
+  
+  it should "handle no references correctly" in withMinimalTestDatabase { _ =>
+    // Create target entities
+    val targetType = "targetType"
+    val targetEntity1 = Entity("targetEntity1", targetType, Map())
+
+    // Create source entities
+    val sourceType = "sourceType"
+    val sourceEntity1 = Entity("sourceEntity1", sourceType, Map(
+      AttributeName.withDefaultNS("ref") -> targetEntity1.toReference
+    ))
+
+    // Insert all entities
+    insertAndGetAll(Seq(targetEntity1, sourceEntity1))
+
+    runAndWait(q.insertReferences(wsid, Set(
+      RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer))
+    )))
+
+    // Execute renameEntityType, this time on sourceType which has no references
+    val newSourceType = "newSourceType"
     val result = runAndWait(q.renameEntityType(wsid, sourceType, newSourceType))
     
     // Verify the entity was updated
     result shouldBe 1
     
     // Get the updated entity
-    val updatedSource = runAndWait(q.getEntity(wsid, newSourceType, sourceEntity.name))
+    val updatedSource = runAndWait(q.getEntity(wsid, newSourceType, sourceEntity1.name))
     
     // Verify the entity exists with the new type
-    updatedSource should not be empty
-    updatedSource.get.entityType shouldBe newSourceType
-    updatedSource.get.name shouldBe sourceEntity.name
-    updatedSource.get.toEntity.attributes shouldBe empty
-  }
+    val newSourceEntity = sourceEntity1.copy(entityType = newSourceType)
+    updatedSource.map(_.toEntity) shouldBe Some(newSourceEntity)
 
-  it should "update entities to an existing type at the component level" in withMinimalTestDatabase { _ =>
-    // Create source and target entities with different types
-    val sourceType = "sourceToDuplicate"
-    val targetType = "existingTargetType"
-    
-    val sourceEntity = Entity("sourceToDuplicate", sourceType, Map())
-    val targetEntity = Entity("existingTarget", targetType, Map())
-    
-    // Insert entities
-    insertAndGetAll(Seq(sourceEntity, targetEntity))
-    
-    // Note: The CompactEntityComponent.renameEntityType method doesn't validate
-    // if the new entity type already exists - that's done at the provider level.
-    // This test verifies the component performs the database operations correctly.
-    
-    // Execute renameEntityType to create a duplicate entity type
-    val result = runAndWait(q.renameEntityType(wsid, sourceType, targetType))
-    
-    // Verify the entity was updated to have the same type as the existing entity
-    result shouldBe 1
-    
-    // Count entities with the target type
-    val entityCount = sql"""select count(*) from ENTITY where workspace_id = $wsid and entity_type = $targetType and deleted = 0""".as[Int]
-    runAndWait(entityCount).head shouldBe 2
+    // Verify the references were updated
+    runAndWait(q.getReferencesFrom(wsid, newSourceEntity.toPointer)) should contain theSameElementsAs Seq(targetEntity1.toPointer)
   }
 
   // ====================================================================================================

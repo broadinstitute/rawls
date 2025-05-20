@@ -464,6 +464,99 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
 
+  /**
+   * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.
+   *
+   * Returns the number of entities that were renamed.
+   *
+   * `execution plan: multiple statements that update both ENTITY and ENTITY_REFS tables`
+   */
+  def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
+    // Update the entity type in the ENTITY table
+    // explain plan: index range scan on idx_entity_type_name
+    val updateEntityTypeSql = 
+      sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
+            where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
+    
+    // Update entity references in the attributes JSON column
+    // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
+    // The best approach would be to add a custom MySQL function for JSON path replacement
+    // For now, we'll do this in application code when accessing entities
+
+    // Update from_entity_type in ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateFromReferencesSql =
+      sql"""update ENTITY_REFS
+            set from_entity_type = $newType
+            where workspace_id = $workspaceId
+            and from_entity_type = $oldType"""
+            
+    // Update to_entity_type in ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateToReferencesSql =
+      sql"""update ENTITY_REFS
+            set to_entity_type = $newType
+            where workspace_id = $workspaceId
+            and to_entity_type = $oldType"""
+
+    // Get all paths in attributes that reference the old type
+    // This is a bit tricky because the attributes column is JSON and we need to search for the old type
+    // in all possible paths. We use JSON_SEARCH to find the paths and JSON_TABLE to extract them.
+    // We also need to handle the case where the reference is singular or not in an array.
+    // Also exclude values in the json that match the old type but are not entity references.
+    // Uses ENTITY_REFS table to find the attributes that reference the old type so must be run before
+    // the ENTITY_REFS table is updated.
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    val attrRefRegex = """'\\$\\.attrs\\.[^.]+\\.entityType'"""
+    val getReferencePathsInAttributesSql =
+      sql"""
+        with entity_attrs as 
+          (select e.attributes
+          from ENTITY e
+          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+          where er.workspace_id = $workspaceId
+          and er.to_entity_type = $oldType)
+        select type_path
+        from entity_attrs e,
+        json_table(json_search(e.attributes, 'all', $oldType), '$$[*]' COLUMNS( type_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
+        where type_path REGEXP #$attrRefRegex
+        union
+        select json_unquote(json_search(e.attributes, 'all', $oldType))
+        from entity_attrs e
+        where json_type(json_search(e.attributes, 'all', $oldType)) != 'ARRAY'
+        and json_unquote(json_search(e.attributes, 'all', $oldType)) REGEXP #$attrRefRegex
+        """
+
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    def updateReferencesInAttributesSql(paths: Seq[String]) = {
+      val replaceParamsSqls = paths.map(path => sql"$path, $newType")
+      concatSqlActions(
+        sql"""
+          update ENTITY e 
+          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+          set e.attributes = JSON_REPLACE(e.attributes, 
+        """,
+        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
+        sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
+      )
+  }
+    
+    // Execute all updates in same transaction
+    for {
+      paths <- getReferencePathsInAttributesSql.as[String]
+      _ <- if(paths.isEmpty) {
+        DBIO.successful(0)
+      } else {
+        DBIO.seq(
+          updateReferencesInAttributesSql(paths).asUpdate,
+          updateToReferencesSql.asUpdate
+        )
+      }
+      _ <- updateFromReferencesSql.asUpdate
+      entityRowsUpdated <- updateEntityTypeSql.asUpdate
+    } yield entityRowsUpdated
+  }
+  
   // ====================================================================================================
   //  entity query helpers
   //      methods in this section are used for building entity query functions
@@ -658,53 +751,5 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
               and name like $likeEntityName;"""
 
     uniqueResult(selectStatement.as[CompactEntityRecord])
-  }
-
-  /**
-   * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.
-   *
-   * Returns the number of entities that were renamed.
-   *
-   * `execution plan: multiple statements that update both ENTITY and ENTITY_REFS tables`
-   */
-  def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
-    // Update the entity type in the ENTITY table
-    val updateEntityTypeSql =
-      sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
-            where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
-
-    // Update entity references in the attributes JSON column
-    // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
-    // The best approach would be to add a custom MySQL function for JSON path replacement
-    // For now, we'll do this in application code when accessing entities
-
-    // Update from_entity_type in ENTITY_REFS table
-    val updateFromReferencesSql =
-      sql"""update ENTITY_REFS
-            set from_entity_type = $newType
-            where workspace_id = $workspaceId
-            and from_entity_type = $oldType"""
-
-    // Update to_entity_type in ENTITY_REFS table
-    val updateToReferencesSql =
-      sql"""update ENTITY_REFS
-            set to_entity_type = $newType
-            where workspace_id = $workspaceId
-            and to_entity_type = $oldType"""
-
-    // Refresh entity keys
-    val updateEntityKeysSql =
-      sql"""update ENTITY_KEYS
-            set entity_type = $newType, last_updated = now(3)
-            where workspace_id = $workspaceId
-            and entity_type = $oldType"""
-
-    // Execute all updates in a transaction
-    for {
-      entityRowsUpdated <- updateEntityTypeSql.asUpdate
-      _ <- updateFromReferencesSql.asUpdate
-      _ <- updateToReferencesSql.asUpdate
-      _ <- updateEntityKeysSql.asUpdate
-    } yield entityRowsUpdated
   }
 }
