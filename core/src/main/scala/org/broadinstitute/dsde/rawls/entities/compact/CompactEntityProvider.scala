@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.compact.batch.BatchHandling
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  AttributeException,
   DataEntityException,
   DeleteEntitiesConflictException,
   DeleteEntitiesOfTypeConflictException,
@@ -311,10 +312,52 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }
 
   override def renameAttribute(entityType: String,
-                               oldAttributeName: AttributeName,
+                               oldName: AttributeName,
                                attributeRenameRequest: AttributeRename,
                                parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] = {
+    val newName = attributeRenameRequest.newAttributeName
+
+    // nested helper function to validate and perform the renaming all in one transaction
+    def renameInTransaction: Future[Int] = repository.dataSource.inTransaction { _ =>
+      for {
+        // does new name already exist? fail if it does.
+        newNameExists <- repository.queries.attributeExists(workspaceId, entityType, newName)
+        _ = if (newNameExists)
+          throw new AttributeException(
+            message = s"${AttributeName.toDelimitedName(newName)} already exists.",
+            code = StatusCodes.BadRequest
+          )
+        // does old name already exist? fail if it does not.
+        oldNameExists <- repository.queries.attributeExists(workspaceId, entityType, oldName)
+        _ = if (!oldNameExists)
+          throw new AttributeException(
+            message = s"${AttributeName.toDelimitedName(oldName)} does not exist.",
+            code = StatusCodes.BadRequest
+          )
+        // perform the rename
+        numEntitiesAffected <- repository.queries.renameAttribute(workspaceId,
+                                                                  entityType,
+                                                                  oldName,
+                                                                  attributeRenameRequest
+        )
+      } yield numEntitiesAffected
+    }
+
+    val renameFuture = for {
+      // validate both old and new names for syntax
+      _ <- Future(EntityUtils.validateAttrName(oldName, entityType))
+      _ <- Future(EntityUtils.validateAttrName(newName, entityType))
+      // perform the rename in a transaction
+      numEntitiesAffected <- renameInTransaction
+    } yield numEntitiesAffected
+
+    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(renameFuture)
+
+    // return the future
+    renameFuture
+  }
 
   override def renameEntity(entityType: String,
                             entityName: String,
