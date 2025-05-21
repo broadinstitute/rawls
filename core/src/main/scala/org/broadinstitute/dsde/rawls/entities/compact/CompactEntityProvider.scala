@@ -348,6 +348,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       // validate both old and new names for syntax
       _ <- Future(EntityUtils.validateAttrName(oldName, entityType))
       _ <- Future(EntityUtils.validateAttrName(newName, entityType))
+      _ = if (oldName == newName) {
+        throw new AttributeException(
+          message = s"Old and new names are the same: ${AttributeName.toDelimitedName(oldName)}",
+          code = StatusCodes.BadRequest
+        )
+      }
       // perform the rename in a transaction
       numEntitiesAffected <- renameInTransaction
     } yield numEntitiesAffected

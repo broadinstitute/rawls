@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeNull,
   AttributeNumber,
+  AttributeRename,
   AttributeString,
   AttributeValueList,
   Entity,
@@ -514,12 +515,99 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     check(attr2, wsid, "entityType2")
     check(attr3, wsid2, "entityType1")
     check(attr4, wsid2, "entityType2")
-
   }
 
   behavior of "renameAttribute"
 
-  it should "be implemented" is pending
+  it should "change the attribute name" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+
+    val renameAttr = AttributeName.withDefaultNS("bar")
+
+    val entity1 = Entity("entityName1",
+                         "entityType",
+                         Map(
+                           attr1 -> AttributeNumber(1),
+                           attr2 -> AttributeNumber(2)
+                         )
+    )
+    val entity2 = Entity("entityName2",
+                         "entityType",
+                         Map(
+                           attr2 -> AttributeNumber(2),
+                           attr3 -> AttributeNumber(3)
+                         )
+    )
+
+    insertAndGetAll(Seq(entity1, entity2))
+
+    // rename attr2 ("import:bar") to renameAttr ("bar")
+    val rename = runAndWait(q.renameAttribute(wsid, "entityType", attr2, AttributeRename(renameAttr)))
+    rename shouldBe 2
+
+    runAndWait(q.getEntity(wsid, "entityType", entity1.name)).get.toEntity.attributes shouldBe Map(
+      attr1 -> AttributeNumber(1),
+      renameAttr -> AttributeNumber(2)
+    )
+
+    runAndWait(q.getEntity(wsid, "entityType", entity2.name)).get.toEntity.attributes shouldBe Map(
+      renameAttr -> AttributeNumber(2),
+      attr3 -> AttributeNumber(3)
+    )
+  }
+
+  it should "respect the workspace and entity type" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("one")
+    val attr2 = AttributeName.withDefaultNS("two")
+    val attr3 = AttributeName.withDefaultNS("three")
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    insertAndGet(Entity("entityName", "entityType1", Map(attr1 -> AttributeNumber(1), attr2 -> AttributeNumber(2))),
+                 wsid
+    )
+    insertAndGet(Entity("entityName", "entityType2", Map(attr2 -> AttributeNumber(2), attr3 -> AttributeNumber(3))),
+                 wsid
+    )
+    insertAndGet(Entity("entityName", "entityType1", Map(attr1 -> AttributeNumber(1), attr2 -> AttributeNumber(2))),
+                 wsid2
+    )
+    insertAndGet(Entity("entityName", "entityType2", Map(attr2 -> AttributeNumber(2), attr3 -> AttributeNumber(3))),
+                 wsid2
+    )
+
+    // check metadata before any renames
+    runAndWait(q.listEntityKeys(wsid)) should contain theSameElementsAs Seq(
+      EntityTypeAndAttributeKey("entityType1", attr1),
+      EntityTypeAndAttributeKey("entityType1", attr2),
+      EntityTypeAndAttributeKey("entityType2", attr2),
+      EntityTypeAndAttributeKey("entityType2", attr3)
+    )
+    runAndWait(q.listEntityKeys(wsid2)) should contain theSameElementsAs Seq(
+      EntityTypeAndAttributeKey("entityType1", attr1),
+      EntityTypeAndAttributeKey("entityType1", attr2),
+      EntityTypeAndAttributeKey("entityType2", attr2),
+      EntityTypeAndAttributeKey("entityType2", attr3)
+    )
+
+    // rename attr2 in entityType1 and wsid; should only affect entity1 and entity2 in wsid
+    val newAttr1 = AttributeName.withDefaultNS("new1")
+    runAndWait(q.renameAttribute(wsid, "entityType1", attr2, AttributeRename(newAttr1))) shouldBe 1
+    // check metadata
+    runAndWait(q.listEntityKeys(wsid)) should contain theSameElementsAs Seq(
+      EntityTypeAndAttributeKey("entityType1", attr1),
+      EntityTypeAndAttributeKey("entityType1", newAttr1),
+      EntityTypeAndAttributeKey("entityType2", attr2),
+      EntityTypeAndAttributeKey("entityType2", attr3)
+    )
+    runAndWait(q.listEntityKeys(wsid2)) should contain theSameElementsAs Seq(
+      EntityTypeAndAttributeKey("entityType1", attr1),
+      EntityTypeAndAttributeKey("entityType1", attr2),
+      EntityTypeAndAttributeKey("entityType2", attr2),
+      EntityTypeAndAttributeKey("entityType2", attr3)
+    )
+  }
 
   /**
    * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.

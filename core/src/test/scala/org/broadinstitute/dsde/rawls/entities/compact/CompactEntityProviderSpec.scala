@@ -807,6 +807,25 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
   behavior of "renameAttribute"
 
+  it should "throw error if old and new names are the same" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("same")
+    val newName = AttributeName.withDefaultNS("same")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[AttributeException] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
   it should "throw error on an invalid new attribute name" in {
     val entityType = "entityType"
     val oldName = AttributeName.withDefaultNS("oldName")
