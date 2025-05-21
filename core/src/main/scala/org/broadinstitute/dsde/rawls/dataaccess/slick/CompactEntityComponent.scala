@@ -579,9 +579,9 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           attributes = JSON_REMOVE(
                          JSON_SET(
                            attributes,
-                           '#${slickAttributePath(renameRequest.newAttributeName)}',
-                           JSON_EXTRACT(attributes, '#${slickAttributePath(oldAttributeName)}')),
-                         '#${slickAttributePath(oldAttributeName)}'
+                           ${slickAttributePath(renameRequest.newAttributeName)},
+                           JSON_EXTRACT(attributes, ${slickAttributePath(oldAttributeName)})),
+                         ${slickAttributePath(oldAttributeName)}
                        )
           where workspace_id = $workspaceId
           and entity_type = $entityType
