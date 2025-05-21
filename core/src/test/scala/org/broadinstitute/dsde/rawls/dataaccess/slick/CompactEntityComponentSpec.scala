@@ -436,6 +436,91 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
+  behavior of "attributeExists"
+
+  it should "find attributes" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+
+    val entity1 = Entity("entityName1",
+                         "entityType",
+                         Map(
+                           attr1 -> AttributeNumber(1)
+                         )
+    )
+    val entity2 = Entity("entityName2",
+                         "entityType",
+                         Map(
+                           attr2 -> AttributeNumber(1)
+                         )
+    )
+    val entity3 = Entity("entityName3",
+                         "entityType",
+                         Map(
+                           attr3 -> AttributeNumber(1)
+                         )
+    )
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    Seq(attr1, attr2, attr3) foreach { attributeName =>
+      withClue(s"attribute $attributeName should exist") {
+        val actual = runAndWait(q.attributeExists(wsid, "entityType", attributeName))
+        actual shouldBe true
+      }
+    }
+
+    // some attributes that don't exist
+    Seq(AttributeName.fromDelimitedName("import:foo"),
+        AttributeName.withDefaultNS("bar"),
+        AttributeName.withDefaultNS("boo")
+    ) foreach { attributeName =>
+      withClue(s"attribute $attributeName should not exist") {
+        val actual = runAndWait(q.attributeExists(wsid, "entityType", attributeName))
+        actual shouldBe false
+      }
+    }
+  }
+
+  it should "respect the workspace and entity type" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("one")
+    val attr2 = AttributeName.withDefaultNS("two")
+    val attr3 = AttributeName.withDefaultNS("three")
+    val attr4 = AttributeName.withDefaultNS("four")
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    insertAndGet(Entity("entityName", "entityType1", Map(attr1 -> AttributeNumber(1))), wsid)
+    insertAndGet(Entity("entityName", "entityType2", Map(attr2 -> AttributeNumber(2))), wsid)
+    insertAndGet(Entity("entityName", "entityType1", Map(attr3 -> AttributeNumber(3))), wsid2)
+    insertAndGet(Entity("entityName", "entityType2", Map(attr4 -> AttributeNumber(4))), wsid2)
+
+    // helper function to check if the attribute exists in the given workspace and entity type
+    def check(attributeName: AttributeName, expectedWorkspaceId: UUID, expectedEntityType: String): Unit =
+      Seq(wsid, wsid2) foreach { workspaceId =>
+        Seq("entityType1", "entityType2") foreach { entityType =>
+          withClue(
+            s"attribute $attributeName should only exist in workspace $expectedWorkspaceId and entity type $expectedEntityType;" +
+              s" error while checking $workspaceId and $entityType"
+          ) {
+            val actual = runAndWait(q.attributeExists(workspaceId, entityType, attributeName))
+            val expected = workspaceId == expectedWorkspaceId && entityType == expectedEntityType
+            actual shouldBe expected
+          }
+        }
+      }
+
+    check(attr1, wsid, "entityType1")
+    check(attr2, wsid, "entityType2")
+    check(attr3, wsid2, "entityType1")
+    check(attr4, wsid2, "entityType2")
+
+  }
+
+  behavior of "renameAttribute"
+
+  it should "be implemented" is pending
+
   /**
    * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
    */

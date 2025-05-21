@@ -563,10 +563,15 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
                       entityType: String,
                       oldName: AttributeName,
                       newName: AttributeRename
-  ): ReadWriteAction[Int] = ???
+  ): ReadWriteAction[Int] = DBIO.failed(new RuntimeException("not implemented"))
 
   def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
-    ???
+    sql"""select exists (select 1 from ENTITY_KEYS
+         where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)})))"""
+      .as[Boolean]
+      .head
 
   // ====================================================================================================
   //  entity query helpers
