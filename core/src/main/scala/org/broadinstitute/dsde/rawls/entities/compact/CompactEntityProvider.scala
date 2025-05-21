@@ -317,7 +317,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[Int] = {
     // Extract the new attribute name from the rename request
     val newAttributeName = attributeRenameRequest.newAttributeName
-    
+
     // Perform the rename in a transaction
     val renameFuture = repository.dataSource.inTransaction { dataAccess =>
       for {
@@ -328,32 +328,37 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
             errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type $entityType")
           )
         }
-        
+
         // Check if the attribute exists for the entity type
         attributeExists <- repository.queries.doesAttributeExist(workspaceId, entityType, oldAttributeName)
         _ = if (!attributeExists) {
           throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}")
+            errorReport = ErrorReport(StatusCodes.NotFound,
+                                      s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"
+            )
           )
         }
-        
+
         // Check if the new attribute name already exists for the entity type
         newAttributeExists <- repository.queries.doesAttributeExist(workspaceId, entityType, newAttributeName)
         _ = if (newAttributeExists) {
           throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.Conflict, s"${AttributeName.toDelimitedName(newAttributeName)} already exists as an attribute name")
+            errorReport =
+              ErrorReport(StatusCodes.Conflict,
+                          s"${AttributeName.toDelimitedName(newAttributeName)} already exists as an attribute name"
+              )
           )
         }
-        
+
         // Perform the rename operation directly on the entities table using our new method
         rowsUpdated <- repository.queries.renameAttribute(workspaceId, entityType, oldAttributeName, newAttributeName)
-          
+
       } yield rowsUpdated // Return the number of attributes that were renamed
     }
-    
+
     // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
     withWorkspaceLastModified(renameFuture)
-    
+
     // Return the future
     renameFuture
   }

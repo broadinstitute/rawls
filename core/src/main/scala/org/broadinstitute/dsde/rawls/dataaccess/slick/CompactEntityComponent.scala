@@ -48,7 +48,11 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   // rename an attribute in the attributes JSON column for all entities of a specific type in a workspace
-  def renameAttribute(workspaceId: UUID, entityType: String, oldAttributeName: AttributeName, newAttributeName: AttributeName): ReadWriteAction[Int] = {
+  def renameAttribute(workspaceId: UUID,
+                      entityType: String,
+                      oldAttributeName: AttributeName,
+                      newAttributeName: AttributeName
+  ): ReadWriteAction[Int] =
     sql"""UPDATE ENTITY
           SET attributes = JSON_SET(
             JSON_REMOVE(attributes, ${CompactEntitySerialization.slickAttributePath(oldAttributeName)}), 
@@ -58,11 +62,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           WHERE workspace_id = ${workspaceId}
             AND entity_type = ${entityType}
             AND deleted = 0
-            AND JSON_EXTRACT(attributes, ${CompactEntitySerialization.slickAttributePath(oldAttributeName)}) IS NOT NULL""".asUpdate
-  }
-  
+            AND JSON_EXTRACT(attributes, ${CompactEntitySerialization.slickAttributePath(
+        oldAttributeName
+      )}) IS NOT NULL""".asUpdate
+
   // Check if an attribute exists for any entity of a specific type in a workspace
-  def doesAttributeExist(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] = {
+  def doesAttributeExist(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
     sql"""SELECT EXISTS (
             SELECT 1 FROM ENTITY 
             WHERE workspace_id = ${workspaceId} 
@@ -70,7 +75,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
               AND deleted = 0
               AND JSON_EXTRACT(attributes, ${CompactEntitySerialization.slickAttributePath(attributeName)}) IS NOT NULL
           ) AS attr_exists""".as[Boolean].head
-  }
 
   private val basicCompactEntitySelect =
     "select id, name, entity_type, workspace_id, record_version, deleted, attributes"
@@ -499,10 +503,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // Update the entity type in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
-    val updateEntityTypeSql = 
+    val updateEntityTypeSql =
       sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
             where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
-    
+
     // Update entity references in the attributes JSON column
     // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
     // The best approach would be to add a custom MySQL function for JSON path replacement
@@ -515,7 +519,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
             set from_entity_type = $newType
             where workspace_id = $workspaceId
             and from_entity_type = $oldType"""
-            
+
     // Update to_entity_type in ENTITY_REFS table
     // explain plan: index range scan on unq_from_to
     val updateToReferencesSql =
@@ -564,24 +568,25 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
         sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
       )
-  }
-    
+    }
+
     // Execute all updates in same transaction
     for {
       paths <- getReferencePathsInAttributesSql.as[String]
-      _ <- if(paths.isEmpty) {
-        DBIO.successful(0)
-      } else {
-        DBIO.seq(
-          updateReferencesInAttributesSql(paths).asUpdate,
-          updateToReferencesSql.asUpdate
-        )
-      }
+      _ <-
+        if (paths.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          DBIO.seq(
+            updateReferencesInAttributesSql(paths).asUpdate,
+            updateToReferencesSql.asUpdate
+          )
+        }
       _ <- updateFromReferencesSql.asUpdate
       entityRowsUpdated <- updateEntityTypeSql.asUpdate
     } yield entityRowsUpdated
   }
-  
+
   // ====================================================================================================
   //  entity query helpers
   //      methods in this section are used for building entity query functions
