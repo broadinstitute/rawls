@@ -47,6 +47,31 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       pp.setString(v.compactPrint)
   }
 
+  // rename an attribute in the attributes JSON column for all entities of a specific type in a workspace
+  def renameAttribute(workspaceId: UUID, entityType: String, oldAttributeName: AttributeName, newAttributeName: AttributeName): ReadWriteAction[Int] = {
+    sql"""UPDATE ENTITY
+          SET attributes = JSON_SET(
+            JSON_REMOVE(attributes, ${CompactEntitySerialization.slickAttributePath(oldAttributeName)}), 
+            ${CompactEntitySerialization.slickAttributePath(newAttributeName)}, 
+            JSON_EXTRACT(attributes, ${CompactEntitySerialization.slickAttributePath(oldAttributeName)})
+          )
+          WHERE workspace_id = ${workspaceId}
+            AND entity_type = ${entityType}
+            AND deleted = 0
+            AND JSON_EXTRACT(attributes, ${CompactEntitySerialization.slickAttributePath(oldAttributeName)}) IS NOT NULL""".asUpdate
+  }
+  
+  // Check if an attribute exists for any entity of a specific type in a workspace
+  def doesAttributeExist(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] = {
+    sql"""SELECT EXISTS (
+            SELECT 1 FROM ENTITY 
+            WHERE workspace_id = ${workspaceId} 
+              AND entity_type = ${entityType} 
+              AND deleted = 0
+              AND JSON_EXTRACT(attributes, ${CompactEntitySerialization.slickAttributePath(attributeName)}) IS NOT NULL
+          ) AS attr_exists""".as[Boolean].head
+  }
+
   private val basicCompactEntitySelect =
     "select id, name, entity_type, workspace_id, record_version, deleted, attributes"
 

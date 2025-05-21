@@ -1641,6 +1641,210 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     updatedRefs should contain theSameElementsAs Seq(newTargetEntity.toPointer)
   }
 
+  behavior of "doesAttributeExist"
+
+  it should "return true when the attribute exists in the specified workspace" in withMinimalTestDatabase { _ =>
+    val entityType = "entityType"
+    val attributeName = AttributeName.withDefaultNS("testAttribute")
+    
+    // Create an entity with the attribute in workspace 1
+    insertAndGet(Entity("test-entity", entityType, Map(attributeName -> AttributeString("test-value"))), wsid)
+    
+    // Verify the attribute exists in workspace 1
+    val exists = runAndWait(q.doesAttributeExist(wsid, entityType, attributeName))
+    exists shouldBe true
+  }
+  
+  it should "return false when the attribute doesn't exist in the specified workspace" in withMinimalTestDatabase { _ =>
+    val entityType = "entityType"
+    val existingAttrName = AttributeName.withDefaultNS("existingAttr")
+    val nonExistentAttrName = AttributeName.withDefaultNS("nonExistentAttr")
+    
+    // Create an entity with existingAttrName but not nonExistentAttrName
+    insertAndGet(Entity("test-entity", entityType, Map(existingAttrName -> AttributeString("test-value"))), wsid)
+    
+    // Verify nonExistentAttrName doesn't exist
+    val exists = runAndWait(q.doesAttributeExist(wsid, entityType, nonExistentAttrName))
+    exists shouldBe false
+  }
+  
+  it should "not be affected by attributes in other workspaces" in withMinimalTestDatabase { _ =>
+    val entityType = "entityType"
+    val attributeName = AttributeName.withDefaultNS("testAttribute")
+    
+    // Create an entity with the attribute in workspace 2 but not in workspace 1
+    insertAndGet(Entity("test-entity", entityType, Map(attributeName -> AttributeString("test-value"))), ws2id)
+    
+    // Check if attribute exists in workspace 1 (should be false)
+    val existsInWs1 = runAndWait(q.doesAttributeExist(wsid, entityType, attributeName))
+    existsInWs1 shouldBe false
+    
+    // Check if attribute exists in workspace 2 (should be true)
+    val existsInWs2 = runAndWait(q.doesAttributeExist(ws2id, entityType, attributeName))
+    existsInWs2 shouldBe true
+  }
+  
+  it should "handle different entity types within the same workspace" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val attributeName = AttributeName.withDefaultNS("testAttribute")
+    
+    // Create an entity with the attribute for entityType1 but not for entityType2
+    insertAndGet(Entity("entity1", entityType1, Map(attributeName -> AttributeString("test-value"))), wsid)
+    insertAndGet(Entity("entity2", entityType2, Map()), wsid)
+    
+    // Check if attribute exists for entityType1 (should be true)
+    val existsForType1 = runAndWait(q.doesAttributeExist(wsid, entityType1, attributeName))
+    existsForType1 shouldBe true
+    
+    // Check if attribute exists for entityType2 (should be false)
+    val existsForType2 = runAndWait(q.doesAttributeExist(wsid, entityType2, attributeName))
+    existsForType2 shouldBe false
+  }
+  
+  it should "only consider non-deleted entities when checking attributes" in withMinimalTestDatabase { _ =>
+    val entityType = "entityType"
+    val attributeName = AttributeName.withDefaultNS("testAttribute")
+    val entityName = "test-entity"
+    
+    // Create an entity with the attribute
+    insertAndGet(Entity(entityName, entityType, Map(attributeName -> AttributeString("test-value"))), wsid)
+    
+    // Verify the attribute exists
+    val existsBeforeDelete = runAndWait(q.doesAttributeExist(wsid, entityType, attributeName))
+    existsBeforeDelete shouldBe true
+    
+    // Now delete the entity
+    runAndWait(q.batchHide(wsid, Seq(EntityPointer(entityType, entityName))))
+    
+    // Verify the attribute no longer exists (because entity is deleted)
+    val existsAfterDelete = runAndWait(q.doesAttributeExist(wsid, entityType, attributeName))
+    existsAfterDelete shouldBe false
+  }
+
+  behavior of "renameAttribute"
+
+  it should "rename an attribute for entities of a specific type" in withMinimalTestDatabase { _ =>
+    // Create entities with the attribute to be renamed
+    val entityType = "testEntityType"
+    val oldAttrName = AttributeName.withDefaultNS("oldAttr")
+    val newAttrName = AttributeName.withDefaultNS("newAttr")
+    val attrValue = "testValue"
+    
+    val entity1 = Entity("entity1", entityType, Map(oldAttrName -> AttributeString(attrValue)))
+    val entity2 = Entity("entity2", entityType, Map(oldAttrName -> AttributeString(attrValue)))
+    
+    // Insert the entities
+    insertAndGetAll(Seq(entity1, entity2))
+    
+    // Execute renameAttribute and verify the result
+    val rowsUpdated = runAndWait(q.renameAttribute(wsid, entityType, oldAttrName, newAttrName))
+    rowsUpdated shouldBe 2
+    
+    // Verify the attribute has been renamed by checking both old and new attribute existence
+    runAndWait(q.doesAttributeExist(wsid, entityType, oldAttrName)) shouldBe false
+    runAndWait(q.doesAttributeExist(wsid, entityType, newAttrName)) shouldBe true
+    
+    // Verify the entities have the new attribute with the same value
+    val updatedEntity1 = runAndWait(q.getEntity(wsid, entityType, entity1.name)).get.toEntity
+    val updatedEntity2 = runAndWait(q.getEntity(wsid, entityType, entity2.name)).get.toEntity
+    
+    updatedEntity1.attributes.get(newAttrName) shouldBe Some(AttributeString(attrValue))
+    updatedEntity2.attributes.get(newAttrName) shouldBe Some(AttributeString(attrValue))
+    
+    // Verify the old attribute no longer exists in the entities
+    updatedEntity1.attributes.get(oldAttrName) shouldBe None
+    updatedEntity2.attributes.get(oldAttrName) shouldBe None
+  }
+
+  it should "not affect entities in another workspace" in withMinimalTestDatabase { _ =>
+    // Create entities with the same attribute in two different workspaces
+    val entityType = "testEntityType"
+    val oldAttrName = AttributeName.withDefaultNS("oldAttr")
+    val newAttrName = AttributeName.withDefaultNS("newAttr")
+    val attrValue = "testValue"
+    
+    val entity1 = Entity("entity1", entityType, Map(oldAttrName -> AttributeString(attrValue)))
+    
+    // Insert the entity in both workspaces
+    insertAndGetAll(Seq(entity1))
+    insertAndGetAll(Seq(entity1), ws2id)
+    
+    // Execute renameAttribute only in the first workspace
+    val rowsUpdated = runAndWait(q.renameAttribute(wsid, entityType, oldAttrName, newAttrName))
+    rowsUpdated shouldBe 1
+    
+    // Verify the attribute was renamed in the first workspace
+    val updatedEntity1 = runAndWait(q.getEntity(wsid, entityType, entity1.name)).get.toEntity
+    updatedEntity1.attributes.get(newAttrName) shouldBe Some(AttributeString(attrValue))
+    updatedEntity1.attributes.get(oldAttrName) shouldBe None
+    
+    // Verify the attribute was NOT renamed in the second workspace
+    val entity1InWs2 = runAndWait(q.getEntity(ws2id, entityType, entity1.name)).get.toEntity
+    entity1InWs2.attributes.get(oldAttrName) shouldBe Some(AttributeString(attrValue))
+    entity1InWs2.attributes.get(newAttrName) shouldBe None
+  }
+
+  it should "not affect entities of a different type in the same workspace" in withMinimalTestDatabase { _ =>
+    // Create entities of different types with the same attribute name
+    val entityType1 = "type1"
+    val entityType2 = "type2"
+    val oldAttrName = AttributeName.withDefaultNS("oldAttr")
+    val newAttrName = AttributeName.withDefaultNS("newAttr")
+    val attrValue = "testValue"
+    
+    val entity1 = Entity("entity1", entityType1, Map(oldAttrName -> AttributeString(attrValue)))
+    val entity2 = Entity("entity2", entityType2, Map(oldAttrName -> AttributeString(attrValue)))
+    
+    // Insert both entities
+    insertAndGetAll(Seq(entity1, entity2))
+    
+    // Execute renameAttribute only for entityType1
+    val rowsUpdated = runAndWait(q.renameAttribute(wsid, entityType1, oldAttrName, newAttrName))
+    rowsUpdated shouldBe 1
+    
+    // Verify the attribute was renamed for entity1
+    val updatedEntity1 = runAndWait(q.getEntity(wsid, entityType1, entity1.name)).get.toEntity
+    updatedEntity1.attributes.get(newAttrName) shouldBe Some(AttributeString(attrValue))
+    updatedEntity1.attributes.get(oldAttrName) shouldBe None
+    
+    // Verify the attribute was NOT renamed for entity2
+    val updatedEntity2 = runAndWait(q.getEntity(wsid, entityType2, entity2.name)).get.toEntity
+    updatedEntity2.attributes.get(oldAttrName) shouldBe Some(AttributeString(attrValue))
+    updatedEntity2.attributes.get(newAttrName) shouldBe None
+  }
+
+  it should "return 0 if the attribute doesn't exist" in withMinimalTestDatabase { _ =>
+    // Create entity without the attribute we'll try to rename
+    val entityType = "testEntityType"
+    val entity = Entity("testEntity", 
+                        entityType, 
+                        Map(AttributeName.withDefaultNS("someOtherAttr") -> AttributeString("value")))
+    
+    // Insert the entity
+    insertAndGetAll(Seq(entity))
+    
+    // Try to rename a non-existent attribute
+    val oldAttrName = AttributeName.withDefaultNS("nonExistentAttr")
+    val newAttrName = AttributeName.withDefaultNS("newAttrName")
+    val rowsUpdated = runAndWait(q.renameAttribute(wsid, entityType, oldAttrName, newAttrName))
+    
+    // Should return 0 rows updated
+    rowsUpdated shouldBe 0
+  }
+
+  it should "return 0 if the entity type doesn't exist" in withMinimalTestDatabase { _ =>
+    // Try to rename an attribute for a non-existent entity type
+    val nonExistentEntityType = "nonExistentType"
+    val oldAttrName = AttributeName.withDefaultNS("oldAttr")
+    val newAttrName = AttributeName.withDefaultNS("newAttr")
+    
+    val rowsUpdated = runAndWait(q.renameAttribute(wsid, nonExistentEntityType, oldAttrName, newAttrName))
+    
+    // Should return 0 rows updated
+    rowsUpdated shouldBe 0
+  }
+
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================
