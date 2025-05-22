@@ -369,6 +369,36 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     query.asUpdate
   }
 
+  /**
+    * Hard-delete all Quicksilver entities which do not have any foreign keys pointed at them.
+    *
+    * Note this does not have a "where deleted=0" clause. Thus, it will also hard-delete any entities
+    * that were previously soft-deleted but which no longer have anything pointing at them (this is unlikely)
+    *
+    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
+    *   and requires a temporary table for the big union.
+    */
+  def deleteEntitiesOfType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
+    sql"""with
+            CANDIDATE_WORKFLOWS as (select wf.ID, wf.ENTITY_ID
+              from WORKFLOW wf, SUBMISSION s
+              where wf.SUBMISSION_ID = s.ID and s.WORKSPACE_ID = $workspaceId)
+          delete e from ENTITY e
+          where e.entity_type = $entityType
+          and e.workspace_id = $workspaceId
+          and e.id not in (
+            select value_entity_ref from WORKSPACE_ATTRIBUTE where owner_id = $workspaceId
+              union
+            select ENTITY_ID from SUBMISSION where WORKSPACE_ID = $workspaceId
+              union
+            select cw.ENTITY_ID as entity_id from CANDIDATE_WORKFLOWS cw
+              union
+            select sa.value_entity_ref as entity_id
+            from SUBMISSION_ATTRIBUTE sa, SUBMISSION_VALIDATION sv, CANDIDATE_WORKFLOWS cw
+            where sa.owner_id = sv.id and sv.WORKFLOW_ID = cw.ID
+          )
+       """.asUpdate
+
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
   // `execution plan: uses idx_to index. Extra: Using where; Using index` (I think this may also use unq_from_to in some cases)

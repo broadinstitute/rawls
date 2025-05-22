@@ -168,6 +168,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         }
         // remove all references from these entities
         _ <- repository.queries.deleteAllReferencesFrom(workspaceId, pointers.toSet)
+        // TODO CORE-495: hard-delete everything we can
+        // soft-delete (i.e. hide) everything that could not be hard-deleted
         res <- repository.queries.batchHide(workspaceId, pointers)
       } yield res
     }
@@ -183,6 +185,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         }
         // remove all references from these entities
         _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
+        // hard-delete everything we can
+        _ <- repository.queries.deleteEntitiesOfType(workspaceId, entityType)
+        // soft-delete (i.e. hide) everything that could not be hard-deleted
         res <- repository.queries.batchHideType(
           workspaceId,
           entityType
