@@ -95,6 +95,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
     }
 
+    // when called with insertOnly=true, the SQL statement is a simple `insert into ...`.
+    // when called with insertOnly=false, the SQL statement is `insert into ... on duplicate key update`.
     val upsertSql = if (insertOnly) {
       sql""
     } else {

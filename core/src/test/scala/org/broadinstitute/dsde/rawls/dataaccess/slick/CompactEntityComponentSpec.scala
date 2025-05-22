@@ -1514,8 +1514,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
     // insert the entities
-    runAndWait(q.batchCreateEntities(wsid, ws1Entities, insertOnly = false)) shouldBe ws1Entities.size
-    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, insertOnly = false)) shouldBe ws2Entities.size
+    runAndWait(q.batchCreateEntities(wsid, ws1Entities, insertOnly = true)) shouldBe ws1Entities.size
+    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, insertOnly = true)) shouldBe ws2Entities.size
 
     // validate listed entities of entityType "testEntityType" in the first workspace
     runAndWait(q.listEntities(wsid, testEntityType)).map(_.toEntity) should contain theSameElementsAs Seq(entity1,
