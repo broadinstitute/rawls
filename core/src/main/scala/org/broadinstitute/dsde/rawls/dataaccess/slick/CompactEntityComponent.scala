@@ -586,7 +586,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           where workspace_id = $workspaceId
           and entity_type = $entityType
           and deleted = 0
-          and JSON_CONTAINS_PATH(attributes, 'one', '#${slickAttributePath(oldAttributeName)}')
+          and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldAttributeName)})
        """.asUpdate
 
   /**
