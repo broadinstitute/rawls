@@ -77,13 +77,20 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     Flow[Seq[EntityUpdateDefinition]].map { updates =>
       // Extract the entity type and name from each update
       val updateIdentifiers = updates.map(update => EntityPointer(update.entityType, update.name))
+      val uniqueUpdateIdentifiers = updateIdentifiers.toSet
 
       for {
         // Query the database for any pre-existing entities being updated
-        existingEntities <- repository.queries.getEntities(workspaceId, updateIdentifiers.toSet)
+        existingEntities <- repository.queries.getEntities(workspaceId, uniqueUpdateIdentifiers)
         // If this invocation does NOT allow upserts, validate that we found all entities being updated
-        _ = if (!allowUpsert && existingEntities.size != updateIdentifiers.size) {
-          throw new EntityNotFoundException()
+        _ = if (!allowUpsert) {
+          val actualPointers = existingEntities.map(_.toPointer).toSet
+          if (
+            existingEntities.size != uniqueUpdateIdentifiers.size || (uniqueUpdateIdentifiers diff actualPointers).nonEmpty
+          )
+            throw new EntityNotFoundException(
+              s"expected ${uniqueUpdateIdentifiers.size} entities to be updated, but found ${existingEntities.size}"
+            )
         }
 
         // Massage the existing entities so they're easier to look up later
