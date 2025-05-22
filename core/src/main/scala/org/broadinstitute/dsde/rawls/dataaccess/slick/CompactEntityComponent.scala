@@ -370,7 +370,21 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   }
 
   /**
-    * Hard-delete all Quicksilver entities which do not have any foreign keys pointed at them.
+    * Hard-delete all of the specified entities that do not have any foreign keys pointed at them.
+    *
+    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
+    *   and requires a temporary table for the big union.
+    */
+  def deleteEntities(workspaceId: UUID, entities: Seq[EntityPointer]): ReadWriteAction[Int] = {
+    // join all the clauses with "or": `(entity_type = ? and name in (?)) or `(entity_type = ? and name in (?))`
+    val criteriaSql: SQLActionBuilder = reduceSqlActionsWithDelim(generateTypeNameSql(entities.toSet).toSeq, sql" or ")
+    val whereClause = concatSqlActions(sql"where (", criteriaSql, sql")")
+    val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
+    finalSql.asUpdate
+  }
+
+  /**
+    * Hard-delete all entities of a given type that do not have any foreign keys pointed at them.
     *
     * Note this does not have a "where deleted=0" clause. Thus, it will also hard-delete any entities
     * that were previously soft-deleted but which no longer have anything pointing at them (this is unlikely)
@@ -378,14 +392,21 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
     *   and requires a temporary table for the big union.
     */
-  def deleteEntitiesOfType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
-    sql"""with
+  def deleteEntitiesOfType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] = {
+    val whereClause = sql"where entity_type = $entityType"
+    val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
+    finalSql.asUpdate
+  }
+
+  // private helper for deleteEntities and deleteEntitiesOfType
+  private def deleteEntitiesImpl(workspaceId: UUID, whereClause: SQLActionBuilder): SQLActionBuilder = {
+    val startSql = sql"""with
             CANDIDATE_WORKFLOWS as (select wf.ID, wf.ENTITY_ID
               from WORKFLOW wf, SUBMISSION s
               where wf.SUBMISSION_ID = s.ID and s.WORKSPACE_ID = $workspaceId)
-          delete e from ENTITY e
-          where e.entity_type = $entityType
-          and e.workspace_id = $workspaceId
+          delete e from ENTITY e """
+
+    val endSql = sql""" and e.workspace_id = $workspaceId
           and e.id not in (
             select value_entity_ref from WORKSPACE_ATTRIBUTE where owner_id = $workspaceId
               union
@@ -397,7 +418,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
             from SUBMISSION_ATTRIBUTE sa, SUBMISSION_VALIDATION sv, CANDIDATE_WORKFLOWS cw
             where sa.owner_id = sv.id and sv.WORKFLOW_ID = cw.ID
           )
-       """.asUpdate
+       """
+
+    concatSqlActions(startSql, whereClause, endSql)
+  }
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
