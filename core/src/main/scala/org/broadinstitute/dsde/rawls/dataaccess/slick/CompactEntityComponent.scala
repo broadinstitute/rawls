@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeName,
+  AttributeRename,
   Entity,
   EntityColumnFilter,
   EntityPointer,
@@ -474,10 +475,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // Update the entity type in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
-    val updateEntityTypeSql = 
+    val updateEntityTypeSql =
       sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
             where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
-    
+
     // Update entity references in the attributes JSON column
     // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
     // The best approach would be to add a custom MySQL function for JSON path replacement
@@ -490,7 +491,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
             set from_entity_type = $newType
             where workspace_id = $workspaceId
             and from_entity_type = $oldType"""
-            
+
     // Update to_entity_type in ENTITY_REFS table
     // explain plan: index range scan on unq_from_to
     val updateToReferencesSql =
@@ -539,24 +540,68 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
         sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
       )
-  }
-    
+    }
+
     // Execute all updates in same transaction
     for {
       paths <- getReferencePathsInAttributesSql.as[String]
-      _ <- if(paths.isEmpty) {
-        DBIO.successful(0)
-      } else {
-        DBIO.seq(
-          updateReferencesInAttributesSql(paths).asUpdate,
-          updateToReferencesSql.asUpdate
-        )
-      }
+      _ <-
+        if (paths.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          DBIO.seq(
+            updateReferencesInAttributesSql(paths).asUpdate,
+            updateToReferencesSql.asUpdate
+          )
+        }
       _ <- updateFromReferencesSql.asUpdate
       entityRowsUpdated <- updateEntityTypeSql.asUpdate
     } yield entityRowsUpdated
   }
-  
+
+  /**
+    * Renames a single attribute across all entities of the given type and workspace.
+    * This method assumes the old and new attribute names have already been validated!
+    *
+    * `Using where. Index used: idx_entity_type_name`
+    */
+  def renameAttribute(workspaceId: UUID,
+                      entityType: String,
+                      oldAttributeName: AttributeName,
+                      renameRequest: AttributeRename
+  ): ReadWriteAction[Int] =
+    // rename is implemented as JSON_REMOVE(JSON_SET(JSON_EXTRACT))
+    // JSON_EXTRACT gets the value of the old attribute
+    // JSON_SET creates the new attribute with that value
+    // JSON_REMOVE deletes the old attribute
+    sql"""update ENTITY
+          set record_version = record_version + 1,
+          attributes = JSON_REMOVE(
+                         JSON_SET(
+                           attributes,
+                           ${slickAttributePath(renameRequest.newAttributeName)},
+                           JSON_EXTRACT(attributes, ${slickAttributePath(oldAttributeName)})),
+                         ${slickAttributePath(oldAttributeName)}
+                       )
+          where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and deleted = 0
+          and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldAttributeName)})
+       """.asUpdate
+
+  /**
+    * Determine if an attribute exists in any entity of the given type and workspace.
+    *
+    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    */
+  def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
+    sql"""select exists (select 1 from ENTITY_KEYS
+         where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)})))"""
+      .as[Boolean]
+      .head
+
   // ====================================================================================================
   //  entity query helpers
   //      methods in this section are used for building entity query functions

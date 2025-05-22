@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
@@ -17,6 +17,8 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
+  AttributeNumber,
+  AttributeRename,
   AttributeString,
   Entity,
   EntityPointer,
@@ -518,6 +520,47 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     )
 
     entities shouldBe empty
+  }
+
+  behavior of "renameAttribute"
+
+  it should "rename an attribute" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val oldAttr = AttributeName.withDefaultNS("foo")
+    val newAttr = AttributeName.withDefaultNS("aFancyNewName")
+
+    // Create entities with attributes
+    val updates = Seq(
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(AddUpdateAttribute(oldAttr, AttributeNumber(1)))
+      ),
+      EntityUpdateDefinition(
+        "name2",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("bar"), AttributeNumber(2)))
+      ),
+      EntityUpdateDefinition(
+        "name3",
+        "typeB",
+        Seq(AddUpdateAttribute(oldAttr, AttributeNumber(3)))
+      )
+    )
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    val numRenamed =
+      Await.result(provider.renameAttribute("typeA", oldAttr, AttributeRename(newAttr), defaultRequestContext), atMost)
+    numRenamed shouldBe 1
+
+    val entitySource = provider.listEntities("typeA")
+    val actual = Await.result(entitySource.runWith(Sink.seq), atMost)
+    actual should contain theSameElementsAs Seq(
+      Entity("name1", "typeA", Map(newAttr -> AttributeNumber(1))),
+      Entity("name2", "typeA", Map(AttributeName.withDefaultNS("bar") -> AttributeNumber(2)))
+    )
+
   }
 
   // ====================================================================================================
