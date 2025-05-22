@@ -471,6 +471,30 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   }
 
+  it should "retrieve the workspace for a submission with getSubmissionWorkspace" in withDefaultTestDatabase {
+    val submissionId = UUID.fromString(testData.submission1.submissionId)
+    val expectedWorkspace = testData.workspace
+
+    // Test that we can retrieve the workspace for a valid submission
+    val workspaceOption = runAndWait(submissionQuery.getSubmissionWorkspace(submissionId))
+
+    assertResult(Some(expectedWorkspace.toWorkspaceName)) {
+      workspaceOption.map(_.toWorkspaceName)
+    }
+
+    assertResult(Some(expectedWorkspace.workspaceId)) {
+      workspaceOption.map(_.workspaceId)
+    }
+
+    // Test that we get None when the submission doesn't exist
+    val nonExistentSubmissionId = UUID.randomUUID()
+    val nonExistentResult = runAndWait(submissionQuery.getSubmissionWorkspace(nonExistentSubmissionId))
+
+    assertResult(None) {
+      nonExistentResult
+    }
+  }
+
   "WorkflowComponent" should "update the status of a workflow and increment record version" in withDefaultTestDatabase {
     val workflowRecBefore =
       runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).head
