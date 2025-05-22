@@ -3,26 +3,19 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeEntityReference,
-  AttributeName,
-  Entity,
-  EntityColumnFilter,
-  EntityQuery,
-  FilterOperators,
-  SortDirections
-}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, Entity, EntityColumnFilter, EntityCopyResponse, EntityHardConflict, EntityPath, EntityQuery, EntitySoftConflict, FilterOperators, RawlsRequestContext, SortDirections, Workspace}
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import spray.json._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -207,6 +200,87 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       // execute
       query.as[CompactEntityRefRecord]
     }
+
+  def copyEntitiesToNewWorkspace(sourceWs: UUID,
+                                 destWs: UUID,
+                                 entityRefs: Set[AttributeEntityReference] = Set()
+                                ): WriteAction[Int] = {
+
+    def copyChunkOfEntitiesOrAllEntities(chunk: Set[AttributeEntityReference] = Set()) =
+      for {
+        entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
+      } yield entitiesCopiedCount
+
+      val chunks: Iterator[Set[AttributeEntityReference]] = if (entityRefs.size > driverComponent.batchSize) {
+        entityRefs.grouped(driverComponent.batchSize)
+      } else {
+        Iterator(entityRefs)
+      }
+
+    val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
+
+    allCopies.map { copyActionResults: Iterator[Int] =>
+      copyActionResults.sum
+    }
+  }
+
+  def getEntitySubtrees(workspaceId: UUID,
+                        entityType: String,
+                        entityNames: Set[String]
+                       ): ReadAction[Seq[EntityPath]] = {
+    val refs = entityNames.map { name => AttributeEntityReference(entityType, name) }
+    for {
+      startingEntityRecords <- getEntityRefs(workspaceId, refs)
+      entities = startingEntityRecords.map { record => record.toAttributeEntityReference}
+      refsToId = startingEntityRecords.map(record => EntityPath(Seq(record.toAttributeEntityReference)) -> record.toAttributeEntityReference).toMap
+      allRefs <- recursiveGetEntityReferences(workspaceId, entities.toSet, refsToId)
+    } yield allRefs
+  }
+
+  def recursiveGetEntityReferences(workspaceId: UUID,
+                                   entities: Set[AttributeEntityReference],
+                                   accumulatedPathsWithLastId: Map[EntityPath, AttributeEntityReference]
+                                  ): ReadAction[Seq[EntityPath]] = {
+    val actions: Seq[ReadAction[Seq[(AttributeEntityReference, AttributeEntityReference)]]] = entities.toSeq.map { entity =>
+      getReferencesTo(workspaceId, Seq(entity)).map { references =>
+        references.map(ref => (entity, ref))
+      }
+    }
+
+    DBIO.sequence(actions).map(_.flatten.toSet).flatMap { priorEntityWithCurrentRec =>
+      val currentPaths = priorEntityWithCurrentRec.flatMap { case (priorEntity, currentRec) =>
+        val pathsThatEndWithPrior = accumulatedPathsWithLastId.filter { case (_, entity) => entity == priorEntity }
+        pathsThatEndWithPrior.keys.map(_.path).map { path =>
+          (EntityPath(path :+ currentRec), currentRec)
+        }
+      }.toMap
+
+      val untraversedIds = priorEntityWithCurrentRec.map(_._2) -- accumulatedPathsWithLastId.values.toSet
+      if (untraversedIds.isEmpty) {
+        DBIO.successful(accumulatedPathsWithLastId.keys.toSeq)
+      } else {
+        recursiveGetEntityReferences(workspaceId, untraversedIds, accumulatedPathsWithLastId ++ currentPaths)
+      }
+    }
+  }
+
+  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[AttributeEntityReference]): ReadWriteAction[Int] =
+    if (refs.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+      val sql = concatSqlActions(
+        sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
+             select name, entity_type, $destWorkspaceId, record_version, 0, attributes
+             from ENTITY e
+             where e.workspace_id = $sourceWorkspaceId
+             and deleted = 0
+             and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "))
+             sql""" );"""
+      sql.asUpdate
+  }
+
 
   /** Given a set of entity type/name pairs, return the count of those entities that exist.
     *
