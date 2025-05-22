@@ -8,26 +8,19 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
+import org.broadinstitute.dsde.rawls.entities.exceptions._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddUpdateAttribute,
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException,
-  EntityNotFoundException,
-  EntityReferenceNotFoundException,
-  UnsupportedEntityOperationException
-}
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
-  AttributeBoolean,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
+  AttributeRename,
   AttributeString,
   Entity,
   EntityPointer,
@@ -45,8 +38,8 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
 import org.scalatest.time.{Millis, Seconds, Span}
 import slick.dbio.DBIO
@@ -805,7 +798,178 @@ class CompactEntityProviderSpec
 
   "queryEntities" should "have tests" is pending
   "queryEntitiesSource" should "have tests" is pending
-  "renameAttribute" should "have tests" is pending
+
+  behavior of "renameAttribute"
+
+  it should "throw error if old and new names are the same" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("same")
+    val newName = AttributeName.withDefaultNS("same")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[AttributeException] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on an invalid new attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("no! @@bad@@")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on an invalid old attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("no! @@bad@@")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on a reserved new attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS(s"${entityType}_id")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on a reserved old attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS(s"${entityType}_id")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error if new name already exists" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    // mock: new name already exists
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
+      .thenReturn(DBIO.successful(true))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[AttributeException] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error if old name does not exist" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    // mock: new name does not exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
+      .thenReturn(DBIO.successful(false))
+    // mock: old name does not exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(oldName)))
+      .thenReturn(DBIO.successful(false))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[AttributeException] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "return the number of entities updated if successful" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    // mock: new name does not exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
+      .thenReturn(DBIO.successful(false))
+    // mock: old name does exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(oldName)))
+      .thenReturn(DBIO.successful(true))
+    // mock: rename touches 123 entities
+    when(mockQueries.renameAttribute(any[UUID], anyString(), mockitoEq(oldName), mockitoEq(AttributeRename(newName))))
+      .thenReturn(DBIO.successful(123))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val actual =
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+
+    actual shouldBe 123
+  }
+
   "renameEntity" should "have tests" is pending
 
   behavior of "renameEntityType"

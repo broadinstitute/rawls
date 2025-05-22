@@ -8,6 +8,8 @@ import { generateBatchUpsert } from './batchOperations.js';
 
 export const options = {
   // define each test scenario to be run
+  // for info on the various executor options (VUs, duration, iterations, etc) see
+  // https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/
   scenarios: {
     // entityQuery baseline and test run in parallel; each has three virtual users and makes as many requests as possible
     // within 20 seconds.
