@@ -112,7 +112,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
         updatedEntities = applyAll(updates, existingEntitiesByIdentifier)
 
         // Persist the updated entities to the database
-        writeCount <- insertBatch(updatedEntities, allowUpsert)
+        writeCount <- insertOrUpdateBatch(updatedEntities)
 
         // Re-retrieve the entities we just wrote. This gets the actual record_version values.
         finalRecordVersions <- repository.queries.getEntityVersions(workspaceId, updateIdentifiers.toSet)
@@ -170,25 +170,33 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
   }
 
   /** write this batch of Entity to the database */
-  private def insertBatch(batch: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] =
+  private def insertOrUpdateBatch(batch: Seq[Entity]): ReadWriteAction[Int] =
 
     for {
       // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
       // has a reference to another entity in the same batch.
-      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, allowUpsert = allowUpsert)
+      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, insertOnly = false)
 
       // Find all requested references within this batch
       allReferences: Set[RefMapping] = findAllReferences(batch)
 
       // verify all requested references exist
-      allExist <- repository.queries.existsAll(workspaceId, allReferences.flatMap(_.to))
+      allExist <-
+        if (allReferences.nonEmpty)
+          repository.queries.existsAll(workspaceId, allReferences.flatMap(_.to))
+        else
+          DBIO.successful(true)
 
       // did we find all the reference sources and targets?
       _ = if (!allExist)
         throw new EntityReferenceNotFoundException("Some entity references do not exist")
 
       _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toPointer).toSet)
-      _ <- repository.queries.insertReferences(workspaceId, allReferences)
+      _ <-
+        if (allReferences.nonEmpty)
+          repository.queries.insertReferences(workspaceId, allReferences)
+        else
+          DBIO.successful(0)
     } yield entitiesCreated
 
 }

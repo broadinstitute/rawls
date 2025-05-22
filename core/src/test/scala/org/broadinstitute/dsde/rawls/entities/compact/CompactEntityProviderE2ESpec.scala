@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
   AddUpdateAttribute,
+  AttributeUpdateOperation,
   CreateAttributeEntityReferenceList,
   EntityUpdateDefinition,
   RemoveAttribute
@@ -518,6 +519,33 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     )
 
     entities shouldBe empty
+  }
+
+  behavior of "updateEntity"
+
+  it should "correctly update an entity in the database" in withMinimalTestDatabase { _ =>
+    val entityType = "typeA"
+    val entityName = "name1"
+    val provider = defaultProvider()
+
+    // create the pre-existing base entity
+    val baseEntity = Entity(entityName, entityType, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
+    val setup = Await.result(provider.createEntity(baseEntity, defaultRequestContext), atMost)
+    setup shouldBe baseEntity
+
+    // ask to apply an update to that entity
+    val operations: Seq[AttributeUpdateOperation] = Seq(
+      AddUpdateAttribute(AttributeName.withDefaultNS("baz"), AttributeString("qux"))
+    )
+    val actual = Await.result(provider.updateEntity(entityType, entityName, operations, defaultRequestContext), atMost)
+
+    actual shouldBe Entity(entityName,
+                           entityType,
+                           Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                               AttributeName.withDefaultNS("baz") -> AttributeString("qux")
+                           )
+    )
+
   }
 
   // ====================================================================================================

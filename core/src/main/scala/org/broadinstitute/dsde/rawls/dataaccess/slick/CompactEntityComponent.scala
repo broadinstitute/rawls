@@ -84,7 +84,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -94,10 +94,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
     }
 
-    val upsertSql = if (allowUpsert) {
-      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
-    } else {
+    val upsertSql = if (insertOnly) {
       sql""
+    } else {
+      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
     }
 
     concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql","), upsertSql).asUpdate
@@ -111,7 +111,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity), allowUpsert = false)
+    batchCreateEntities(workspaceId, Seq(entity), insertOnly = true)
 
   /**
     * Read a single entity from the db
@@ -474,10 +474,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // Update the entity type in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
-    val updateEntityTypeSql = 
+    val updateEntityTypeSql =
       sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
             where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
-    
+
     // Update entity references in the attributes JSON column
     // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
     // The best approach would be to add a custom MySQL function for JSON path replacement
@@ -490,7 +490,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
             set from_entity_type = $newType
             where workspace_id = $workspaceId
             and from_entity_type = $oldType"""
-            
+
     // Update to_entity_type in ENTITY_REFS table
     // explain plan: index range scan on unq_from_to
     val updateToReferencesSql =
@@ -539,24 +539,25 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
         sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
       )
-  }
-    
+    }
+
     // Execute all updates in same transaction
     for {
       paths <- getReferencePathsInAttributesSql.as[String]
-      _ <- if(paths.isEmpty) {
-        DBIO.successful(0)
-      } else {
-        DBIO.seq(
-          updateReferencesInAttributesSql(paths).asUpdate,
-          updateToReferencesSql.asUpdate
-        )
-      }
+      _ <-
+        if (paths.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          DBIO.seq(
+            updateReferencesInAttributesSql(paths).asUpdate,
+            updateToReferencesSql.asUpdate
+          )
+        }
       _ <- updateFromReferencesSql.asUpdate
       entityRowsUpdated <- updateEntityTypeSql.asUpdate
     } yield entityRowsUpdated
   }
-  
+
   // ====================================================================================================
   //  entity query helpers
   //      methods in this section are used for building entity query functions
