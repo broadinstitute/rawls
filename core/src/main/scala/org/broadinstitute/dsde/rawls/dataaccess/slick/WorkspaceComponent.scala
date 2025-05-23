@@ -604,7 +604,7 @@ trait WorkspaceComponent {
     def findByGoogleProjectIdQuery(googleProjectId: GoogleProjectId): WorkspaceQueryType =
       workspaceQuery.withGoogleProjectId(googleProjectId)
 
-    private def loadWorkspace(lookup: WorkspaceQueryType,
+    def loadWorkspace(lookup: WorkspaceQueryType,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Option[Workspace]] =
       uniqueResult(loadWorkspaces(lookup, attributeSpecs))

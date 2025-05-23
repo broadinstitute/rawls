@@ -2023,10 +2023,14 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           .result
       ).head
 
-      val messages = runAndWait(workflowQuery.loadWorkflowMessages(workflowRecord.id))
-      assert(messages.exists(_.value.startsWith("Cannot save outputs to workspace")),
-             s"Expected error message not found in [${messages.mkString(",")}]"
-      )
+      val errorMessage =
+        "Cannot save outputs to workspace because workflow's attribute count of 15 exceeds Terra maximum of 10."
+      assertResult(Vector(AttributeString(errorMessage))) {
+        runAndWait(
+          workflowQuery.loadWorkflowMessages(workflowRecord.id)
+        )
+      }
+
   }
 
   it should "fail workflows that exceed the configured entity attribute maximum" in withDefaultTestDatabase {
@@ -2092,10 +2096,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           .result
       ).head
 
-      val messages = runAndWait(workflowQuery.loadWorkflowMessages(workflowRecord.id))
-      assert(messages.exists(_.value.startsWith("Cannot save outputs to entity")),
-             s"Expected error message not found in [${messages.mkString(",")}]"
-      )
+      val errorMessage =
+        "Cannot save outputs to entity because workflow's attribute count of 11 exceeds Terra maximum of 10."
+      assertResult(Vector(AttributeString(errorMessage))) {
+        runAndWait(
+          workflowQuery.loadWorkflowMessages(workflowRecord.id)
+        )
+      }
   }
 
   it should "handleStatusResponses and fail workflows that are missing outputs" in withDefaultTestDatabase {

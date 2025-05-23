@@ -479,14 +479,12 @@ trait SubmissionComponent {
       uniqueResult[Unit](findByWorkspaceAndId(workspaceId, submissionId).map(_ => ()))
 
     def getSubmissionWorkspace(submissionId: UUID): ReadAction[Option[Workspace]] = {
-      // Use a single query with a join between submission and workspace tables
       val query = for {
         submission <- submissionQuery if submission.id === submissionId
         workspace <- workspaceQuery if workspace.id === submission.workspaceId
       } yield workspace
 
-      // Map the workspace record to a Workspace model object and handle the None case
-      query.result.headOption.map(_.map(WorkspaceRecord.toWorkspace(_)))
+      workspaceQuery.loadWorkspace(query)
     }
 
     /*
