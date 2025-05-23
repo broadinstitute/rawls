@@ -41,7 +41,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.mockito.Mockito.RETURNS_SMART_NULLS
-import org.scalatest.Inspectors._
+import org.scalatest.Inspectors.forEvery
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
