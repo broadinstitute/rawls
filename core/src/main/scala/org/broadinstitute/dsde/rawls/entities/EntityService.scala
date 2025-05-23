@@ -618,14 +618,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
           // populate the ENTITY_REFS table for this workspace
           _ = logger.info(s"Quicksilver migration: populating ENTITY_REFS ...")
           _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
+
+          /***** don't delete legacy data; we'll to that en masse after everything is migrated
           // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
           _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
           _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
                                                                              shardId
           )
-          // delete the all_attribute_values column for this workspace
+           delete the all_attribute_values column for this workspace
           _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
           _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
+           *****/
 
           _ <- dataAccess.compactEntityQuery.migrationDeleteTempTable
           _ = logger.info(s"Quicksilver migration: done!")

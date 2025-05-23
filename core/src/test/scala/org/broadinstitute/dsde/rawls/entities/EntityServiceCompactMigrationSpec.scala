@@ -17,7 +17,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProvider,
   CompactEntityProviderConfig,
-  CompactEntityRepository
+  CompactEntityRepository,
+  CompactEntitySerialization
 }
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
@@ -40,6 +41,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.mockito.Mockito.RETURNS_SMART_NULLS
+import org.scalatest.Inspectors._
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -56,7 +58,8 @@ class EntityServiceCompactMigrationSpec
     with Eventually
     with ScalaFutures
     with MockitoTestUtils
-    with RawlsStatsDTestUtils {
+    with RawlsStatsDTestUtils
+    with CompactEntitySerialization {
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
@@ -135,11 +138,6 @@ class EntityServiceCompactMigrationSpec
 
   behavior of "Compact Entity Migration"
 
-//  val testWorkspaces: Seq[Workspace] = Seq(testData.workspace, testData.workspaceLocked, testData.regionalWorkspace, testData.workspaceNoAttrs,
-//    testData.workspaceWithRealm, testData.workspaceWithMultiGroupAD, testData.controlledWorkspace,
-//    testData.otherWorkspaceWithRealm, testData.workspaceNoSubmissions, testData.workspaceNoEntities,
-//    testData.workspaceSuccessfulSubmission, testData.workspaceFailedSubmission)
-
   getAllWorkspaces.filterNot(_.name.contains("azure")).foreach { workspace =>
     it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" in withTestDataServices {
       apiService =>
@@ -171,10 +169,11 @@ class EntityServiceCompactMigrationSpec
 
         // get all entity types
         val localEntityTypes =
-          Await.result(localProvider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
-        localEntityTypes.keys.foreach { entityType =>
+          Await.result(localProvider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost).keys
+
+        forEvery(localEntityTypes) { entityType =>
           withClue(s"for type $entityType") {
-            // get all entities of this type
+            // get all entities of this type. This materializes the result; don't run this on large workspaces
             val localEntities =
               Await.result(localProvider.listEntities(entityType).runWith(Sink.seq), atMost)
             val compactEntities =
