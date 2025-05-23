@@ -605,7 +605,7 @@ trait WorkspaceComponent {
       workspaceQuery.withGoogleProjectId(googleProjectId)
 
     def loadWorkspace(lookup: WorkspaceQueryType,
-                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+                      attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Option[Workspace]] =
       uniqueResult(loadWorkspaces(lookup, attributeSpecs))
 
