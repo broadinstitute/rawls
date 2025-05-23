@@ -85,7 +85,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -95,10 +95,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
     }
 
-    val upsertSql = if (allowUpsert) {
-      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
-    } else {
+    // when called with insertOnly=true, the SQL statement is a simple `insert into ...`.
+    // when called with insertOnly=false, the SQL statement is `insert into ... on duplicate key update`.
+    val upsertSql = if (insertOnly) {
       sql""
+    } else {
+      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
     }
 
     concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql","), upsertSql).asUpdate
@@ -112,7 +114,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity), allowUpsert = false)
+    batchCreateEntities(workspaceId, Seq(entity), insertOnly = true)
 
   /**
     * Read a single entity from the db
