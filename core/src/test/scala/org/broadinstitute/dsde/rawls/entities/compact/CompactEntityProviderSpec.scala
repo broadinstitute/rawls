@@ -8,14 +8,11 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  AttributeException,
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException,
-  EntityNotFoundException,
-  EntityReferenceNotFoundException
+import org.broadinstitute.dsde.rawls.entities.exceptions._
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
+  AddUpdateAttribute,
+  AttributeUpdateOperation,
+  EntityUpdateDefinition
 }
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -38,11 +35,11 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo,
   Workspace
 }
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
 import org.scalatest.time.{Millis, Seconds, Span}
 import slick.dbio.DBIO
@@ -51,7 +48,10 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatchers with MockitoTestUtils {
+class CompactEntityProviderSpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with MockitoTestUtils
+    with AttributeSupport {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
   implicit val system: ActorSystem = ActorSystem("CompactEntityProviderSpec")
@@ -110,12 +110,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
-                                                    any(),
-                                                    mockitoEq(true)
-    )
-    // entities have no references, so the input to upsertReferences should be empty
-    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    // entities have no references, so it should skip insertReferences
+    verify(mockQuery, never()).insertReferences(any(), any())
   }
 
   it should "issue multiple insert statements when given large batches" in {
@@ -148,9 +145,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     // should have called batchCreateEntities multiple times to write the entities
     verify(mockQuery, Mockito.atLeast(2))
-      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), mockitoEq(true))
-    // entities have no references, so the input to upsertReferences should be empty
-    verify(mockQuery, Mockito.atLeast(2)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
+      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    // entities have no references, so it should skip insertReferences
+    verify(mockQuery, never()).insertReferences(any(), any())
 
   }
 
@@ -195,10 +192,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val ref3 = EntityPointer("typeB", "name3")
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
-                                                    any(),
-                                                    mockitoEq(true)
-    )
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
     // entities found references, so should ask to upsert those.
     // given the mock response defined above, we expect references from name2->targetName and name3->targetName
     verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID,
@@ -1044,7 +1038,45 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     result shouldBe 5
   }
 
-  "updateEntity" should "have tests" is pending
+  behavior of "updateEntity"
+
+  it should "throw if the user specified zero operations" in {
+    val entityType = "entityType"
+    val entityName = "entityName"
+    val operations = Seq.empty[AttributeUpdateOperation]
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    val provider = providerWithMocks(mockQueries)
+
+    val actual = intercept[UnsupportedEntityOperationException] {
+      Await.result(provider.updateEntity(entityType, entityName, operations, testContext), atMost)
+    }
+
+    actual.code shouldBe StatusCodes.BadRequest
+  }
+
+  it should "throw if the entity does not exist" in {
+    val entityType = "entityType"
+    val entityName = "entityName"
+    val operations: Seq[AttributeUpdateOperation] = Seq(
+      AddUpdateAttribute(
+        AttributeName.withDefaultNS("foo"),
+        AttributeNumber(42)
+      )
+    )
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    // mock: batchUpdate does not find the pre-existing entity
+    when(mockQueries.getEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any()))
+      .thenAnswer(_ => throw new EntityNotFoundException())
+    val provider = providerWithMocks(mockQueries)
+
+    val actual = intercept[EntityNotFoundException] {
+      Await.result(provider.updateEntity(entityType, entityName, operations, testContext), atMost)
+    }
+
+    actual.code shouldBe StatusCodes.NotFound
+  }
 
   // ====================================================================================================
   // tests for CompactEntityProvider helper methods
