@@ -43,6 +43,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
@@ -200,9 +201,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[Map[String, EntityTypeMetadata]] =
     repository.dataSource.inTransaction(ReadOnly) { _ =>
       for {
-        entityTypeAndKeys <- repository.queries.listEntityKeys(workspaceId)
-        entityTypeAndCounts <- repository.queries.countEntitiesGroupedByType(workspaceId)
-      } yield {
+        entityTypeAndKeys <- traceDBIOWithParent("listEntityKeys", parentContext) { _ =>
+          repository.queries.listEntityKeys(workspaceId)
+        }
+        entityTypeAndCounts <- traceDBIOWithParent("countEntitiesGroupedByType", parentContext) { _ =>
+          repository.queries.countEntitiesGroupedByType(workspaceId)
+        }
+      } yield trace("resultCalculation", parentContext) { _ =>
         // note that entityTypeAndKeys only contains entity types that have at least one key
         // and that entityTypeAndCounts contains all entity types, even those with zero keys
         val keysByType = entityTypeAndKeys.groupMap(_.entityType)(_.attributeKey)
