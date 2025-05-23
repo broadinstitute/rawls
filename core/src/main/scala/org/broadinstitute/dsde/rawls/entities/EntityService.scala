@@ -607,8 +607,74 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
 
         for {
+          /* TODO CORE-473: create two temp tables:
+              create temporary table QS_ATTR_TEMP(
+                  entity_id bigint unsigned NOT NULL,
+                  attr_name varchar(240) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
+                  list_index int,
+                  attr_value json,
+                  KEY KEY_LIST_IDX (list_index),
+                  KEY KEY_ATTR_INDEX (entity_id, attr_name)
+              );
+              create temporary table QS_ENTITY_TEMP(
+                  entity_id bigint unsigned NOT NULL,
+                  attributes json,
+                  KEY FK_ENT_ID (entity_id),
+                  CONSTRAINT FK_ENTITY_MIGRATION FOREIGN KEY (entity_id) REFERENCES ENTITY (id)
+              );
+           */
           // create temp table
           _ <- dataAccess.compactEntityQuery.migrationCreateTempTable
+          /* TODO CORE-473: insert json-ized attributes into QS_ATTR_TEMP
+              select e.id,
+                  CONCAT(
+                      case
+                          when ea.namespace = 'default' then ''
+                          else CONCAT(ea.namespace, ':')
+                      end,
+                      ea.name
+                  ) as attr_name,
+                  CASE
+                      WHEN value_string is not null THEN CAST(JSON_QUOTE(value_string) as JSON)
+                      WHEN value_number is not null THEN CAST(value_number as JSON)
+                      WHEN value_boolean is not null THEN CAST(value_boolean as JSON)
+                      WHEN VALUE_JSON is not null THEN VALUE_JSON
+                      WHEN value_entity_ref is not null THEN JSON_OBJECT('entityType', ref.entity_type, 'entityName', ref.name)
+                      ELSE null
+                  END as attr_value,
+                  ea.list_index
+              from ENTITY e
+                  join ENTITY_ATTRIBUTE_60_63 ea on e.id = ea.owner_id
+                  left outer join ENTITY ref on ea.value_entity_ref = ref.id
+              where e.workspace_id = x'616AEA84E6DC49CE83BE40580F3BB9DA'
+              and e.deleted = 0
+              and ea.deleted = 0
+              order by e.id, attr_name, list_index;
+           */
+
+          /* TODO CORE-473: aggregate array attributes and insert into QS_ENTITY_TEMP
+              with CTE as (
+                select entity_id, attr_name
+                    case
+                        when max(list_index) is null then max(attr_value)
+                        else JSON_ARRAYAGG(attr_value)
+                    end as attr_value
+                from QS_ATTR_TEMP
+                where list_index is not null
+                group by entity_id, attr_name)
+              select
+              entity_id, JSON_OBJECT('v', 1, 'attrs', JSON_OBJECTAGG(attr_name, attr_value) as attributes)
+              from CTE
+              group by entity_id;
+           */
+
+          /* TODO CORE-473: update ENTITY
+              update ENTITY e
+              join QS_ENTITY_TEMP tmp
+              on e.id = tmp.id
+              set e.attributes = tmp.attributes;
+           */
+
           // insert entity name, entity type, and attributes to the temp table
           _ = logger.info(s"Quicksilver migration: inserting to temp table ...")
           _ <- DBIO.sequence(allTypesResult)
