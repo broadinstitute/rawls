@@ -36,9 +36,14 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
 
   /**
     * process the incoming EntityUpdateDefinitions and persist to the database
+    *
+    * @param entityUpdates the entity operations to process
+    * @param allowInsert are both inserts and updates allowed? When false, only updates are allowed.
+    * @param config options for processing the operations
+    * @param parentContext parent tracing span and userinfo
     */
   def handleUpdates(entityUpdates: Source[EntityUpdateDefinition, _],
-                    allowUpsert: Boolean,
+                    allowInsert: Boolean,
                     config: CompactEntityProviderConfig,
                     parentContext: RawlsRequestContext
   ): Future[Int] = {
@@ -49,7 +54,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     // Apply the incoming operations to a pre-existing entity (for updates) or a blank entity (for inserts)
     // and create the DBIO actions to persist the results.
     val batchActionsSource: Source[ReadWriteAction[Int], _] =
-      batchedUpdates.via(flowOperationsToEntities(allowUpsert))
+      batchedUpdates.via(flowOperationsToEntities(allowInsert))
 
     // Materialize the batch actions into a sequence and convert to a single DBIO action
     val batchActionsF: Future[ReadWriteAction[Int]] = batchActionsSource
@@ -70,9 +75,12 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
   }
 
   /** Stream component to accept a seq of batch updates, look for any pre-existing entities targeted by those updates,
-    * apply the updates to those entities, then persist those entities. Emits the count of rows written as a DBIO. */
+    * apply the updates to those entities, then persist those entities. Emits the count of rows written as a DBIO.
+    *
+    * @param allowInsert are both inserts and updates allowed? When false, only updates are allowed.
+    */
   private def flowOperationsToEntities(
-    allowUpsert: Boolean
+    allowInsert: Boolean
   ): Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Int], _] =
     Flow[Seq[EntityUpdateDefinition]].map { updates =>
       // Extract the entity type and name from each update
@@ -82,8 +90,8 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       for {
         // Query the database for any pre-existing entities being updated
         existingEntities <- repository.queries.getEntities(workspaceId, uniqueUpdateIdentifiers)
-        // If this invocation does NOT allow upserts, validate that we found all entities being updated
-        _ = if (!allowUpsert) {
+        // If this invocation does NOT allow inserts, validate that we found all entities being updated
+        _ = if (!allowInsert) {
           val actualPointers = existingEntities.map(_.toPointer).toSet
           if (
             existingEntities.size != uniqueUpdateIdentifiers.size || (uniqueUpdateIdentifiers diff actualPointers).nonEmpty

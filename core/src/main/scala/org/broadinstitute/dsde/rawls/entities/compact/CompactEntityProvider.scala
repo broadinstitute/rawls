@@ -76,7 +76,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     parentContext: RawlsRequestContext
   ): Future[Int] = {
     // perform the updates
-    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowUpsert = false, config, parentContext)
+    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowInsert = false, config, parentContext)
     // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
     withWorkspaceLastModified(dbResults)
     // and return
@@ -88,7 +88,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     parentContext: RawlsRequestContext
   ): Future[Int] = {
     // perform the upserts
-    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowUpsert = true, config, parentContext)
+    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowInsert = true, config, parentContext)
     // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
     withWorkspaceLastModified(dbResults)
     // and return
