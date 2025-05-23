@@ -406,15 +406,17 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
               where wf.SUBMISSION_ID = s.ID and s.WORKSPACE_ID = $workspaceId)
           delete e from ENTITY e """
 
+    // where clause gets inserted here, e.g. `where e.entity_type = ?`
+
     val endSql = sql""" and e.workspace_id = $workspaceId
           and e.id not in (
             select value_entity_ref from WORKSPACE_ATTRIBUTE where owner_id = $workspaceId
               union
             select ENTITY_ID from SUBMISSION where WORKSPACE_ID = $workspaceId
               union
-            select cw.ENTITY_ID as entity_id from CANDIDATE_WORKFLOWS cw
+            select cw.ENTITY_ID from CANDIDATE_WORKFLOWS cw
               union
-            select sa.value_entity_ref as entity_id
+            select sa.value_entity_ref
             from SUBMISSION_ATTRIBUTE sa, SUBMISSION_VALIDATION sv, CANDIDATE_WORKFLOWS cw
             where sa.owner_id = sv.id and sv.WORKFLOW_ID = cw.ID
           )
