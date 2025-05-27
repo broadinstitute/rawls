@@ -4267,6 +4267,50 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/billingProject:
+    patch:
+      tags:
+        - workspaces_v2
+      summary: Update workspace billing
+      description: Change the billing project for a workspace
+      operationId: updateWorkspaceBillingProject
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: Request for updating workspace billing project
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/WorkspaceRequestUpdateBilling'
+        required: true
+      responses:
+        200:
+          description: Successful Request
+          headers:
+            Location:
+              description: The workspace billing project was successfully updated
+              schema:
+                type: string
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDetails'
+        403:
+          description: User does not have permission to perform this operation
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: workspaceRequest
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/clone:
     post:
       tags:
@@ -6330,6 +6374,15 @@ components:
           type: boolean
           description: Clone this workspace with a bucket that collects extra logging about data access.
           default: false
+      description: ""
+    WorkspaceRequestUpdateBilling:
+      required:
+        - newBillingProjectName
+      type: object
+      properties:
+        newBillingProjectName:
+          type: string
+          description: The new namespace (billing project) to use for this workspace
       description: ""
     BucketMetricsResponse:
       type: array

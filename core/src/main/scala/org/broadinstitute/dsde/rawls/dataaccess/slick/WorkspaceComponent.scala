@@ -430,10 +430,13 @@ trait WorkspaceComponent {
       findByIdQuery(workspaceId).map(_.lastModified).update(currentTime)
     }
 
-    def updateLastModified(workspaceName: WorkspaceName) = {
-      val currentTime = new Timestamp(new Date().getTime)
-      findByNameQuery(workspaceName).map(_.lastModified).update(currentTime)
-    }
+    def updateBilling(workspaceId: UUID,
+                      namespace: String,
+                      newBilling: Option[RawlsBillingAccountName]
+    ): WriteAction[Int] =
+      findByIdQuery(workspaceId)
+        .map(ws => (ws.namespace, ws.currentBillingAccountOnGoogleProject))
+        .update((namespace, newBilling.map(_.value)))
 
     def updateGoogleProjectNumber(workspaceIds: Seq[UUID], googleProjectNumber: GoogleProjectNumber): WriteAction[Int] =
       findByIdsQuery(workspaceIds).map(_.googleProjectNumber).update(Option(googleProjectNumber.value))
@@ -601,8 +604,8 @@ trait WorkspaceComponent {
     def findByGoogleProjectIdQuery(googleProjectId: GoogleProjectId): WorkspaceQueryType =
       workspaceQuery.withGoogleProjectId(googleProjectId)
 
-    private def loadWorkspace(lookup: WorkspaceQueryType,
-                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    def loadWorkspace(lookup: WorkspaceQueryType,
+                      attributeSpecs: Option[WorkspaceAttributeSpecs] = None
     ): ReadAction[Option[Workspace]] =
       uniqueResult(loadWorkspaces(lookup, attributeSpecs))
 

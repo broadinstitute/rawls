@@ -7,22 +7,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeEntityReference,
-  AttributeName,
-  Entity,
-  EntityColumnFilter,
-  EntityCopyResponse,
-  EntityHardConflict,
-  EntityPath,
-  EntityQuery,
-  EntitySoftConflict,
-  FilterOperators,
-  RawlsRequestContext,
-  SortDirections,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, AttributeRename, Entity, EntityColumnFilter, EntityPointer, EntityQuery, FilterOperators, SortDirections}
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
@@ -76,8 +61,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   implicit val getEntityTypeAndCount: GetResult[EntityTypeAndCount] =
     GetResult(r => EntityTypeAndCount(r.<<, r.<<))
 
-  implicit val getAttributeEntityReference: GetResult[AttributeEntityReference] =
-    GetResult(r => AttributeEntityReference(r.<<, r.<<))
+  implicit val getEntityPointer: GetResult[EntityPointer] =
+    GetResult(r => EntityPointer(r.<<, r.<<))
 
   implicit val getEntity: GetResult[Entity] =
     GetResult(r => Entity(r.<<, r.<<, fromSql(r.<<)))
@@ -91,7 +76,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -101,10 +86,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
     }
 
-    val upsertSql = if (allowUpsert) {
-      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
-    } else {
+    // when called with insertOnly=true, the SQL statement is a simple `insert into ...`.
+    // when called with insertOnly=false, the SQL statement is `insert into ... on duplicate key update`.
+    val upsertSql = if (insertOnly) {
       sql""
+    } else {
+      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
     }
 
     concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql","), upsertSql).asUpdate
@@ -118,7 +105,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity), allowUpsert = false)
+    batchCreateEntities(workspaceId, Seq(entity), insertOnly = true)
 
   /**
     * Read a single entity from the db
@@ -139,7 +126,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
-  def getEntities(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRecord]] =
+  def getEntities(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Seq[CompactEntityRecord]] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(Seq())
@@ -165,9 +152,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
-  def getEntityVersions(workspaceId: UUID,
-                        refs: Set[AttributeEntityReference]
-  ): ReadAction[Seq[CompactEntityVersionRecord]] =
+  def getEntityVersions(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Seq[CompactEntityVersionRecord]] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(Seq())
@@ -189,12 +174,25 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       query.as[CompactEntityVersionRecord]
     }
 
+  /**
+   * Get all entities of a given type in a workspace.
+   *
+   * `execution plan: index range scan; using where. Index: idx_entity_type_name`
+   */
+  def listEntities(workspaceId: UUID,
+                   entityType: String
+  ): SqlStreamingAction[Seq[CompactEntityRecord], CompactEntityRecord, Read] =
+    sql"""#$basicCompactEntitySelect
+      #$fromEntityWhereNotDeleted
+      and workspace_id = $workspaceId
+      and entity_type = $entityType""".as[CompactEntityRecord]
+
   /** Given a set of entity type/name pairs, return the CompactEntityRefRecord for those pairs.
     * The CompactEntityRefRecord includes the internal database id for these entities.
     *
     * `execution plan: index range scan on idx_entity_type_name`
     */
-  def getEntityRefs(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Seq[CompactEntityRefRecord]] =
+  def getEntityRefs(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Seq[CompactEntityRefRecord]] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(Seq())
@@ -381,7 +379,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: uses idx_entity_type_name index. Extra: Using index condition; Using where`
     */
-  def countExisting(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Int] =
+  def countExisting(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Int] =
     // short-circuit
     if (refs.isEmpty) {
       DBIO.successful(0)
@@ -407,7 +405,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: uses idx_entity_type_name index. Extra: Using index condition; Using where` (always the same as countExisting())
     */
-  def existsAll(workspaceId: UUID, refs: Set[AttributeEntityReference]): ReadAction[Boolean] =
+  def existsAll(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Boolean] =
     countExisting(workspaceId, refs).map(count => count == refs.size)
 
   /**
@@ -417,7 +415,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * `execution plan: Uses unq_from_to index. Extra: Using where`
    */
-  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[AttributeEntityReference]): ReadWriteAction[Int] = {
+  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[EntityPointer]): ReadWriteAction[Int] = {
     val typeNameClauses = generateTypeNameSql(fromRefs, typeColumn = "from_entity_type", nameColumn = "from_name")
 
     val baseSql =
@@ -490,7 +488,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    *
    * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
    */
-  def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
+  def batchHide(workspaceId: UUID, entities: Seq[EntityPointer]): ReadWriteAction[Int] = {
     // get unique suffix for renaming
     val renameSuffix = "_" + driverComponent.getSufficientlyRandomSuffix(1000000000) // 1 billion
     val deletedDate = new Timestamp(new Date().getTime)
@@ -525,12 +523,66 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     query.asUpdate
   }
 
+  /**
+    * Hard-delete all of the specified entities that do not have any foreign keys pointed at them.
+    *
+    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
+    *   and requires a temporary table for the big union.
+    */
+  def deleteEntities(workspaceId: UUID, entities: Seq[EntityPointer]): ReadWriteAction[Int] = {
+    // join all the clauses with "or": `(entity_type = ? and name in (?)) or `(entity_type = ? and name in (?))`
+    val criteriaSql: SQLActionBuilder = reduceSqlActionsWithDelim(generateTypeNameSql(entities.toSet).toSeq, sql" or ")
+    val whereClause = concatSqlActions(sql"where (", criteriaSql, sql")")
+    val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
+    finalSql.asUpdate
+  }
+
+  /**
+    * Hard-delete all entities of a given type that do not have any foreign keys pointed at them.
+    *
+    * Note this does not have a "where deleted=0" clause. Thus, it will also hard-delete any entities
+    * that were previously soft-deleted but which no longer have anything pointing at them (this is unlikely)
+    *
+    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
+    *   and requires a temporary table for the big union.
+    */
+  def deleteEntitiesOfType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] = {
+    val whereClause = sql"where entity_type = $entityType"
+    val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
+    finalSql.asUpdate
+  }
+
+  // private helper for deleteEntities and deleteEntitiesOfType
+  private def deleteEntitiesImpl(workspaceId: UUID, whereClause: SQLActionBuilder): SQLActionBuilder = {
+    val startSql = sql"""with
+            CANDIDATE_WORKFLOWS as (select wf.ID, wf.ENTITY_ID
+              from WORKFLOW wf, SUBMISSION s
+              where wf.SUBMISSION_ID = s.ID and s.WORKSPACE_ID = $workspaceId)
+          delete e from ENTITY e """
+
+    // where clause gets inserted here, e.g. `where e.entity_type = ?`
+
+    val endSql = sql""" and e.workspace_id = $workspaceId
+          and e.id not in (
+            select value_entity_ref from WORKSPACE_ATTRIBUTE where owner_id = $workspaceId
+              union
+            select ENTITY_ID from SUBMISSION where WORKSPACE_ID = $workspaceId
+              union
+            select cw.ENTITY_ID from CANDIDATE_WORKFLOWS cw
+              union
+            select sa.value_entity_ref
+            from SUBMISSION_ATTRIBUTE sa, SUBMISSION_VALIDATION sv, CANDIDATE_WORKFLOWS cw
+            where sa.owner_id = sv.id and sv.WORKFLOW_ID = cw.ID
+          )
+       """
+
+    concatSqlActions(startSql, whereClause, endSql)
+  }
+
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
   // `execution plan: uses idx_to index. Extra: Using where; Using index` (I think this may also use unq_from_to in some cases)
-  def getReferencesTo(workspaceId: UUID,
-                      refs: Seq[AttributeEntityReference]
-  ): ReadAction[Seq[AttributeEntityReference]] = {
+  def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
       sql" or "
@@ -547,25 +599,25 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         and ("""
 
     concatSqlActions(baseSql, toNameClause, sql") and NOT (", fromNameClause, sql")")
-      .as[AttributeEntityReference]
+      .as[EntityPointer]
   }
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
   // `execution plan: Uses unq_from_to index. Extra: Using where`
-  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] =
+  def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
     sql"""select from_entity_type, from_name
          from ENTITY_REFS
          where workspace_id = $workspaceId
          and to_entity_type = $entityType
          and from_entity_type != $entityType
-       """.as[AttributeEntityReference]
+       """.as[EntityPointer]
 
   /*
    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
-   * AttributeEntityReferences.
+   * EntityKeys.
    */
-  private def generateTypeNameSql(refs: Set[AttributeEntityReference],
+  private def generateTypeNameSql(refs: Set[EntityPointer],
                                   typeColumn: String = "entity_type",
                                   nameColumn: String = "name"
   ): Iterable[SQLActionBuilder] = {
@@ -622,6 +674,143 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
                                 entityQuery: EntityQuery
   ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
+
+  /**
+   * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.
+   *
+   * Returns the number of entities that were renamed.
+   *
+   * `execution plan: multiple statements that update both ENTITY and ENTITY_REFS tables`
+   */
+  def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
+    // Update the entity type in the ENTITY table
+    // explain plan: index range scan on idx_entity_type_name
+    val updateEntityTypeSql =
+      sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
+            where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
+
+    // Update entity references in the attributes JSON column
+    // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
+    // The best approach would be to add a custom MySQL function for JSON path replacement
+    // For now, we'll do this in application code when accessing entities
+
+    // Update from_entity_type in ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateFromReferencesSql =
+      sql"""update ENTITY_REFS
+            set from_entity_type = $newType
+            where workspace_id = $workspaceId
+            and from_entity_type = $oldType"""
+
+    // Update to_entity_type in ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateToReferencesSql =
+      sql"""update ENTITY_REFS
+            set to_entity_type = $newType
+            where workspace_id = $workspaceId
+            and to_entity_type = $oldType"""
+
+    // Get all paths in attributes that reference the old type
+    // This is a bit tricky because the attributes column is JSON and we need to search for the old type
+    // in all possible paths. We use JSON_SEARCH to find the paths and JSON_TABLE to extract them.
+    // We also need to handle the case where the reference is singular or not in an array.
+    // Also exclude values in the json that match the old type but are not entity references.
+    // Uses ENTITY_REFS table to find the attributes that reference the old type so must be run before
+    // the ENTITY_REFS table is updated.
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    val attrRefRegex = """'\\$\\.attrs\\.[^.]+\\.entityType'"""
+    val getReferencePathsInAttributesSql =
+      sql"""
+        with entity_attrs as
+          (select e.attributes
+          from ENTITY e
+          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+          where er.workspace_id = $workspaceId
+          and er.to_entity_type = $oldType)
+        select type_path
+        from entity_attrs e,
+        json_table(json_search(e.attributes, 'all', $oldType), '$$[*]' COLUMNS( type_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
+        where type_path REGEXP #$attrRefRegex
+        union
+        select json_unquote(json_search(e.attributes, 'all', $oldType))
+        from entity_attrs e
+        where json_type(json_search(e.attributes, 'all', $oldType)) != 'ARRAY'
+        and json_unquote(json_search(e.attributes, 'all', $oldType)) REGEXP #$attrRefRegex
+        """
+
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    def updateReferencesInAttributesSql(paths: Seq[String]) = {
+      val replaceParamsSqls = paths.map(path => sql"$path, $newType")
+      concatSqlActions(
+        sql"""
+          update ENTITY e
+          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+          set e.attributes = JSON_REPLACE(e.attributes,
+        """,
+        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
+        sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
+      )
+    }
+
+    // Execute all updates in same transaction
+    for {
+      paths <- getReferencePathsInAttributesSql.as[String]
+      _ <-
+        if (paths.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          DBIO.seq(
+            updateReferencesInAttributesSql(paths).asUpdate,
+            updateToReferencesSql.asUpdate
+          )
+        }
+      _ <- updateFromReferencesSql.asUpdate
+      entityRowsUpdated <- updateEntityTypeSql.asUpdate
+    } yield entityRowsUpdated
+  }
+
+  /**
+    * Renames a single attribute across all entities of the given type and workspace.
+    * This method assumes the old and new attribute names have already been validated!
+    *
+    * `Using where. Index used: idx_entity_type_name`
+    */
+  def renameAttribute(workspaceId: UUID,
+                      entityType: String,
+                      oldAttributeName: AttributeName,
+                      renameRequest: AttributeRename
+  ): ReadWriteAction[Int] =
+    // rename is implemented as JSON_REMOVE(JSON_SET(JSON_EXTRACT))
+    // JSON_EXTRACT gets the value of the old attribute
+    // JSON_SET creates the new attribute with that value
+    // JSON_REMOVE deletes the old attribute
+    sql"""update ENTITY
+          set record_version = record_version + 1,
+          attributes = JSON_REMOVE(
+                         JSON_SET(
+                           attributes,
+                           ${slickAttributePath(renameRequest.newAttributeName)},
+                           JSON_EXTRACT(attributes, ${slickAttributePath(oldAttributeName)})),
+                         ${slickAttributePath(oldAttributeName)}
+                       )
+          where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and deleted = 0
+          and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldAttributeName)})
+       """.asUpdate
+
+  /**
+    * Determine if an attribute exists in any entity of the given type and workspace.
+    *
+    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    */
+  def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
+    sql"""select exists (select 1 from ENTITY_KEYS
+         where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)})))"""
+      .as[Boolean]
+      .head
 
   // ====================================================================================================
   //  entity query helpers
@@ -786,12 +975,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   /** look up the types&names of all entities referenced by the given entity */
   @VisibleForTesting
-  def getReferencesFrom(workspaceId: UUID, from: AttributeEntityReference): ReadAction[Seq[AttributeEntityReference]] =
+  def getReferencesFrom(workspaceId: UUID, from: EntityPointer): ReadAction[Seq[EntityPointer]] =
     sql"""select to_entity_type, to_name
          from ENTITY_REFS
          where workspace_id = $workspaceId
          and from_entity_type = ${from.entityType}
-         and from_name = ${from.entityName}""".as[AttributeEntityReference]
+         and from_name = ${from.entityName}""".as[EntityPointer]
 
   // return the ENTITY_KEYS row for a given entity
   // `execution plan: single row constant; fully indexed by primary key`
@@ -818,5 +1007,4 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
-
 }

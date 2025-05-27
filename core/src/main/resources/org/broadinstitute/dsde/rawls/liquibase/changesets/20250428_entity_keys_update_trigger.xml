@@ -5,7 +5,7 @@
 
 
     <!-- update the ENTITY triggers which populate ENTITY_KEYS to reflect the latest ENTITY.attributes format -->
-    <changeSet logicalFilePath="dummy" author="davidan" id="update_entity_keys_triggers_for_migration">
+    <changeSet logicalFilePath="dummy" author="davidan" id="update_entity_keys_triggers_for_migration" runOnChange="true">
         <sql stripComments="true" endDelimiter="~">
             DROP TRIGGER IF EXISTS after_entity_update ~
 
@@ -14,19 +14,31 @@
                 BEGIN
                     declare new_keys json;
                     declare old_keys json;
+                    
                     -- is this row soft-deleted?
                     if old.deleted = 0 and new.deleted = 1 then
                         DELETE FROM ENTITY_KEYS WHERE id = new.id;
-                    elseif new.attributes is not null then
-                        -- compare old keys to new keys; update the ENTITY_KEYS table only if they are different
-                        set new_keys := ifnull(JSON_KEYS(new.attributes, '$.attrs'), '[]');
-                        set old_keys := ifnull(JSON_KEYS(old.attributes, '$.attrs'), '[]');
-                        if JSON_LENGTH(new_keys) != JSON_LENGTH(old_keys) OR JSON_CONTAINS(new_keys, old_keys) = 0 then
-                            -- upsert into ENTITY_KEYS. The row should exist except when migrating from legacy data tables.
-                            insert into ENTITY_KEYS (id, workspace_id, entity_type, attribute_keys, last_updated)
-                            values (new.id, new.workspace_id, new.entity_type, new_keys, now(3))
-                            on duplicate key update attribute_keys = new_keys, last_updated = now(3);
-                end if;
+                    else
+                        -- Handle entity type changes
+                        if old.entity_type != new.entity_type then
+                            -- Update entity_type in ENTITY_KEYS when type changes
+                            UPDATE ENTITY_KEYS 
+                            SET entity_type = new.entity_type, last_updated = now(3)
+                            WHERE id = new.id;
+                        end if;
+                        
+                        -- Handle attribute changes (potentially in addition to type changes)
+                        if new.attributes is not null then
+                            set new_keys := ifnull(JSON_KEYS(new.attributes, '$.attrs'), '[]');
+                            set old_keys := ifnull(JSON_KEYS(old.attributes, '$.attrs'), '[]');
+                            
+                            if JSON_LENGTH(new_keys) != JSON_LENGTH(old_keys) OR JSON_CONTAINS(new_keys, old_keys) = 0 then
+                                -- upsert into ENTITY_KEYS. The row should exist except when migrating from legacy data tables.
+                                insert into ENTITY_KEYS (id, workspace_id, entity_type, attribute_keys, last_updated)
+                                values (new.id, new.workspace_id, new.entity_type, new_keys, now(3))
+                                on duplicate key update attribute_keys = new_keys, entity_type = new.entity_type, last_updated = now(3);
+                            end if;
+                        end if;
                     end if;
                 END ~
         </sql>

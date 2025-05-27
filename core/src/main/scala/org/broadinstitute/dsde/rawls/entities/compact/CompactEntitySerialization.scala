@@ -49,7 +49,7 @@ trait CompactEntitySerialization {
     }
 
   val slickAttrsPath: String = s"$$.${ATTRS_KEY}"
-  def slickAttributePath(attributeName: String): String = s"${slickAttrsPath}.${attributeName}"
+  def slickAttributePath(attributeName: String): String = s"""${slickAttrsPath}."${attributeName}""""
   def slickAttributePath(attributeName: AttributeName): String = slickAttributePath(toDelimitedName(attributeName))
 
   // retrieve the version number from the database's JSON

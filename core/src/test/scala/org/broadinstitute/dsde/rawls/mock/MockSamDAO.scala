@@ -177,7 +177,9 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
   )
 
-  override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] = ???
+  override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] = Future.successful(
+    """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
+  )
 
   override def getUserPetServiceAccount(ctx: RawlsRequestContext,
                                         googleProjectId: GoogleProjectId

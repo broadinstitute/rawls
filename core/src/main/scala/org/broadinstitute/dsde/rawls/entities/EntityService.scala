@@ -5,6 +5,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
+import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -17,7 +18,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceFutureWithParent}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -165,7 +166,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
               )
             }
             _ <- traceFutureWithParent("entityProvider.deleteEntities", localContext) { s =>
-              entityProvider.deleteEntities(entRefs, s)
+              entityProvider.deleteEntities(entRefs.map(_.toPointer), s)
             }
           } yield Set[AttributeEntityReference]()
 
@@ -322,6 +323,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
               EntityRequestArguments(workspaceContext, s)
             )
           }
+          _ = setTraceSpanAttribute(localContext,
+                                    AttributeKey.stringKey("providerType"),
+                                    entityProvider.getClass.getSimpleName
+          )
           metadata <- traceFutureWithParent("EntityProvider.entityTypeMetadata", localContext) { s =>
             entityProvider.entityTypeMetadata(useCache, s)
           }

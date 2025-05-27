@@ -12,27 +12,28 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.compact.batch.BatchHandling
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  AttributeException,
   DataEntityException,
   DeleteEntitiesConflictException,
   DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException,
-  EntityReferenceNotFoundException
+  EntityReferenceNotFoundException,
+  UnsupportedEntityOperationException
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
   AttributeRename,
-  AttributeUpdateOperations,
   AttributeValue,
   Entity,
   EntityCopyResponse,
+  EntityPointer,
   EntityHardConflict,
-  EntityPath,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
@@ -44,8 +45,9 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-import slick.dbio.DBIO
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
+import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.util.UUID
@@ -78,7 +80,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     parentContext: RawlsRequestContext
   ): Future[Int] = {
     // perform the updates
-    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowUpsert = false, config, parentContext)
+    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowInsert = false, config, parentContext)
     // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
     withWorkspaceLastModified(dbResults)
     // and return
@@ -90,7 +92,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     parentContext: RawlsRequestContext
   ): Future[Int] = {
     // perform the upserts
-    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowUpsert = true, config, parentContext)
+    val dbResults: Future[Int] = handleUpdates(entityUpdates, allowInsert = true, config, parentContext)
     // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
     withWorkspaceLastModified(dbResults)
     // and return
@@ -226,7 +228,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         // verify that nobody else saved this same record in the meantime
         _ = if (savedEntityRecord.recordVersion != 0L)
           throw new RawlsConcurrentModificationException(
-            s"Detected concurrent modifications to entity ${savedEntityRecord.toAttributeEntityReference.entityType}/${savedEntityRecord.toAttributeEntityReference.entityName}."
+            s"Detected concurrent modifications to entity ${savedEntityRecord.toPointer}."
           )
 
         // save all references from this entity to other entities
@@ -239,22 +241,21 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     createFuture
   }
 
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference],
-                              parentContext: RawlsRequestContext
-  ): Future[Int] =
+  override def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int] =
     repository.dataSource.inTransaction { _ =>
       for {
         // check if any of these entities are referenced by someone else
-        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencesTo(workspaceId,
-                                                                                                 entityRefs
-        )
+        referencingEntities: Seq[EntityPointer] <- repository.queries.getReferencesTo(workspaceId, pointers)
         // getReferencesTo already excludes the entities that are being deleted
         _ = if (referencingEntities.nonEmpty) {
-          throw new DeleteEntitiesConflictException(referencingEntities.toSet)
+          throw new DeleteEntitiesConflictException(referencingEntities.map(_.toAttributeEntityReference).toSet)
         }
         // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, entityRefs.toSet)
-        res <- repository.queries.batchHide(workspaceId, entityRefs)
+        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, pointers.toSet)
+        // hard-delete everything we can
+        _ <- repository.queries.deleteEntities(workspaceId, pointers)
+        // soft-delete (i.e. hide) everything that could not be hard-deleted
+        res <- repository.queries.batchHide(workspaceId, pointers)
       } yield res
     }
 
@@ -262,15 +263,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     repository.dataSource.inTransaction { _ =>
       for {
         // check if any of these entities are referenced by someone else
-        referencingEntities: Seq[AttributeEntityReference] <- repository.queries.getReferencesToType(workspaceId,
-                                                                                                     entityType
-        )
+        referencingEntities: Seq[EntityPointer] <- repository.queries.getReferencesToType(workspaceId, entityType)
         // The getReferencesToType query already disregards references of the type to be deleted
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
         // remove all references from these entities
         _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
+        // hard-delete everything we can
+        _ <- repository.queries.deleteEntitiesOfType(workspaceId, entityType)
+        // soft-delete (i.e. hide) everything that could not be hard-deleted
         res <- repository.queries.batchHideType(
           workspaceId,
           entityType
@@ -288,9 +290,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[Map[String, EntityTypeMetadata]] =
     repository.dataSource.inTransaction(ReadOnly) { _ =>
       for {
-        entityTypeAndKeys <- repository.queries.listEntityKeys(workspaceId)
-        entityTypeAndCounts <- repository.queries.countEntitiesGroupedByType(workspaceId)
-      } yield {
+        entityTypeAndKeys <- traceDBIOWithParent("listEntityKeys", parentContext) { _ =>
+          repository.queries.listEntityKeys(workspaceId)
+        }
+        entityTypeAndCounts <- traceDBIOWithParent("countEntitiesGroupedByType", parentContext) { _ =>
+          repository.queries.countEntitiesGroupedByType(workspaceId)
+        }
+      } yield trace("resultCalculation", parentContext) { _ =>
         // note that entityTypeAndKeys only contains entity types that have at least one key
         // and that entityTypeAndCounts contains all entity types, even those with zero keys
         val keysByType = entityTypeAndKeys.groupMap(_.entityType)(_.attributeKey)
@@ -327,10 +333,24 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     }
   }
 
-  override def listEntities(entityType: String): Source[Entity, NotUsed] =
-    throw new DataEntityException("list all entities not supported for compact data tables.",
-                                  code = StatusCodes.NotImplemented
-    )
+  override def listEntities(entityType: String): Source[Entity, NotUsed] = {
+    import repository.dataSource.dataAccess.driver.api._
+
+    Source
+      .fromPublisher(
+        repository.dataSource.database.stream(
+          repository.queries
+            .listEntities(workspaceId, entityType)
+            .transactionally
+            .withTransactionIsolation(ReadCommitted)
+            .withStatementParameters(rsType = ResultSetType.ForwardOnly,
+                                     rsConcurrency = ResultSetConcurrency.ReadOnly,
+                                     fetchSize = repository.dataSource.fetchSize
+            )
+        )
+      )
+      .map(_.toEntity)
+  }
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
@@ -386,10 +406,58 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }
 
   override def renameAttribute(entityType: String,
-                               oldAttributeName: AttributeName,
+                               oldName: AttributeName,
                                attributeRenameRequest: AttributeRename,
                                parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] = {
+    val newName = attributeRenameRequest.newAttributeName
+
+    // nested helper function to validate and perform the renaming all in one transaction
+    def renameInTransaction: Future[Int] = repository.dataSource.inTransaction { _ =>
+      for {
+        // does new name already exist? fail if it does.
+        newNameExists <- repository.queries.attributeExists(workspaceId, entityType, newName)
+        _ = if (newNameExists)
+          throw new AttributeException(
+            message = s"${AttributeName.toDelimitedName(newName)} already exists.",
+            code = StatusCodes.BadRequest
+          )
+        // does old name already exist? fail if it does not.
+        oldNameExists <- repository.queries.attributeExists(workspaceId, entityType, oldName)
+        _ = if (!oldNameExists)
+          throw new AttributeException(
+            message = s"${AttributeName.toDelimitedName(oldName)} does not exist.",
+            code = StatusCodes.BadRequest
+          )
+        // perform the rename
+        numEntitiesAffected <- repository.queries.renameAttribute(workspaceId,
+                                                                  entityType,
+                                                                  oldName,
+                                                                  attributeRenameRequest
+        )
+      } yield numEntitiesAffected
+    }
+
+    val renameFuture = for {
+      // validate both old and new names for syntax
+      _ <- Future(EntityUtils.validateAttrName(oldName, entityType))
+      _ <- Future(EntityUtils.validateAttrName(newName, entityType))
+      _ = if (oldName == newName) {
+        throw new AttributeException(
+          message = s"Old and new names are the same: ${AttributeName.toDelimitedName(oldName)}",
+          code = StatusCodes.BadRequest
+        )
+      }
+      // perform the rename in a transaction
+      numEntitiesAffected <- renameInTransaction
+    } yield numEntitiesAffected
+
+    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(renameFuture)
+
+    // return the future
+    renameFuture
+  }
 
   override def renameEntity(entityType: String,
                             entityName: String,
@@ -400,13 +468,66 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def renameEntityType(oldName: String,
                                 renameInfo: EntityTypeRename,
                                 parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] = {
+    // Extract the new entity type name from the rename info
+    val newName = renameInfo.newName
+
+    // Perform the rename in a transaction
+    val renameFuture = repository.dataSource.inTransaction { dataAccess =>
+      for {
+        // First check if the old entity type exists
+        entityTypeCount <- repository.queries.countEntities(workspaceId, oldName)
+        _ = if (entityTypeCount == 0) {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type $oldName")
+          )
+        }
+
+        // Check if the new entity type already exists
+        newTypeCount <- repository.queries.countEntities(workspaceId, newName)
+        _ = if (newTypeCount > 0) {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Conflict, s"$newName already exists as an entity type")
+          )
+        }
+
+        // Call the renameEntityType method in CompactEntityComponent to update entity types and references
+        entityRowsUpdated <- repository.queries.renameEntityType(workspaceId, oldName, newName)
+
+      } yield entityRowsUpdated // Return the number of entities that were renamed
+    }
+
+    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(renameFuture)
+
+    // Return the future
+    renameFuture
+  }
 
   override def updateEntity(entityType: String,
                             entityName: String,
-                            operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation],
+                            operations: Seq[AttributeUpdateOperation],
                             parentContext: RawlsRequestContext
-  ): Future[Entity] = ???
+  ): Future[Entity] =
+    // validate
+    if (operations.isEmpty) {
+      Future.failed(
+        new UnsupportedEntityOperationException(message = "No operations provided", code = StatusCodes.BadRequest)
+      )
+    } else {
+      // translate the input arguments to the batchUpdate arguments
+      val updateDefinition = Source.single(EntityUpdateDefinition(entityName, entityType, operations))
+      // perform a batchUpdate for just this one entity. batchUpdate will throw an error if the entity does not exist.
+      batchUpdateEntities(updateDefinition, parentContext) flatMap { _ =>
+        repository.dataSource.inTransaction { _ =>
+          // on batchUpsert completion, re-retrieve the entity and return it
+          repository.queries.getEntity(workspaceId, entityType, entityName) map {
+            case Some(entityRec) => entityRec.toEntity
+            case None            => throw new EntityNotFoundException()
+          }
+        }
+      }
+    }
 
   // ====================================================================================================
   //  helper methods
@@ -424,17 +545,17 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   protected[compact] def findAllReferences(entities: Seq[Entity]): Set[RefMapping] = {
     // use a map here, generated by Seq.toMap, to automatically respect only the last occurrence
     // of any given entity
-    val referenceMap: Map[AttributeEntityReference, Seq[AttributeEntityReference]] = entities
+    val referenceMap: Map[EntityPointer, Seq[EntityPointer]] = entities
       .map { entity =>
         val referenceTargets =
           entity.attributes
             .collect {
-              case (_, ref: AttributeEntityReference)         => Seq(ref)
-              case (_, refList: AttributeEntityReferenceList) => refList.list
+              case (_, ref: AttributeEntityReference)         => Seq(ref.toPointer)
+              case (_, refList: AttributeEntityReferenceList) => refList.list.map(_.toPointer)
             }
             .flatten
             .toSeq
-        entity.toReference -> referenceTargets
+        entity.toPointer -> referenceTargets
       }
       .filter(_._2.nonEmpty)
       .toMap

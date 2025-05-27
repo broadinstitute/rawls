@@ -2,13 +2,14 @@ package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
   AddUpdateAttribute,
+  AttributeUpdateOperation,
   CreateAttributeEntityReferenceList,
   EntityUpdateDefinition,
   RemoveAttribute
@@ -17,8 +18,11 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
+  AttributeNumber,
+  AttributeRename,
   AttributeString,
   Entity,
+  EntityPointer,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -119,9 +123,9 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataAfter("typeA").count shouldBe 2
     metadataAfter("typeB").count shouldBe 1
 
-    val ref1 = AttributeEntityReference("typeA", "name1")
-    val ref2 = AttributeEntityReference("typeA", "name2")
-    val ref3 = AttributeEntityReference("typeB", "name3")
+    val ref1 = EntityPointer("typeA", "name1")
+    val ref2 = EntityPointer("typeA", "name2")
+    val ref3 = EntityPointer("typeB", "name3")
 
     // entity with "name1" should have no references
     runAndWait(q.getReferencesFrom(wsid, ref1)) shouldBe empty
@@ -168,11 +172,11 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the starting references before our batchUpsert
     val initialReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
-    initialReferences shouldBe Seq(AttributeEntityReference("targetType", "targetName1"),
-                                   AttributeEntityReference("targetType", "targetName2")
+    initialReferences shouldBe Seq(EntityPointer("targetType", "targetName1"),
+                                   EntityPointer("targetType", "targetName2")
     )
 
     // perform the batchUpsert - delete one existing reference, add two more
@@ -203,13 +207,13 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the references after our batchUpsert
     val finalReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
     finalReferences.toSet shouldBe Set(
-      AttributeEntityReference("targetType", "targetName1"),
-      AttributeEntityReference("targetType", "targetName3"),
-      AttributeEntityReference("targetType", "targetName4")
+      EntityPointer("targetType", "targetName1"),
+      EntityPointer("targetType", "targetName3"),
+      EntityPointer("targetType", "targetName4")
     )
 
   }
@@ -238,10 +242,10 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the starting reference before our batchUpsert
     val initialReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
-    initialReferences shouldBe Seq(AttributeEntityReference("targetType", "targetName"))
+    initialReferences shouldBe Seq(EntityPointer("targetType", "targetName"))
 
     // perform the batchUpsert - delete the existing reference, don't add any
     val updates = Source(
@@ -255,7 +259,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // validate the references after our batchUpsert
     val finalReferences =
       runAndWait(
-        provider.repository.queries.getReferencesFrom(wsid, AttributeEntityReference("sourceType", "sourceName"))
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
       )
 
     finalReferences.toSet shouldBe empty
@@ -454,6 +458,216 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     intercept[EntityNotFoundException] {
       Await.result(provider.batchUpdateEntities(Source(updates), defaultRequestContext), atMost)
     }
+  }
+
+  behavior of "batchUpdateEntities"
+
+  it should "update entities with references" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    // create target entities
+    Await.result(provider.createEntity(Entity("targetName1", "targetType", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("targetName2", "targetType", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("targetName3", "targetType", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("targetName4", "targetType", Map()), defaultRequestContext), atMost)
+
+    // create the entity we'll be updating; give it two references
+    Await.result(
+      provider.createEntity(
+        Entity(
+          "sourceName",
+          "sourceType",
+          Map(
+            AttributeName.withDefaultNS("ref1") -> AttributeEntityReference("targetType", "targetName1"),
+            AttributeName.withDefaultNS("ref2") -> AttributeEntityReference("targetType", "targetName2")
+          )
+        ),
+        defaultRequestContext
+      ),
+      atMost
+    )
+
+    // validate the starting references before our batchUpsert
+    val initialReferences =
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
+      )
+
+    initialReferences shouldBe Seq(EntityPointer("targetType", "targetName1"),
+                                   EntityPointer("targetType", "targetName2")
+    )
+
+    // perform the batchUpsert - delete one existing reference, add two more
+    val updates = Source(
+      Seq(
+        EntityUpdateDefinition(
+          "sourceName",
+          "sourceType",
+          Seq(
+            CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("refList")),
+            AddListMember(AttributeName.withDefaultNS("refList"),
+                          AttributeEntityReference("targetType", "targetName3")
+            ),
+            AddListMember(AttributeName.withDefaultNS("refList"), AttributeEntityReference("targetType", "targetName4"))
+          )
+        ),
+        EntityUpdateDefinition("sourceName",
+                               "sourceType",
+                               Seq(
+                                 RemoveAttribute(AttributeName.withDefaultNS("ref2"))
+                               )
+        )
+      )
+    )
+
+    Await.result(provider.batchUpdateEntities(updates, defaultRequestContext), atMost)
+
+    // validate the references after our batchUpsert
+    val finalReferences =
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName"))
+      )
+
+    finalReferences.toSet shouldBe Set(
+      EntityPointer("targetType", "targetName1"),
+      EntityPointer("targetType", "targetName3"),
+      EntityPointer("targetType", "targetName4")
+    )
+
+  }
+
+  behavior of "listEntities"
+
+  it should "list entities" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create entities
+    val updates = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition("name2", "typeA", Seq())
+    )
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // List entities
+    val entities = Await.result(
+      provider.listEntities("typeA").runFold(Seq.empty[Entity])(_ :+ _),
+      atMost
+    )
+
+    entities.map(_.name) should contain theSameElementsAs Seq("name1", "name2")
+  }
+
+  it should "list entities with attributes" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create entities with attributes
+    val updates = Seq(
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("bar")))
+      ),
+      EntityUpdateDefinition(
+        "name2",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("baz"), AttributeString("qux")))
+      )
+    )
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // List entities
+    val entities = Await.result(
+      provider.listEntities("typeA").runFold(Seq.empty[Entity])(_ :+ _),
+      atMost
+    )
+
+    entities should contain theSameElementsAs Seq(
+      Entity("name1", "typeA", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name2", "typeA", Map(AttributeName.withDefaultNS("baz") -> AttributeString("qux")))
+    )
+  }
+
+  it should "list entities when none" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // List entities when none exist
+    val entities = Await.result(
+      provider.listEntities("typeA").runFold(Seq.empty[Entity])(_ :+ _),
+      atMost
+    )
+
+    entities shouldBe empty
+  }
+
+  behavior of "updateEntity"
+
+  it should "correctly update an entity in the database" in withMinimalTestDatabase { _ =>
+    val entityType = "typeA"
+    val entityName = "name1"
+    val provider = defaultProvider()
+
+    // create the pre-existing base entity
+    val baseEntity = Entity(entityName, entityType, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
+    val setup = Await.result(provider.createEntity(baseEntity, defaultRequestContext), atMost)
+    setup shouldBe baseEntity
+
+    // ask to apply an update to that entity
+    val operations: Seq[AttributeUpdateOperation] = Seq(
+      AddUpdateAttribute(AttributeName.withDefaultNS("baz"), AttributeString("qux"))
+    )
+    val actual = Await.result(provider.updateEntity(entityType, entityName, operations, defaultRequestContext), atMost)
+
+    actual shouldBe Entity(entityName,
+                           entityType,
+                           Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"),
+                               AttributeName.withDefaultNS("baz") -> AttributeString("qux")
+                           )
+    )
+
+  }
+
+  behavior of "renameAttribute"
+
+  it should "rename an attribute" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val oldAttr = AttributeName.withDefaultNS("foo")
+    val newAttr = AttributeName.withDefaultNS("aFancyNewName")
+
+    // Create entities with attributes
+    val updates = Seq(
+      EntityUpdateDefinition(
+        "name1",
+        "typeA",
+        Seq(AddUpdateAttribute(oldAttr, AttributeNumber(1)))
+      ),
+      EntityUpdateDefinition(
+        "name2",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("bar"), AttributeNumber(2)))
+      ),
+      EntityUpdateDefinition(
+        "name3",
+        "typeB",
+        Seq(AddUpdateAttribute(oldAttr, AttributeNumber(3)))
+      )
+    )
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    val numRenamed =
+      Await.result(provider.renameAttribute("typeA", oldAttr, AttributeRename(newAttr), defaultRequestContext), atMost)
+    numRenamed shouldBe 1
+
+    val entitySource = provider.listEntities("typeA")
+    val actual = Await.result(entitySource.runWith(Sink.seq), atMost)
+    actual should contain theSameElementsAs Seq(
+      Entity("name1", "typeA", Map(newAttr -> AttributeNumber(1))),
+      Entity("name2", "typeA", Map(AttributeName.withDefaultNS("bar") -> AttributeNumber(2)))
+    )
+
   }
 
   // ====================================================================================================
