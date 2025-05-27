@@ -76,7 +76,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // should throw a primary key violation error
     intercept[SQLIntegrityConstraintViolationException](
-      runAndWait(q.batchCreateEntities(wsid, entities, allowUpsert = false))
+      runAndWait(q.batchCreateEntities(wsid, entities, insertOnly = true))
     )
 
     // entity 2 should still exist
@@ -1514,8 +1514,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
     // insert the entities
-    runAndWait(q.batchCreateEntities(wsid, ws1Entities, allowUpsert = false)) shouldBe ws1Entities.size
-    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, allowUpsert = false)) shouldBe ws2Entities.size
+    runAndWait(q.batchCreateEntities(wsid, ws1Entities, insertOnly = true)) shouldBe ws1Entities.size
+    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, insertOnly = true)) shouldBe ws2Entities.size
 
     // validate listed entities of entityType "testEntityType" in the first workspace
     runAndWait(q.listEntities(wsid, testEntityType)).map(_.toEntity) should contain theSameElementsAs Seq(entity1,
@@ -1847,7 +1847,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
 
     // insert the entities
-    runAndWait(q.batchCreateEntities(workspaceId, entities, allowUpsert = false)) shouldBe entities.size
+    runAndWait(q.batchCreateEntities(workspaceId, entities, insertOnly = true)) shouldBe entities.size
     // retrieve the entities; retrieved value includes its id
     entities.map { entity =>
       val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))

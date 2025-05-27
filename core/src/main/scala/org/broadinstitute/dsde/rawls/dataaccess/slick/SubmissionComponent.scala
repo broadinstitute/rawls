@@ -478,6 +478,15 @@ trait SubmissionComponent {
     def confirmInWorkspace(workspaceId: UUID, submissionId: UUID): ReadAction[Option[Unit]] =
       uniqueResult[Unit](findByWorkspaceAndId(workspaceId, submissionId).map(_ => ()))
 
+    def getSubmissionWorkspace(submissionId: UUID): ReadAction[Option[Workspace]] = {
+      val query = for {
+        submission <- submissionQuery if submission.id === submissionId
+        workspace <- workspaceQuery if workspace.id === submission.workspaceId
+      } yield workspace
+
+      workspaceQuery.loadWorkspace(query)
+    }
+
     /*
       the marshal/unmarshal methods
      */
