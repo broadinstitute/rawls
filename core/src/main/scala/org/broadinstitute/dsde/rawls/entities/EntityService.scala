@@ -566,9 +566,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
       case None =>
         throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.InternalServerError,
-                      "Workspace setting service not available"
-          )
+          ErrorReport(StatusCodes.InternalServerError, "Workspace setting service not available")
         )
     }
 
