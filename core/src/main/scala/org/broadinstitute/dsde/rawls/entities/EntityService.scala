@@ -549,12 +549,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * This migration method is unoptimized and in flux; use at your own risk
     *
     */
-  def quicksilverMigration(workspaceName: WorkspaceName): Future[Map[String, Int]] = {
-    implicit val system: ActorSystem = ActorSystem("quicksilverMigration")
-
+  def quicksilverMigration(workspaceName: WorkspaceName): Future[Int] =
     for {
       // verify owner of workspace.
-      // TODO CORE-364: require some kind of admin permission via asFCAdmin or a resource type admin instead?
       workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
                                                               SamWorkspaceActions.own,
                                                               Some(WorkspaceAttributeSpecs(all = false))
@@ -572,127 +569,39 @@ class EntityService(protected val ctx: RawlsRequestContext,
         throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
       }
 
-      // get the local (legacy) provider
-      localProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
-
-      // get the list of entity types in this workspace
-      entityTypeMetadata <- localProvider.entityTypeMetadata(useCache = true, ctx)
-
       // start a transaction; here's where we do a bunch of writes
-      _ <- dataSource.inTransaction { dataAccess =>
+      userResult <- dataSource.inTransaction { dataAccess =>
         val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
 
-        // loop over entity types
-        def allTypesResult: Iterable[ReadWriteAction[Iterator[Int]]] =
-          entityTypeMetadata.map { case (entityType, metadata) =>
-            logger.info(s"Quicksilver migration:     - $entityType (${metadata.count}) ...")
-
-            val thisTypeList: ReadAction[Seq[Entity]] = DBIO.from(
-              localProvider
-                .listEntities(entityType)
-                .runWith(Sink.seq)
-            )
-
-            val thisTypeInserts: ReadWriteAction[Iterator[Int]] = thisTypeList flatMap { entities =>
-              // batch inserts into chunks of 400 entities at a time
-              val batches = entities.grouped(400)
-
-              DBIO.sequence(batches.map { batch =>
-                // ... insert each batch into the temp table
-                dataAccess.compactEntityQuery.migrationInsertAttributesToTempTable(batch)
-              })
-            }
-
-            thisTypeInserts
-          }
-
         for {
-          /* TODO CORE-473: create two temp tables:
-              create temporary table QS_ATTR_TEMP(
-                  entity_id bigint unsigned NOT NULL,
-                  attr_name varchar(240) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
-                  list_index int,
-                  attr_value json,
-                  KEY KEY_LIST_IDX (list_index),
-                  KEY KEY_ATTR_INDEX (entity_id, attr_name)
-              );
-              create temporary table QS_ENTITY_TEMP(
-                  entity_id bigint unsigned NOT NULL,
-                  attributes json,
-                  KEY FK_ENT_ID (entity_id),
-                  CONSTRAINT FK_ENTITY_MIGRATION FOREIGN KEY (entity_id) REFERENCES ENTITY (id)
-              );
-           */
-          // create temp table
-          _ <- dataAccess.compactEntityQuery.migrationCreateTempTable
-          /* TODO CORE-473: insert json-ized attributes into QS_ATTR_TEMP
-              insert into QS_ATTR_TEMP(entity_id, attr_name, list_index, attr_value)
-              select
-                e.id,
-                CONCAT(
-                    case
-                        when ea.namespace = 'default' then ''
-                        else CONCAT(ea.namespace, ':')
-                    end,
-                    ea.name
-                ) as attr_name,
-                ea.list_index,
-                CASE
-                    WHEN value_string is not null THEN CAST(JSON_QUOTE(value_string) as JSON)
-                    WHEN value_number is not null THEN CAST(value_number as JSON)
-                    WHEN value_boolean is not null THEN CAST(value_boolean as JSON)
-                    WHEN VALUE_JSON is not null THEN VALUE_JSON
-                    WHEN value_entity_ref is not null THEN JSON_OBJECT('entityType', ref.entity_type, 'entityName', ref.name)
-                    ELSE null
-                END as attr_value
-              from ENTITY e
-                  join ENTITY_ATTRIBUTE_60_63 ea on e.id = ea.owner_id
-                  left outer join ENTITY ref on ea.value_entity_ref = ref.id
-              where e.workspace_id = x'616AEA84E6DC49CE83BE40580F3BB9DA'
-              and e.deleted = 0
-              and ea.deleted = 0
-              order by e.id, attr_name, list_index;
-           */
 
-          /* TODO CORE-473: aggregate array attributes and insert into QS_ENTITY_TEMP
-              with CTE as (
-                select entity_id, attr_name
-                    case
-                        when max(list_index) is null then max(attr_value)
-                        else JSON_ARRAYAGG(attr_value)
-                    end as attr_value
-                from QS_ATTR_TEMP
-                where list_index is not null
-                group by entity_id, attr_name)
-              insert into QS_ENTITY_TEMP(entity_id, attributes)
-              select
-                entity_id,
-                JSON_OBJECT('v', 1, 'attrs', JSON_OBJECTAGG(attr_name, attr_value) as attributes)
-              from CTE
-              group by entity_id;
-           */
-
-          /* TODO CORE-473: update ENTITY
-              update ENTITY e
-              join QS_ENTITY_TEMP tmp
-              on e.id = tmp.id
-              set e.attributes = tmp.attributes;
-           */
-
-          /* TODO CORE-473: drop temp tables */
-
-          // insert entity name, entity type, and attributes to the temp table
-          _ = logger.info(s"Quicksilver migration: inserting to temp table ...")
-          _ <- DBIO.sequence(allTypesResult)
+          // create temp tables
+          _ <- dataAccess.compactEntityQuery.migrationCreateAttributeTempTable
+          _ = logger.info(s"Quicksilver migration: created attribute temp table ...")
+          _ <- dataAccess.compactEntityQuery.migrationCreateEntityTempTable
+          _ = logger.info(s"Quicksilver migration: created entity temp table ...")
+          // normalize attributes to JSON scalars and insert into the temp table
+          _ <- dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceContext.workspaceIdAsUUID,
+                                                                                 shardId
+          )
+          _ = logger.info(s"Quicksilver migration: populated attribute temp table ...")
+          // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
+          _ <- dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
+          _ = logger.info(s"Quicksilver migration: populated entity temp table ...")
           // update ENTITY from the contents of the temp table
+          numEntitiesUpdated <- dataAccess.compactEntityQuery.migrationUpdateEntityTable(
+            workspaceContext.workspaceIdAsUUID
+          )
           _ = logger.info(s"Quicksilver migration: updating ENTITY from temp table ...")
-          _ <- dataAccess.compactEntityQuery.migrationUpdateFromTempTable(workspaceContext.workspaceIdAsUUID)
+          // drop temp tables
+          _ <- dataAccess.compactEntityQuery.migrationDropAttributeTempTable
+          _ <- dataAccess.compactEntityQuery.migrationDropEntityTempTable
+          _ = logger.info(s"Quicksilver migration: dropped temp tables ...")
           // populate the ENTITY_REFS table for this workspace
           _ = logger.info(s"Quicksilver migration: populating ENTITY_REFS ...")
           _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
 
           /***** don't delete legacy data; we'll do that en masse after everything is migrated
-
           // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
           _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
           _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
@@ -701,12 +610,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
           // delete the all_attribute_values column for this workspace
           _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
           _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
-
            *****/
 
-          _ <- dataAccess.compactEntityQuery.migrationDeleteTempTable
           _ = logger.info(s"Quicksilver migration: done!")
-        } yield ()
+        } yield numEntitiesUpdated
       }
 
       // finally, change the workspace to be quicksilver-enabled
@@ -716,6 +623,5 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
 
       // return a count of entities updated
-    } yield entityTypeMetadata.map { case (entityType, metadata) => (entityType, metadata.count) }
-  }
+    } yield userResult
 }
