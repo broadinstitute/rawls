@@ -164,6 +164,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     case Status.Failure(t) =>
       // an error happened in some future, let the supervisor handle it
       // wrap in MonitoredSubmissionException so the supervisor can log/instrument the submission details
+      // We still use the original workspaceName for error reporting since we don't have easy access to the current name here
       throw MonitoredSubmissionException(workspaceName, submissionId, t)
   }
 
@@ -193,7 +194,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val perWorkflowCostCap: Option[BigDecimal]
   val petUserInfo: UserInfo
 
-  // Cache these metric builders since they won't change for this SubmissionMonitor
+  // These metric builders are initialized with the original workspaceName, but they might not reflect renames
+  // We keep them for backward compatibility with existing metrics, and because modifying these during
+  // a submission would cause confusion in metric reporting
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
     workspaceMetricBuilder(workspaceName)
 
@@ -546,6 +549,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     val hasFailedOrAbortedWorkflows = submission.workflows.exists(wf =>
       wf.status.equals(WorkflowStatuses.Failed) || wf.status.equals(WorkflowStatuses.Aborted)
     )
+    // Create notification workspace name from the provided WorkspaceName parameter
     val notificationWorkspaceName = Notifications.WorkspaceName(workspaceName.namespace, workspaceName.name)
     val userComment = submission.userComment.getOrElse("N/A")
 
@@ -600,29 +604,38 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def sendTerminalSubmissionNotification(submissionId: UUID, finalStatus: SubmissionStatus)(implicit
     executionContext: ExecutionContext
   ): ReadAction[Unit] =
-    datasource.slickDataSource.dataAccess.submissionQuery.loadSubmission(submissionId) flatMap {
-      case Some(submission) =>
-        // This Sam lookup is a bit unfortunate. Rawls only stores the submitter email address for the submission, but Thurloe
-        // requires their googleSubjectId in order to look up the contact email (which may differ from their account email).
-        // Because all submission monitoring happens asynchronously, we also don't have their subject ID on-hand to use.
-        // Additionally, the fact that this is the googleSubjectId and not the userSubjectId will pose some challenges for
-        // the multicloud world, where not every user will have a googleSubjectId.
-        DBIO.from(samDAO.getUserIdInfoForEmail(submission.submitter)) map { userIdInfo =>
-          userIdInfo.googleSubjectId match {
-            case Some(googleSubjectId) =>
-              toThurloeNotification(submission, workspaceName, finalStatus, WorkbenchUserId(googleSubjectId)).fold()(
-                notification => notificationDAO.fireAndForgetNotification(notification)
-              )
-            case None =>
-              logger.info(
-                s"Submitter does not have a googleSubjectId. Will not send an email notification for submission ${submissionId}."
-              )
+    for {
+      submissionOpt <- datasource.slickDataSource.dataAccess.submissionQuery.loadSubmission(submissionId)
+      workspaceOpt <- getWorkspace(datasource.slickDataSource.dataAccess)
+      _ <- (submissionOpt, workspaceOpt) match {
+        case (Some(submission), Some(workspace)) =>
+          // This Sam lookup is a bit unfortunate. Rawls only stores the submitter email address for the submission, but Thurloe
+          // requires their googleSubjectId in order to look up the contact email (which may differ from their account email).
+          // Because all submission monitoring happens asynchronously, we also don't have their subject ID on-hand to use.
+          // Additionally, the fact that this is the googleSubjectId and not the userSubjectId will pose some challenges for
+          // the multicloud world, where not every user will have a googleSubjectId.
+          DBIO.from(samDAO.getUserIdInfoForEmail(submission.submitter)) map { userIdInfo =>
+            userIdInfo.googleSubjectId match {
+              case Some(googleSubjectId) =>
+                toThurloeNotification(submission,
+                                      workspace.toWorkspaceName,
+                                      finalStatus,
+                                      WorkbenchUserId(googleSubjectId)
+                ).fold()(notification => notificationDAO.fireAndForgetNotification(notification))
+              case None =>
+                logger.info(
+                  s"Submitter does not have a googleSubjectId. Will not send an email notification for submission ${submissionId}."
+                )
+            }
           }
-        }
-      case None =>
-        logger.info(s"Unable to send terminal submission notification for ${submissionId}. Submission not found.")
-        DBIO.successful()
-    }
+        case (None, _) =>
+          logger.info(s"Unable to send terminal submission notification for ${submissionId}. Submission not found.")
+          DBIO.successful(())
+        case (_, None) =>
+          logger.info(s"Unable to send terminal submission notification for ${submissionId}. Workspace not found.")
+          DBIO.successful(())
+      }
+    } yield ()
 
   /**
    * When there are no workflows with a running or queued status, mark the submission as done or aborted as appropriate.
@@ -724,7 +737,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
 
   def getWorkspace(dataAccess: DataAccess): ReadAction[Option[Workspace]] =
-    dataAccess.workspaceQuery.findByName(workspaceName)
+    dataAccess.submissionQuery.getSubmissionWorkspace(submissionId)
 
   def listMethodConfigOutputsForSubmission(dataAccess: DataAccess): ReadAction[Map[String, String]] =
     dataAccess.submissionQuery.getMethodConfigOutputExpressions(submissionId)
@@ -939,19 +952,21 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             _.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found"))
           )
           subStatuses <- dataAccess.submissionQuery.countByStatus(workspace)
+          currentWorkspaceName = WorkspaceName(workspace.namespace, workspace.name)
         } yield {
           val workflowStatuses = wfStatuses.map { case (k, v) => WorkflowStatuses.withName(k) -> v }
           val submissionStatuses = subStatuses.map { case (k, v) => SubmissionStatuses.withName(k) -> v }
-          (workflowStatuses, submissionStatuses)
+          (workflowStatuses, submissionStatuses, currentWorkspaceName)
         }
       }
       .recover { case NonFatal(e) =>
         // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor if it fails
         logger.error("Error occurred checking current workflow status counts", e)
-        (Map.empty[WorkflowStatus, Int], Map.empty[SubmissionStatus, Int])
+        // Fall back to the cached workspaceName for metrics reporting if we can't load the workspace
+        (Map.empty[WorkflowStatus, Int], Map.empty[SubmissionStatus, Int], workspaceName)
       }
-      .map { case (wfCounts, subCounts) =>
-        SaveCurrentWorkflowStatusCounts(workspaceName, submissionId, wfCounts, subCounts, reschedule)
+      .map { case (wfCounts, subCounts, currentWorkspaceName) =>
+        SaveCurrentWorkflowStatusCounts(currentWorkspaceName, submissionId, wfCounts, subCounts, reschedule)
       }
 }
 
