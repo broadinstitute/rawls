@@ -18,7 +18,11 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceFutureWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{
+  setTraceSpanAttribute,
+  traceDBIOWithParent,
+  traceFutureWithParent
+}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -550,78 +554,118 @@ class EntityService(protected val ctx: RawlsRequestContext,
     *
     */
   def quicksilverMigration(workspaceName: WorkspaceName): Future[Int] =
-    for {
-      // verify owner of workspace.
-      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
-                                                              SamWorkspaceActions.own,
-                                                              Some(WorkspaceAttributeSpecs(all = false))
-      )
-
-      // confirm if this is already a quicksilver workspace by checking settings
-      workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
-      settings <- workspaceSettingService.getWorkspaceSettings(workspaceName)
-      _ = if (
-        settings
-          .find(_.isInstanceOf[CompactDataTablesSetting])
-          .asInstanceOf[Option[CompactDataTablesSetting]]
-          .exists(_.config.enabled)
-      ) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
-      }
-
-      // start a transaction; here's where we do a bunch of writes
-      userResult <- dataSource.inTransaction { dataAccess =>
-        val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
-
-        for {
-
-          // create temp tables
-          _ <- dataAccess.compactEntityQuery.migrationCreateAttributeTempTable
-          _ = logger.info(s"Quicksilver migration: created attribute temp table ...")
-          _ <- dataAccess.compactEntityQuery.migrationCreateEntityTempTable
-          _ = logger.info(s"Quicksilver migration: created entity temp table ...")
-          // normalize attributes to JSON scalars and insert into the temp table
-          _ <- dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceContext.workspaceIdAsUUID,
-                                                                                 shardId
+    traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
+      for {
+        // verify owner of workspace.
+        workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", s) { _ =>
+          getV2WorkspaceContextAndPermissions(workspaceName,
+                                              SamWorkspaceActions.own,
+                                              Some(WorkspaceAttributeSpecs(all = false))
           )
-          _ = logger.info(s"Quicksilver migration: populated attribute temp table ...")
-          // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
-          _ <- dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
-          _ = logger.info(s"Quicksilver migration: populated entity temp table ...")
-          // update ENTITY from the contents of the temp table
-          numEntitiesUpdated <- dataAccess.compactEntityQuery.migrationUpdateEntityTable(
-            workspaceContext.workspaceIdAsUUID
+        }
+
+        // confirm if this is already a quicksilver workspace by checking settings
+        workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
+        settings <- traceFutureWithParent("getWorkspaceSettings", s) { _ =>
+          workspaceSettingService.getWorkspaceSettings(workspaceName)
+        }
+        _ = if (
+          settings
+            .find(_.isInstanceOf[CompactDataTablesSetting])
+            .asInstanceOf[Option[CompactDataTablesSetting]]
+            .exists(_.config.enabled)
+        ) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
+        }
+
+        // start a transaction; here's where we do a bunch of writes
+        userResult <- dataSource.inTransaction { dataAccess =>
+          val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
+
+          val tick = System.currentTimeMillis()
+
+          for {
+
+            // create temp tables
+            _ <- traceDBIOWithParent("migrationCreateAttributeTempTable", s) { _ =>
+              dataAccess.compactEntityQuery.migrationCreateAttributeTempTable
+            }
+            _ = logger.info(
+              s"Quicksilver migration: created attribute temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+            )
+            _ <- traceDBIOWithParent("migrationCreateEntityTempTable", s) { _ =>
+              dataAccess.compactEntityQuery.migrationCreateEntityTempTable
+            }
+            _ = logger.info(
+              s"Quicksilver migration: created entity temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+            )
+            // normalize attributes to JSON scalars and insert into the temp table
+            _ <- traceDBIOWithParent("migrationPopulateAttributeTempTable", s) { _ =>
+              dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceContext.workspaceIdAsUUID,
+                                                                                shardId
+              )
+            }
+            _ = logger.info(
+              s"Quicksilver migration: populated attribute temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+            )
+            // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
+            _ <- traceDBIOWithParent("migrationPopulateEntityTempTable", s) { _ =>
+              dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
+            }
+            _ = logger.info(
+              s"Quicksilver migration: populated entity temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+            )
+            // update ENTITY from the contents of the temp table
+            numEntitiesUpdated <- traceDBIOWithParent("migrationUpdateEntityTable", s) { _ =>
+              dataAccess.compactEntityQuery.migrationUpdateEntityTable(
+                workspaceContext.workspaceIdAsUUID
+              )
+            }
+            _ = logger.info(
+              s"Quicksilver migration: updating ENTITY from temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+            )
+            // drop temp tables
+            _ <- traceDBIOWithParent("migrationDropAttributeTempTable", s) { _ =>
+              dataAccess.compactEntityQuery.migrationDropAttributeTempTable
+            }
+            _ <- traceDBIOWithParent("migrationDropEntityTempTable", s) { _ =>
+              dataAccess.compactEntityQuery.migrationDropEntityTempTable
+            }
+            _ = logger.info(
+              s"Quicksilver migration: dropped temp tables (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+            )
+            // populate the ENTITY_REFS table for this workspace
+            _ <- traceDBIOWithParent("migrationAddReferences", s) { _ =>
+              dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
+            }
+            _ = logger.info(
+              s"Quicksilver migration: populated ENTITY_REFS (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+            )
+
+            /** *** don't delete legacy data; we'll do that en masse after everything is migrated
+              *  // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
+              *  _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
+              *  _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
+              *  shardId
+              *  )
+              *  // delete the all_attribute_values column for this workspace
+              *  _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
+              *  _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
+              * *** */
+
+            _ = logger.info(s"Quicksilver migration: done!")
+          } yield numEntitiesUpdated
+        }
+
+        // finally, change the workspace to be quicksilver-enabled
+        _ <- traceFutureWithParent("setWorkspaceSettings", s) { _ =>
+          workspaceSettingService.setWorkspaceSettings(
+            workspaceName,
+            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
           )
-          _ = logger.info(s"Quicksilver migration: updating ENTITY from temp table ...")
-          // drop temp tables
-          _ <- dataAccess.compactEntityQuery.migrationDropAttributeTempTable
-          _ <- dataAccess.compactEntityQuery.migrationDropEntityTempTable
-          _ = logger.info(s"Quicksilver migration: dropped temp tables ...")
-          // populate the ENTITY_REFS table for this workspace
-          _ = logger.info(s"Quicksilver migration: populating ENTITY_REFS ...")
-          _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
+        }
 
-          /***** don't delete legacy data; we'll do that en masse after everything is migrated
-          // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
-          _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
-          _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
-                                                                             shardId
-          )
-          // delete the all_attribute_values column for this workspace
-          _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
-          _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
-           *****/
-
-          _ = logger.info(s"Quicksilver migration: done!")
-        } yield numEntitiesUpdated
-      }
-
-      // finally, change the workspace to be quicksilver-enabled
-      _ <- workspaceSettingService.setWorkspaceSettings(
-        workspaceName,
-        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-      )
-
-      // return a count of entities updated
-    } yield userResult
+        // return a count of entities updated
+      } yield userResult
+    }
 }
