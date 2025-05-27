@@ -7,7 +7,17 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, AttributeRename, Entity, EntityColumnFilter, EntityPointer, EntityQuery, FilterOperators, SortDirections}
+import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
+  AttributeName,
+  AttributeRename,
+  Entity,
+  EntityColumnFilter,
+  EntityPointer,
+  EntityQuery,
+  FilterOperators,
+  SortDirections
+}
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
@@ -216,16 +226,16 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   def copyEntitiesToNewWorkspace(sourceWs: UUID,
                                  destWs: UUID,
-                                 entityRefs: Set[AttributeEntityReference] = Set()
-  ): WriteAction[(Int, Int)] = {
+                                 entityRefs: Set[EntityPointer] = Set()
+  ): ReadWriteAction[(Int, Int)] = {
 
-    def copyChunkOfEntitiesOrAllEntities(chunk: Set[AttributeEntityReference] = Set()) =
+    def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
       for {
         entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
         entityRefsCopiedCount <- copyEntityReferences(sourceWs, destWs, chunk)
       } yield (entitiesCopiedCount, entityRefsCopiedCount)
 
-    val chunks: Iterator[Set[AttributeEntityReference]] = entityRefs.grouped(driverComponent.batchSize)
+    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(driverComponent.batchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 
@@ -237,18 +247,18 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def getEntitySubtrees(workspaceId: UUID,
                         entityType: String,
                         entityNames: Set[String]
-  ): ReadAction[Map[AttributeEntityReference, Set[AttributeEntityReference]]] = {
-    val refs = entityNames.map(name => AttributeEntityReference(entityType, name))
+  ): ReadAction[Map[EntityPointer, Set[EntityPointer]]] = {
+    val refs = entityNames.map(name => EntityPointer(entityType, name))
     for {
       startingEntityRecords <- getEntityRefs(workspaceId, refs)
-      entities = startingEntityRecords.map(record => record.toAttributeEntityReference)
+      entities = startingEntityRecords.map(record => record.toPointer)
       allRefs <- recursiveGetEntityReferences(workspaceId, entities.toSet)
     } yield allRefs
   }
 
   def recursiveGetEntityReferences(workspaceId: UUID,
-                                   entities: Set[AttributeEntityReference]
-  ): ReadAction[Map[AttributeEntityReference, Set[AttributeEntityReference]]] =
+                                   entities: Set[EntityPointer]
+  ): ReadAction[Map[EntityPointer, Set[EntityPointer]]] =
     if (entities.isEmpty) {
       DBIO.successful(Map.empty)
     } else {
@@ -289,7 +299,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         from EntityReferences
       """.as[(String, String, String, String)].map { rows =>
           rows
-            .groupMap(row => AttributeEntityReference(row._1, row._2))(row => AttributeEntityReference(row._3, row._4))
+            .groupMap(row => EntityPointer(row._1, row._2))(row => EntityPointer(row._3, row._4))
             .view
             .mapValues(_.toSet)
             .toMap
@@ -298,37 +308,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       query
     }
 
-//  def recursiveGetEntityReferences(workspaceId: UUID,
-//                                   entities: Set[AttributeEntityReference],
-//                                   accumulatedPathsWithLastId: Map[EntityPath, AttributeEntityReference]
-//                                  ): ReadAction[Seq[EntityPath]] = {
-//    val actions: Seq[ReadAction[Seq[(AttributeEntityReference, AttributeEntityReference)]]] = entities.toSeq.map { entity =>
-//      getReferencesTo(workspaceId, Seq(entity)).map { references =>
-//        references.map(ref => (entity, ref))
-//      }
-//    }
-//
-//    DBIO.sequence(actions).map(_.flatten.toSet).flatMap { priorEntityWithCurrentRec =>
-//      val currentPaths = priorEntityWithCurrentRec.flatMap { case (priorEntity, currentRec) =>
-//        val pathsThatEndWithPrior = accumulatedPathsWithLastId.filter { case (_, entity) => entity == priorEntity }
-//        pathsThatEndWithPrior.keys.map(_.path).map { path =>
-//          (EntityPath(path :+ currentRec), currentRec)
-//        }
-//      }.toMap
-//
-//      val untraversedIds = priorEntityWithCurrentRec.map(_._2) -- accumulatedPathsWithLastId.values.toSet
-//      if (untraversedIds.isEmpty) {
-//        DBIO.successful(accumulatedPathsWithLastId.keys.toSeq)
-//      } else {
-//        recursiveGetEntityReferences(workspaceId, untraversedIds, accumulatedPathsWithLastId ++ currentPaths)
-//      }
-//    }
-//  }
-
-  def copyEntities(sourceWorkspaceId: UUID,
-                   destWorkspaceId: UUID,
-                   refs: Set[AttributeEntityReference]
-  ): ReadWriteAction[Int] =
+  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
     if (refs.isEmpty) {
       DBIO.successful(0)
     } else {
@@ -347,13 +327,13 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     }
 
   /**
-   * Given a destWorkspaceId: UUID and refs: Set[AttributeEntityReference]
+   * Given a destWorkspaceId: UUID and refs: Set[EntityPointer]
    * select rows from ENTITY_REFS table for the source workspace where the from_entity_type and from_name are in the refs set
    * and insert new rows into ENTITY_REFS table for the destWorkspaceId with the same from_entity_type and from_name
    */
   def copyEntityReferences(sourceWorkspaceId: UUID,
                            destWorkspaceId: UUID,
-                           refs: Set[AttributeEntityReference]
+                           refs: Set[EntityPointer]
   ): ReadWriteAction[Int] =
     if (refs.isEmpty) {
       DBIO.successful(0)

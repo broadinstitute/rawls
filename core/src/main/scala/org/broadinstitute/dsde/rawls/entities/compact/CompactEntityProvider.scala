@@ -32,8 +32,8 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValue,
   Entity,
   EntityCopyResponse,
-  EntityPointer,
   EntityHardConflict,
+  EntityPointer,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
@@ -135,16 +135,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                            parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = {
 
-    def getSoftConflicts(paths: Set[AttributeEntityReference]): Future[Set[AttributeEntityReference]] =
+    def getSoftConflicts(paths: Set[EntityPointer]): Future[Set[EntityPointer]] =
       // return the entities already present in the destination workspace
       repository.dataSource.inTransaction { _ =>
         repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, paths).map { conflicts =>
-          val conflictsAsRefs = conflicts.toSeq.map(_.toAttributeEntityReference)
+          val conflictsAsRefs = conflicts.toSeq.map(_.toPointer)
           paths.filter(p => conflictsAsRefs.contains(p))
         }
       }
 
-    val entitiesToCopyRefs = entityNames.map(name => AttributeEntityReference(entityType, name))
+    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name))
     repository.dataSource
       .inTransaction { _ =>
         repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs.toSet)
@@ -164,9 +164,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
           pathsAndConflicts.flatMap { case (entityReferenceMap, entityReferences, softConflicts) =>
             if (softConflicts.isEmpty || linkExistingEntities) {
-              val allEntityRefs: Set[AttributeEntityReference] = entityReferences
-              val allConflictRefs: Set[AttributeEntityReference] = softConflicts
-              val entitiesToCopy: Set[AttributeEntityReference] = allEntityRefs diff allConflictRefs
+              val allEntityRefs: Set[EntityPointer] = entityReferences
+              val allConflictRefs: Set[EntityPointer] = softConflicts
+              val entitiesToCopy: Set[EntityPointer] = allEntityRefs diff allConflictRefs
               repository.dataSource.inTransaction { _ =>
                 for {
                   _ <- repository.queries.copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
@@ -174,7 +174,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                      entitiesToCopy
                   )
                   _ <- repository.updateLastModified(workspaceId)
-                } yield EntityCopyResponse(entitiesToCopy.toSeq, Seq.empty, Seq.empty)
+                } yield EntityCopyResponse(entitiesToCopy.map(e => e.toAttributeEntityReference).toSeq,
+                                           Seq.empty,
+                                           Seq.empty
+                )
               }
             } else {
               val unmergedSoftConflicts = entityReferenceMap.flatMap { case (key, value) =>
