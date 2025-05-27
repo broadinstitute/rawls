@@ -20,12 +20,14 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceFieldSpecs
 }
 import slick.dbio.Effect.Read
+import slick.jdbc.GetResult
 import slick.sql.SqlStreamingAction
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.sql.SQLIntegrityConstraintViolationException
 import java.util.UUID
+import scala.concurrent.Future
 import scala.util.Random
 
 class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
@@ -773,7 +775,246 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val hidden3 = runAndWait(q.getDeletedEntity(wsid, entity3.entityType, entity3.name))
     hidden3 should not be empty
     hidden3.get.attributes shouldBe empty
+  }
 
+  behavior of "deleteEntities"
+
+  it should "delete the specified entities in the given workspace" in withMinimalTestDatabase { _ =>
+    import driver.api._ // for bespoke SQL queries
+
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1) // targeted for deletion
+    insertAndGet(entity2) // targeted for deletion
+    insertAndGet(entity3) // should be deleted
+    insertAndGet(entity4) // targeted for deletion
+    insertAndGet(entity4, wsid2) // should NOT be deleted; different workspace
+
+    // validate counts before
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType1, 3),
+      (wsid, entityType2, 1),
+      (wsid2, entityType1, 1)
+    )
+
+    // perform the delete
+    val pointers = Seq(entity1.toPointer, entity2.toPointer, entity4.toPointer)
+    val deletedCount = runAndWait(q.deleteEntities(wsid, pointers))
+
+    deletedCount shouldBe 3
+
+    // validate counts after
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType1, 1),
+      (wsid2, entityType1, 1)
+    )
+  }
+
+  it should "not delete entities which have a foreign key pointed at them" in withMinimalTestDatabase { _ =>
+    import driver.api._ // for bespoke SQL queries
+
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity5 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity6 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity7 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity8 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1) // targeted for deletion
+    insertAndGet(entity2) // targeted for deletion
+    insertAndGet(entity3) // should be deleted
+    insertAndGet(entity4) // targeted for deletion
+    insertAndGet(entity4, wsid2) // should NOT be deleted; different workspace
+    val entityRec5 = insertAndGet(entity5) // targeted, but should NOT be deleted due to FK from WORKSPACE_ATTRIBUTE
+    val entityRec6 = insertAndGet(entity6) // targeted, but should NOT be deleted due to FK from SUBMISSION
+    val entityRec7 = insertAndGet(entity7) // targeted, but should NOT be deleted due to FK from WORKFLOW
+    val entityRec8 = insertAndGet(entity8) // targeted, but should NOT be deleted due to FK from SUBMISSION_ATTRIBUTE
+
+    // set up foreign keys
+
+    // a workspace attribute points at entity5
+    runAndWait(
+      sql"""insert into WORKSPACE_ATTRIBUTE(name, owner_id, value_entity_ref)
+            values ('n', $wsid, ${entityRec5.id})""".asUpdate
+    )
+    // a submission points at entity6
+    runAndWait(
+      sql"""insert into METHOD_CONFIG(NAMESPACE, NAME, WORKSPACE_ID)
+            values ('nn', 'n', $wsid)""".asUpdate
+    )
+    val methodConfigId = runAndWait(
+      sql"select ID from METHOD_CONFIG where NAMESPACE = 'nn' and NAME = 'n' and WORKSPACE_ID = $wsid".as[Long].head
+    )
+    runAndWait(sql"""insert into SUBMISSION(ID, WORKSPACE_ID, SUBMITTER, METHOD_CONFIG_ID, SUBMISSION_ROOT, ENTITY_ID)
+            values (${UUID.randomUUID()}, $wsid, 'submitter', $methodConfigId, 'subroot', ${entityRec6.id})""".asUpdate)
+    val submissionId = runAndWait(sql"select ID from SUBMISSION where WORKSPACE_ID = $wsid".as[UUID].head)
+    // a workflow points at entity7
+    runAndWait(sql"""insert into WORKFLOW(SUBMISSION_ID, record_version, ENTITY_ID)
+        values($submissionId, 1, ${entityRec7.id})""".asUpdate)
+    val workflowId = runAndWait(sql"select ID from WORKFLOW where SUBMISSION_ID = $submissionId".as[Long].head)
+    // a submission attribute points at entity8
+    runAndWait(
+      sql"""insert into SUBMISSION_VALIDATION(WORKFLOW_ID, INPUT_NAME) values($workflowId, 'input')""".asUpdate
+    )
+    val submissionValidationId =
+      runAndWait(sql"select id from SUBMISSION_VALIDATION where WORKFLOW_ID = $workflowId".as[Long].head)
+    runAndWait(
+      sql"""insert into SUBMISSION_ATTRIBUTE(name, owner_id, value_entity_ref)
+            values ('s', $submissionValidationId, ${entityRec8.id})""".asUpdate
+    )
+
+    // validate counts before
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType1, 7),
+      (wsid, entityType2, 1),
+      (wsid2, entityType1, 1)
+    )
+
+    // perform the delete
+    val pointers = Seq(entity1.toPointer,
+                       entity2.toPointer,
+                       entity4.toPointer,
+                       entity5.toPointer,
+                       entity6.toPointer,
+                       entity7.toPointer,
+                       entity8.toPointer
+    )
+    val deletedCount = runAndWait(q.deleteEntities(wsid, pointers))
+
+    deletedCount shouldBe 3
+
+    // validate counts after
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType1, 5),
+      (wsid2, entityType1, 1)
+    )
+  }
+
+  behavior of "deleteEntitiesOfType"
+
+  it should "delete entities of the given type in the given workspace" in withMinimalTestDatabase { _ =>
+    import driver.api._ // for bespoke SQL queries
+
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1) // should be deleted
+    insertAndGet(entity2) // should NOT be deleted; different entity type
+    insertAndGet(entity3) // should be deleted
+    insertAndGet(entity4) // should be deleted
+    insertAndGet(entity4, wsid2) // should NOT be deleted; different workspace
+
+    // validate counts before
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType1, 3),
+      (wsid, entityType2, 1),
+      (wsid2, entityType1, 1)
+    )
+
+    // perform the delete
+    val deletedCount = runAndWait(q.deleteEntitiesOfType(wsid, entityType1))
+
+    deletedCount shouldBe 3
+
+    // validate counts after
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType2, 1),
+      (wsid2, entityType1, 1)
+    )
+  }
+
+  it should "not delete entities which have a foreign key pointed at them" in withMinimalTestDatabase { _ =>
+    import driver.api._ // for bespoke SQL queries
+
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity5 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity6 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity7 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity8 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1) // should be deleted
+    insertAndGet(entity2) // should NOT be deleted; different entity type
+    insertAndGet(entity3) // should be deleted
+    insertAndGet(entity4) // should be deleted
+    insertAndGet(entity4, wsid2) // should NOT be deleted; different workspace
+    val entityRec5 = insertAndGet(entity5) // should NOT be deleted due to FK from WORKSPACE_ATTRIBUTE
+    val entityRec6 = insertAndGet(entity6) // should NOT be deleted due to FK from SUBMISSION
+    val entityRec7 = insertAndGet(entity7) // should NOT be deleted due to FK from WORKFLOW
+    val entityRec8 = insertAndGet(entity8) // should NOT be deleted due to FK from SUBMISSION_ATTRIBUTE
+
+    // set up foreign keys
+
+    // a workspace attribute points at entity5
+    runAndWait(
+      sql"""insert into WORKSPACE_ATTRIBUTE(name, owner_id, value_entity_ref)
+            values ('n', $wsid, ${entityRec5.id})""".asUpdate
+    )
+    // a submission points at entity6
+    runAndWait(
+      sql"""insert into METHOD_CONFIG(NAMESPACE, NAME, WORKSPACE_ID)
+            values ('nn', 'n', $wsid)""".asUpdate
+    )
+    val methodConfigId = runAndWait(
+      sql"select ID from METHOD_CONFIG where NAMESPACE = 'nn' and NAME = 'n' and WORKSPACE_ID = $wsid".as[Long].head
+    )
+    runAndWait(sql"""insert into SUBMISSION(ID, WORKSPACE_ID, SUBMITTER, METHOD_CONFIG_ID, SUBMISSION_ROOT, ENTITY_ID)
+            values (${UUID.randomUUID()}, $wsid, 'submitter', $methodConfigId, 'subroot', ${entityRec6.id})""".asUpdate)
+    val submissionId = runAndWait(sql"select ID from SUBMISSION where WORKSPACE_ID = $wsid".as[UUID].head)
+    // a workflow points at entity7
+    runAndWait(sql"""insert into WORKFLOW(SUBMISSION_ID, record_version, ENTITY_ID)
+        values($submissionId, 1, ${entityRec7.id})""".asUpdate)
+    val workflowId = runAndWait(sql"select ID from WORKFLOW where SUBMISSION_ID = $submissionId".as[Long].head)
+    // a submission attribute points at entity8
+    runAndWait(
+      sql"""insert into SUBMISSION_VALIDATION(WORKFLOW_ID, INPUT_NAME) values($workflowId, 'input')""".asUpdate
+    )
+    val submissionValidationId =
+      runAndWait(sql"select id from SUBMISSION_VALIDATION where WORKFLOW_ID = $workflowId".as[Long].head)
+    runAndWait(
+      sql"""insert into SUBMISSION_ATTRIBUTE(name, owner_id, value_entity_ref)
+            values ('s', $submissionValidationId, ${entityRec8.id})""".asUpdate
+    )
+
+    // validate counts before
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType1, 7),
+      (wsid, entityType2, 1),
+      (wsid2, entityType1, 1)
+    )
+
+    // perform the delete
+    val deletedCount = runAndWait(q.deleteEntitiesOfType(wsid, entityType1))
+
+    deletedCount shouldBe 3
+
+    // validate counts after
+    getRawCounts should contain theSameElementsAs Seq(
+      (wsid, entityType1, 4),
+      (wsid, entityType2, 1),
+      (wsid2, entityType1, 1)
+    )
   }
 
   behavior of "getReferencesTo"
@@ -1904,6 +2145,16 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
             desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
         )
       )
+    )
+  }
+
+  // helper to validate counts of entities by workspace and type. Note this does not have a `where deleted=0` clause.
+  def getRawCounts: Seq[(UUID, String, Int)] = {
+    import driver.api._ // for bespoke SQL queries
+    implicit val getter: GetResult[(UUID, String, Int)] = GetResult(r => (r.<<, r.<<, r.<<))
+    runAndWait(
+      sql"select workspace_id, entity_type, count(1) from ENTITY group by workspace_id, entity_type"
+        .as[(UUID, String, Int)]
     )
   }
 }

@@ -519,6 +519,7 @@ class CompactEntityProviderSpec
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.deleteEntities(any(), any())).thenReturn(DBIO.successful(0))
     when(
       mockQuery.getEntity(any[UUID],
                           ArgumentMatchers.eq(createdEntityRec1.entityType),
@@ -633,6 +634,7 @@ class CompactEntityProviderSpec
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.deleteAllReferencesFromType(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.deleteEntitiesOfType(any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
 
     // provider using mocks
