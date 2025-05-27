@@ -19,7 +19,7 @@ trait CompactEntityMigration {
             attr_name varchar(240) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
             list_index int,
             attr_value json,
-            KEY KEY_LIST_IDX (list_index),
+            KEY KEY_LIST_INDEX (list_index),
             KEY KEY_ATTR_INDEX (entity_id, attr_name)
           );""".asUpdate
 
@@ -28,7 +28,7 @@ trait CompactEntityMigration {
     sql"""create temporary table QS_ENTITY_TEMP(
             entity_id bigint unsigned NOT NULL,
             attributes json,
-            KEY FK_ENT_ID (entity_id)
+            KEY KEY_ENT_ID (entity_id)
           );""".asUpdate
 
   /**
@@ -36,23 +36,29 @@ trait CompactEntityMigration {
     *   - join namespace and name into a single delimited attribute key
     *   - cast individual attribute values to JSON
     * Write all this to a temp table QS_ATTR_TEMP.
+    *
+    * The order-by clause here is very sensitive. See the comment about JSON_ARRAYAGG behavior on the
+    * migrationPopulateEntityTempTable() function; the order-by must insert rows into the temp table in the proper
+    * order to respect the list_index value from the legacy attributes.
+    *
+    * Note also the case for list_length==0. This is a special handling for empty lists; legacy attributes
+    * represent empty lists as a row with list_length 0, list_index null, and value_number -1. Without the special-case handling,
+    * these would be returned as AttributeNumber(-1). See AttributeComponent.marshalEmptyVal for details.
     */
   def migrationPopulateAttributeTempTable(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
     sql"""insert into QS_ATTR_TEMP(entity_id, attr_name, list_index, attr_value)
           select
             e.id,
-            CONCAT(
-                case
-                    when ea.namespace = ${AttributeName.defaultNamespace} then ''
-                    else CONCAT(ea.namespace, ${AttributeName.delimiter.toString})
-                end,
-                ea.name
-            ) as attr_name,
+            CASE
+              WHEN ea.namespace = ${AttributeName.defaultNamespace} then ea.name
+              ELSE CONCAT(ea.namespace, ${AttributeName.delimiter.toString}, ea.name)
+            END as attr_name,
             ea.list_index,
             CASE
                 WHEN value_string is not null THEN CAST(JSON_QUOTE(value_string) as JSON)
-                WHEN value_number is not null THEN CAST(value_number as JSON)
                 WHEN value_boolean is not null THEN CAST(value_boolean as JSON)
+                WHEN list_length = 0 THEN JSON_ARRAY()
+                WHEN value_number is not null THEN CAST(value_number as JSON)
                 WHEN VALUE_JSON is not null THEN VALUE_JSON
                 WHEN value_entity_ref is not null THEN JSON_OBJECT(${AttributeFormat.ENTITY_TYPE_KEY}, ref.entity_type, ${AttributeFormat.ENTITY_NAME_KEY}, ref.name)
                 ELSE null
@@ -63,7 +69,7 @@ trait CompactEntityMigration {
           where e.workspace_id = $workspaceId
           and e.deleted = 0
           and ea.deleted = 0
-          order by e.id, attr_name, list_index;""".asUpdate
+          order by ea.list_index, e.id, attr_name""".asUpdate
 
   /**
     * Second step of data massaging to build compact entities:
@@ -84,8 +90,8 @@ trait CompactEntityMigration {
                     else JSON_ARRAYAGG(attr_value)
                 end as attr_value
             from QS_ATTR_TEMP
-            group by entity_id, attr_name)
-
+            group by entity_id, attr_name
+            order by entity_id, attr_name, list_index)
           select
             entity_id,
             JSON_OBJECT($VERSION_KEY, $CURRENT_VERSION, $ATTRS_KEY, JSON_OBJECTAGG(attr_name, attr_value))
