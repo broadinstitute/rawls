@@ -626,23 +626,25 @@ class EntityService(protected val ctx: RawlsRequestContext,
           // create temp table
           _ <- dataAccess.compactEntityQuery.migrationCreateTempTable
           /* TODO CORE-473: insert json-ized attributes into QS_ATTR_TEMP
-              select e.id,
-                  CONCAT(
-                      case
-                          when ea.namespace = 'default' then ''
-                          else CONCAT(ea.namespace, ':')
-                      end,
-                      ea.name
-                  ) as attr_name,
-                  CASE
-                      WHEN value_string is not null THEN CAST(JSON_QUOTE(value_string) as JSON)
-                      WHEN value_number is not null THEN CAST(value_number as JSON)
-                      WHEN value_boolean is not null THEN CAST(value_boolean as JSON)
-                      WHEN VALUE_JSON is not null THEN VALUE_JSON
-                      WHEN value_entity_ref is not null THEN JSON_OBJECT('entityType', ref.entity_type, 'entityName', ref.name)
-                      ELSE null
-                  END as attr_value,
-                  ea.list_index
+              insert into QS_ATTR_TEMP(entity_id, attr_name, list_index, attr_value)
+              select
+                e.id,
+                CONCAT(
+                    case
+                        when ea.namespace = 'default' then ''
+                        else CONCAT(ea.namespace, ':')
+                    end,
+                    ea.name
+                ) as attr_name,
+                ea.list_index,
+                CASE
+                    WHEN value_string is not null THEN CAST(JSON_QUOTE(value_string) as JSON)
+                    WHEN value_number is not null THEN CAST(value_number as JSON)
+                    WHEN value_boolean is not null THEN CAST(value_boolean as JSON)
+                    WHEN VALUE_JSON is not null THEN VALUE_JSON
+                    WHEN value_entity_ref is not null THEN JSON_OBJECT('entityType', ref.entity_type, 'entityName', ref.name)
+                    ELSE null
+                END as attr_value
               from ENTITY e
                   join ENTITY_ATTRIBUTE_60_63 ea on e.id = ea.owner_id
                   left outer join ENTITY ref on ea.value_entity_ref = ref.id
@@ -662,8 +664,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
                 from QS_ATTR_TEMP
                 where list_index is not null
                 group by entity_id, attr_name)
+              insert into QS_ENTITY_TEMP(entity_id, attributes)
               select
-              entity_id, JSON_OBJECT('v', 1, 'attrs', JSON_OBJECTAGG(attr_name, attr_value) as attributes)
+                entity_id,
+                JSON_OBJECT('v', 1, 'attrs', JSON_OBJECTAGG(attr_name, attr_value) as attributes)
               from CTE
               group by entity_id;
            */
@@ -674,6 +678,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
               on e.id = tmp.id
               set e.attributes = tmp.attributes;
            */
+
+          /* TODO CORE-473: drop temp tables */
 
           // insert entity name, entity type, and attributes to the temp table
           _ = logger.info(s"Quicksilver migration: inserting to temp table ...")

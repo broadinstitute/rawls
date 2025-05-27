@@ -183,6 +183,6 @@ class EntityServiceCompactMigrationSpec
           }
         }
     }
-
   }
+
 }
