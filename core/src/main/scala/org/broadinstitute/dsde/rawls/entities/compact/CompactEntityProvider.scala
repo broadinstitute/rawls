@@ -164,7 +164,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
           pathsAndConflicts.flatMap { case (entityReferenceMap, entityReferences, softConflicts) =>
             if (softConflicts.isEmpty || linkExistingEntities) {
-              val allEntityRefs: Set[EntityPointer] = entityReferences
+              val allEntityRefs: Set[EntityPointer] = entityReferenceMap.keys.toSet concat entityReferences
               val allConflictRefs: Set[EntityPointer] = softConflicts
               val entitiesToCopy: Set[EntityPointer] = allEntityRefs diff allConflictRefs
               repository.dataSource.inTransaction { _ =>

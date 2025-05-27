@@ -258,55 +258,47 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   def recursiveGetEntityReferences(workspaceId: UUID,
                                    entities: Set[EntityPointer]
-  ): ReadAction[Map[EntityPointer, Set[EntityPointer]]] =
+                                  ): ReadAction[Map[EntityPointer, Set[EntityPointer]]] = {
     if (entities.isEmpty) {
       DBIO.successful(Map.empty)
     } else {
-      val entityTypeNameTuples = entities.map(ref => (ref.entityType, ref.entityName))
+      val entityTypeNameClauses = generateTypeNameSql(entities)
 
-      val query =
-        sql"""
-        with recursive EntityReferences as (
-          -- Base case: start with the initial set of entities
-          select
-            er.from_entity_type,
-            er.from_name,
-            er.to_entity_type,
-            er.to_name
-          from ENTITY_REFS er
-          where er.workspace_id = $workspaceId
-          and (er.from_entity_type, er.from_name) in (#${reduceSqlActionsWithDelim(entityTypeNameTuples.map {
-                                                                                     case (entityType, name) =>
-                                                                                       sql"($entityType, $name)"
-                                                                                   }.toSeq,
-                                                                                   sql","
-          )})
+      val baseSql = concatSqlActions(
+        sql"""with recursive EntityReferences as (
+              select er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
+              from ENTITY_REFS er
+              where er.workspace_id = $workspaceId
+              and (""",
+        reduceSqlActionsWithDelim(entityTypeNameClauses.toSeq, sql" or "),
+        sql""")
+            """
+      )
 
-          union distinct
+      val recursiveSql = sql"""
+            union distinct
+            select er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
+            from EntityReferences er1
+            join ENTITY_REFS er
+            on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
+            where er.workspace_id = $workspaceId
+          )
+        """
 
-          -- Recursive case: find references to other entities
-          select
-            er.from_entity_type,
-            er.from_name,
-            er.to_entity_type,
-            er.to_name
-          from EntityReferences er1
-          join ENTITY_REFS er
-          on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
-          where er.workspace_id = $workspaceId
-        )
+      val finalSql = sql"""
         select from_entity_type, from_name, to_entity_type, to_name
         from EntityReferences
-      """.as[(String, String, String, String)].map { rows =>
-          rows
-            .groupMap(row => EntityPointer(row._1, row._2))(row => EntityPointer(row._3, row._4))
-            .view
-            .mapValues(_.toSet)
-            .toMap
-        }
+      """
 
-      query
+      concatSqlActions(baseSql, recursiveSql, finalSql).as[(String, String, String, String)].map { rows =>
+        rows
+          .groupMap(row => EntityPointer(row._1, row._2))(row => EntityPointer(row._3, row._4))
+          .view
+          .mapValues(_.toSet)
+          .toMap
+      }
     }
+  }
 
   def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
     if (refs.isEmpty) {

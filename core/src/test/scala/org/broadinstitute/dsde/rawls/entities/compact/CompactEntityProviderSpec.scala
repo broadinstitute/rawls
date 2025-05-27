@@ -9,38 +9,15 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
 import org.broadinstitute.dsde.rawls.entities.exceptions._
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
-  AddUpdateAttribute,
-  AttributeUpdateOperation,
-  EntityUpdateDefinition
-}
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeEntityReference,
-  AttributeEntityReferenceList,
-  AttributeName,
-  AttributeNumber,
-  AttributeRename,
-  AttributeString,
-  Entity,
-  EntityPointer,
-  EntityQuery,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  EntityTypeRename,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  SortDirections,
-  UserInfo,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.AgoraEntityType.EntityType
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNumber, AttributeRename, AttributeString, Entity, EntityPointer, EntityQuery, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SortDirections, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
-import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
+import org.mockito.Mockito.{never, times, verify, when, timeout => mockitotimeout}
 import org.mockito.{ArgumentMatchers, Mockito}
-import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
+import org.scalatest.concurrent.Futures.{PatienceConfig, scaled}
 import org.scalatest.time.{Millis, Seconds, Span}
 import slick.dbio.DBIO
 
@@ -1462,6 +1439,42 @@ class CompactEntityProviderSpec
       )
     )
   }
+
+
+  behavior of "copyEntities"
+
+  it should "copy entities from source workspace to destination workspace" in {
+    val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    val mockRepository = mock[CompactEntityRepository]
+    when(mockRepository.queries).thenReturn(mockQuery)
+    when(mockRepository.dataSource).thenReturn(slickDataSource)
+    when[ReadWriteAction[Int]](mockRepository.updateLastModified(any[UUID]()))
+      .thenReturn(DBIO.successful(1))
+
+    val sourceWorkspaceId = UUID.randomUUID
+    val sourceWorkspace = Workspace("namespace", "sourceWorkspace", sourceWorkspaceId.toString, "source-bucket", None, new DateTime(), new DateTime(), "creator", Map.empty)
+    val destWorkspace = Workspace("namespace", "destWorkspace", UUID.randomUUID.toString, "dest-bucket", None, new DateTime(), new DateTime(), "creator", Map.empty)
+
+    val entityType = "sampleType"
+    val entityNames = Seq("entity1", "entity2", "entity3")
+
+    val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
+    when(mockQuery.getEntityRefs(any[UUID], any[Set[EntityPointer]])).thenReturn(DBIO.successful(Seq.empty))
+    when(mockQuery.getEntitySubtrees(sourceWorkspaceId, entityType, entityNames.toSet))
+      .thenReturn(DBIO.successful(Map.from(mockEntityRefs.map(ref => ref -> Set.empty))))
+    when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]])).thenReturn(DBIO.successful((3, 0)))
+
+    val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
+    val result = Await.result(provider.copyEntities(sourceWorkspace, destWorkspace, entityType, entityNames, linkExistingEntities = false, defaultRequestContext), atMost)
+
+    result.entitiesCopied.length shouldBe 3
+    result.hardConflicts shouldBe empty
+    result.softConflicts shouldBe empty
+
+    verify(mockQuery, times(1)).getEntityRefs(destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
+    verify(mockQuery, times(1)).copyEntitiesToNewWorkspace(sourceWorkspace.workspaceIdAsUUID, destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
+  }
+
 
   // ====================================================================================================
   //  helper methods
