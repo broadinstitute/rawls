@@ -7,7 +7,22 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, Entity, EntityColumnFilter, EntityCopyResponse, EntityHardConflict, EntityPath, EntityQuery, EntitySoftConflict, FilterOperators, RawlsRequestContext, SortDirections, Workspace}
+import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
+  AttributeEntityReference,
+  AttributeName,
+  Entity,
+  EntityColumnFilter,
+  EntityCopyResponse,
+  EntityHardConflict,
+  EntityPath,
+  EntityQuery,
+  EntitySoftConflict,
+  FilterOperators,
+  RawlsRequestContext,
+  SortDirections,
+  Workspace
+}
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
@@ -204,67 +219,118 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def copyEntitiesToNewWorkspace(sourceWs: UUID,
                                  destWs: UUID,
                                  entityRefs: Set[AttributeEntityReference] = Set()
-                                ): WriteAction[Int] = {
+  ): WriteAction[(Int, Int)] = {
 
     def copyChunkOfEntitiesOrAllEntities(chunk: Set[AttributeEntityReference] = Set()) =
       for {
         entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
-      } yield entitiesCopiedCount
+        entityRefsCopiedCount <- copyEntityReferences(sourceWs, destWs, chunk)
+      } yield (entitiesCopiedCount, entityRefsCopiedCount)
 
-      val chunks: Iterator[Set[AttributeEntityReference]] = if (entityRefs.size > driverComponent.batchSize) {
-        entityRefs.grouped(driverComponent.batchSize)
-      } else {
-        Iterator(entityRefs)
-      }
+    val chunks: Iterator[Set[AttributeEntityReference]] = entityRefs.grouped(driverComponent.batchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 
-    allCopies.map { copyActionResults: Iterator[Int] =>
-      copyActionResults.sum
+    allCopies.map { copyActionResults: Iterator[(Int, Int)] =>
+      (copyActionResults.map(_._1).sum, copyActionResults.map(_._2).sum)
     }
   }
 
   def getEntitySubtrees(workspaceId: UUID,
                         entityType: String,
                         entityNames: Set[String]
-                       ): ReadAction[Seq[EntityPath]] = {
-    val refs = entityNames.map { name => AttributeEntityReference(entityType, name) }
+  ): ReadAction[Map[AttributeEntityReference, Set[AttributeEntityReference]]] = {
+    val refs = entityNames.map(name => AttributeEntityReference(entityType, name))
     for {
       startingEntityRecords <- getEntityRefs(workspaceId, refs)
-      entities = startingEntityRecords.map { record => record.toAttributeEntityReference}
-      refsToId = startingEntityRecords.map(record => EntityPath(Seq(record.toAttributeEntityReference)) -> record.toAttributeEntityReference).toMap
-      allRefs <- recursiveGetEntityReferences(workspaceId, entities.toSet, refsToId)
+      entities = startingEntityRecords.map(record => record.toAttributeEntityReference)
+      allRefs <- recursiveGetEntityReferences(workspaceId, entities.toSet)
     } yield allRefs
   }
 
   def recursiveGetEntityReferences(workspaceId: UUID,
-                                   entities: Set[AttributeEntityReference],
-                                   accumulatedPathsWithLastId: Map[EntityPath, AttributeEntityReference]
-                                  ): ReadAction[Seq[EntityPath]] = {
-    val actions: Seq[ReadAction[Seq[(AttributeEntityReference, AttributeEntityReference)]]] = entities.toSeq.map { entity =>
-      getReferencesTo(workspaceId, Seq(entity)).map { references =>
-        references.map(ref => (entity, ref))
-      }
-    }
+                                   entities: Set[AttributeEntityReference]
+  ): ReadAction[Map[AttributeEntityReference, Set[AttributeEntityReference]]] =
+    if (entities.isEmpty) {
+      DBIO.successful(Map.empty)
+    } else {
+      val entityTypeNameTuples = entities.map(ref => (ref.entityType, ref.entityName))
 
-    DBIO.sequence(actions).map(_.flatten.toSet).flatMap { priorEntityWithCurrentRec =>
-      val currentPaths = priorEntityWithCurrentRec.flatMap { case (priorEntity, currentRec) =>
-        val pathsThatEndWithPrior = accumulatedPathsWithLastId.filter { case (_, entity) => entity == priorEntity }
-        pathsThatEndWithPrior.keys.map(_.path).map { path =>
-          (EntityPath(path :+ currentRec), currentRec)
+      val query =
+        sql"""
+        with recursive EntityReferences as (
+          -- Base case: start with the initial set of entities
+          select
+            er.from_entity_type,
+            er.from_name,
+            er.to_entity_type,
+            er.to_name
+          from ENTITY_REFS er
+          where er.workspace_id = $workspaceId
+          and (er.from_entity_type, er.from_name) in (#${reduceSqlActionsWithDelim(entityTypeNameTuples.map {
+                                                                                     case (entityType, name) =>
+                                                                                       sql"($entityType, $name)"
+                                                                                   }.toSeq,
+                                                                                   sql","
+          )})
+
+          union distinct
+
+          -- Recursive case: find references to other entities
+          select
+            er.from_entity_type,
+            er.from_name,
+            er.to_entity_type,
+            er.to_name
+          from EntityReferences er1
+          join ENTITY_REFS er
+          on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
+          where er.workspace_id = $workspaceId
+        )
+        select from_entity_type, from_name, to_entity_type, to_name
+        from EntityReferences
+      """.as[(String, String, String, String)].map { rows =>
+          rows
+            .groupMap(row => AttributeEntityReference(row._1, row._2))(row => AttributeEntityReference(row._3, row._4))
+            .view
+            .mapValues(_.toSet)
+            .toMap
         }
-      }.toMap
 
-      val untraversedIds = priorEntityWithCurrentRec.map(_._2) -- accumulatedPathsWithLastId.values.toSet
-      if (untraversedIds.isEmpty) {
-        DBIO.successful(accumulatedPathsWithLastId.keys.toSeq)
-      } else {
-        recursiveGetEntityReferences(workspaceId, untraversedIds, accumulatedPathsWithLastId ++ currentPaths)
-      }
+      query
     }
-  }
 
-  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[AttributeEntityReference]): ReadWriteAction[Int] =
+//  def recursiveGetEntityReferences(workspaceId: UUID,
+//                                   entities: Set[AttributeEntityReference],
+//                                   accumulatedPathsWithLastId: Map[EntityPath, AttributeEntityReference]
+//                                  ): ReadAction[Seq[EntityPath]] = {
+//    val actions: Seq[ReadAction[Seq[(AttributeEntityReference, AttributeEntityReference)]]] = entities.toSeq.map { entity =>
+//      getReferencesTo(workspaceId, Seq(entity)).map { references =>
+//        references.map(ref => (entity, ref))
+//      }
+//    }
+//
+//    DBIO.sequence(actions).map(_.flatten.toSet).flatMap { priorEntityWithCurrentRec =>
+//      val currentPaths = priorEntityWithCurrentRec.flatMap { case (priorEntity, currentRec) =>
+//        val pathsThatEndWithPrior = accumulatedPathsWithLastId.filter { case (_, entity) => entity == priorEntity }
+//        pathsThatEndWithPrior.keys.map(_.path).map { path =>
+//          (EntityPath(path :+ currentRec), currentRec)
+//        }
+//      }.toMap
+//
+//      val untraversedIds = priorEntityWithCurrentRec.map(_._2) -- accumulatedPathsWithLastId.values.toSet
+//      if (untraversedIds.isEmpty) {
+//        DBIO.successful(accumulatedPathsWithLastId.keys.toSeq)
+//      } else {
+//        recursiveGetEntityReferences(workspaceId, untraversedIds, accumulatedPathsWithLastId ++ currentPaths)
+//      }
+//    }
+//  }
+
+  def copyEntities(sourceWorkspaceId: UUID,
+                   destWorkspaceId: UUID,
+                   refs: Set[AttributeEntityReference]
+  ): ReadWriteAction[Int] =
     if (refs.isEmpty) {
       DBIO.successful(0)
     } else {
@@ -276,11 +342,40 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
              where e.workspace_id = $sourceWorkspaceId
              and deleted = 0
              and ( """,
-        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "))
-             sql""" );"""
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or ")
+      )
+      sql""" );"""
       sql.asUpdate
-  }
+    }
 
+  /**
+   * Given a destWorkspaceId: UUID and refs: Set[AttributeEntityReference]
+   * select rows from ENTITY_REFS table for the source workspace where the from_entity_type and from_name are in the refs set
+   * and insert new rows into ENTITY_REFS table for the destWorkspaceId with the same from_entity_type and from_name
+   */
+  def copyEntityReferences(sourceWorkspaceId: UUID,
+                           destWorkspaceId: UUID,
+                           refs: Set[AttributeEntityReference]
+  ): ReadWriteAction[Int] =
+    if (refs.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs, typeColumn = "from_entity_type", nameColumn = "from_name")
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name)
+               select $destWorkspaceId, from_entity_type, from_name, to_entity_type, to_name
+               from ENTITY_REFS
+               where workspace_id = $sourceWorkspaceId
+               and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.asUpdate
+    }
 
   /** Given a set of entity type/name pairs, return the count of those entities that exist.
     *
