@@ -117,8 +117,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             linkExistingEntities: Boolean,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] =
-    // retrieve the workspace settings for both workspaces and verify that both have CompactDataTables enabled
-//    val sourceSettings = sourceWorkspaceContext.workspaceSettings
     checkAndCopyEntities(
       sourceWorkspaceContext,
       destWorkspaceContext,
