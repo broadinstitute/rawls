@@ -136,15 +136,24 @@ class EntityServiceCompactMigrationSpec
 
   private val atMost = Duration("60 seconds") // timeout for Await() in tests
 
-  behavior of "Compact Entity Migration"
+  private val testWorkspaces = Map(
+    testData.workspace -> 18, // has 20 entities, but 2 of them have no attributes, so 18 entities are updated in the migration
+    testData.workspaceNoAttrs -> 0, // has 0 entities
+    testData.workspaceWithRealm -> 0 // has 1 entity, but that entity has no attributes, so 0 entities are updated in the migration
+  )
 
-  getAllWorkspaces.filterNot(_.name.contains("azure")).foreach { workspace =>
+  behavior of "Compact Entity Migration"
+  testWorkspaces.foreach { case (workspace, expectedCount) =>
+    // getAllWorkspaces.filterNot(_.name.contains("azure")).foreach { workspace =>
     it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" in withTestDataServices {
       apiService =>
         // entity data is already loaded into legacy tables via withTestDataServices
 
         // perform migration - this keeps legacy attributes and adds Quicksilver attributes
-        Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+        val entitiesUpdated =
+          Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+
+        entitiesUpdated shouldBe expectedCount
 
         val defaultRequestContext =
           RawlsRequestContext(

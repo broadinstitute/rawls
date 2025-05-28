@@ -555,7 +555,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     *
     */
   def quicksilverMigration(workspaceName: WorkspaceName): Future[Int] = {
-    val chunkSize = 50000 // process 50k entities at a time to ensure temp tables don't get too big
+    // Number of entities to handle in a single chunk when migrating from legacy to compact.
+    // The migration relies on temp tables; this setting ensures the temp tables do not grow too large.
+    val batchSize = 50000
 
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
@@ -589,12 +591,24 @@ class EntityService(protected val ctx: RawlsRequestContext,
           val tick = System.currentTimeMillis()
 
           for {
-            batchBoundaries <- quicksilverCalculateBatches(workspaceId, chunkSize, dataAccess)
-
-            // TODO CORE-473: batch into groups of 50k (???????) entities or so. Use a "cursor" to find min/max entity IDs?
+            // batch into groups of 50k (???????) entities or so. Use a "cursor" to find min/max entity IDs?
             //     - determine all chunk boundaries; this will give us the number of batches
             //     - for each chunk, do the migration
-            numEntitiesUpdated <- quicksilverMigrateBatch(workspaceId, shardId, dataAccess, s)
+            batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
+            // niceties for logging
+            indexedBoundaries = batchBoundaries.zipWithIndex
+
+            _ = logger.info(
+              s"Quicksilver migration: found batch boundaries: $batchBoundaries ..."
+            )
+
+            updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
+              // TODO CORE-473: this logging happens eagerly and is out of order; fix
+              logger.info(s"Quicksilver migration: batch ${idx + 1}/${indexedBoundaries.size} ...")
+              quicksilverMigrateBatch(workspaceId, shardId, boundary, dataAccess, s)
+            })
+
+            numEntitiesUpdated = updateCounts.sum
 
             // populate the ENTITY_REFS table for this workspace
             _ <- traceDBIOWithParent("migrationAddReferences", s) { _ =>
@@ -632,21 +646,43 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
   }
 
+  case class MigrationBoundary(startEntityId: Long, endEntityId: Long)
+
+  /*
+    TODO CORE-473: could do this in a single query with a windowing function, like so:
+      WITH NumberedRows AS (
+        SELECT
+            id,
+            ROW_NUMBER() OVER (ORDER BY id) AS row_num
+        FROM ENTITY
+        WHERE id > -1
+            and workspace_id = x'FB6853941E3F444391E4209D6DB2D16D'
+                    and deleted = 0
+      )
+      SELECT
+          FLOOR((row_num - 1) / 6) AS win,
+          MAX(id) AS max_id
+      FROM NumberedRows
+      GROUP BY win
+      ORDER BY win;
+   */
   private def quicksilverCalculateBatches(workspaceId: UUID,
                                           batchSize: Int,
                                           dataAccess: DataAccess
-  ): ReadAction[Seq[Int]] = {
-    def findNextBatch(accum: Seq[Int], startingId: Long): ReadAction[Seq[Int]] =
-      dataAccess.compactEntityQuery.findMaxChunkId(batchSize, startingId, workspaceId).flatMap {
-        case None            => DBIO.successful(accum)
-        case Some(nextLimit) => findNextBatch(accum :+ nextLimit, nextLimit)
+  ): ReadAction[Seq[MigrationBoundary]] = {
+
+    def findNextBatch(accum: Seq[MigrationBoundary], startingId: Long): ReadAction[Seq[MigrationBoundary]] =
+      dataAccess.compactEntityQuery.findMaxBatchId(batchSize, startingId, workspaceId).flatMap {
+        case None | Some(0L) => DBIO.successful(accum)
+        case Some(nextLimit) => findNextBatch(accum :+ MigrationBoundary(startingId, nextLimit), nextLimit)
       }
 
-    findNextBatch(Seq.empty, 0)
+    findNextBatch(Seq.empty, -1)
   }
 
   private def quicksilverMigrateBatch(workspaceId: UUID,
                                       shardId: String,
+                                      boundary: MigrationBoundary,
                                       dataAccess: DataAccess,
                                       parentContext: RawlsRequestContext
   ): ReadWriteAction[Int] = {
@@ -659,7 +695,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       traceDBIOWithParent(spanName, parentContext) { _ =>
         op
       }.map { result =>
-        logger.info(s"Quicksilver migration: $logMessage (${System.currentTimeMillis() - tick}ms) ...")
+        logger.info(s"Quicksilver migration:     - $logMessage (${System.currentTimeMillis() - tick}ms) ...")
         result
       }
     }
@@ -673,12 +709,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
       }
       // normalize attributes to JSON scalars and insert into the temp table
       _ <- logAndTrace("migrationPopulateAttributeTempTable", "populated attribute temp table") {
-        dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceId, shardId)
+        dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceId,
+                                                                          shardId,
+                                                                          boundary.startEntityId,
+                                                                          boundary.endEntityId
+        )
       }
       // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
       _ <- logAndTrace("migrationPopulateEntityTempTable", "populated entity temp table") {
         dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
       }
+
       // update ENTITY from the contents of the temp table
       numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTable", "updated ENTITY from temp table") {
         dataAccess.compactEntityQuery.migrationUpdateEntityTable(workspaceId)

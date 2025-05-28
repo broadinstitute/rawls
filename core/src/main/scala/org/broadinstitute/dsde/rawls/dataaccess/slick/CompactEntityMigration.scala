@@ -12,15 +12,15 @@ import scala.annotation.unused
 trait CompactEntityMigration {
   this: CompactEntityQuery =>
 
-  def findMaxChunkId(chunkSize: Int, startingId: Long, workspaceId: UUID): ReadAction[Option[Long]] =
+  def findMaxBatchId(batchSize: Int, startingId: Long, workspaceId: UUID): ReadAction[Option[Long]] =
     sql"""select max(id)
-          from ENTITY
-          where id > $startingId
-          and workspace_id = $workspaceId
-          and deleted = 0
-          order by id
-          limit #$chunkSize
-          """.as[Long].headOption
+          from (select id
+                from ENTITY
+                where id > $startingId
+                and workspace_id = $workspaceId
+                and deleted = 0
+                order by id
+                limit #$batchSize) as chunk""".as[Long].headOption
 
   /** temp table used during migration from legacy to compact entities */
   def migrationCreateAttributeTempTable: ReadWriteAction[Int] =
@@ -55,7 +55,11 @@ trait CompactEntityMigration {
     * represent empty lists as a row with list_length 0, list_index null, and value_number -1. Without the special-case handling,
     * these would be returned as AttributeNumber(-1). See AttributeComponent.marshalEmptyVal for details.
     */
-  def migrationPopulateAttributeTempTable(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
+  def migrationPopulateAttributeTempTable(workspaceId: UUID,
+                                          shardId: String,
+                                          startEntityId: Long,
+                                          endEntityId: Long
+  ): ReadWriteAction[Int] =
     sql"""insert into QS_ATTR_TEMP(entity_id, attr_name, list_index, attr_value)
           select
             e.id,
@@ -79,6 +83,8 @@ trait CompactEntityMigration {
           where e.workspace_id = $workspaceId
           and e.deleted = 0
           and ea.deleted = 0
+          and e.id > $startEntityId
+          and e.id <= $endEntityId
           order by ea.list_index, e.id, attr_name""".asUpdate
 
   /**
