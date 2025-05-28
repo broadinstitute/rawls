@@ -12,6 +12,16 @@ import scala.annotation.unused
 trait CompactEntityMigration {
   this: CompactEntityQuery =>
 
+  def findMaxChunkId(chunkSize: Int, startingId: Long, workspaceId: UUID): ReadAction[Option[Long]] =
+    sql"""select max(id)
+          from ENTITY
+          where id > $startingId
+          and workspace_id = $workspaceId
+          and deleted = 0
+          order by id
+          limit #$chunkSize
+          """.as[Long].headOption
+
   /** temp table used during migration from legacy to compact entities */
   def migrationCreateAttributeTempTable: ReadWriteAction[Int] =
     sql"""create temporary table QS_ATTR_TEMP(

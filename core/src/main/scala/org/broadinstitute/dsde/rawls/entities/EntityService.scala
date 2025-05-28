@@ -26,9 +26,10 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.dbio.DBIO
+import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
 import java.sql.SQLException
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 object EntityService {
@@ -553,7 +554,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * This migration method is unoptimized and in flux; use at your own risk
     *
     */
-  def quicksilverMigration(workspaceName: WorkspaceName): Future[Int] =
+  def quicksilverMigration(workspaceName: WorkspaceName): Future[Int] = {
+    val chunkSize = 50000 // process 50k entities at a time to ensure temp tables don't get too big
+
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
         // verify owner of workspace.
@@ -563,6 +566,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                               Some(WorkspaceAttributeSpecs(all = false))
           )
         }
+        workspaceId = workspaceContext.workspaceIdAsUUID
 
         // confirm if this is already a quicksilver workspace by checking settings
         workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
@@ -580,63 +584,21 @@ class EntityService(protected val ctx: RawlsRequestContext,
 
         // start a transaction; here's where we do a bunch of writes
         userResult <- dataSource.inTransaction { dataAccess =>
-          val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
+          val shardId: String = dataAccess.determineShard(workspaceId)
 
           val tick = System.currentTimeMillis()
 
           for {
+            batchBoundaries <- quicksilverCalculateBatches(workspaceId, chunkSize, dataAccess)
 
-            // create temp tables
-            _ <- traceDBIOWithParent("migrationCreateAttributeTempTable", s) { _ =>
-              dataAccess.compactEntityQuery.migrationCreateAttributeTempTable
-            }
-            _ = logger.info(
-              s"Quicksilver migration: created attribute temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
-            )
-            _ <- traceDBIOWithParent("migrationCreateEntityTempTable", s) { _ =>
-              dataAccess.compactEntityQuery.migrationCreateEntityTempTable
-            }
-            _ = logger.info(
-              s"Quicksilver migration: created entity temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
-            )
-            // normalize attributes to JSON scalars and insert into the temp table
-            _ <- traceDBIOWithParent("migrationPopulateAttributeTempTable", s) { _ =>
-              dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceContext.workspaceIdAsUUID,
-                                                                                shardId
-              )
-            }
-            _ = logger.info(
-              s"Quicksilver migration: populated attribute temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
-            )
-            // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
-            _ <- traceDBIOWithParent("migrationPopulateEntityTempTable", s) { _ =>
-              dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
-            }
-            _ = logger.info(
-              s"Quicksilver migration: populated entity temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
-            )
-            // update ENTITY from the contents of the temp table
-            numEntitiesUpdated <- traceDBIOWithParent("migrationUpdateEntityTable", s) { _ =>
-              dataAccess.compactEntityQuery.migrationUpdateEntityTable(
-                workspaceContext.workspaceIdAsUUID
-              )
-            }
-            _ = logger.info(
-              s"Quicksilver migration: updating ENTITY from temp table (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
-            )
-            // drop temp tables
-            _ <- traceDBIOWithParent("migrationDropAttributeTempTable", s) { _ =>
-              dataAccess.compactEntityQuery.migrationDropAttributeTempTable
-            }
-            _ <- traceDBIOWithParent("migrationDropEntityTempTable", s) { _ =>
-              dataAccess.compactEntityQuery.migrationDropEntityTempTable
-            }
-            _ = logger.info(
-              s"Quicksilver migration: dropped temp tables (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
-            )
+            // TODO CORE-473: batch into groups of 50k (???????) entities or so. Use a "cursor" to find min/max entity IDs?
+            //     - determine all chunk boundaries; this will give us the number of batches
+            //     - for each chunk, do the migration
+            numEntitiesUpdated <- quicksilverMigrateBatch(workspaceId, shardId, dataAccess, s)
+
             // populate the ENTITY_REFS table for this workspace
             _ <- traceDBIOWithParent("migrationAddReferences", s) { _ =>
-              dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
+              dataAccess.compactEntityQuery.migrationAddReferences(workspaceId, shardId)
             }
             _ = logger.info(
               s"Quicksilver migration: populated ENTITY_REFS (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
@@ -668,4 +630,66 @@ class EntityService(protected val ctx: RawlsRequestContext,
         // return a count of entities updated
       } yield userResult
     }
+  }
+
+  private def quicksilverCalculateBatches(workspaceId: UUID,
+                                          batchSize: Int,
+                                          dataAccess: DataAccess
+  ): ReadAction[Seq[Int]] = {
+    def findNextBatch(accum: Seq[Int], startingId: Long): ReadAction[Seq[Int]] =
+      dataAccess.compactEntityQuery.findMaxChunkId(batchSize, startingId, workspaceId).flatMap {
+        case None            => DBIO.successful(accum)
+        case Some(nextLimit) => findNextBatch(accum :+ nextLimit, nextLimit)
+      }
+
+    findNextBatch(Seq.empty, 0)
+  }
+
+  private def quicksilverMigrateBatch(workspaceId: UUID,
+                                      shardId: String,
+                                      dataAccess: DataAccess,
+                                      parentContext: RawlsRequestContext
+  ): ReadWriteAction[Int] = {
+
+    // instrumentation helper
+    def logAndTrace[T, E <: Effect](spanName: String, logMessage: String)(
+      op: DBIOAction[T, NoStream, E]
+    ): DBIOAction[T, NoStream, E with Effect] = {
+      val tick = System.currentTimeMillis()
+      traceDBIOWithParent(spanName, parentContext) { _ =>
+        op
+      }.map { result =>
+        logger.info(s"Quicksilver migration: $logMessage (${System.currentTimeMillis() - tick}ms) ...")
+        result
+      }
+    }
+
+    for {
+      // create temp tables
+      _ <- logAndTrace("migrationCreateTempTables", "created migration temp tables") {
+        DBIO.seq(dataAccess.compactEntityQuery.migrationCreateAttributeTempTable,
+                 dataAccess.compactEntityQuery.migrationCreateEntityTempTable
+        )
+      }
+      // normalize attributes to JSON scalars and insert into the temp table
+      _ <- logAndTrace("migrationPopulateAttributeTempTable", "populated attribute temp table") {
+        dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceId, shardId)
+      }
+      // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
+      _ <- logAndTrace("migrationPopulateEntityTempTable", "populated entity temp table") {
+        dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
+      }
+      // update ENTITY from the contents of the temp table
+      numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTable", "updated ENTITY from temp table") {
+        dataAccess.compactEntityQuery.migrationUpdateEntityTable(workspaceId)
+      }
+      // drop temp tables
+      _ <- logAndTrace("migrationDropTempTables", "dropped temp tables") {
+        DBIO.seq(dataAccess.compactEntityQuery.migrationDropAttributeTempTable,
+                 dataAccess.compactEntityQuery.migrationDropEntityTempTable
+        )
+      }
+    } yield numEntitiesUpdated
+  }
+
 }
