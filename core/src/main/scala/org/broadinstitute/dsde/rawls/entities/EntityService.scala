@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
+import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -591,12 +592,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
           val tick = System.currentTimeMillis()
 
           for {
+            // get the current value of
+            defaultSortBufferSize <- dataAccess.compactEntityQuery.getSortBufferSetting
             // batch into groups of 50k (???????) entities or so. Use a "cursor" to find min/max entity IDs?
             //     - determine all chunk boundaries; this will give us the number of batches
             //     - for each chunk, do the migration
             batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
             // niceties for logging
             indexedBoundaries = batchBoundaries.zipWithIndex
+
+            // set sort buffer size to 8M; this avoids MySQL errors during migration
+            _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(8388608L)
 
             _ = logger.info(
               s"Quicksilver migration: found batch boundaries: $batchBoundaries ..."
@@ -628,6 +634,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
               *  _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
               *  _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
               * *** */
+
+            // reset sort buffer size to its original value
+            _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
 
             _ = logger.info(s"Quicksilver migration: done!")
           } yield numEntitiesUpdated
@@ -691,11 +700,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
     def logAndTrace[T, E <: Effect](spanName: String, logMessage: String)(
       op: DBIOAction[T, NoStream, E]
     ): DBIOAction[T, NoStream, E with Effect] = {
-      val tick = System.currentTimeMillis()
+      val stopwatch = StopWatch.createStarted()
       traceDBIOWithParent(spanName, parentContext) { _ =>
         op
       }.map { result =>
-        logger.info(s"Quicksilver migration:     - $logMessage (${System.currentTimeMillis() - tick}ms) ...")
+        stopwatch.stop()
+        logger.info(s"Quicksilver migration:     - $logMessage (${stopwatch.formatTime()}) ...")
         result
       }
     }
@@ -725,6 +735,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
         dataAccess.compactEntityQuery.migrationUpdateEntityTable(workspaceId)
       }
       // drop temp tables
+      // this explicitly uses create/drop table instead of truncate to avoid implicit transaction commits:
+      // https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html
       _ <- logAndTrace("migrationDropTempTables", "dropped temp tables") {
         DBIO.seq(dataAccess.compactEntityQuery.migrationDropAttributeTempTable,
                  dataAccess.compactEntityQuery.migrationDropEntityTempTable

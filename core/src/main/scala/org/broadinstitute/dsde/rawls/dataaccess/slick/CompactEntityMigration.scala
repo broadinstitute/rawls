@@ -12,6 +12,14 @@ import scala.annotation.unused
 trait CompactEntityMigration {
   this: CompactEntityQuery =>
 
+  def getSortBufferSetting: ReadAction[Long] =
+    sql"""SELECT @@sort_buffer_size;""".as[Long].head
+
+  // default 262144 = 256k
+  // 8M = 8,388,608
+  def setSessionSortBuffer(bufferSize: Long) =
+    sql"""SET SESSION sort_buffer_size = $bufferSize;""".asUpdate
+
   def findMaxBatchId(batchSize: Int, startingId: Long, workspaceId: UUID): ReadAction[Option[Long]] =
     sql"""select max(id)
           from (select id
