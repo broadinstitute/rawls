@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.time.StopWatch
@@ -550,10 +550,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
   }
 
   /**
-    * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to compact (Quicksilver) format.
-    *
-    * This migration method is unoptimized and in flux; use at your own risk
-    *
+    * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to
+    * compact (Quicksilver) format.
     */
   def quicksilverMigration(workspaceName: WorkspaceName): Future[Int] = {
     // Number of entities to handle in a single chunk when migrating from legacy to compact.
@@ -589,29 +587,38 @@ class EntityService(protected val ctx: RawlsRequestContext,
         userResult <- dataSource.inTransaction { dataAccess =>
           val shardId: String = dataAccess.determineShard(workspaceId)
 
-          val tick = System.currentTimeMillis()
+          val stopwatch = StopWatch.createStarted()
+
+          logger.info(
+            s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
+          )
 
           for {
-            // get the current value of
+            // get the current value of MySQL sort_buffer_size
             defaultSortBufferSize <- dataAccess.compactEntityQuery.getSortBufferSetting
-            // batch into groups of 50k (???????) entities or so. Use a "cursor" to find min/max entity IDs?
-            //     - determine all chunk boundaries; this will give us the number of batches
-            //     - for each chunk, do the migration
+            // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
+            // for each batch. later queries will use those boundaries to migrate entities in batches, which
+            // prevents the temp tables from growing too large.
             batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
             // niceties for logging
             indexedBoundaries = batchBoundaries.zipWithIndex
 
-            // set sort buffer size to 8M; this avoids MySQL errors during migration
+            // set sort buffer size to 8MB; this avoids MySQL errors during migration
+            // with a "Out of sort memory, consider increasing server sort buffer size" message.
+            // see also https://bugs.mysql.com/bug.php?id=103225
             _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(8388608L)
 
-            _ = logger.info(
-              s"Quicksilver migration: found batch boundaries: $batchBoundaries ..."
-            )
-
+            // for each batch, migrate the entities in that batch
             updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
-              // TODO CORE-473: this logging happens eagerly and is out of order; fix
-              logger.info(s"Quicksilver migration: batch ${idx + 1}/${indexedBoundaries.size} ...")
-              quicksilverMigrateBatch(workspaceId, shardId, boundary, dataAccess, s)
+              quicksilverMigrateBatch(workspaceId,
+                                      shardId,
+                                      boundary,
+                                      dataAccess,
+                                      idx,
+                                      indexedBoundaries.size,
+                                      stopwatch,
+                                      s
+              )
             })
 
             numEntitiesUpdated = updateCounts.sum
@@ -621,7 +628,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
               dataAccess.compactEntityQuery.migrationAddReferences(workspaceId, shardId)
             }
             _ = logger.info(
-              s"Quicksilver migration: populated ENTITY_REFS (elapsed: ${System.currentTimeMillis() - tick}ms) ..."
+              s"Quicksilver migration $workspaceId: populated ENTITY_REFS (${stopwatch.formatTime()}) ..."
             )
 
             /** *** don't delete legacy data; we'll do that en masse after everything is migrated
@@ -638,7 +645,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
             // reset sort buffer size to its original value
             _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
 
-            _ = logger.info(s"Quicksilver migration: done!")
+            _ = logger.info(s"Quicksilver migration $workspaceId: done! (${stopwatch.formatTime()})")
           } yield numEntitiesUpdated
         }
 
@@ -655,25 +662,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  case class MigrationBoundary(startEntityId: Long, endEntityId: Long)
+  private case class MigrationBoundary(startEntityId: Long, endEntityId: Long)
 
-  /*
-    TODO CORE-473: could do this in a single query with a windowing function, like so:
-      WITH NumberedRows AS (
-        SELECT
-            id,
-            ROW_NUMBER() OVER (ORDER BY id) AS row_num
-        FROM ENTITY
-        WHERE id > -1
-            and workspace_id = x'FB6853941E3F444391E4209D6DB2D16D'
-                    and deleted = 0
-      )
-      SELECT
-          FLOOR((row_num - 1) / 6) AS win,
-          MAX(id) AS max_id
-      FROM NumberedRows
-      GROUP BY win
-      ORDER BY win;
+  /**
+   * Calculate the boundaries for each batch of entities to migrate
+   * This method returns a sequence of MigrationBoundary objects, each containing the start and end entity ids
+   * for a batch. The batch sizes are determined by the batchSize parameter.
    */
   private def quicksilverCalculateBatches(workspaceId: UUID,
                                           batchSize: Int,
@@ -689,26 +683,37 @@ class EntityService(protected val ctx: RawlsRequestContext,
     findNextBatch(Seq.empty, -1)
   }
 
+  /**
+    * Perform the work to migrate a single batch of entities from legacy to compact format.
+    * This method will:
+    *   - create temporary tables for attributes and entities
+    *   - populate the attribute temp table with JSON-normalized attributes
+    *   - populate the entity temp table with a single JSON object per entity
+    *   - update the ENTITY table from the entity temp table
+    *   - drop the temporary tables
+    */
   private def quicksilverMigrateBatch(workspaceId: UUID,
                                       shardId: String,
                                       boundary: MigrationBoundary,
                                       dataAccess: DataAccess,
+                                      batchIdx: Int,
+                                      totalBatches: Int,
+                                      stopwatch: StopWatch,
                                       parentContext: RawlsRequestContext
   ): ReadWriteAction[Int] = {
 
     // instrumentation helper
     def logAndTrace[T, E <: Effect](spanName: String, logMessage: String)(
       op: DBIOAction[T, NoStream, E]
-    ): DBIOAction[T, NoStream, E with Effect] = {
-      val stopwatch = StopWatch.createStarted()
+    ): DBIOAction[T, NoStream, E with Effect] =
       traceDBIOWithParent(spanName, parentContext) { _ =>
         op
       }.map { result =>
-        stopwatch.stop()
-        logger.info(s"Quicksilver migration:     - $logMessage (${stopwatch.formatTime()}) ...")
+        logger.info(
+          s"Quicksilver migration $workspaceId batch ${batchIdx + 1}/$totalBatches: $logMessage (${stopwatch.formatTime()}) ..."
+        )
         result
       }
-    }
 
     for {
       // create temp tables
