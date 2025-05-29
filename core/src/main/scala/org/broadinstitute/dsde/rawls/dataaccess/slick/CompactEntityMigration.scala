@@ -12,14 +12,21 @@ import scala.annotation.unused
 trait CompactEntityMigration {
   this: CompactEntityQuery =>
 
+  /** get the current value of the sort_buffer_size setting */
   def getSortBufferSetting: ReadAction[Long] =
     sql"""SELECT @@sort_buffer_size;""".as[Long].head
 
-  // default 262144 = 256k
-  // 8M = 8,388,608
+  /** set MySQL's sort_buffer_size setting to a given value.
+    * default 262144 = 256k
+    * 8M = 8,388,608
+    */
   def setSessionSortBuffer(bufferSize: Long) =
     sql"""SET SESSION sort_buffer_size = $bufferSize;""".asUpdate
 
+  /** find the maximum entity id in a workspace, starting from a given id.
+    * This is called recursively from EntityService to find the start/end entity ids for each batch of entities
+    * being migrated.
+    */
   def findMaxBatchId(batchSize: Int, startingId: Long, workspaceId: UUID): ReadAction[Option[Long]] =
     sql"""select max(id)
           from (select id

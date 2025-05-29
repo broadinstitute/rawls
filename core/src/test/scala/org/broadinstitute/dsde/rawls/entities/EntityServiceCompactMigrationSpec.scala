@@ -117,23 +117,6 @@ class EntityServiceCompactMigrationSpec
     testCode(apiService)
   }
 
-  /**
-   * Returns a Seq containing all members of testData that are of type Workspace
-   * Uses reflection to find all Workspace fields in testData
-   */
-  def getAllWorkspaces: Seq[Workspace] = {
-    import scala.reflect.runtime.universe._
-
-    val mirror = runtimeMirror(testData.getClass.getClassLoader)
-    val instanceMirror = mirror.reflect(testData)
-    val testDataType = instanceMirror.symbol.toType
-
-    testDataType.decls.collect {
-      case m: MethodSymbol if m.isGetter && m.returnType <:< typeOf[Workspace] =>
-        instanceMirror.reflectMethod(m).apply().asInstanceOf[Workspace]
-    }.toSeq
-  }
-
   private val atMost = Duration("60 seconds") // timeout for Await() in tests
 
   private val testWorkspaces = Map(
