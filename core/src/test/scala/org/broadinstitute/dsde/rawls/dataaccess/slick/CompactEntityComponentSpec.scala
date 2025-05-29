@@ -442,7 +442,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
-
   behavior of "queryEntitiesForAttributes"
 
   it should "get the attribute from an entity" in withMinimalTestDatabase { _ =>
@@ -463,73 +462,73 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   }
 
-//  behavior of "queryRelationsForAttribute"
-//
-//  it should "get the attributes from a single reference" in withMinimalTestDatabase { _ =>
-//    // Insert referenced entities
-//    val sample1 = Entity(
-//      "sample1",
-//      "sample",
-//      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
-//    )
-//
-//    val sample2 = Entity(
-//      "sample2",
-//      "sample",
-//      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
-//    )
-//
-//    // Referencing entity
-//    val set1 = Entity(
-//      "set1",
-//      "sample_set",
-//      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
-//    )
-//
-//    insertAndGetAll(
-//      Seq(sample1, sample2, set1)
-//    )
-//
-//    runAndWait(
-//      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
-//    ) shouldBe Seq(AttributeString("a"))
-//
-//  }
-//
-//  it should "get the attributes from a list of references" in withMinimalTestDatabase { _ =>
-//    // Insert referenced entities
-//    val sample1 = Entity(
-//      "sample1",
-//      "sample",
-//      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
-//    )
-//
-//    val sample2 = Entity(
-//      "sample2",
-//      "sample",
-//      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
-//    )
-//
-//    // Referencing entity
-//    val set1 = Entity(
-//      "set1",
-//      "sample_set",
-//      Map(
-//        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
-//          Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
-//        )
-//      )
-//    )
-//
-//    insertAndGetAll(
-//      Seq(sample1, sample2, set1)
-//    )
-//
-//    runAndWait(
-//      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
-//    ) shouldBe Seq(AttributeString("a"), AttributeString("b"))
-//
-//  }
+  //  behavior of "queryRelationsForAttribute"
+  //
+  //  it should "get the attributes from a single reference" in withMinimalTestDatabase { _ =>
+  //    // Insert referenced entities
+  //    val sample1 = Entity(
+  //      "sample1",
+  //      "sample",
+  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+  //    )
+  //
+  //    val sample2 = Entity(
+  //      "sample2",
+  //      "sample",
+  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+  //    )
+  //
+  //    // Referencing entity
+  //    val set1 = Entity(
+  //      "set1",
+  //      "sample_set",
+  //      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+  //    )
+  //
+  //    insertAndGetAll(
+  //      Seq(sample1, sample2, set1)
+  //    )
+  //
+  //    runAndWait(
+  //      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
+  //    ) shouldBe Seq(AttributeString("a"))
+  //
+  //  }
+  //
+  //  it should "get the attributes from a list of references" in withMinimalTestDatabase { _ =>
+  //    // Insert referenced entities
+  //    val sample1 = Entity(
+  //      "sample1",
+  //      "sample",
+  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+  //    )
+  //
+  //    val sample2 = Entity(
+  //      "sample2",
+  //      "sample",
+  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+  //    )
+  //
+  //    // Referencing entity
+  //    val set1 = Entity(
+  //      "set1",
+  //      "sample_set",
+  //      Map(
+  //        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+  //          Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+  //        )
+  //      )
+  //    )
+  //
+  //    insertAndGetAll(
+  //      Seq(sample1, sample2, set1)
+  //    )
+  //
+  //    runAndWait(
+  //      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
+  //    ) shouldBe Seq(AttributeString("a"), AttributeString("b"))
+  //
+  //  }
 
   behavior of "queryRelatedRecordsWithArray"
 
@@ -643,8 +642,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(sample, set))
 
     // Can't really create a RelationContext so mock one that returns the correct getText
-//    val mockRelationContextSamples = Mockito.mock(classOf[RelationContext])
-//    Mockito.when(mockRelationContextSamples.getText).thenReturn("samples")
+    //    val mockRelationContextSamples = Mockito.mock(classOf[RelationContext])
+    //    Mockito.when(mockRelationContextSamples.getText).thenReturn("samples")
     val mockRelationContextParticipant = Mockito.mock(classOf[RelationContext])
     Mockito.when(mockRelationContextParticipant.getText).thenReturn("participant")
 
@@ -845,6 +844,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
     )
     result.get(sample1.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSampleWS1)
+  }
 
   behavior of "attributeExists"
 
@@ -1019,8 +1019,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   }
 
   /**
-   * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
-   */
+     * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
+     */
   private def createEntitiesWithKeys(entityType1AttributeNames: List[AttributeName],
                                      entityType1: String,
                                      workspaceId: UUID
