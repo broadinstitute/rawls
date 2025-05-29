@@ -100,7 +100,7 @@ trait CompactEntityMigration {
           and ea.deleted = 0
           and e.id > $startEntityId
           and e.id <= $endEntityId
-          order by ea.list_index, e.id, attr_name""".asUpdate
+          order by ea.list_index, attr_name""".asUpdate
 
   /**
     * Second step of data massaging to build compact entities:
@@ -121,8 +121,7 @@ trait CompactEntityMigration {
                     else JSON_ARRAYAGG(attr_value)
                 end as attr_value
             from QS_ATTR_TEMP
-            group by entity_id, attr_name
-            order by entity_id, attr_name, list_index)
+            group by entity_id, attr_name)
           select
             entity_id,
             JSON_OBJECT($VERSION_KEY, $CURRENT_VERSION, $ATTRS_KEY, JSON_OBJECTAGG(attr_name, attr_value))
