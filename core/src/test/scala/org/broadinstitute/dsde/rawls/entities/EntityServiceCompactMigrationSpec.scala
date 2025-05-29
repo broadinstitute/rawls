@@ -127,7 +127,6 @@ class EntityServiceCompactMigrationSpec
 
   behavior of "Compact Entity Migration"
   testWorkspaces.foreach { case (workspace, expectedCount) =>
-    // getAllWorkspaces.filterNot(_.name.contains("azure")).foreach { workspace =>
     it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" in withTestDataServices {
       apiService =>
         // entity data is already loaded into legacy tables via withTestDataServices

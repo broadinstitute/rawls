@@ -645,7 +645,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
             // reset sort buffer size to its original value
             _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
 
-            _ = logger.info(s"Quicksilver migration $workspaceId: done! (${stopwatch.formatTime()})")
+            _ = logger.info(
+              s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+            )
           } yield numEntitiesUpdated
         }
 
