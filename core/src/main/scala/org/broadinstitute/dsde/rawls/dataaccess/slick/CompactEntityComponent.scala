@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeName,
+  AttributeRename,
   Entity,
   EntityColumnFilter,
   EntityPointer,
@@ -87,7 +88,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], allowUpsert: Boolean): ReadWriteAction[Int] = {
+  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -97,10 +98,12 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
     }
 
-    val upsertSql = if (allowUpsert) {
-      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
-    } else {
+    // when called with insertOnly=true, the SQL statement is a simple `insert into ...`.
+    // when called with insertOnly=false, the SQL statement is `insert into ... on duplicate key update`.
+    val upsertSql = if (insertOnly) {
       sql""
+    } else {
+      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
     }
 
     concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql","), upsertSql).asUpdate
@@ -114,7 +117,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity), allowUpsert = false)
+    batchCreateEntities(workspaceId, Seq(entity), insertOnly = true)
 
   /**
     * Read a single entity from the db
@@ -369,6 +372,62 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
            where entity_type=$entityType AND deleted=0 AND workspace_id=$workspaceId """
 
     query.asUpdate
+  }
+
+  /**
+    * Hard-delete all of the specified entities that do not have any foreign keys pointed at them.
+    *
+    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
+    *   and requires a temporary table for the big union.
+    */
+  def deleteEntities(workspaceId: UUID, entities: Seq[EntityPointer]): ReadWriteAction[Int] = {
+    // join all the clauses with "or": `(entity_type = ? and name in (?)) or `(entity_type = ? and name in (?))`
+    val criteriaSql: SQLActionBuilder = reduceSqlActionsWithDelim(generateTypeNameSql(entities.toSet).toSeq, sql" or ")
+    val whereClause = concatSqlActions(sql"where (", criteriaSql, sql")")
+    val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
+    finalSql.asUpdate
+  }
+
+  /**
+    * Hard-delete all entities of a given type that do not have any foreign keys pointed at them.
+    *
+    * Note this does not have a "where deleted=0" clause. Thus, it will also hard-delete any entities
+    * that were previously soft-deleted but which no longer have anything pointing at them (this is unlikely)
+    *
+    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
+    *   and requires a temporary table for the big union.
+    */
+  def deleteEntitiesOfType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] = {
+    val whereClause = sql"where entity_type = $entityType"
+    val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
+    finalSql.asUpdate
+  }
+
+  // private helper for deleteEntities and deleteEntitiesOfType
+  private def deleteEntitiesImpl(workspaceId: UUID, whereClause: SQLActionBuilder): SQLActionBuilder = {
+    val startSql = sql"""with
+            CANDIDATE_WORKFLOWS as (select wf.ID, wf.ENTITY_ID
+              from WORKFLOW wf, SUBMISSION s
+              where wf.SUBMISSION_ID = s.ID and s.WORKSPACE_ID = $workspaceId)
+          delete e from ENTITY e """
+
+    // where clause gets inserted here, e.g. `where e.entity_type = ?`
+
+    val endSql = sql""" and e.workspace_id = $workspaceId
+          and e.id not in (
+            select value_entity_ref from WORKSPACE_ATTRIBUTE where owner_id = $workspaceId
+              union
+            select ENTITY_ID from SUBMISSION where WORKSPACE_ID = $workspaceId
+              union
+            select cw.ENTITY_ID from CANDIDATE_WORKFLOWS cw
+              union
+            select sa.value_entity_ref
+            from SUBMISSION_ATTRIBUTE sa, SUBMISSION_VALIDATION sv, CANDIDATE_WORKFLOWS cw
+            where sa.owner_id = sv.id and sv.WORKFLOW_ID = cw.ID
+          )
+       """
+
+    concatSqlActions(startSql, whereClause, endSql)
   }
 
   // Gets any entities that have references to the entities in the given list
@@ -785,6 +844,49 @@ ON (
       entityRowsUpdated <- updateEntityTypeSql.asUpdate
     } yield entityRowsUpdated
   }
+
+  /**
+    * Renames a single attribute across all entities of the given type and workspace.
+    * This method assumes the old and new attribute names have already been validated!
+    *
+    * `Using where. Index used: idx_entity_type_name`
+    */
+  def renameAttribute(workspaceId: UUID,
+                      entityType: String,
+                      oldAttributeName: AttributeName,
+                      renameRequest: AttributeRename
+  ): ReadWriteAction[Int] =
+    // rename is implemented as JSON_REMOVE(JSON_SET(JSON_EXTRACT))
+    // JSON_EXTRACT gets the value of the old attribute
+    // JSON_SET creates the new attribute with that value
+    // JSON_REMOVE deletes the old attribute
+    sql"""update ENTITY
+          set record_version = record_version + 1,
+          attributes = JSON_REMOVE(
+                         JSON_SET(
+                           attributes,
+                           ${slickAttributePath(renameRequest.newAttributeName)},
+                           JSON_EXTRACT(attributes, ${slickAttributePath(oldAttributeName)})),
+                         ${slickAttributePath(oldAttributeName)}
+                       )
+          where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and deleted = 0
+          and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldAttributeName)})
+       """.asUpdate
+
+  /**
+    * Determine if an attribute exists in any entity of the given type and workspace.
+    *
+    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    */
+  def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
+    sql"""select exists (select 1 from ENTITY_KEYS
+         where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)})))"""
+      .as[Boolean]
+      .head
 
   // ====================================================================================================
   //  entity query helpers

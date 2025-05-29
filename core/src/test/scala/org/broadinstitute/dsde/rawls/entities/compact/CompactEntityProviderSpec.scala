@@ -8,12 +8,11 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException
+import org.broadinstitute.dsde.rawls.entities.exceptions._
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
+  AddUpdateAttribute,
+  AttributeUpdateOperation,
+  EntityUpdateDefinition
 }
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -21,6 +20,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
+  AttributeRename,
   AttributeString,
   Entity,
   EntityPointer,
@@ -35,11 +35,11 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo,
   Workspace
 }
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
 import org.scalatest.time.{Millis, Seconds, Span}
 import slick.dbio.DBIO
@@ -48,7 +48,10 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatchers with MockitoTestUtils {
+class CompactEntityProviderSpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with MockitoTestUtils
+    with AttributeSupport {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
   implicit val system: ActorSystem = ActorSystem("CompactEntityProviderSpec")
@@ -107,12 +110,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
-                                                    any(),
-                                                    mockitoEq(true)
-    )
-    // entities have no references, so the input to upsertReferences should be empty
-    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    // entities have no references, so it should skip insertReferences
+    verify(mockQuery, never()).insertReferences(any(), any())
   }
 
   it should "issue multiple insert statements when given large batches" in {
@@ -145,9 +145,9 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
     // should have called batchCreateEntities multiple times to write the entities
     verify(mockQuery, Mockito.atLeast(2))
-      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), mockitoEq(true))
-    // entities have no references, so the input to upsertReferences should be empty
-    verify(mockQuery, Mockito.atLeast(2)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
+      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    // entities have no references, so it should skip insertReferences
+    verify(mockQuery, never()).insertReferences(any(), any())
 
   }
 
@@ -192,10 +192,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val ref3 = EntityPointer("typeB", "name3")
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID),
-                                                    any(),
-                                                    mockitoEq(true)
-    )
+    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
     // entities found references, so should ask to upsert those.
     // given the mock response defined above, we expect references from name2->targetName and name3->targetName
     verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID,
@@ -522,6 +519,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.deleteEntities(any(), any())).thenReturn(DBIO.successful(0))
     when(
       mockQuery.getEntity(any[UUID],
                           ArgumentMatchers.eq(createdEntityRec1.entityType),
@@ -636,6 +634,7 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     val mockQuery = mock[slickDataSource.dataAccess.compactEntityQuery.type]
     when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.deleteAllReferencesFromType(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.deleteEntitiesOfType(any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
 
     // provider using mocks
@@ -801,7 +800,178 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
 
   "queryEntities" should "have tests" is pending
   "queryEntitiesSource" should "have tests" is pending
-  "renameAttribute" should "have tests" is pending
+
+  behavior of "renameAttribute"
+
+  it should "throw error if old and new names are the same" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("same")
+    val newName = AttributeName.withDefaultNS("same")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[AttributeException] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on an invalid new attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("no! @@bad@@")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on an invalid old attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("no! @@bad@@")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on a reserved new attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS(s"${entityType}_id")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error on a reserved old attribute name" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS(s"${entityType}_id")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error if new name already exists" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    // mock: new name already exists
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
+      .thenReturn(DBIO.successful(true))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[AttributeException] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "throw error if old name does not exist" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    // mock: new name does not exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
+      .thenReturn(DBIO.successful(false))
+    // mock: old name does not exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(oldName)))
+      .thenReturn(DBIO.successful(false))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[AttributeException] {
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.BadRequest
+
+    // execution should short-circuit before executing a rename
+    verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
+  }
+
+  it should "return the number of entities updated if successful" in {
+    val entityType = "entityType"
+    val oldName = AttributeName.withDefaultNS("oldName")
+    val newName = AttributeName.withDefaultNS("newName")
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    // mock: new name does not exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
+      .thenReturn(DBIO.successful(false))
+    // mock: old name does exist
+    when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(oldName)))
+      .thenReturn(DBIO.successful(true))
+    // mock: rename touches 123 entities
+    when(mockQueries.renameAttribute(any[UUID], anyString(), mockitoEq(oldName), mockitoEq(AttributeRename(newName))))
+      .thenReturn(DBIO.successful(123))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val actual =
+      Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
+
+    actual shouldBe 123
+  }
+
   "renameEntity" should "have tests" is pending
 
   behavior of "renameEntityType"
@@ -870,7 +1040,45 @@ class CompactEntityProviderSpec extends TestDriverComponentWithFlatSpecAndMatche
     result shouldBe 5
   }
 
-  "updateEntity" should "have tests" is pending
+  behavior of "updateEntity"
+
+  it should "throw if the user specified zero operations" in {
+    val entityType = "entityType"
+    val entityName = "entityName"
+    val operations = Seq.empty[AttributeUpdateOperation]
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    val provider = providerWithMocks(mockQueries)
+
+    val actual = intercept[UnsupportedEntityOperationException] {
+      Await.result(provider.updateEntity(entityType, entityName, operations, testContext), atMost)
+    }
+
+    actual.code shouldBe StatusCodes.BadRequest
+  }
+
+  it should "throw if the entity does not exist" in {
+    val entityType = "entityType"
+    val entityName = "entityName"
+    val operations: Seq[AttributeUpdateOperation] = Seq(
+      AddUpdateAttribute(
+        AttributeName.withDefaultNS("foo"),
+        AttributeNumber(42)
+      )
+    )
+
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+    // mock: batchUpdate does not find the pre-existing entity
+    when(mockQueries.getEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any()))
+      .thenAnswer(_ => throw new EntityNotFoundException())
+    val provider = providerWithMocks(mockQueries)
+
+    val actual = intercept[EntityNotFoundException] {
+      Await.result(provider.updateEntity(entityType, entityName, operations, testContext), atMost)
+    }
+
+    actual.code shouldBe StatusCodes.NotFound
+  }
 
   // ====================================================================================================
   // tests for CompactEntityProvider helper methods
