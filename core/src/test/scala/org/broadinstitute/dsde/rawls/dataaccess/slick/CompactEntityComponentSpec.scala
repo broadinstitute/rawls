@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.RelationContext
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -18,6 +20,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SortDirections,
   WorkspaceFieldSpecs
 }
+import org.mockito.Mockito
 import slick.dbio.Effect.Read
 import slick.sql.SqlStreamingAction
 import spray.json.DefaultJsonProtocol._
@@ -456,40 +459,112 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   }
 
-  behavior of "queryRelationsForAttribute"
+//  behavior of "queryRelationsForAttribute"
+//
+//  it should "get the attributes from a single reference" in withMinimalTestDatabase { _ =>
+//    // Insert referenced entities
+//    val sample1 = Entity(
+//      "sample1",
+//      "sample",
+//      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+//    )
+//
+//    val sample2 = Entity(
+//      "sample2",
+//      "sample",
+//      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+//    )
+//
+//    // Referencing entity
+//    val set1 = Entity(
+//      "set1",
+//      "sample_set",
+//      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+//    )
+//
+//    insertAndGetAll(
+//      Seq(sample1, sample2, set1)
+//    )
+//
+//    runAndWait(
+//      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
+//    ) shouldBe Seq(AttributeString("a"))
+//
+//  }
+//
+//  it should "get the attributes from a list of references" in withMinimalTestDatabase { _ =>
+//    // Insert referenced entities
+//    val sample1 = Entity(
+//      "sample1",
+//      "sample",
+//      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+//    )
+//
+//    val sample2 = Entity(
+//      "sample2",
+//      "sample",
+//      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+//    )
+//
+//    // Referencing entity
+//    val set1 = Entity(
+//      "set1",
+//      "sample_set",
+//      Map(
+//        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+//          Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+//        )
+//      )
+//    )
+//
+//    insertAndGetAll(
+//      Seq(sample1, sample2, set1)
+//    )
+//
+//    runAndWait(
+//      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
+//    ) shouldBe Seq(AttributeString("a"), AttributeString("b"))
+//
+//  }
 
-  it should "get the attributes from a single reference" in withMinimalTestDatabase { _ =>
-    // Insert referenced entities
-    val sample1 = Entity(
+  behavior of "queryRelatedRecordsWithArray"
+
+  it should "get the record for a single reference" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
       "sample1",
       "sample",
       Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
     )
 
-    val sample2 = Entity(
-      "sample2",
-      "sample",
-      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
-    )
+    // We'll need this later for comparison
+    val insertedSample = insertAndGet(sample)
 
     // Referencing entity
-    val set1 = Entity(
+    val set = Entity(
       "set1",
       "sample_set",
       Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
     )
 
-    insertAndGetAll(
-      Seq(sample1, sample2, set1)
+    insertAndGet(set)
+
+    // Can't really create a RelationContext so mock one that returns the correct getText
+    val mockRelationContext = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockRelationContext.getText).thenReturn("samples")
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(wsid,
+                                     "sample_set",
+                                     "set1",
+                                     List(AttributeLookup(List(mockRelationContext), "type")),
+                                     List.empty
+      )
     )
-
-    runAndWait(
-      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
-    ) shouldBe Seq(AttributeString("a"))
-
+    result.get(sample.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSample)
   }
 
-  it should "get the attributes from a list of references" in withMinimalTestDatabase { _ =>
+  it should "get the records for a list of references" in withMinimalTestDatabase { _ =>
     // Insert referenced entities
     val sample1 = Entity(
       "sample1",
@@ -503,25 +578,269 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
     )
 
+    // TODO if i do insertAndGetAll is there a convenient way to do the comparison
+    // We'll need these later for comparison
+    val insertedSample1 = insertAndGet(sample1)
+    val insertedSample2 = insertAndGet(sample2)
+
     // Referencing entity
-    val set1 = Entity(
+    val set = Entity(
       "set1",
       "sample_set",
       Map(
         AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
-          Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+          List(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
         )
       )
     )
 
-    insertAndGetAll(
-      Seq(sample1, sample2, set1)
+    insertAndGet(set)
+
+    // Can't really create a RelationContext so mock one that returns the correct getText
+    val mockRelationContext = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockRelationContext.getText).thenReturn("samples")
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(minimalTestData.workspace.workspaceIdAsUUID,
+                                     "sample_set",
+                                     "set1",
+                                     List(AttributeLookup(List(mockRelationContext), "type")),
+                                     List.empty
+      )
+    )
+    // TODO this returns multiple of each entity.  is there a case where that makes sense or should the method reduce it to one each?
+    result.get(sample1.name).toSeq.flatten should contain(insertedSample1)
+    result.get(sample2.name).toSeq.flatten should contain(insertedSample2)
+  }
+
+  it should "get the record for a chain of references" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
     )
 
-    runAndWait(
-      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
-    ) shouldBe Seq(AttributeString("a"), AttributeString("b"))
+    val insertedParticipant = insertAndGet(participant)
 
+    val sample = Entity(
+      "s1",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p1"))
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "s1"))
+    )
+
+    insertAndGetAll(Seq(sample, set))
+
+    // Can't really create a RelationContext so mock one that returns the correct getText
+//    val mockRelationContextSamples = Mockito.mock(classOf[RelationContext])
+//    Mockito.when(mockRelationContextSamples.getText).thenReturn("samples")
+    val mockRelationContextParticipant = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockRelationContextParticipant.getText).thenReturn("participant")
+
+    // TODO is this the lookups that will exist/be given?
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(AttributeLookup(List(), "samples")),
+        List(AttributeLookup(List(mockRelationContextParticipant), "type"))
+      )
+    )
+    result.get(participant.name).toSeq.flatten should contain(insertedParticipant)
+  }
+
+  it should "get the records for a chain of references with an array" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant1 = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val participant2 = Entity(
+      "p2",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val insertedParticipant1 = insertAndGet(participant1)
+    val insertedParticipant2 = insertAndGet(participant2)
+
+    val sample1 = Entity(
+      "s1",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p1"))
+    )
+
+    val sample2 = Entity(
+      "s2",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p2"))
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("sample", "s1"), AttributeEntityReference("sample", "s2"))
+        )
+      )
+    )
+
+    insertAndGetAll(Seq(sample1, sample2, set))
+
+    // Can't really create a RelationContext so mock one that returns the correct getText
+    val mockRelationContextParticipant = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockRelationContextParticipant.getText).thenReturn("participant")
+
+    // TODO is this the lookups that will exist/be given?
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(AttributeLookup(List(), "samples")),
+        List(AttributeLookup(List(mockRelationContextParticipant), "type"))
+      )
+    )
+    result.get(participant1.name).toSeq.flatten should contain(insertedParticipant1)
+    result.get(participant2.name).toSeq.flatten should contain(insertedParticipant2)
+  }
+
+  it should "get the records for a chain of references with multiple arrays" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant1 = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val participant2 = Entity(
+      "p2",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val participant3 = Entity(
+      "p3",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("c"))
+    )
+
+    val participant4 = Entity(
+      "p4",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("d"))
+    )
+
+    val insertedParticipant1 = insertAndGet(participant1)
+    val insertedParticipant2 = insertAndGet(participant2)
+    val insertedParticipant3 = insertAndGet(participant3)
+    val insertedParticipant4 = insertAndGet(participant4)
+
+    val sample1 = Entity(
+      "s1",
+      "sample",
+      Map(
+        AttributeName.withDefaultNS("participant") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("participant", "p1"), AttributeEntityReference("participant", "p3"))
+        )
+      )
+    )
+
+    val sample2 = Entity(
+      "s2",
+      "sample",
+      Map(
+        AttributeName.withDefaultNS("participant") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("participant", "p2"), AttributeEntityReference("participant", "p4"))
+        )
+      )
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("sample", "s1"), AttributeEntityReference("sample", "s2"))
+        )
+      )
+    )
+
+    insertAndGetAll(Seq(sample1, sample2, set))
+
+    // Can't really create a RelationContext so mock one that returns the correct getText
+    val mockRelationContextParticipant = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockRelationContextParticipant.getText).thenReturn("participant")
+
+    // TODO is this the lookups that will exist/be given?
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(AttributeLookup(List(), "samples")),
+        List(AttributeLookup(List(mockRelationContextParticipant), "type"))
+      )
+    )
+    result.get(participant1.name).toSeq.flatten should contain(insertedParticipant1)
+    result.get(participant2.name).toSeq.flatten should contain(insertedParticipant2)
+    result.get(participant3.name).toSeq.flatten should contain(insertedParticipant3)
+    result.get(participant4.name).toSeq.flatten should contain(insertedParticipant4)
+  }
+
+  it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample1 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val sample2 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    // We'll need this later for comparison
+    val insertedSampleWS1 = insertAndGet(sample1)
+    val insertedSampleWS2 = insertAndGet(sample2, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    // Can't really create a RelationContext so mock one that returns the correct getText
+    val mockRelationContext = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockRelationContext.getText).thenReturn("samples")
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(wsid,
+                                     "sample_set",
+                                     "set1",
+                                     List(AttributeLookup(List(mockRelationContext), "type")),
+                                     List.empty
+      )
+    )
+    result.get(sample1.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSampleWS1)
   }
 
   /**

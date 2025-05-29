@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   EntityNotFoundException,
   EntityReferenceNotFoundException
 }
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionValidator
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.expressions.CompactExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -234,7 +235,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                    gatherInputsResult
     )
 
-  override def expressionValidator: ExpressionValidator = ???
+  // TODO not sure if a new validator needs to be written
+  override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
     val queryResult = repository.dataSource.inTransaction(ReadOnly) { _ =>

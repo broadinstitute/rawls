@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -24,6 +25,7 @@ import slick.sql.SqlStreamingAction
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.{AttributeNull, AttributeValue, WorkspaceJsonSupport}
 import spray.json._
+
 import scala.concurrent.ExecutionContext
 
 trait CompactEntityComponent extends LazyLogging {
@@ -485,45 +487,210 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     }
 
   // Written by AI!
-  // Deals with both the case that the relation column is a single reference and a list of references
-  def queryRelationsForAttribute(workspaceId: UUID,
-                                 relation: String,
-                                 attributeName: String,
-                                 entityType: String,
-                                 entityName: String
-  ): ReadAction[Seq[AttributeValue]] =
-    sql"""SELECT JSON_EXTRACT(e2.attributes, '$$.attrs.#$attributeName') AS value
-    FROM ENTITY e1
-  JOIN JSON_TABLE(
-    CASE
-      WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'ARRAY'
-  THEN JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')
-  WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'OBJECT'
-  THEN JSON_ARRAY(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation'))
-  ELSE NULL
-    END,
-  '$$[*]' COLUMNS (
-    entityType VARCHAR(255) PATH '$$.entityType',
-  entityName VARCHAR(255) PATH '$$.entityName'
-  )
-  ) refs
-  ON 1=1
-  JOIN ENTITY e2
-  ON e2.entity_type = refs.entityType
-  AND e2.name = refs.entityName
-  WHERE e1.workspace_id = $workspaceId
-  AND e1.entity_type = $entityType
-  AND e1.name = $entityName""".as[String].map { seq =>
-      seq.map {
-        case jsonString if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
-          try
-            WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
-          catch {
-            case _: Exception => AttributeNull
-          }
-        case _ => AttributeNull
+  // TODO return all of attributes, then the caller will extract the actual attribute values
+  // TODO also take in multiple entityNames
+//  def queryRelationsForAttribute(workspaceId: UUID,
+//                                 relation: String,
+//                                 attributeName: String,
+//                                 entityType: String,
+//                                 entityName: String
+//  ): ReadAction[Seq[AttributeValue]] =
+//    sql"""SELECT JSON_EXTRACT(e2.attributes, '$$.attrs.#$attributeName') AS value
+//    FROM ENTITY e1
+//  JOIN JSON_TABLE(
+//    CASE
+//      WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'ARRAY'
+//  THEN JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')
+//  WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'OBJECT'
+//  THEN JSON_ARRAY(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation'))
+//  ELSE NULL
+//    END,
+//  '$$[*]' COLUMNS (
+//    entityType VARCHAR(255) PATH '$$.entityType',
+//  entityName VARCHAR(255) PATH '$$.entityName'
+//  )
+//  ) refs
+//  ON 1=1
+//  JOIN ENTITY e2
+//  ON e2.entity_type = refs.entityType
+//  AND e2.name = refs.entityName
+//  WHERE e1.workspace_id = $workspaceId
+//  AND e1.entity_type = $entityType
+//  AND e1.name = $entityName""".as[String].map { seq =>
+//      seq.map {
+//        case jsonString if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
+//          try
+//            WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
+//          catch {
+//            case _: Exception => AttributeNull
+//          }
+//        case _ => AttributeNull
+//      }
+//    }
+
+  // Written by/with AI (including the javadoc!)
+  /**
+   * Queries related records in a workspace by traversing relationships defined in the attributes of entities.
+   * This method supports recursive traversal of relationships, handling both arrays and objects in JSON attributes.
+   *
+   * @param workspaceId      The UUID of the workspace containing the entities.
+   * @param arrayEntityType  The type of the root entity to start the query from.
+   * @param arrayEntityId    The name of the root entity to start the query from.
+   * @param arrayRelations   A list of `AttributeLookup` objects defining the initial relationships to traverse.
+   *                         The first element in this list specifies the starting point for the query.
+   * @param relations        A list of `AttributeLookup` objects defining additional relationships to traverse.
+   *                         These relationships are applied after the initial `arrayRelations`.
+   * @return                 A `ReadAction` that resolves to a map where the keys are entity names and the values
+   *                         are sequences of `CompactEntityRecord` objects representing the related entities.
+   *                         The result includes all entities found by traversing the specified relationships.
+   * @throws IllegalArgumentException if `arrayRelations` is empty.
+   */
+  def queryRelatedRecordsWithArray(
+    workspaceId: UUID,
+    arrayEntityType: String,
+    arrayEntityId: String,
+    arrayRelations: List[AttributeLookup],
+    relations: List[AttributeLookup]
+  ): ReadAction[Map[String, Seq[CompactEntityRecord]]] = {
+    require(arrayRelations.nonEmpty, "Array relations must not be empty")
+
+    // This always leaves out the last element, since that would be a specific element on a record
+    // This method should return the records and allow the attributes to be chosen by the caller
+    val relationChain = collection.mutable.ArrayBuffer[String]()
+    // Traverse the relations inside the first arrayRelation, if any
+    if (arrayRelations.nonEmpty) {
+      arrayRelations.head.relations.foreach(r => relationChain += r.getText)
+      if (relations.nonEmpty) {
+        relationChain += arrayRelations.head.attributeName
       }
     }
+    // For each relation, add its relation context if present, then its attributeName
+    // But skip the last attributeName (that's the final attribute to extract)
+    if (relations.nonEmpty) {
+      relations.dropRight(1).foreach { rel =>
+        rel.relations.headOption.foreach(r => relationChain += r.getText)
+        relationChain += rel.attributeName
+      }
+      // For the last relation, only add its relation context if present (not its attributeName)
+      relations.lastOption.flatMap(_.relations.headOption).foreach(r => relationChain += r.getText)
+    }
+    relationChain.toList
+
+    // The base join finds the starting entity and gets its relevant relation attributes to find the next entities to query for
+    val baseJoin =
+      sql"""
+      SELECT
+        e.id,
+        e.name,
+        e.entity_type,
+        e.workspace_id,
+        e.record_version,
+        e.deleted,
+        e.attributes,
+        refs.entityType AS root_entity_type,
+        refs.entityName AS root_entity_name,
+        1 as level
+      FROM ENTITY e
+      JOIN JSON_TABLE(
+        CASE
+WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"})) = 'ARRAY'
+            THEN JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"})
+          WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"})) = 'OBJECT'
+            THEN JSON_ARRAY(JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"}))
+          ELSE NULL
+        END,
+        '$$[*]' COLUMNS (
+          entityType VARCHAR(255) PATH '$$.entityType',
+          entityName VARCHAR(255) PATH '$$.entityName'
+        )
+      ) refs
+      WHERE e.name = $arrayEntityId AND e.entity_type = $arrayEntityType AND e.workspace_id = $workspaceId
+      """
+
+    // Recursively join through each relation in the chain except the last
+    val recursiveJoins = if (relationChain.length > 1) {
+      relationChain.tail.zipWithIndex
+        .map { case (rel, idx) =>
+          val prevLevel = idx + 1
+          val nextLevel = prevLevel + 1
+          sql"""
+      SELECT
+        e.id,
+        e.name,
+        e.entity_type,
+        e.workspace_id,
+        e.record_version,
+        e.deleted,
+        e.attributes,
+        refs.entityType AS root_entity_type,
+        refs.entityName AS root_entity_name,
+        $nextLevel as level
+      FROM ENTITY e
+JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.root_entity_name AND h.level = $prevLevel
+      JOIN JSON_TABLE(
+          CASE
+              WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"})) = 'ARRAY'
+                THEN JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"})
+              WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"})) = 'OBJECT'
+                THEN JSON_ARRAY(JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"}))
+              ELSE NULL
+        END,
+        '$$[*]' COLUMNS (
+          entityType VARCHAR(255) PATH '$$.entityType',
+          entityName VARCHAR(255) PATH '$$.entityName'
+        )
+      ) refs
+      WHERE e.workspace_id = $workspaceId
+"""
+        }
+    } else Seq.empty
+
+    // The last join should find the final entities that will be returned by the method
+    val lastRelation = relationChain.last
+    val lastLevel = relationChain.length
+    val lastJoin =
+      sql"""
+    SELECT
+      e.id,
+      e.name,
+      e.entity_type,
+      e.workspace_id,
+      e.record_version,
+      e.deleted,
+      e.attributes,
+      NULL AS root_entity_type,
+      NULL AS root_entity_name,
+      $lastLevel as level
+    FROM ENTITY e
+    JOIN entity_hierarchy h
+ON (
+          JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$$.attrs.', $lastRelation, '.entityName'))) = e.name
+          AND JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$$.attrs.', $lastRelation, '.entityType'))) = e.entity_type
+        )
+      OR (
+          JSON_CONTAINS(
+            JSON_EXTRACT(h.attributes, CONCAT('$$.attrs.', $lastRelation)),
+            JSON_OBJECT('entityName', e.name, 'entityType', e.entity_type)
+          )
+      )
+    WHERE h.level = ${relationChain.length} AND e.workspace_id = $workspaceId
+    """
+
+    val cte =
+      concatSqlActions(
+        sql"WITH RECURSIVE entity_hierarchy AS (",
+        baseJoin,
+        if (recursiveJoins.nonEmpty) {
+          recursiveJoins.foldLeft(sql"")((acc, join) => concatSqlActions(acc, sql" UNION ALL ", join))
+        } else sql"",
+        sql") ",
+        lastJoin
+      )
+
+    cte.as[CompactEntityRecord].map { results =>
+      results.groupBy(_.name).map { case (entityName, entities) => entityName -> entities }
+    }
+  }
 
   /**
    * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.

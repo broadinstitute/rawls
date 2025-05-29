@@ -40,19 +40,27 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                           gatherInputsResult: MethodConfigResolver.GatherInputsResult
   )(implicit executionContext: ExecutionContext): Future[LazyList[SubmissionValidationEntityInputs]] = {
     // TODO is this necessarily an error?  when isn't it?
-    val rootEntityType = expressionEvaluationContext.entityType.getOrElse(
+    val entityType = expressionEvaluationContext.entityType.getOrElse(
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityType"))
     )
-    val rootEntityName = expressionEvaluationContext.entityName.getOrElse(
+    val entityName = expressionEvaluationContext.entityName.getOrElse(
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityName"))
     )
+    // TODO will parselookups work if expression is None
+    val entityLookups = parseLookups(expressionEvaluationContext.expression.get)
 
+    // TODO when entityType/Name is a set entity (i.e. different from rootEntity) then the expression needs to know to refer to
+    // that entity type instead.  is that done in parseLookups or in lookUpToQuery?
+    // TODO also parse exevcxt.expression
+    // make a view??? that decidse if its an array or not, json type func in sql
     val inputFutures: Seq[Future[(String, Seq[SubmissionValidationValue])]] = {
       gatherInputsResult.processableInputs.toSeq.map { input =>
-        val lookups = parseLookups(input.expression)
+        val inputLookups = parseLookups(input.expression)
+        // TODO lookupToQuery should use both inputLookups and entityLookups
+        // we want the result to be records.  for each record we get any attributes out of it that are needed by the expressions parsed
         repository.dataSource
           .inTransaction { _ =>
-            lookUpToQuery(workspaceId, lookups, rootEntityType, rootEntityName)
+            lookUpToQuery(workspaceId, inputLookups, entityType, entityName)
           }
           .map { values =>
             val attributeValueList = AttributeValueList(values)
@@ -60,7 +68,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             // Wrap each value in a SubmissionValidationValue
             val validationValues =
               Seq(SubmissionValidationValue(Some(attributeValueList), None, input.workflowInput.getName))
-            rootEntityName -> validationValues // TODO this won't be rootentity, it'll come from elsewhere
+            entityName -> validationValues // TODO this won't be entityName if it's a set entity
           }(executionContext)
       }
       /*
@@ -108,6 +116,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
 
   // TODO multiple lookups but in a smarter way
   // TODO do we need to care about workspace attributes?
+  // group lookups according to root, add root to attributelookup
+  //
   def lookUpToQuery(workspaceId: UUID, lookups: Seq[AttributeLookup], entityType: String, entityName: String)(implicit
     executionContext: ExecutionContext
   ): ReadAction[Seq[AttributeValue]] =
@@ -129,4 +139,92 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       })
       .map(_.flatten)
 
+  /*
+  def queryFromLookup
+
+import scala.collection.mutable.LinkedHashMap
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
+
+case class Relation(relationColName: String, relationEntityType: String)
+case class Record(id: String, attributes: Map[String, Any])
+
+class EntityDao(namedTemplate: NamedParameterJdbcTemplate) {
+
+  def queryRelatedRecordsWithArray(
+      collectionId: String,
+      arrayEntityType: String,
+      arrayEntityId: String,
+      arrayRelations: List[Relation],
+      relations: List[Relation],
+      pageSize: Int,
+      offset: Int
+  ): LinkedHashMap[String, List[Record]] = {
+    require(arrayRelations.nonEmpty, "Array relations must not be empty")
+
+    val rootEntityType = arrayRelations.last.relationEntityType
+    val queryEntityType = if (relations.isEmpty) rootEntityType else relations.last.relationEntityType
+
+    val sql =
+      s"""
+         |WITH RECURSIVE entity_hierarchy AS (
+         |  SELECT
+         |    e.entity_id AS root_id,
+         |    e.entity_id,
+         |    e.entity_type,
+         |    e.attributes
+         |  FROM ENTITY e
+         |  WHERE e.entity_id = :arrayEntityId AND e.entity_type = :arrayEntityType
+         |
+         |  UNION ALL
+         |
+         |  SELECT
+         |    h.root_id,
+         |    e.entity_id,
+         |    e.entity_type,
+         |    e.attributes
+         |  FROM entity_hierarchy h
+         |  JOIN ENTITY e
+            ON (
+              JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$.attrs.', :relationColName, '.entity_id'))) = e.entity_id
+              AND JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$.attrs.', :relationColName, '.entity_type'))) = e.entity_type
+            )
+            OR (
+              JSON_CONTAINS(
+                JSON_EXTRACT(h.attributes, CONCAT('$.attrs.', :relationColName)),
+                JSON_OBJECT('entity_id', e.entity_id, 'entity_type', e.entity_type)
+              )
+            )
+         |)
+         |SELECT root_id, entity_id, entity_type, attributes
+         |FROM entity_hierarchy
+         |WHERE entity_type = :queryEntityType
+         |LIMIT :pageSize OFFSET :offset
+       """.stripMargin
+
+    val params = new MapSqlParameterSource()
+      .addValue("arrayEntityId", arrayEntityId)
+      .addValue("arrayEntityType", arrayEntityType)
+      .addValue("relationColName", arrayRelations.head.relationColName) // Adjust for dynamic relations
+      .addValue("queryEntityType", queryEntityType)
+      .addValue("pageSize", pageSize)
+      .addValue("offset", offset)
+
+    val results = namedTemplate.query(sql, params, (rs, _) => {
+      Record(
+        id = rs.getString("entity_id"),
+        attributes = Map(
+          "entity_type" -> rs.getString("entity_type"),
+          "attributes" -> rs.getString("attributes")
+        )
+      )
+    })
+
+    results
+      .groupBy(_.id)
+      .map { case (rootId, records) => rootId -> records.toList }
+      .to(LinkedHashMap)
+  }
+}
+   */
 }
