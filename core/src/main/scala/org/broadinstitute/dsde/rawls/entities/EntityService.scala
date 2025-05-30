@@ -506,9 +506,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   ): Future[EntityProvider] =
     for {
       entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-        entityManager.resolveProviderFuture(
-          EntityRequestArguments(workspaceContext, s)
-        )
+        entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
       }
       _ = setTraceSpanAttribute(localContext,
                                 AttributeKey.stringKey("providerType"),
