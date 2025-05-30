@@ -108,14 +108,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
 
         // Apply the incoming operations to the existing entities (or to an empty entity if none pre-existed).
         // This skips unchanged entities
-        allUpdatedEntities = applyAll(updates, existingEntitiesByIdentifier)
-
-        // If the same entity appears multiple times in our update, take the last one.
-        updatedEntities = allUpdatedEntities
-          .groupBy(_.toPointer)
-          .values
-          .map(_.last)
-          .toSeq
+        updatedEntities = applyAll(updates, existingEntitiesByIdentifier)
 
         // How many updates do we have for each entity being updated?
         updateCounts = updatedEntities
@@ -175,8 +168,14 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
                  accum: Seq[Entity]
     ): Seq[Entity] =
       if (updates.isEmpty) {
-        //  end of updates; return the accumulator
+        // end of updates.
+        // now that everything has been applied, de-duplicate the entities.
+        // If the same entity appears multiple times in our update, take the last one.
         accum
+          .groupBy(_.toPointer)
+          .values
+          .map(_.last)
+          .toSeq
       } else {
         val thisUpdate = updates.head
 

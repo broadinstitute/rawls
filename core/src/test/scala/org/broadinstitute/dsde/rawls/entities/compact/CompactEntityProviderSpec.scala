@@ -1393,13 +1393,8 @@ class CompactEntityProviderSpec
     )
 
     val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
-    // The actual result is two entities, because we applied the two sets of operations in order
+    // The actual result is the entity after all operations are applied to it
     actual shouldBe Seq(
-      Entity(
-        "name1",
-        "typeA",
-        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"))
-      ),
       Entity(
         "name1",
         "typeA",
@@ -1442,15 +1437,8 @@ class CompactEntityProviderSpec
     )
 
     val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
-    // The actual result is two entities, because we applied the two sets of operations in order
+    // The actual result is the entity after all operations are applied to it
     actual shouldBe Seq(
-      Entity(
-        "name1",
-        "typeA",
-        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"),
-            AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
-        )
-      ),
       Entity(
         "name1",
         "typeA",
