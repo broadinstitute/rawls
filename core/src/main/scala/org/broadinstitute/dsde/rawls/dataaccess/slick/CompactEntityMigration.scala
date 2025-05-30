@@ -85,7 +85,7 @@ trait CompactEntityMigration {
             ea.list_index,
             CASE
                 WHEN value_string is not null THEN CAST(JSON_QUOTE(value_string) as JSON)
-                WHEN value_boolean is not null THEN CAST(value_boolean as JSON)
+                WHEN value_boolean is not null THEN CAST(value_boolean=1 as JSON)
                 WHEN list_length = 0 THEN JSON_ARRAY()
                 WHEN value_number is not null THEN CAST(value_number as JSON)
                 WHEN VALUE_JSON is not null THEN VALUE_JSON
@@ -100,7 +100,7 @@ trait CompactEntityMigration {
           and ea.deleted = 0
           and e.id > $startEntityId
           and e.id <= $endEntityId
-          order by ea.list_index, attr_name""".asUpdate
+          order by ea.list_index, e.id, attr_name""".asUpdate
 
   /**
     * Second step of data massaging to build compact entities:
