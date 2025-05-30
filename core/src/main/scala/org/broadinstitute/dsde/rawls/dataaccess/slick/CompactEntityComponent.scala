@@ -653,12 +653,31 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
     */
   def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
-    sql"""select exists (select 1 from ENTITY_KEYS
+    anyAttributeExists(workspaceId, entityType, Set(attributeName))
+
+  /**
+    * Determine if an attribute exists in any entity of the given type and workspace.
+    *
+    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    */
+  def anyAttributeExists(workspaceId: UUID,
+                         entityType: String,
+                         attributeNames: Set[AttributeName]
+  ): ReadAction[Boolean] = {
+    val containsClauses = attributeNames.map { attributeName =>
+      sql"""JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)}))"""
+    }
+    val clause = reduceSqlActionsWithDelim(containsClauses.toSeq, sql" or ")
+
+    val baseSql = sql"""select exists (select 1 from ENTITY_KEYS
          where workspace_id = $workspaceId
           and entity_type = $entityType
-          and JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)})))"""
+          and ("""
+
+    concatSqlActions(baseSql, clause, sql"))")
       .as[Boolean]
       .head
+  }
 
   // ====================================================================================================
   //  entity query helpers
