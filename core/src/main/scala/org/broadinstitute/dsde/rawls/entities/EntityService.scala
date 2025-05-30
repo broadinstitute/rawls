@@ -552,12 +552,13 @@ class EntityService(protected val ctx: RawlsRequestContext,
   /**
     * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to
     * compact (Quicksilver) format.
+    *
+    * The migration relies on temp tables; the batchSize setting ensures the temp tables do not grow too large.
+    *
+    * @param workspaceName the name of the workspace to migrate
+    * @param batchSize the number of entities to migrate in a single batch; defaults to 50,000
     */
-  def quicksilverMigration(workspaceName: WorkspaceName): Future[Int] = {
-    // Number of entities to handle in a single chunk when migrating from legacy to compact.
-    // The migration relies on temp tables; this setting ensures the temp tables do not grow too large.
-    val batchSize = 50000
-
+  def quicksilverMigration(workspaceName: WorkspaceName, batchSize: Int = 50000): Future[Int] = {
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
         // verify owner of workspace.

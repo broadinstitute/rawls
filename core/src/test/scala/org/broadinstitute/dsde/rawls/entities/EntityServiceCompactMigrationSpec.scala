@@ -24,6 +24,19 @@ import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.{
+  Attribute,
+  AttributeBoolean,
+  AttributeEntityReference,
+  AttributeEntityReferenceEmptyList,
+  AttributeEntityReferenceList,
+  AttributeName,
+  AttributeNull,
+  AttributeNumber,
+  AttributeString,
+  AttributeValueEmptyList,
+  AttributeValueList,
+  AttributeValueRawJson,
+  Entity,
   RawlsRequestContext,
   RawlsUser,
   RawlsUserEmail,
@@ -45,6 +58,7 @@ import org.scalatest.Inspectors.forEvery
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -132,8 +146,9 @@ class EntityServiceCompactMigrationSpec
         // entity data is already loaded into legacy tables via withTestDataServices
 
         // perform migration - this keeps legacy attributes and adds Quicksilver attributes
+        // set a low batch size to ensure we exercise the batching logic
         val entitiesUpdated =
-          Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+          Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName, batchSize = 3), atMost)
 
         entitiesUpdated shouldBe expectedCount
 
@@ -174,6 +189,96 @@ class EntityServiceCompactMigrationSpec
           }
         }
     }
+  }
+
+  it should s"migrate to compact entities with various attribute data types" in withTestDataServices { apiService =>
+    val workspace = testData.workspace // has some entities we can use to test references
+
+    // various attribute types to ensure migration works for all of them
+    val attrs: Map[AttributeName, Attribute] = Map(
+      AttributeName.withDefaultNS("stringAttr") -> AttributeString("stringValue"),
+      AttributeName.withLibraryNS("nullAttr") -> AttributeNull,
+      AttributeName.fromDelimitedName("import:intAttr") -> AttributeNumber(Long.MaxValue),
+      AttributeName.fromDelimitedName("pfb:booleanAttr") -> AttributeBoolean(true),
+      AttributeName.fromDelimitedName("othernamespace:jsonObjAttr") -> AttributeValueRawJson(
+        """{"foo":"bar", "nested": {"stuff": [2,3,4,false]}}""".parseJson
+      ),
+      AttributeName.withDefaultNS("jsonArrAttr") -> AttributeValueRawJson("""[1,2,3,[4,5,6],[7,8,9]]""".parseJson),
+      AttributeName.withDefaultNS("jsonStrAttr") -> AttributeValueRawJson(
+        """"this is a string parsed as json"""".parseJson
+      ),
+      AttributeName.withDefaultNS("refAttr") -> AttributeEntityReference(testData.sample1.entityType,
+                                                                         testData.sample1.name
+      ),
+      AttributeName.withDefaultNS("duplicateRefAttr") -> AttributeEntityReference(testData.sample1.entityType,
+                                                                                  testData.sample1.name
+      ), // same as previous, to test de-duplication when inserting to ENTITY_REFS
+      AttributeName.withDefaultNS("emptyList") -> AttributeValueEmptyList,
+      AttributeName.withDefaultNS("emptyRefList") -> AttributeEntityReferenceEmptyList,
+      AttributeName.withDefaultNS("valueList") -> AttributeValueList(
+        Seq(
+          AttributeNumber(Long.MinValue),
+          AttributeNumber(-1L),
+          AttributeNumber(0L),
+          AttributeNumber(1L),
+          AttributeNumber(Long.MaxValue)
+        )
+      ),
+      AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(
+        Seq(
+          AttributeEntityReference(testData.sample2.entityType, testData.sample2.name),
+          AttributeEntityReference(testData.sample1.entityType, testData.sample1.name),
+          AttributeEntityReference(testData.sample3.entityType, testData.sample3.name)
+        )
+      )
+    )
+
+    val entity = Entity("lotsaDataTypes", "willThisWork", attrs)
+
+    val defaultRequestContext =
+      RawlsRequestContext(
+        UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
+      )
+
+    val requestArguments = EntityRequestArguments(workspace, defaultRequestContext)
+
+    // get providers
+    val localProvider =
+      new LocalEntityProvider(requestArguments,
+                              slickDataSource,
+                              true,
+                              java.time.Duration.ofSeconds(60),
+                              workbenchMetricBaseName
+      )
+
+    val compactProvider = new CompactEntityProvider(requestArguments,
+                                                    new CompactEntityRepository(slickDataSource),
+                                                    CompactEntityProviderConfig()
+    )
+
+    // save the entity with the various attributes
+    val savedEntity = Await.result(localProvider.createEntity(entity, defaultRequestContext), atMost)
+    savedEntity shouldBe entity
+
+    // perform migration - this keeps legacy attributes and adds Quicksilver attributes
+    val entitiesUpdated =
+      Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+
+    entitiesUpdated shouldBe 19 // 18 from the test data, plus the one we just created
+
+    val compactEntity =
+      Await.result(compactProvider.getEntity(entity.entityType, entity.name, defaultRequestContext), atMost)
+
+    val localEntity =
+      Await.result(localProvider.getEntity(entity.entityType, entity.name, defaultRequestContext), atMost)
+
+    forEvery(localEntity.attributes.keys) { attributeName =>
+      withClue(s"for attribute $attributeName") {
+        // check that the attributes match
+        compactEntity.attributes.get(attributeName) shouldBe localEntity.attributes.get(attributeName)
+      }
+    }
+
   }
 
 }

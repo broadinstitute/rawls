@@ -147,7 +147,10 @@ trait CompactEntityMigration {
   def migrationDropEntityTempTable: ReadWriteAction[Int] =
     sql"""drop temporary table QS_ENTITY_TEMP;""".asUpdate
 
-  /** Insert references for the entities we just updated */
+  /** Insert references for the entities we just updated
+    * Copying directly from ENTITY_ATTRIBUTE_* can easily generate duplicate references, so we use
+    * `on duplicate key ...` with a noop update to avoid that.
+    * */
   def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
     sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name)
          select e.workspace_id,
@@ -158,7 +161,8 @@ trait CompactEntityMigration {
          and e.workspace_id = $workspaceId
          and e.deleted = 0
          and ea.value_entity_ref is not null
-         and ea.value_entity_ref = r.id;""".asUpdate
+         and ea.value_entity_ref = r.id
+         on duplicate key update workspace_id = e.workspace_id;""".asUpdate
 
   /** Delete the all_attribute_values text from a compact ENTITY.
       * Currently unused, but leaving here in case we change our mind.
