@@ -1,8 +1,13 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityQuery, ReadAction, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  CompactEntityQuery,
+  CompactEntityRecord,
+  ReadAction,
+  TestDriverComponent
+}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
+import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityRepository, CompactEntitySerialization}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.{
@@ -74,18 +79,25 @@ class CompactExpressionEvaluatorSpec
 
   // Copying from LocalEntityProviderSpec
   "evaluateExpressions" should "resolve method config inputs for a single entity" in withConfigData {
-    // TODO probably check that it calls this with the correct values
-    // workspaceId, attributeName, entityType, entityName
+    // TODO probably check that it calls the query with the correct values
+
+    // TODO is there a better way
+    val sampleGoodAsCER = CompactEntityRecord(
+      1L,
+      sampleGood.name,
+      sampleGood.entityType,
+      workspace.workspaceIdAsUUID,
+      1L,
+      false,
+      Option(CompactEntitySerialization.toSql(sampleGood.attributes).compactPrint)
+    )
     when(
-      mockQueries.queryEntityForAttribute(any(),
-                                          org.mockito.ArgumentMatchers.eq("blah"),
-                                          any(),
-                                          org.mockito.ArgumentMatchers.eq("sampleGood")
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.name)
       )
     )
-      .thenReturn(DBIO.successful(AttributeNumber(1)))
-//    when(mockQueries.queryEntityForAttribute(any(), "blah", any(), "sampleGood2"))
-//      .thenReturn(DBIO.successful(AttributeNumber(2)))
+      .thenReturn(DBIO.successful(Some(sampleGoodAsCER)))
 
     // TODO make a helper method to reduce repetition
     val expressionEvaluationContext =
@@ -97,9 +109,7 @@ class CompactExpressionEvaluatorSpec
                                                        gatherInputsResult
         )
     }
-//processableinputs.0.expression = this.blah.  sampleGood.blah = 1
-    // configGood.rootEntityType = Some("sample")
-    // configGood.inputs = Map(intArgNameWithWfName -> AttributeString("this.blah"))
+    // TODO there must be a better way to check the result?
     whenReady(futureResult) { lazyList =>
       lazyList should contain(
         SubmissionValidationEntityInputs(
@@ -134,32 +144,91 @@ class CompactExpressionEvaluatorSpec
   }
 
   it should "resolve method config inputs for a set entity" in withConfigData {
-    // workspaceId, relation, attributeName, entityType, entityName
-    when(
-      mockQueries.queryRelationsForAttribute(any(), any(), any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"))
+    val sampleGoodAsCER = CompactEntityRecord(
+      1L,
+      sampleGood.name,
+      sampleGood.entityType,
+      workspace.workspaceIdAsUUID,
+      1L,
+      false,
+      Option(CompactEntitySerialization.toSql(sampleGood.attributes).compactPrint)
     )
-      .thenReturn(DBIO.successful(Seq(AttributeNumber(1))))
+
+    val sampleGood2AsCER = CompactEntityRecord(
+      3L,
+      sampleGood2.name,
+      sampleGood2.entityType,
+      workspace.workspaceIdAsUUID,
+      1L,
+      false,
+      Option(CompactEntitySerialization.toSql(sampleGood2.attributes).compactPrint)
+    )
+
+    val sampleMissingValueAsCER = CompactEntityRecord(
+      2L,
+      sampleMissingValue.name,
+      sampleMissingValue.entityType,
+      workspace.workspaceIdAsUUID,
+      1L,
+      false,
+      Option(CompactEntitySerialization.toSql(sampleMissingValue.attributes).compactPrint)
+    )
+
+    val sampleWithSingleElementArrayAsCER = CompactEntityRecord(
+      4L,
+      sampleWithSingleElementArray.name,
+      sampleWithSingleElementArray.entityType,
+      workspace.workspaceIdAsUUID,
+      1L,
+      false,
+      Option(CompactEntitySerialization.toSql(sampleWithSingleElementArray.attributes).compactPrint)
+    )
     when(
-      mockQueries.queryRelationsForAttribute(any(),
-                                             any(),
-                                             any(),
-                                             any(),
-                                             org.mockito.ArgumentMatchers.eq("daSampleSet2")
+      mockQueries.queryRelatedRecordsWithArray(any(),
+                                               any(),
+                                               org.mockito.ArgumentMatchers.eq("daSampleSet"),
+                                               any(),
+                                               any()
       )
     )
-      .thenReturn(DBIO.successful(Seq(AttributeNumber(1), AttributeNumber(2))))
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER),
+              sampleMissingValueAsCER.name -> Seq(sampleMissingValueAsCER)
+          )
+        )
+      )
+
     when(
-      mockQueries.queryRelationsForAttribute(any(),
-                                             any(),
-                                             any(),
-                                             any(),
-                                             org.mockito.ArgumentMatchers.eq("daSampleSet4")
+      mockQueries.queryRelatedRecordsWithArray(any(),
+                                               any(),
+                                               org.mockito.ArgumentMatchers.eq("daSampleSet2"),
+                                               any(),
+                                               any()
       )
     )
-      .thenReturn(DBIO.successful(Seq(AttributeNumber(101))))
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+        )
+      )
+
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(),
+                                               any(),
+                                               org.mockito.ArgumentMatchers.eq("daSampleSet4"),
+                                               any(),
+                                               any()
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleWithSingleElementArrayAsCER.name -> Seq(sampleWithSingleElementArrayAsCER))
+        )
+      )
 
     val expressionEvaluationContext =
-      ExpressionEvaluationContext(Some(sampleSet.entityType), Some(sampleSet.name), None, None)
+      ExpressionEvaluationContext(Some(sampleSet.entityType), Some(sampleSet.name), Some("this.samples"), None)
     val futureResult = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,
@@ -180,7 +249,7 @@ class CompactExpressionEvaluatorSpec
 
     // TODO is changing the entity in the exevcxt the correct way to set this up?
     val expressionEvaluationContext2 =
-      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, None)
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), Some("this.samples"), None)
     val futureResult2 = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,
@@ -204,7 +273,7 @@ class CompactExpressionEvaluatorSpec
     }
 
     val expressionEvaluationContext3 =
-      ExpressionEvaluationContext(Some(sampleSet4.entityType), Some(sampleSet4.name), None, None)
+      ExpressionEvaluationContext(Some(sampleSet4.entityType), Some(sampleSet4.name), Some("this.samples"), None)
     val futureResult3 = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,

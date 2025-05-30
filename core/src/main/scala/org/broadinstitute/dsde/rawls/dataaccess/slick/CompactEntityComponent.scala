@@ -25,7 +25,6 @@ import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.{AttributeNull, AttributeValue, WorkspaceJsonSupport}
-import spray.json._
 
 import scala.concurrent.ExecutionContext
 
@@ -548,44 +547,44 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   // Written by AI!
   // TODO return all of attributes, then the caller will extract the actual attribute values
   // TODO also take in multiple entityNames
-//  def queryRelationsForAttribute(workspaceId: UUID,
-//                                 relation: String,
-//                                 attributeName: String,
-//                                 entityType: String,
-//                                 entityName: String
-//  ): ReadAction[Seq[AttributeValue]] =
-//    sql"""SELECT JSON_EXTRACT(e2.attributes, '$$.attrs.#$attributeName') AS value
-//    FROM ENTITY e1
-//  JOIN JSON_TABLE(
-//    CASE
-//      WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'ARRAY'
-//  THEN JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')
-//  WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'OBJECT'
-//  THEN JSON_ARRAY(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation'))
-//  ELSE NULL
-//    END,
-//  '$$[*]' COLUMNS (
-//    entityType VARCHAR(255) PATH '$$.entityType',
-//  entityName VARCHAR(255) PATH '$$.entityName'
-//  )
-//  ) refs
-//  ON 1=1
-//  JOIN ENTITY e2
-//  ON e2.entity_type = refs.entityType
-//  AND e2.name = refs.entityName
-//  WHERE e1.workspace_id = $workspaceId
-//  AND e1.entity_type = $entityType
-//  AND e1.name = $entityName""".as[String].map { seq =>
-//      seq.map {
-//        case jsonString if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
-//          try
-//            WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
-//          catch {
-//            case _: Exception => AttributeNull
-//          }
-//        case _ => AttributeNull
-//      }
-//    }
+  def queryRelationsForAttribute(workspaceId: UUID,
+                                 relation: String,
+                                 attributeName: String,
+                                 entityType: String,
+                                 entityName: String
+  ): ReadAction[Seq[AttributeValue]] =
+    sql"""SELECT JSON_EXTRACT(e2.attributes, '$$.attrs.#$attributeName') AS value
+    FROM ENTITY e1
+  JOIN JSON_TABLE(
+    CASE
+      WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'ARRAY'
+  THEN JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')
+  WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'OBJECT'
+  THEN JSON_ARRAY(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation'))
+  ELSE NULL
+    END,
+  '$$[*]' COLUMNS (
+    entityType VARCHAR(255) PATH '$$.entityType',
+  entityName VARCHAR(255) PATH '$$.entityName'
+  )
+  ) refs
+  ON 1=1
+  JOIN ENTITY e2
+  ON e2.entity_type = refs.entityType
+  AND e2.name = refs.entityName
+  WHERE e1.workspace_id = $workspaceId
+  AND e1.entity_type = $entityType
+  AND e1.name = $entityName""".as[String].map { seq =>
+      seq.map {
+        case jsonString if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
+          try
+            WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
+          catch {
+            case _: Exception => AttributeNull
+          }
+        case _ => AttributeNull
+      }
+    }
 
   // Written by/with AI (including the javadoc!)
   /**
@@ -608,8 +607,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     workspaceId: UUID,
     arrayEntityType: String,
     arrayEntityId: String,
-    arrayRelations: List[AttributeLookup],
-    relations: List[AttributeLookup]
+    arrayRelations: Seq[AttributeLookup],
+    relations: Seq[AttributeLookup]
   ): ReadAction[Map[String, Seq[CompactEntityRecord]]] = {
     require(arrayRelations.nonEmpty, "Array relations must not be empty")
 

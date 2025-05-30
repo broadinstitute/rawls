@@ -30,7 +30,6 @@ import spray.json._
 
 import java.sql.SQLIntegrityConstraintViolationException
 import java.util.UUID
-import scala.concurrent.Future
 import scala.util.Random
 
 class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
@@ -812,6 +811,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
     )
 
+    // Entity of same name/type in a different workspace
     val sample2 = Entity(
       "sample1",
       "sample",
@@ -820,7 +820,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // We'll need this later for comparison
     val insertedSampleWS1 = insertAndGet(sample1)
-    val insertedSampleWS2 = insertAndGet(sample2, minimalTestData.workspace2.workspaceIdAsUUID)
+    insertAndGet(sample2, minimalTestData.workspace2.workspaceIdAsUUID)
 
     // Referencing entity
     val set = Entity(

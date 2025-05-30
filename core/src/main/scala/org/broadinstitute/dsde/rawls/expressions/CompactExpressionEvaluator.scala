@@ -1,14 +1,19 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import akka.http.scaladsl.model.StatusCodes
+import io.circe.Json
+import io.circe.parser.parse
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.entities.base.{ExpressionEvaluationContext, ExpressionEvaluationSupport}
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, CompactEvaluateVisitor}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
+  Attribute,
+  AttributeName,
+  AttributeNull,
   AttributeValue,
   AttributeValueList,
   ErrorReport,
@@ -23,6 +28,7 @@ import scala.util.{Failure, Success, Try}
 
 class CompactExpressionEvaluator(repository: CompactEntityRepository) extends ExpressionEvaluationSupport {
 
+  // TODO replace with queryRelatedRecordsWithArray
   def evaluateExpression(workspaceId: UUID, expression: String, entityType: String, entityName: String)(implicit
     executionContext: ExecutionContext
   ): Future[Seq[AttributeValue]] = {
@@ -34,7 +40,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
   }
 
   // TODO alllllll the error handling, correctly
-  // TODO also everything else I might need to worry about from gatherInputsResult, although as far as I can tell, LocalEntityProvider just ignores everything else
   def evaluateExpressions(workspaceId: UUID,
                           expressionEvaluationContext: ExpressionEvaluationContext,
                           gatherInputsResult: MethodConfigResolver.GatherInputsResult
@@ -46,60 +51,87 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     val entityName = expressionEvaluationContext.entityName.getOrElse(
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityName"))
     )
-    // TODO will parselookups work if expression is None
-    val entityLookups = parseLookups(expressionEvaluationContext.expression.get)
 
-    // TODO when entityType/Name is a set entity (i.e. different from rootEntity) then the expression needs to know to refer to
-    // that entity type instead.  is that done in parseLookups or in lookUpToQuery?
-    // TODO also parse exevcxt.expression
-    // make a view??? that decidse if its an array or not, json type func in sql
-    val inputFutures: Seq[Future[(String, Seq[SubmissionValidationValue])]] = {
+    val entityLookups = expressionEvaluationContext.expression
+      .map(parseLookups)
+      .getOrElse(Seq.empty)
+
+    // TODO if there are multiple inputs, how does that affect the query?
+    val inputFutures =
       gatherInputsResult.processableInputs.toSeq.map { input =>
         val inputLookups = parseLookups(input.expression)
-        // TODO lookupToQuery should use both inputLookups and entityLookups
-        // we want the result to be records.  for each record we get any attributes out of it that are needed by the expressions parsed
-        repository.dataSource
-          .inTransaction { _ =>
-            lookUpToQuery(workspaceId, inputLookups, entityType, entityName)
-          }
-          .map { values =>
-            val attributeValueList = AttributeValueList(values)
+        val inputMap = inputLookups.map(_ -> input.workflowInput.getName)
 
-            // Wrap each value in a SubmissionValidationValue
-            val validationValues =
-              Seq(SubmissionValidationValue(Some(attributeValueList), None, input.workflowInput.getName))
-            entityName -> validationValues // TODO this won't be entityName if it's a set entity
-          }(executionContext)
-      }
-      /*
-            ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
-        // Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
-        val resultsByInput = inputs.toSeq.map { input =>
-          evaluator.evalFinalAttribute(workspaceContext, input.expression, Option(input)).asTry.map {
-            tryAttribsByEntity =>
-              val validationValuesByEntity: Seq[(EntityName, SubmissionValidationValue)] = tryAttribsByEntity match {
-                case Failure(regret) =>
-                  // The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
-                  entityNames
-                    .map((_, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.getName)))
-                case Success(attributeMap) =>
-                  convertToSubmissionValidationValues(attributeMap, input)
-              }
-              validationValuesByEntity
-          }
+        if (entityLookups.isEmpty) {
+          repository.dataSource
+            .inTransaction { _ =>
+              repository.queries
+                .getEntity(workspaceId, entityType, entityName)
+            }
+            .map {
+              case Some(record) =>
+                // Convert the single CompactEntityRecord into a Map for buildValidationInputs
+                val entityRecords = Map(entityName -> Seq(record))
+                buildValidationInputs(entityRecords, inputMap)
+              case None =>
+                LazyList.empty[SubmissionValidationEntityInputs]
+            }
+        } else {
+          repository.dataSource
+            .inTransaction { _ =>
+              repository.queries.queryRelatedRecordsWithArray(workspaceId,
+                                                              entityType,
+                                                              entityName,
+                                                              entityLookups,
+                                                              inputLookups
+              )
+            }
+            .map { entityRecords =>
+              buildValidationInputs(entityRecords, inputMap)
+            }
         }
-
-       */
-    }
-
-    // Combine all input results into a map, then wrap in SubmissionValidationEntityInputs
-    Future.sequence(inputFutures).map { resultsByInput =>
-      val valuesByEntity: Map[ExpressionEvaluationSupport.EntityName, Seq[SubmissionValidationValue]] =
-        resultsByInput.groupBy(_._1).view.mapValues(_.flatMap(_._2)).toMap
-
-      createSubmissionValidationEntityInputs(valuesByEntity)
+      }
+//TODO it makes sense for the entityName to be that of the actual entities
+    // But in the case of an entity set should be it be the name of the set entity??
+    Future.sequence(inputFutures).map { results =>
+      results.flatten
+        .groupBy(_.entityName) // Group by entityName
+        .map { case (entityName, inputs) =>
+          SubmissionValidationEntityInputs(
+            entityName = entityName,
+            inputResolutions = inputs.flatMap(_.inputResolutions).toSet // Combine all SubmissionValidationValue sets
+          )
+        }
+        .to(LazyList)
     }
   }
+
+  def buildValidationInputs(
+    entityRecords: Map[String, Seq[CompactEntityRecord]],
+    lookupsWithInputNames: Seq[(AttributeLookup, String)]
+  ): LazyList[SubmissionValidationEntityInputs] =
+    // TODO why do i have a list of records for each entity again??
+    entityRecords
+      .map { case (entityName, records) =>
+        // Use the first record for attribute extraction (or adjust as needed)
+        val record = records.head.toEntity
+
+        val validationValues: Set[SubmissionValidationValue] = lookupsWithInputNames.map { case (lookup, inputName) =>
+          val attrName = AttributeName.fromDelimitedName(lookup.attributeName)
+          val attrValue: Option[Attribute] = record.attributes.get(attrName)
+          SubmissionValidationValue(
+            value = attrValue.orElse(Some(AttributeNull)),
+            error = None,
+            inputName = inputName
+          )
+        }.toSet
+
+        SubmissionValidationEntityInputs(
+          entityName = entityName,
+          inputResolutions = validationValues
+        )
+      }
+      .to(LazyList)
 
   def parseLookups(expression: String): Seq[AttributeLookup] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
