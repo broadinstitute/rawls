@@ -76,7 +76,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       EntityUpdateDefinition("name3", "typeB", Seq())
     )
 
-    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 3
 
     val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
     metadataAfter.size shouldBe 2
@@ -115,7 +116,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       )
     )
 
-    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 3
 
     val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
     metadataAfter.size shouldBe 2
@@ -202,7 +204,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       )
     )
 
-    Await.result(provider.batchUpsertEntities(updates, defaultRequestContext), atMost)
+    val numUpdated = Await.result(provider.batchUpsertEntities(updates, defaultRequestContext), atMost)
+    numUpdated shouldBe 1
 
     // validate the references after our batchUpsert
     val finalReferences =
@@ -254,7 +257,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       )
     )
 
-    Await.result(provider.batchUpsertEntities(updates, defaultRequestContext), atMost)
+    val numUpdated = Await.result(provider.batchUpsertEntities(updates, defaultRequestContext), atMost)
+    numUpdated shouldBe 1
 
     // validate the references after our batchUpsert
     val finalReferences =
@@ -287,7 +291,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       )
     }
 
-    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 1000
 
     val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
     metadataAfter.size shouldBe 1
@@ -341,7 +346,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       )
     )
 
-    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 2
 
     // cursory validation of the entity creation
     val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
@@ -434,6 +440,47 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     }.toMap
 
     actual shouldBe Entity("name1", "typeA", expectedAttributes)
+
+  }
+
+  it should "handle noop updates" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // create the pre-existing base entities
+    val baseEntity1 = Entity("name1", "myType", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
+    val setup1 = Await.result(provider.createEntity(baseEntity1, defaultRequestContext), atMost)
+    setup1 shouldBe baseEntity1
+
+    val baseEntity2 = Entity("name2", "myType", Map(AttributeName.withDefaultNS("baz") -> AttributeString("qux")))
+    val setup2 = Await.result(provider.createEntity(baseEntity2, defaultRequestContext), atMost)
+    setup2 shouldBe baseEntity2
+
+    // issue multiple updates to the same entity
+    val updates = Seq(
+      EntityUpdateDefinition(
+        "name1",
+        "myType",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("bar"))) // this is a noop update
+      ),
+      EntityUpdateDefinition(
+        "name2",
+        "myType",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("baz"), AttributeString("changed!"))) // this is an update
+      )
+    )
+
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 1 // only one entity was actually updated
+
+    // entity1 remains unchanged
+    val actual1 = Await.result(provider.getEntity("myType", "name1", defaultRequestContext), atMost)
+    actual1 shouldBe baseEntity1
+
+    // entity2 has been updated
+    val actual2 = Await.result(provider.getEntity("myType", "name2", defaultRequestContext), atMost)
+    actual2 shouldBe baseEntity2.copy(attributes =
+      Map(AttributeName.withDefaultNS("baz") -> AttributeString("changed!"))
+    )
 
   }
 
