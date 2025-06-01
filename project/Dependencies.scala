@@ -112,7 +112,7 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.15.4"
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.16.1"
   val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.17.0"
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
