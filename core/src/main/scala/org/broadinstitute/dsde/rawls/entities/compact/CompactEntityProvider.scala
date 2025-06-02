@@ -118,68 +118,63 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = {
 
-    def getSoftConflicts(entities: Set[EntityPointer]): Future[Set[EntityPointer]] =
-      // return the entities already present in the destination workspace
-      repository.dataSource.inTransaction { _ =>
-        repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entities).map { conflicts =>
-          conflicts.toSeq.map(_.toPointer).toSet
-        }
-      }
-
     val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name))
-    repository.dataSource
-      .inTransaction { _ =>
-        repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs.toSet)
-      }
-      .flatMap {
-        case Seq() =>
-          val pathsAndConflicts = for {
-            entityReferenceMap <- repository.dataSource.inTransaction { _ =>
-              repository.queries.getEntitySubtrees(sourceWorkspaceContext.workspaceIdAsUUID,
-                                                   entityType,
-                                                   entityNames.toSet
-              )
-            }
-            entityReferences = entityReferenceMap.flatMap(_.to)
-            softConflicts <- getSoftConflicts(entityReferences)
-          } yield (entityReferenceMap, entityReferences, softConflicts)
-
-          pathsAndConflicts.flatMap { case (entityReferenceMap, entityReferences, softConflicts) =>
-            if (softConflicts.isEmpty || linkExistingEntities) {
-              val allEntityRefs: Set[EntityPointer] = entityReferenceMap.map(_.from) concat entityReferences
-              val entitiesToCopy: Set[EntityPointer] = allEntityRefs diff softConflicts
-              repository.dataSource.inTransaction { _ =>
-                for {
-                  _ <- repository.queries.copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-                                                                     destWorkspaceContext.workspaceIdAsUUID,
-                                                                     entitiesToCopy
-                  )
-                  _ <- repository.updateLastModified(workspaceId)
-                } yield EntityCopyResponse(entitiesToCopy.map(e => e.toAttributeEntityReference).toSeq,
-                                           Seq.empty,
-                                           Seq.empty
-                )
-              }
-            } else {
-              val unmergedSoftConflicts = entityReferenceMap.flatMap { refMapping =>
-                val conflicts = refMapping.to
-                  .intersect(softConflicts)
-                  .map(conflict => EntitySoftConflict(conflict.entityType, conflict.entityName, Seq.empty))
-                  .toSeq
-                if (conflicts.nonEmpty) {
-                  Some(EntitySoftConflict(refMapping.from.entityType, refMapping.from.entityName, conflicts))
-                } else {
-                  None
+    val copyResult = repository.dataSource.inTransaction { _ =>
+      for {
+        // Get hard conflicts
+        hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID,
+          entitiesToCopyRefs.toSet
+        )
+        result: EntityCopyResponse =
+          if (hardConflicts.nonEmpty) {
+              EntityCopyResponse(
+                Seq.empty,
+                hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)),
+                Seq.empty
+            )
+          } else {
+            repository.queries
+              .getEntitySubtrees(sourceWorkspaceContext.workspaceIdAsUUID, entityType, entityNames.toSet)
+              .flatMap { entityReferenceMap =>
+                val entityReferences = entityReferenceMap.flatMap(_.to)
+                repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).map {
+                  conflicts =>
+                    val softConflicts = conflicts.toSeq.map(_.toPointer).toSet
+                    if (softConflicts.isEmpty || linkExistingEntities) {
+                      val allEntityRefs: Set[EntityPointer] = entityReferenceMap.map(_.from) ++ entityReferences
+                      val entitiesToCopy: Set[EntityPointer] = allEntityRefs diff softConflicts
+                      repository.queries
+                        .copyEntitiesToNewWorkspace(
+                          sourceWorkspaceContext.workspaceIdAsUUID,
+                          destWorkspaceContext.workspaceIdAsUUID,
+                          entitiesToCopy
+                        )
+                      EntityCopyResponse(
+                        entitiesToCopy.map(_.toAttributeEntityReference).toSeq,
+                        Seq.empty,
+                        Seq.empty
+                      )
+                    } else {
+                      val unmergedSoftConflicts = entityReferenceMap.flatMap { refMapping =>
+                        val conflicts = refMapping.to
+                          .intersect(softConflicts)
+                          .map(conflict => EntitySoftConflict(conflict.entityType, conflict.entityName, Seq.empty))
+                          .toSeq
+                        if (conflicts.nonEmpty) {
+                          Some(EntitySoftConflict(refMapping.from.entityType, refMapping.from.entityName, conflicts))
+                        } else {
+                          None
+                        }
+                      }.toSeq
+                      EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts)
+                    }
                 }
-              }.toSeq
-              Future.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
-            }
+              }
           }
-        case hardConflicts =>
-          Future.successful(
-            EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)), Seq.empty)
-          )
-      }
+      } yield result
+    }
+    withWorkspaceLastModified(copyResult)
+    copyResult
   }
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
