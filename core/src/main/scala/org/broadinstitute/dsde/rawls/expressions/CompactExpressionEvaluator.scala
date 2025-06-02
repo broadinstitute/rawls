@@ -52,57 +52,76 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityName"))
     )
 
-    val entityLookups = expressionEvaluationContext.expression
-      .map(parseLookups)
-      .getOrElse(Seq.empty)
-
-    // TODO if there are multiple inputs, how does that affect the query?
-    val inputFutures =
-      gatherInputsResult.processableInputs.toSeq.map { input =>
-        val inputLookups = parseLookups(input.expression)
-        val inputMap = inputLookups.map(_ -> input.workflowInput.getName)
-
-        if (entityLookups.isEmpty) {
-          repository.dataSource
-            .inTransaction { _ =>
-              repository.queries
-                .getEntity(workspaceId, entityType, entityName)
-            }
-            .map {
-              case Some(record) =>
-                // Convert the single CompactEntityRecord into a Map for buildValidationInputs
-                val entityRecords = Map(entityName -> Seq(record))
-                buildValidationInputs(entityRecords, inputMap)
-              case None =>
-                LazyList.empty[SubmissionValidationEntityInputs]
-            }
-        } else {
-          repository.dataSource
-            .inTransaction { _ =>
-              repository.queries.queryRelatedRecordsWithArray(workspaceId,
-                                                              entityType,
-                                                              entityName,
-                                                              entityLookups,
-                                                              inputLookups
-              )
-            }
-            .map { entityRecords =>
-              buildValidationInputs(entityRecords, inputMap)
-            }
-        }
-      }
-//TODO it makes sense for the entityName to be that of the actual entities
-    // But in the case of an entity set should be it be the name of the set entity??
-    Future.sequence(inputFutures).map { results =>
-      results.flatten
-        .groupBy(_.entityName) // Group by entityName
-        .map { case (entityName, inputs) =>
-          SubmissionValidationEntityInputs(
-            entityName = entityName,
-            inputResolutions = inputs.flatMap(_.inputResolutions).toSet // Combine all SubmissionValidationValue sets
+    val rootEntityTypeOpt = expressionEvaluationContext.rootEntityType
+    if (rootEntityTypeOpt.isEmpty) { // TODO Is this an error or what?
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing rootEntityType")))
+    } else if (
+      expressionEvaluationContext.expression.isEmpty &&
+      entityType != rootEntityTypeOpt.get
+    ) {
+      val whatYouGaveUs =
+        if (expressionEvaluationContext.entityType.isDefined)
+          s"an entity of type ${expressionEvaluationContext.entityType.get}"
+        else "no entity"
+      Future.failed(
+        new RawlsExceptionWithErrorReport(
+          errorReport = ErrorReport(
+            StatusCodes.BadRequest,
+            s"Method configuration expects an entity of type ${rootEntityTypeOpt.get}, but you gave us $whatYouGaveUs."
           )
+        )
+      )
+    } else {
+      // TODO if there are multiple inputs, how does that affect the query?
+      val inputFutures =
+        gatherInputsResult.processableInputs.toSeq.map { input =>
+          val inputLookups = parseLookups(input.expression)
+          val inputMap = inputLookups.map(_ -> input.workflowInput.getName)
+          // If there's an expression, evaluate it to get the list of entities to run this job on.
+          // Otherwise, use the entity given in the submission.
+          expressionEvaluationContext.expression match {
+            case None =>
+              repository.dataSource
+                .inTransaction { _ =>
+                  repository.queries
+                    .getEntity(workspaceId, entityType, entityName)
+                }
+                .map {
+                  case Some(record) =>
+                    // Convert the single CompactEntityRecord into a Map for buildValidationInputs
+                    val entityRecords = Map(entityName -> Seq(record))
+                    buildValidationInputs(entityRecords, inputMap)
+                  case None =>
+                    LazyList.empty[SubmissionValidationEntityInputs]
+                }
+            case Some(expression) =>
+              val entityLookups = parseLookups(expression)
+              repository.dataSource
+                .inTransaction { _ =>
+                  repository.queries.queryRelatedRecordsWithArray(workspaceId,
+                                                                  entityType,
+                                                                  entityName,
+                                                                  entityLookups,
+                                                                  inputLookups
+                  )
+                }
+                .map { entityRecords =>
+                  buildValidationInputs(entityRecords, inputMap)
+                }
+
+          }
         }
-        .to(LazyList)
+      Future.sequence(inputFutures).map { results =>
+        results.flatten
+          .groupBy(_.entityName) // Group by entityName
+          .map { case (entityName, inputs) =>
+            SubmissionValidationEntityInputs(
+              entityName = entityName,
+              inputResolutions = inputs.flatMap(_.inputResolutions).toSet // Combine all SubmissionValidationValue sets
+            )
+          }
+          .to(LazyList)
+      }
     }
   }
 
@@ -113,15 +132,19 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     // TODO why do i have a list of records for each entity again??
     entityRecords
       .map { case (entityName, records) =>
-        // Use the first record for attribute extraction (or adjust as needed)
-        val record = records.head.toEntity
+        val record =
+          records.head.toEntity // TODO I think I only care about the first record, so I shouldn't need a list should I??
 
         val validationValues: Set[SubmissionValidationValue] = lookupsWithInputNames.map { case (lookup, inputName) =>
           val attrName = AttributeName.fromDelimitedName(lookup.attributeName)
           val attrValue: Option[Attribute] = record.attributes.get(attrName)
+          // TODO What should the error message be?  Does it really have to be an error?
+          val error =
+            if (record.attributes.contains(attrName)) None else Some("This attribute does not exist on this entity")
+
           SubmissionValidationValue(
-            value = attrValue.orElse(Some(AttributeNull)),
-            error = None,
+            value = attrValue,
+            error = error,
             inputName = inputName
           )
         }.toSet

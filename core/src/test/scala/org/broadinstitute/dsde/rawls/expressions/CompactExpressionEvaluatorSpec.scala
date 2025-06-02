@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.expressions
 
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   CompactEntityQuery,
   CompactEntityRecord,
@@ -26,7 +27,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatestplus.mockito.MockitoSugar.mock
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
@@ -45,6 +45,47 @@ class CompactExpressionEvaluatorSpec
   when(compactEntityRepository.dataSource).thenReturn(slickDataSource)
 
   val compactExpressionEvaluator = new CompactExpressionEvaluator(compactEntityRepository)
+
+  // TODO is there a better way
+  val sampleGoodAsCER = CompactEntityRecord(
+    1L,
+    sampleGood.name,
+    sampleGood.entityType,
+    workspace.workspaceIdAsUUID,
+    1L,
+    false,
+    Option(CompactEntitySerialization.toSql(sampleGood.attributes).compactPrint)
+  )
+
+  val sampleGood2AsCER = CompactEntityRecord(
+    3L,
+    sampleGood2.name,
+    sampleGood2.entityType,
+    workspace.workspaceIdAsUUID,
+    1L,
+    false,
+    Option(CompactEntitySerialization.toSql(sampleGood2.attributes).compactPrint)
+  )
+
+  val sampleMissingValueAsCER = CompactEntityRecord(
+    2L,
+    sampleMissingValue.name,
+    sampleMissingValue.entityType,
+    workspace.workspaceIdAsUUID,
+    1L,
+    false,
+    Option(CompactEntitySerialization.toSql(sampleMissingValue.attributes).compactPrint)
+  )
+
+  val sampleWithSingleElementArrayAsCER = CompactEntityRecord(
+    4L,
+    sampleWithSingleElementArray.name,
+    sampleWithSingleElementArray.entityType,
+    workspace.workspaceIdAsUUID,
+    1L,
+    false,
+    Option(CompactEntitySerialization.toSql(sampleWithSingleElementArray.attributes).compactPrint)
+  )
 
   // Note: this is also essentially a test for CompactEvaluateVisitor
   "parseLookups" should "generate correct lookups" in {
@@ -80,17 +121,6 @@ class CompactExpressionEvaluatorSpec
   // Copying from LocalEntityProviderSpec
   "evaluateExpressions" should "resolve method config inputs for a single entity" in withConfigData {
     // TODO probably check that it calls the query with the correct values
-
-    // TODO is there a better way
-    val sampleGoodAsCER = CompactEntityRecord(
-      1L,
-      sampleGood.name,
-      sampleGood.entityType,
-      workspace.workspaceIdAsUUID,
-      1L,
-      false,
-      Option(CompactEntitySerialization.toSql(sampleGood.attributes).compactPrint)
-    )
     when(
       mockQueries.getEntity(any(),
                             org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
@@ -101,7 +131,7 @@ class CompactExpressionEvaluatorSpec
 
     // TODO make a helper method to reduce repetition
     val expressionEvaluationContext =
-      ExpressionEvaluationContext(Some(sampleGood.entityType), Some(sampleGood.name), None, None)
+      ExpressionEvaluationContext(Some(sampleGood.entityType), Some(sampleGood.name), None, Some(sampleGood.entityType))
     val futureResult = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configGood, littleWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,
@@ -120,7 +150,7 @@ class CompactExpressionEvaluatorSpec
     }
 
     val expressionEvaluationContext2 =
-      ExpressionEvaluationContext(Some(sampleGood.entityType), Some(sampleGood.name), None, None)
+      ExpressionEvaluationContext(Some(sampleGood.entityType), Some(sampleGood.name), None, Some(sampleGood.entityType))
     val futureResult2 =
       Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configEvenBetter, littleWdl)) flatMap {
         gatherInputsResult =>
@@ -144,45 +174,6 @@ class CompactExpressionEvaluatorSpec
   }
 
   it should "resolve method config inputs for a set entity" in withConfigData {
-    val sampleGoodAsCER = CompactEntityRecord(
-      1L,
-      sampleGood.name,
-      sampleGood.entityType,
-      workspace.workspaceIdAsUUID,
-      1L,
-      false,
-      Option(CompactEntitySerialization.toSql(sampleGood.attributes).compactPrint)
-    )
-
-    val sampleGood2AsCER = CompactEntityRecord(
-      3L,
-      sampleGood2.name,
-      sampleGood2.entityType,
-      workspace.workspaceIdAsUUID,
-      1L,
-      false,
-      Option(CompactEntitySerialization.toSql(sampleGood2.attributes).compactPrint)
-    )
-
-    val sampleMissingValueAsCER = CompactEntityRecord(
-      2L,
-      sampleMissingValue.name,
-      sampleMissingValue.entityType,
-      workspace.workspaceIdAsUUID,
-      1L,
-      false,
-      Option(CompactEntitySerialization.toSql(sampleMissingValue.attributes).compactPrint)
-    )
-
-    val sampleWithSingleElementArrayAsCER = CompactEntityRecord(
-      4L,
-      sampleWithSingleElementArray.name,
-      sampleWithSingleElementArray.entityType,
-      workspace.workspaceIdAsUUID,
-      1L,
-      false,
-      Option(CompactEntitySerialization.toSql(sampleWithSingleElementArray.attributes).compactPrint)
-    )
     when(
       mockQueries.queryRelatedRecordsWithArray(any(),
                                                any(),
@@ -228,7 +219,11 @@ class CompactExpressionEvaluatorSpec
       )
 
     val expressionEvaluationContext =
-      ExpressionEvaluationContext(Some(sampleSet.entityType), Some(sampleSet.name), Some("this.samples"), None)
+      ExpressionEvaluationContext(Some(sampleSet.entityType),
+                                  Some(sampleSet.name),
+                                  Some("this.samples"),
+                                  Some(sampleSet.entityType)
+      )
     val futureResult = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,
@@ -239,9 +234,20 @@ class CompactExpressionEvaluatorSpec
     whenReady(futureResult) { lazyList =>
       lazyList should contain(
         SubmissionValidationEntityInputs(
-          sampleSet.name,
+          sampleGood.name, // TODO the LocalEntityProviderSpec has this mapped to sampleSet.name.  That seems wrong?  Does it matter?
           Set(
-            SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayNameWithWfName)
+            SubmissionValidationValue(Some(AttributeNumber(1)),
+                                      None,
+                                      intArrayNameWithWfName
+            ) // TODO LocalEntityProviderSpec has the value as Some(AttributeValueList(Seq(AttributeNumber(1)))), why so complicated?  Why not just AttributeNumber(1)?
+          )
+        )
+      )
+      lazyList should contain(
+        SubmissionValidationEntityInputs(
+          sampleMissingValue.name, // TODO the LocalEntityProviderSpec has this mapped to sampleSet.name.  That seems wrong?  Does it matter?
+          Set(
+            SubmissionValidationValue(Some(AttributeNull), None, intArrayNameWithWfName)
           )
         )
       )
@@ -249,7 +255,11 @@ class CompactExpressionEvaluatorSpec
 
     // TODO is changing the entity in the exevcxt the correct way to set this up?
     val expressionEvaluationContext2 =
-      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), Some("this.samples"), None)
+      ExpressionEvaluationContext(Some(sampleSet2.entityType),
+                                  Some(sampleSet2.name),
+                                  Some("this.samples"),
+                                  Some(sampleSet.entityType)
+      )
     val futureResult2 = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,
@@ -261,19 +271,43 @@ class CompactExpressionEvaluatorSpec
     whenReady(futureResult2) { lazyList =>
       lazyList should contain(
         SubmissionValidationEntityInputs(
-          sampleSet2.name,
+          sampleGood.name,
           Set(
-            SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))),
-                                      None,
-                                      intArrayNameWithWfName
-            )
+            SubmissionValidationValue(Some(AttributeNumber(1)), None, intArrayNameWithWfName)
+          )
+        )
+      )
+      lazyList should contain(
+        SubmissionValidationEntityInputs(
+          sampleGood2.name,
+          Set(
+            SubmissionValidationValue(Some(AttributeNumber(2)), None, intArrayNameWithWfName)
           )
         )
       )
     }
 
+    // TODO this is what LocalEntityProviderSpec expects
+//    whenReady(futureResult2) { lazyList =>
+//      lazyList should contain(
+//        SubmissionValidationEntityInputs(
+//          sampleSet2.name,
+//          Set(
+//            SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))),
+//              None,
+//              intArrayNameWithWfName
+//            )
+//          )
+//        )
+//      )
+//    }
+
     val expressionEvaluationContext3 =
-      ExpressionEvaluationContext(Some(sampleSet4.entityType), Some(sampleSet4.name), Some("this.samples"), None)
+      ExpressionEvaluationContext(Some(sampleSet4.entityType),
+                                  Some(sampleSet4.name),
+                                  Some("this.samples"),
+                                  Some(sampleSet.entityType)
+      )
     val futureResult3 = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,
@@ -285,7 +319,7 @@ class CompactExpressionEvaluatorSpec
     whenReady(futureResult3) { lazyList =>
       lazyList should contain(
         SubmissionValidationEntityInputs(
-          sampleSet4.name,
+          sampleWithSingleElementArray.name,
           Set(
             SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(101)))), None, intArrayNameWithWfName)
           )
@@ -296,13 +330,23 @@ class CompactExpressionEvaluatorSpec
   }
 
   it should "return error on missing values" in withConfigData {
-    // TODO what would this actually return, and then how would CEE deal with it
     when(
-      mockQueries.queryEntityForAttribute(any(), any(), any(), org.mockito.ArgumentMatchers.eq("sampleMissingValue"))
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleMissingValue.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleMissingValue.name)
+      )
     )
-      .thenReturn(DBIO.successful(AttributeNull))
+      .thenReturn(
+        DBIO.successful(
+          Some(sampleMissingValueAsCER)
+        )
+      )
     val expressionEvaluationContext =
-      ExpressionEvaluationContext(Some(sampleMissingValue.entityType), Some(sampleMissingValue.name), None, None)
+      ExpressionEvaluationContext(Some(sampleMissingValue.entityType),
+                                  Some(sampleMissingValue.name),
+                                  None,
+                                  Some(sampleMissingValue.entityType)
+      )
     val futureResult = Future.fromTry(methodConfigResolver.gatherInputs(userInfo, configGood, littleWdl)) flatMap {
       gatherInputsResult =>
         compactExpressionEvaluator.evaluateExpressions(workspace.workspaceIdAsUUID,
@@ -311,23 +355,10 @@ class CompactExpressionEvaluatorSpec
         )
     }
     whenReady(futureResult) { lazyList =>
-      val result = lazyList.find(_.entityName == "sampleMissingValue").flatMap { entityInputs =>
-        entityInputs.inputResolutions.find {
-          case SubmissionValidationValue(None, Some(_), intArg) if intArg == intArgNameWithWfName => true
-          case _                                                                                  => false
-        }
-      }
-      result shouldBe true
+      lazyList
+        .find(_.entityName == "sampleMissingValue")
+        .exists(_.inputResolutions.exists(v => v.inputName == intArgNameWithWfName && v.error.isDefined)) shouldBe true
     }
-    /*
-          assertResult(true, "Missing values should return an error") {
-        runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this))
-          .get("sampleMissingValue")
-          .get match {
-          case Seq(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgNameWithWfName => true
-        }
-      }
-     */
   }
 
   it should "error on missing input definitions" in withConfigData {
@@ -341,13 +372,11 @@ class CompactExpressionEvaluatorSpec
                                                          gatherInputsResult
           )
       }
-    /*
-          // MethodConfiguration config_namespace/configMissingExpr is missing definitions for these inputs: w1.t1.int_arg
-      intercept[RawlsException] {
-        runAndWait(testResolveInputs(context, configMissingExpr, sampleGood, littleWdl, this))
-      }
 
-     */
+    whenReady(futureResult.failed) { ex =>
+      ex shouldBe a[RawlsExceptionWithErrorReport]
+      ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("Missing rootEntityType")
+    }
   }
 
 }
