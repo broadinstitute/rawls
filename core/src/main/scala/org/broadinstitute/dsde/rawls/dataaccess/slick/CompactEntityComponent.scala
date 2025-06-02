@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.model.AttributeFormat.{ENTITY_NAME_KEY, ENTITY_TYPE_KEY}
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -658,7 +659,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    * TODO CORE-468: execution plan
     */
   def anyAttributeExists(workspaceId: UUID,
                          entityType: String,
@@ -673,6 +674,39 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
          where workspace_id = $workspaceId
           and entity_type = $entityType
           and ("""
+
+    concatSqlActions(baseSql, clause, sql"))")
+      .as[Boolean]
+      .head
+  }
+
+  /**
+    * Determine if a reference-containing attribute exists in any entity of the given type and workspace.
+    *
+    * TODO CORE-468: execution plan
+    */
+  def anyAttributeHasReference(workspaceId: UUID,
+                               entityType: String,
+                               attributeNames: Set[AttributeName]
+  ): ReadAction[Boolean] = {
+    val containsClauses = attributeNames.map { attributeName =>
+      val refTypePathScalar = s"${slickAttributePath(attributeName)}.$ENTITY_TYPE_KEY"
+      val refNamePathScalar = s"${slickAttributePath(attributeName)}.$ENTITY_NAME_KEY"
+      val refTypePathArray = s"${slickAttributePath(attributeName)}[*].$ENTITY_TYPE_KEY"
+      val refNamePathArray = s"${slickAttributePath(attributeName)}[*].$ENTITY_NAME_KEY"
+      sql"""JSON_CONTAINS_PATH(attributes, 'all', $refTypePathScalar, $refNamePathScalar)
+              or
+            JSON_CONTAINS_PATH(attributes, 'all', $refTypePathArray, $refNamePathArray)
+         """
+    }
+    val clause = reduceSqlActionsWithDelim(containsClauses.toSeq, sql" or ")
+
+    val baseSql =
+      sql"""select exists (select 1 from ENTITY
+            where workspace_id = $workspaceId
+            and entity_type = $entityType
+            and deleted = 0
+            and ("""
 
     concatSqlActions(baseSql, clause, sql"))")
       .as[Boolean]

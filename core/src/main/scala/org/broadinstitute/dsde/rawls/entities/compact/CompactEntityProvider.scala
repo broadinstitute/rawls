@@ -201,24 +201,28 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                       attributeNames: Set[AttributeName],
                                       parentContext: RawlsRequestContext
   ): Future[Unit] = {
-    for {
-      // verify if any of the attributes exist in the entityType. Short-circuit w/BadRequest if not.
-      attrExists <- repository.dataSource.inTransaction { _ =>
-        repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
-      }
-      _ = if (!attrExists) {
-        throw new AttributeException(
-          message = "Could not find any of the given attribute names.",
-          code = StatusCodes.BadRequest
-        )
-      }
-      // TODO CORE-468: does any entity exist which has {"entityType": *, "entityName": *} in this attribute,
-      //   either as a scalar or an array? If not, skip the next step.
-      // TODO CORE-468: if refs exist, delete from ENTITY_REFS where workspace_id matches, entity_type matches,
-      //   and to_entity_type+to_entity_name pairs exist in the column being deleted
-      // TODO CORE-468: Update ENTITY set attributes = JSON_REMOVE(attributes, targetColumn) where
-      //   JSON_CONTAINS_PATH(attributes, targetColumn), record_version = record_version + 1
-    } yield ()
+    repository.dataSource.inTransaction { _ =>
+      for {
+        // verify if any of the attributes exist in the entityType. Short-circuit w/BadRequest if not.
+        anyAttrExists <-
+          repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
+        _ = if (!anyAttrExists) {
+          throw new AttributeException(
+            message = "Could not find any of the given attribute names.",
+            code = StatusCodes.BadRequest
+          )
+        }
+        // TODO CORE-468: does any entity exist which has {"entityType": *, "entityName": *} in this attribute,
+        //   either as a scalar or an array? If not, skip the next step.
+        anyAttrHasReference <- repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
+        // TODO CORE-468: if refs exist, delete from ENTITY_REFS where workspace_id matches, entity_type matches,
+        //   and to_entity_type+to_entity_name pairs exist in the column being deleted
+
+        // TODO CORE-468: Update ENTITY set attributes = JSON_REMOVE(attributes, targetColumn) where
+        //   JSON_CONTAINS_PATH(attributes, targetColumn), record_version = record_version + 1
+
+      } yield ()
+    }
 
     throw new NotImplementedError("CompactEntityProvider does not support deleteEntityAttributes")
   }

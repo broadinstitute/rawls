@@ -519,6 +519,226 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     check(attr4, wsid2, "entityType2")
   }
 
+  behavior of "anyAttributeExists"
+
+  it should "find attributes" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+
+    val entity1 = Entity("entityName1",
+                         "entityType",
+                         Map(
+                           attr1 -> AttributeNumber(1)
+                         )
+    )
+    val entity2 = Entity("entityName2",
+                         "entityType",
+                         Map(
+                           attr2 -> AttributeNumber(1)
+                         )
+    )
+    val entity3 = Entity("entityName3",
+                         "entityType",
+                         Map(
+                           attr3 -> AttributeNumber(1)
+                         )
+    )
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    Seq(attr1, attr2, attr3) foreach { attributeName =>
+      withClue(s"attribute $attributeName should exist") {
+        val attrsToFind =
+          Set(AttributeName.withDefaultNS("nonexistent"),
+              attributeName,
+              AttributeName.withDefaultNS("anotherNonexistent")
+          )
+        val actual = runAndWait(q.anyAttributeExists(wsid, "entityType", attrsToFind))
+        actual shouldBe true
+      }
+    }
+
+    // some attributes that don't exist
+    Seq(AttributeName.fromDelimitedName("import:foo"),
+        AttributeName.withDefaultNS("bar"),
+        AttributeName.withDefaultNS("boo")
+    ) foreach { attributeName =>
+      withClue(s"attribute $attributeName should not exist") {
+        val attrsToFind =
+          Set(AttributeName.withDefaultNS("nonexistent"),
+              attributeName,
+              AttributeName.withDefaultNS("anotherNonexistent")
+          )
+        val actual = runAndWait(q.anyAttributeExists(wsid, "entityType", attrsToFind))
+        actual shouldBe false
+      }
+    }
+  }
+
+  it should "respect the workspace and entity type" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("one")
+    val attr2 = AttributeName.withDefaultNS("two")
+    val attr3 = AttributeName.withDefaultNS("three")
+    val attr4 = AttributeName.withDefaultNS("four")
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    insertAndGet(Entity("entityName", "entityType1", Map(attr1 -> AttributeNumber(1))), wsid)
+    insertAndGet(Entity("entityName", "entityType2", Map(attr2 -> AttributeNumber(2))), wsid)
+    insertAndGet(Entity("entityName", "entityType1", Map(attr3 -> AttributeNumber(3))), wsid2)
+    insertAndGet(Entity("entityName", "entityType2", Map(attr4 -> AttributeNumber(4))), wsid2)
+
+    // helper function to check if the attribute exists in the given workspace and entity type
+    def check(attributeName: AttributeName, expectedWorkspaceId: UUID, expectedEntityType: String): Unit =
+      Seq(wsid, wsid2) foreach { workspaceId =>
+        Seq("entityType1", "entityType2") foreach { entityType =>
+          withClue(
+            s"attribute $attributeName should only exist in workspace $expectedWorkspaceId and entity type $expectedEntityType;" +
+              s" error while checking $workspaceId and $entityType"
+          ) {
+            val attrsToFind =
+              Set(AttributeName.withDefaultNS("nonexistent"),
+                  attributeName,
+                  AttributeName.withDefaultNS("anotherNonexistent")
+              )
+            val actual = runAndWait(q.anyAttributeExists(workspaceId, entityType, attrsToFind))
+            val expected = workspaceId == expectedWorkspaceId && entityType == expectedEntityType
+            actual shouldBe expected
+          }
+        }
+      }
+
+    check(attr1, wsid, "entityType1")
+    check(attr2, wsid, "entityType2")
+    check(attr3, wsid2, "entityType1")
+    check(attr4, wsid2, "entityType2")
+  }
+
+  behavior of "anyAttributeHasReference"
+
+  it should "find references" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("decoy")
+
+    val entity1 = Entity(
+      "entityName1",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeString("not a reference"),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+    val entity2 = Entity(
+      "entityName2",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeEntityReference("entityType", "entityName1"),
+        attr3 -> AttributeString("not a reference"),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+    val entity3 = Entity(
+      "entityName3",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("entityType", "entityName1"),
+            AttributeEntityReference("entityType", "entityName2")
+          )
+        ),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // attr1 does not have a reference
+    val actual1 = runAndWait(q.anyAttributeHasReference(wsid, "entityType", Set(attr1, attr4)))
+    withClue("attr1 should not find a reference") {
+      actual1 shouldBe false
+    }
+
+    // attr2 has a reference
+    val actual2 = runAndWait(q.anyAttributeHasReference(wsid, "entityType", Set(attr2, attr4)))
+    withClue("attr2 should find a reference scalar") {
+      actual2 shouldBe true
+    }
+
+    // attr3 has a reference list
+    val actual3 = runAndWait(q.anyAttributeHasReference(wsid, "entityType", Set(attr3, attr4)))
+    withClue("attr3 should find a reference list") {
+      actual3 shouldBe true
+    }
+
+  }
+
+  it should "respect the workspace and entity type" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("decoy")
+
+    val attrsMap1 = Map(
+      attr1 -> AttributeNumber(1),
+      attr2 -> AttributeString("not a reference"),
+      attr3 -> AttributeString("not a reference"),
+      attr4 -> AttributeString("entityType and entityName are important words")
+    )
+
+    val attrsMap2 = Map(
+      attr1 -> AttributeNumber(1),
+      attr2 -> AttributeEntityReference("entityType1", "entityName1"),
+      attr3 -> AttributeEntityReferenceList(
+        Seq(
+          AttributeEntityReference("entityType1", "entityName1")
+        )
+      ),
+      attr4 -> AttributeString("entityType and entityName are important words")
+    )
+
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    // insert target entities
+    insertAndGet(Entity("entityName1", "entityType1", attrsMap1), wsid)
+    insertAndGet(Entity("entityName1", "entityType1", attrsMap1), wsid2)
+    // insert the entities we will be searching against.
+    // references will exist in wsid/entityType1 and wsid2/entityType2
+    insertAndGet(Entity("entityName2", "entityType1", attrsMap2), wsid) // attrsMap2 has references
+    insertAndGet(Entity("entityName2", "entityType2", attrsMap1), wsid)
+    insertAndGet(Entity("entityName2", "entityType1", attrsMap1), wsid2)
+    insertAndGet(Entity("entityName2", "entityType2", attrsMap2), wsid2) // attrsMap2 has references
+
+    // helper function to check if the attribute exists in the given workspace and entity type
+    def check(attributeName: AttributeName, workspaceId: UUID, entityType: String, expectedResult: Boolean): Unit = {
+      val attrsToFind =
+        Set(AttributeName.withDefaultNS("nonexistent"),
+            attributeName,
+            AttributeName.withDefaultNS("anotherNonexistent")
+        )
+      val actual = runAndWait(q.anyAttributeHasReference(workspaceId, entityType, attrsToFind))
+      actual shouldBe expectedResult
+    }
+
+    // in wsid, references exist in entityType1
+    check(attr2, wsid, "entityType1", expectedResult = true)
+    check(attr3, wsid, "entityType1", expectedResult = true)
+    check(attr2, wsid, "entityType2", expectedResult = false)
+    check(attr3, wsid, "entityType2", expectedResult = false)
+    // in wsid2, references exist in entityType2
+    check(attr2, wsid2, "entityType1", expectedResult = false)
+    check(attr3, wsid2, "entityType1", expectedResult = false)
+    check(attr2, wsid2, "entityType2", expectedResult = true)
+    check(attr3, wsid2, "entityType2", expectedResult = true)
+  }
+
   behavior of "renameAttribute"
 
   it should "change the attribute name" in withMinimalTestDatabase { _ =>
