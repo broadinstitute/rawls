@@ -856,6 +856,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
   }
 
+  behavior of "deleteReferencesFromAttribute"
+
+  it should "have tests" is pending
+
+  
+
   behavior of "renameAttribute"
 
   it should "change the attribute name" in withMinimalTestDatabase { _ =>
