@@ -247,20 +247,16 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
   def getEntitySubtrees(workspaceId: UUID,
                         entityType: String,
                         entityNames: Set[String]
-  ): ReadAction[Map[EntityPointer, Set[EntityPointer]]] = {
+  ): ReadAction[Set[RefMapping]] = {
     val refs = entityNames.map(name => EntityPointer(entityType, name))
     for {
-      startingEntityRecords <- getEntityRefs(workspaceId, refs)
-      entities = startingEntityRecords.map(record => record.toPointer)
-      allRefs <- recursiveGetEntityReferences(workspaceId, entities.toSet)
+      allRefs <- recursiveGetEntityReferences(workspaceId, refs)
     } yield allRefs
   }
 
-  def recursiveGetEntityReferences(workspaceId: UUID,
-                                   entities: Set[EntityPointer]
-                                  ): ReadAction[Map[EntityPointer, Set[EntityPointer]]] = {
+  def recursiveGetEntityReferences(workspaceId: UUID, entities: Set[EntityPointer]): ReadAction[Set[RefMapping]] =
     if (entities.isEmpty) {
-      DBIO.successful(Map.empty)
+      DBIO.successful(Set.empty[RefMapping])
     } else {
       val entityTypeNameClauses = generateTypeNameSql(entities)
 
@@ -296,9 +292,10 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
           .view
           .mapValues(_.toSet)
           .toMap
+          .map { case (key, value) => RefMapping(key, value) }
+          .toSet
       }
     }
-  }
 
   def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
     if (refs.isEmpty) {
