@@ -2,22 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProviderConfig, CompactEntitySerialization}
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeName,
-  AttributeRename,
-  Entity,
-  EntityColumnFilter,
-  EntityPointer,
-  EntityQuery,
-  FilterOperators,
-  SortDirections
-}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeRename, Entity, EntityColumnFilter, EntityPointer, EntityQuery, FilterOperators, SortDirections}
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
@@ -31,10 +21,11 @@ trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
 
   /** low-level raw SQL queries for ENTITY. */
-  object compactEntityQuery extends CompactEntityQuery(this)
+  def compactEntityQuery(config: CompactEntityProviderConfig): CompactEntityQuery =
+    new CompactEntityQuery(this, config)
 }
 
-class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery with CompactEntitySerialization {
+class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntityProviderConfig) extends RawSqlQuery with CompactEntitySerialization {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
@@ -235,7 +226,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         entityRefsCopiedCount <- copyEntityReferences(sourceWs, destWs, chunk)
       } yield (entitiesCopiedCount, entityRefsCopiedCount)
 
-    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(driverComponent.batchSize)
+    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(config.batchCopyBatchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 
