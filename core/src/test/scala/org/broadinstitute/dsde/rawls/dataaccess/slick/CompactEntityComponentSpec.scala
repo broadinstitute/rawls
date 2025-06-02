@@ -938,11 +938,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                        fake.to.head.entityName
       )
     }) ++ Set(validRef1, validRef2).map { otherWorkspaceRef =>
-      RefPointerRecord(wsid,
-                       otherWorkspaceRef.from.entityType,
-                       otherWorkspaceRef.from.entityName,
-                       otherWorkspaceRef.to.head.entityType,
-                       otherWorkspaceRef.to.head.entityName
+      RefPointerRecord(
+        testData.workspaceNoAttrs.workspaceIdAsUUID,
+        otherWorkspaceRef.from.entityType,
+        otherWorkspaceRef.from.entityName,
+        otherWorkspaceRef.to.head.entityType,
+        otherWorkspaceRef.to.head.entityName
       )
     }
 

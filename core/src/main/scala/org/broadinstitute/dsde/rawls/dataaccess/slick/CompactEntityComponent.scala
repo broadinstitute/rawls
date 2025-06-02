@@ -295,6 +295,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     * @param fromType the entity type containing reference
     * @param fromAttributes the attributes in the fromType entities that contain references to other entities
     * @return the number of rows deleted
+    *
+    * TODO: execution plan
     */
   def deleteAllReferencesFromAttributes(workspaceId: UUID,
                                         fromType: String,
@@ -304,7 +306,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       DBIO.successful(0)
     } else {
       val entityTypePath = s"$$.$ENTITY_TYPE_KEY"
-      val entityNamePath = s"$$.$ENTITY_TYPE_KEY"
+      val entityNamePath = s"$$.$ENTITY_NAME_KEY"
 
       val readQueries = fromAttributes.map { attributeName =>
         val attributePath = slickAttributePath(attributeName)
