@@ -1,5 +1,5 @@
 # TODO: Replace build script with multi-stage Dockerfile that builds its own JAR
-# FROM sbtscala/scala-sbt:eclipse-temurin-17.0.14_7_1.10.11_2.13.16 as jar-builder
+# FROM sbtscala/scala-sbt:eclipse-temurin-17.0.15_6_1.11.0_2.13.16 as jar-builder
 # ...build JAR...
 # FROM us.gcr.io/broad-dsp-gcr-public/base/jre:17-debian
 # COPY --from=jar-builder ./rawls*.jar /rawls
