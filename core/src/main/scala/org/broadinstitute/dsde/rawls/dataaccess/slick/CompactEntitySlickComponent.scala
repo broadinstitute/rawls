@@ -31,11 +31,16 @@ trait CompactEntitySlickComponent {
 
   /** high-level Slick table for ENTITY_REFS */
   class CompactEntityRefTable(tag: Tag) extends Table[RefPointerRecord](tag, "ENTITY_REFS") {
-    def fromId = column[Long]("from_id")
-    def toId = column[Long]("to_id")
+    def workspaceId = column[UUID]("worspace_id")
+    def fromEntityType = column[String]("from_entity_type")
+    def fromEntityName = column[String]("from_entity_name")
+    def toEntityType = column[String]("to_entity_type")
+    def toEntityName = column[String]("to_entity_name")
 
     def * =
-      (fromId, toId) <> (RefPointerRecord.tupled, RefPointerRecord.unapply)
+      (workspaceId, fromEntityType, fromEntityName, toEntityType, toEntityName) <> (RefPointerRecord.tupled,
+                                                                                    RefPointerRecord.unapply
+      )
   }
 
   /** high-level Slick table for ENTITY_KEYS */

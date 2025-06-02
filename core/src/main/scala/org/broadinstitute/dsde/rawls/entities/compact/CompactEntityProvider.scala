@@ -226,25 +226,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           _ <-
             // If none of these attributes contains a references, no need to issue an update to ENTITY_REFS
             if (anyAttrHasReference) {
-              // TODO CORE-468: if refs exist, delete from ENTITY_REFS where workspace_id matches, entity_type matches,
+              // If refs exist, delete from ENTITY_REFS where workspace_id matches, entity_type matches,
               //   and to_entity_type+to_entity_name pairs exist in the column being deleted
-              /*
-              SELECT
-                JSON_UNQUOTE(JSON_EXTRACT(value, '$.entityType')),
-                JSON_UNQUOTE(JSON_EXTRACT(value, '$.entityName')),
-                attributes
-              FROM ENTITY,
-              JSON_TABLE(
-                CASE
-                  WHEN JSON_TYPE(JSON_EXTRACT(attributes, '$.attrs."library:baz"')) = 'ARRAY' THEN JSON_EXTRACT(attributes, '$.attrs."library:baz"')
-                  ELSE JSON_ARRAY(JSON_EXTRACT(attributes, '$.attrs."library:baz"'))
-                END,
-                '$[*]' COLUMNS(value json PATH '$')
-              ) AS jt
-              where JSON_TYPE(value) = 'OBJECT'
-              and JSON_CONTAINS_PATH(value, 'all', '$.entityType', '$.entityName');
-               */
-              DBIO.failed(new NotImplementedError("TODO CORE-468: delete from ENTITY_REFS"))
+              repository.queries.deleteAllReferencesFromAttributes(
+                workspaceId,
+                entityType,
+                attributeNames
+              )
             } else {
               DBIO.successful(())
             }

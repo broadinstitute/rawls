@@ -63,7 +63,12 @@ case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attribute
 /**
   * model class for rows in the ENTITY_REFS table
   */
-case class RefPointerRecord(fromId: Long, toId: Long)
+case class RefPointerRecord(workspaceId: UUID,
+                            fromEntityType: String,
+                            fromEntityName: String,
+                            toEntityType: String,
+                            toEntityName: String
+)
 
 /** all reference pointers from one entity to all its reference targets */
 case class RefMapping(from: EntityPointer, to: Set[EntityPointer])

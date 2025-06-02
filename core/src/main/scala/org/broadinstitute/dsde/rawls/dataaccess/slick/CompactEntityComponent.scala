@@ -290,6 +290,54 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     sql"""delete from ENTITY_REFS where workspace_id = $workspaceId and from_entity_type = $fromType""".asUpdate
 
   /**
+    * Delete all rows in ENTITY_REFS representing references from specific attributes in entities of a given type.
+    * @param workspaceId the workspace containing references
+    * @param fromType the entity type containing reference
+    * @param fromAttributes the attributes in the fromType entities that contain references to other entities
+    * @return the number of rows deleted
+    */
+  def deleteAllReferencesFromAttributes(workspaceId: UUID,
+                                        fromType: String,
+                                        fromAttributes: Set[AttributeName]
+  ): ReadWriteAction[Int] =
+    if (fromAttributes.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val entityTypePath = s"$$.$ENTITY_TYPE_KEY"
+      val entityNamePath = s"$$.$ENTITY_TYPE_KEY"
+
+      val readQueries = fromAttributes.map { attributeName =>
+        val attributePath = slickAttributePath(attributeName)
+
+        sql"""SELECT
+                JSON_UNQUOTE(JSON_EXTRACT(value, $entityTypePath)) as entityType,
+                JSON_UNQUOTE(JSON_EXTRACT(value, $entityNamePath)) as entityName
+              FROM ENTITY,
+              JSON_TABLE(
+                CASE
+                  WHEN JSON_TYPE(JSON_EXTRACT(attributes, $attributePath)) = 'ARRAY' THEN JSON_EXTRACT(attributes, $attributePath)
+                  ELSE JSON_ARRAY(JSON_EXTRACT(attributes, $attributePath))
+                END,
+                '$$[*]' COLUMNS(value json PATH '$$')
+              ) AS jt
+              where JSON_TYPE(value) = 'OBJECT'
+              and JSON_CONTAINS_PATH(value, 'all', $entityTypePath, $entityNamePath)
+           """
+      }
+
+      val allReads = reduceSqlActionsWithDelim(readQueries.toSeq, sql" union all ")
+
+      concatSqlActions(
+        sql"""delete from ENTITY_REFS
+            where workspace_id = $workspaceId
+            and from_entity_type = $fromType
+            and (to_entity_type, to_name) in (""",
+        allReads,
+        sql")"
+      ).asUpdate
+    }
+
+  /**
     * Insert references into ENTITY_REFS.
     *
     * Returns the number of rows upserted.
