@@ -1393,13 +1393,8 @@ class CompactEntityProviderSpec
     )
 
     val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
-    // The actual result is two entities, because we applied the two sets of operations in order
+    // The actual result is the entity after all operations are applied to it
     actual shouldBe Seq(
-      Entity(
-        "name1",
-        "typeA",
-        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"))
-      ),
       Entity(
         "name1",
         "typeA",
@@ -1442,15 +1437,8 @@ class CompactEntityProviderSpec
     )
 
     val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
-    // The actual result is two entities, because we applied the two sets of operations in order
+    // The actual result is the entity after all operations are applied to it
     actual shouldBe Seq(
-      Entity(
-        "name1",
-        "typeA",
-        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"),
-            AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
-        )
-      ),
       Entity(
         "name1",
         "typeA",
@@ -1459,6 +1447,50 @@ class CompactEntityProviderSpec
           AttributeName.withDefaultNS("col2") -> AttributeString("val2"),
           AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
         )
+      )
+    )
+  }
+
+  it should "skip noop updates" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition("name2",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val2")))
+      )
+    )
+
+    val existingEntitiesByIdentifier: Map[EntityPointer, Entity] = Map(
+      EntityPointer("typeA", "name1") -> Entity("name1",
+                                                "typeA",
+                                                Map(
+                                                  AttributeName.withDefaultNS("col1") -> AttributeString("val1")
+                                                )
+      ),
+      EntityPointer("typeA", "name2") -> Entity("name2",
+                                                "typeA",
+                                                Map(
+                                                  AttributeName.withDefaultNS("col1") -> AttributeString("val1")
+                                                )
+      )
+    )
+
+    val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
+    // The actual result is the entity after all operations are applied to it; the noop operations are skipped
+    actual shouldBe Seq(
+      Entity("name2",
+             "typeA",
+             Map(
+               AttributeName.withDefaultNS("col1") -> AttributeString("val2")
+             )
       )
     )
   }

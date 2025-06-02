@@ -106,11 +106,15 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
           .map(rec => rec.toPointer -> rec.toEntity)
           .toMap
 
+        // Apply the incoming operations to the existing entities (or to an empty entity if none pre-existed).
+        // This skips unchanged entities
+        updatedEntities = applyAll(updates, existingEntitiesByIdentifier)
+
         // How many updates do we have for each entity being updated?
-        updateCounts = updateIdentifiers
-          .groupBy(identity)
-          .map { case (updateIdentifier, updateDefinitions) =>
-            updateIdentifier -> updateDefinitions.size
+        updateCounts = updatedEntities
+          .groupBy(_.toPointer)
+          .map { case (updateIdentifier, updates) =>
+            updateIdentifier -> updates.size
           }
         // what are the existing record_versions?
         existingVersionsByIdentifier = existingEntities
@@ -123,14 +127,16 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
           identifier -> (existingVersion + updateCount)
         }
 
-        // Apply the incoming operations to the existing entities (or to an empty entity if none pre-existed)
-        updatedEntities = applyAll(updates, existingEntitiesByIdentifier)
-
         // Persist the updated entities to the database
-        writeCount <- insertOrUpdateBatch(updatedEntities)
+        _ <- insertOrUpdateBatch(updatedEntities)
+
+        // insertOrUpdateBatch uses an `insert into ... on duplicate key update` statement.
+        // MySQL behavior is to return 1 if a row was inserted and 2 if it was updated.
+        // So, to return the actual number of entities written, we need to count the number of unique pointers.
+        writeCount = updatedEntities.map(_.toPointer).toSet.size
 
         // Re-retrieve the entities we just wrote. This gets the actual record_version values.
-        finalRecordVersions <- repository.queries.getEntityVersions(workspaceId, updateIdentifiers.toSet)
+        finalRecordVersions <- repository.queries.getEntityVersions(workspaceId, updatedEntities.map(_.toPointer).toSet)
 
         // Compare the actual record versions, after writing the entities, to the expected record versions
         _ = finalRecordVersions.foreach { rec =>
@@ -162,22 +168,37 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
                  accum: Seq[Entity]
     ): Seq[Entity] =
       if (updates.isEmpty) {
-        //  end of updates; return the accumulator
+        // end of updates.
+        // now that everything has been applied, de-duplicate the entities.
+        // If the same entity appears multiple times in our update, take the last one.
         accum
+          .groupBy(_.toPointer)
+          .values
+          .map(_.last)
+          .toSeq
       } else {
         val thisUpdate = updates.head
-        val thisBaseEntity = existingEntitiesByIdentifier.getOrElse(
-          EntityPointer(thisUpdate.entityType, thisUpdate.name),
-          Entity(thisUpdate.name, thisUpdate.entityType, Map())
-        )
+
+        val thisUpdatePointer = EntityPointer(thisUpdate.entityType, thisUpdate.name)
+
+        val isPreExisting = existingEntitiesByIdentifier.contains(thisUpdatePointer)
+
+        val thisBaseEntity =
+          existingEntitiesByIdentifier.getOrElse(
+            thisUpdatePointer,
+            Entity(thisUpdate.name, thisUpdate.entityType, Map())
+          )
 
         val updatedEntity = applyOperationsToEntity(thisBaseEntity, thisUpdate.operations)
 
-        applyOne(updates.tail,
-                 existingEntitiesByIdentifier + (updatedEntity.toPointer -> updatedEntity),
-                 accum :+ updatedEntity
-        )
+        // If the entity has not changed and already exists, we can skip it.
+        val newAccum = if (isPreExisting && thisBaseEntity == updatedEntity) {
+          accum
+        } else {
+          accum :+ updatedEntity
+        }
 
+        applyOne(updates.tail, existingEntitiesByIdentifier + (updatedEntity.toPointer -> updatedEntity), newAccum)
       }
 
     applyOne(updates, existingEntitiesByIdentifier, Seq())
