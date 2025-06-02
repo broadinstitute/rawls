@@ -528,7 +528,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * @param workspaceName the name of the workspace to migrate
     * @param batchSize the number of entities to migrate in a single batch; defaults to 50,000
     */
-  def quicksilverMigration(workspaceName: WorkspaceName, batchSize: Int = 50000): Future[Int] = {
+  def quicksilverMigration(workspaceName: WorkspaceName, batchSize: Int = 50000): Future[Int] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
         // verify owner of workspace.
@@ -564,45 +564,38 @@ class EntityService(protected val ctx: RawlsRequestContext,
             s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
           )
 
-          for {
-            // get the current value of MySQL sort_buffer_size
-            defaultSortBufferSize <- dataAccess.compactEntityQuery.getSortBufferSetting
-            // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
-            // for each batch. later queries will use those boundaries to migrate entities in batches, which
-            // prevents the temp tables from growing too large.
-            batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
-            // niceties for logging
-            indexedBoundaries = batchBoundaries.zipWithIndex
+          withIncreasedSortMemory(dataAccess) {
+            for {
+              // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
+              // for each batch. later queries will use those boundaries to migrate entities in batches, which
+              // prevents the temp tables from growing too large.
+              batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
+              // niceties for logging
+              indexedBoundaries = batchBoundaries.zipWithIndex
 
-            // set sort buffer size to 8MB; this avoids MySQL errors during migration
-            // with a "Out of sort memory, consider increasing server sort buffer size" message.
-            // see also https://bugs.mysql.com/bug.php?id=103225
-            _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(8388608L)
+              // for each batch, migrate the entities in that batch
+              updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
+                quicksilverMigrateBatch(workspaceId,
+                                        shardId,
+                                        boundary,
+                                        dataAccess,
+                                        idx,
+                                        indexedBoundaries.size,
+                                        stopwatch,
+                                        s
+                )
+              })
+              numEntitiesUpdated = updateCounts.sum
 
-            // for each batch, migrate the entities in that batch
-            updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
-              quicksilverMigrateBatch(workspaceId,
-                                      shardId,
-                                      boundary,
-                                      dataAccess,
-                                      idx,
-                                      indexedBoundaries.size,
-                                      stopwatch,
-                                      s
+              // populate the ENTITY_REFS table for this workspace
+              _ <- traceDBIOWithParent("migrationAddReferences", s) { _ =>
+                dataAccess.compactEntityQuery.migrationAddReferences(workspaceId, shardId)
+              }
+              _ = logger.info(
+                s"Quicksilver migration $workspaceId: populated ENTITY_REFS (${stopwatch.formatTime()}) ..."
               )
-            })
 
-            numEntitiesUpdated = updateCounts.sum
-
-            // populate the ENTITY_REFS table for this workspace
-            _ <- traceDBIOWithParent("migrationAddReferences", s) { _ =>
-              dataAccess.compactEntityQuery.migrationAddReferences(workspaceId, shardId)
-            }
-            _ = logger.info(
-              s"Quicksilver migration $workspaceId: populated ENTITY_REFS (${stopwatch.formatTime()}) ..."
-            )
-
-            /** *** don't delete legacy data; we'll do that en masse after everything is migrated
+              /** *** don't delete legacy data; we'll do that en masse after everything is migrated
               *  // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
               *  _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
               *  _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
@@ -613,13 +606,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
               *  _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
               * *** */
 
-            // reset sort buffer size to its original value
-            _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
+              _ = logger.info(
+                s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+              )
+            } yield numEntitiesUpdated
+          }
 
-            _ = logger.info(
-              s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
-            )
-          } yield numEntitiesUpdated
         }
 
         // finally, change the workspace to be quicksilver-enabled
@@ -633,7 +625,20 @@ class EntityService(protected val ctx: RawlsRequestContext,
         // return a count of entities updated
       } yield userResult
     }
-  }
+
+  /** Executes a database operation `op` in a session using 8MB of `sort_buffer_size` memory,
+    * then resets the sort buffer size back to its original value */
+  private def withIncreasedSortMemory[T](dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] =
+    for {
+      // get the current value of MySQL sort_buffer_size
+      defaultSortBufferSize <- dataAccess.compactEntityQuery.getSortBufferSetting
+      // set sort buffer size to 8MB; this avoids MySQL errors during migration
+      // with an "Out of sort memory, consider increasing server sort buffer size" message.
+      // see also https://bugs.mysql.com/bug.php?id=103225
+      _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(8388608L)
+      // execute the requested operation, then reset sort buffer size to its original value
+      result <- op andFinally dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
+    } yield result
 
   private case class MigrationBoundary(startEntityId: Long, endEntityId: Long)
 
