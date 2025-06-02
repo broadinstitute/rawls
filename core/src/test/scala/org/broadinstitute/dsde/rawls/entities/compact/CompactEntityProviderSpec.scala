@@ -1484,7 +1484,7 @@ class CompactEntityProviderSpec
     )
 
     val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
-    // The actual result is two entities, because we applied the two sets of operations in order
+    // The actual result is the entity after all operations are applied to it; the noop operations are skipped
     actual shouldBe Seq(
       Entity("name2",
              "typeA",
