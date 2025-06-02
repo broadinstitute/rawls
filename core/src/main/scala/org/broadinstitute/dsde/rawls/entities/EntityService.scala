@@ -688,7 +688,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         result
       }
 
-    for {
+    (for {
       // create temp tables
       _ <- logAndTrace("migrationCreateTempTables", "created migration temp tables") {
         DBIO.seq(dataAccess.compactEntityQuery.migrationCreateAttributeTempTable,
@@ -712,15 +712,16 @@ class EntityService(protected val ctx: RawlsRequestContext,
       numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTable", "updated ENTITY from temp table") {
         dataAccess.compactEntityQuery.migrationUpdateEntityTable(workspaceId)
       }
+
+    } yield numEntitiesUpdated) andFinally
       // drop temp tables
       // this explicitly uses create/drop table instead of truncate to avoid implicit transaction commits:
       // https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html
-      _ <- logAndTrace("migrationDropTempTables", "dropped temp tables") {
+      logAndTrace("migrationDropTempTables", "dropped temp tables") {
         DBIO.seq(dataAccess.compactEntityQuery.migrationDropAttributeTempTable,
                  dataAccess.compactEntityQuery.migrationDropEntityTempTable
         )
       }
-    } yield numEntitiesUpdated
   }
 
 }
