@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SortDirections,
   WorkspaceFieldSpecs
 }
+import org.scalatest.Inspectors.forEvery
 import slick.dbio.Effect.Read
 import slick.jdbc.GetResult
 import slick.sql.SqlStreamingAction
@@ -737,6 +738,122 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     check(attr3, wsid2, "entityType1", expectedResult = false)
     check(attr2, wsid2, "entityType2", expectedResult = true)
     check(attr3, wsid2, "entityType2", expectedResult = true)
+  }
+
+  behavior of "deleteEntityAttributes"
+
+  it should "delete the requested attributes" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("decoy")
+
+    val entity1 = Entity(
+      "entityName1",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeString("not a reference"),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+    val entity2 = Entity(
+      "entityName2",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeEntityReference("entityType", "entityName1"),
+        attr3 -> AttributeString("not a reference"),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+    val entity3 = Entity(
+      "entityName3",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("entityType", "entityName1"),
+            AttributeEntityReference("entityType", "entityName2")
+          )
+        ),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // delete attr2 and attr3
+    val actual = runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr2, attr3)))
+    actual shouldBe 3
+
+    // verify each entity
+    forEvery(Seq(entity1, entity2, entity3)) { entity =>
+      val ent = runAndWait(q.getEntity(wsid, entity.entityType, entity.name))
+      ent shouldBe defined
+      ent.get.toEntity.attributes shouldBe Map(attr1 -> AttributeNumber(1),
+                                               attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    }
+  }
+
+  it should "respect the workspace and entity type" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("decoy")
+
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val attrsMap = Map(
+      attr1 -> AttributeNumber(1),
+      attr2 -> AttributeString("not a reference"),
+      attr3 -> AttributeString("not a reference"),
+      attr4 -> AttributeString("entityType and entityName are important words")
+    )
+
+    insertAndGet(Entity("entityName1", "entityType1", attrsMap), wsid)
+    insertAndGet(Entity("entityName1", "entityType2", attrsMap), wsid)
+    insertAndGet(Entity("entityName1", "entityType1", attrsMap), wsid2)
+    insertAndGet(Entity("entityName1", "entityType2", attrsMap), wsid2)
+
+    // delete only workspace1, entityType1
+    val actual = runAndWait(q.deleteAttributes(wsid, "entityType1", Set(attr2, attr3)))
+
+    // verify each entity
+    runAndWait(
+      q.getEntity(wsid, "entityType1", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr4
+    )
+    runAndWait(
+      q.getEntity(wsid, "entityType2", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr2,
+      attr3,
+      attr4
+    )
+    runAndWait(
+      q.getEntity(wsid2, "entityType1", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr2,
+      attr3,
+      attr4
+    )
+    runAndWait(
+      q.getEntity(wsid2, "entityType2", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr2,
+      attr3,
+      attr4
+    )
   }
 
   behavior of "renameAttribute"

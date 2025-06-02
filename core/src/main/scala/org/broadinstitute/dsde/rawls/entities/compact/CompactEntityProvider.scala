@@ -44,6 +44,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
+import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
@@ -200,32 +201,48 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def deleteEntityAttributes(entityType: String,
                                       attributeNames: Set[AttributeName],
                                       parentContext: RawlsRequestContext
-  ): Future[Unit] = {
-    repository.dataSource.inTransaction { _ =>
-      for {
-        // verify if any of the attributes exist in the entityType. Short-circuit w/BadRequest if not.
-        anyAttrExists <-
-          repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
-        _ = if (!anyAttrExists) {
-          throw new AttributeException(
-            message = "Could not find any of the given attribute names.",
-            code = StatusCodes.BadRequest
+  ): Future[Unit] =
+    if (attributeNames.isEmpty) {
+      Future.failed(
+        new AttributeException(
+          message = "The supplied set of attributes to remove cannot be empty.",
+          code = StatusCodes.BadRequest
+        )
+      )
+    } else {
+      repository.dataSource.inTransaction { _ =>
+        for {
+          // Verify if any of the attributes exist in the entityType. Short-circuit w/BadRequest if not.
+          anyAttrExists <-
+            repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
+          _ = if (!anyAttrExists) {
+            throw new AttributeException(
+              message = "Could not find any of the given attribute names.",
+              code = StatusCodes.BadRequest
+            )
+          }
+          // Does any entity exist which contains a reference in any of these attributes?
+          anyAttrHasReference <- repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
+          _ <-
+            // If none of these attributes contains a references, no need to issue an update to ENTITY_REFS
+            if (anyAttrHasReference) {
+              // TODO CORE-468: if refs exist, delete from ENTITY_REFS where workspace_id matches, entity_type matches,
+              //   and to_entity_type+to_entity_name pairs exist in the column being deleted
+              DBIO.failed(new NotImplementedError("TODO CORE-468: delete from ENTITY_REFS"))
+            } else {
+              DBIO.successful(())
+            }
+
+          // Remove the attributes from entities
+          _ <- repository.queries.deleteAttributes(
+            workspaceId,
+            entityType,
+            attributeNames
           )
-        }
-        // TODO CORE-468: does any entity exist which has {"entityType": *, "entityName": *} in this attribute,
-        //   either as a scalar or an array? If not, skip the next step.
-        anyAttrHasReference <- repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
-        // TODO CORE-468: if refs exist, delete from ENTITY_REFS where workspace_id matches, entity_type matches,
-        //   and to_entity_type+to_entity_name pairs exist in the column being deleted
+        } yield ()
+      }
 
-        // TODO CORE-468: Update ENTITY set attributes = JSON_REMOVE(attributes, targetColumn) where
-        //   JSON_CONTAINS_PATH(attributes, targetColumn), record_version = record_version + 1
-
-      } yield ()
     }
-
-    throw new NotImplementedError("CompactEntityProvider does not support deleteEntityAttributes")
-  }
 
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext

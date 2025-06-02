@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import akka.http.scaladsl.model.StatusCodes
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
 import org.broadinstitute.dsde.rawls.model.AttributeFormat.{ENTITY_NAME_KEY, ENTITY_TYPE_KEY}
 
 import java.sql.Timestamp
@@ -23,8 +25,10 @@ import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import slick.sql.SqlStreamingAction
+import slick.util.SQLBuilder
 import spray.json._
 
+import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 
 trait CompactEntityComponent extends LazyLogging {
@@ -712,6 +716,50 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       .as[Boolean]
       .head
   }
+
+  /**
+    * Removed the specified attributes from all entities of the given type and workspace.
+    *
+    * Note this does NOT also update ENTITY_REFS; see ??? to do that.
+    */
+  def deleteAttributes(workspaceId: UUID,
+                       entityType: String,
+                       attributeNames: Set[AttributeName]
+  ): ReadWriteAction[Int] =
+
+    if (attributeNames.isEmpty) {
+      DBIO.failed(
+        new AttributeException(
+          message = "The supplied set of attributes to remove cannot be empty.",
+          code = StatusCodes.BadRequest
+        )
+      )
+    } else {
+      // SQL to pass the supplied attribute names as bind parameters
+      val attributeParameters =
+        reduceSqlActionsWithDelim(attributeNames.map(attr => sql"${slickAttributePath(attr)}").toSeq, sql", ")
+
+      // JSON_REMOVE to update the attributes json and delete the specified attributes
+      val removeSql = concatSqlActions(
+        sql"JSON_REMOVE(attributes, ",
+        attributeParameters,
+        sql")"
+      )
+
+      // Build a where clause that targets only those entities which actually contain the attributes to be removed;
+      // this way, we don't issue needless updates to entities that don't have the attributes.
+      val hasAttributesClause = concatSqlActions(
+        sql"JSON_CONTAINS_PATH(attributes, 'one', ",
+        attributeParameters,
+        sql")"
+      )
+
+      val startSql = sql"update ENTITY set record_version = record_version + 1, attributes = "
+
+      val whereSql = sql" where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0 and "
+
+      concatSqlActions(startSql, removeSql, whereSql, hasAttributesClause).asUpdate
+    }
 
   // ====================================================================================================
   //  entity query helpers
