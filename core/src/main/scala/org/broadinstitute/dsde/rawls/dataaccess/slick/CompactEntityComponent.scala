@@ -7,7 +7,17 @@ import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProviderConf
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeRename, Entity, EntityColumnFilter, EntityPointer, EntityQuery, FilterOperators, SortDirections}
+import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
+  AttributeName,
+  AttributeRename,
+  Entity,
+  EntityColumnFilter,
+  EntityPointer,
+  EntityQuery,
+  FilterOperators,
+  SortDirections
+}
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
@@ -25,7 +35,9 @@ trait CompactEntityComponent extends LazyLogging {
     new CompactEntityQuery(this, config)
 }
 
-class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntityProviderConfig) extends RawSqlQuery with CompactEntitySerialization {
+class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntityProviderConfig)
+    extends RawSqlQuery
+    with CompactEntitySerialization {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
@@ -67,6 +79,17 @@ class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntity
 
   implicit val getEntity: GetResult[Entity] =
     GetResult(r => Entity(r.<<, r.<<, fromSql(r.<<)))
+
+  implicit val getRefPointerRecord: GetResult[RefPointerRecord] =
+    GetResult(r =>
+      RefPointerRecord(
+        r.<<,
+        r.<<,
+        r.<<,
+        r.<<,
+        r.<<
+      )
+    )
 
   private val fromEntityWhereNotDeleted = "from ENTITY e where e.deleted = 0"
 
@@ -253,7 +276,7 @@ class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntity
 
       val baseSql = concatSqlActions(
         sql"""with recursive EntityReferences as (
-              select er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
+              select er.workspace_id, er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
               from ENTITY_REFS er
               where er.workspace_id = $workspaceId
               and (""",
@@ -264,7 +287,7 @@ class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntity
 
       val recursiveSql = sql"""
             union distinct
-            select er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
+            select er.workspace_id, er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
             from EntityReferences er1
             join ENTITY_REFS er
             on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
@@ -273,13 +296,15 @@ class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntity
         """
 
       val finalSql = sql"""
-        select from_entity_type, from_name, to_entity_type, to_name
+        select workspace_id, from_entity_type, from_name, to_entity_type, to_name
         from EntityReferences
       """
 
-      concatSqlActions(baseSql, recursiveSql, finalSql).as[(String, String, String, String)].map { rows =>
+      concatSqlActions(baseSql, recursiveSql, finalSql).as[RefPointerRecord].map { rows =>
         rows
-          .groupMap(row => EntityPointer(row._1, row._2))(row => EntityPointer(row._3, row._4))
+          .groupMap(row => EntityPointer(row.fromEntityType, row.fromName))(row =>
+            EntityPointer(row.toEntityType, row.toName)
+          )
           .view
           .mapValues(_.toSet)
           .toMap
