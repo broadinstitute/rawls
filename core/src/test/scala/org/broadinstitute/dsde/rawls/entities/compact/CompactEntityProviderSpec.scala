@@ -1396,13 +1396,8 @@ class CompactEntityProviderSpec
     )
 
     val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
-    // The actual result is two entities, because we applied the two sets of operations in order
+    // The actual result is the entity after all operations are applied to it
     actual shouldBe Seq(
-      Entity(
-        "name1",
-        "typeA",
-        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"))
-      ),
       Entity(
         "name1",
         "typeA",
@@ -1445,15 +1440,8 @@ class CompactEntityProviderSpec
     )
 
     val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
-    // The actual result is two entities, because we applied the two sets of operations in order
+    // The actual result is the entity after all operations are applied to it
     actual shouldBe Seq(
-      Entity(
-        "name1",
-        "typeA",
-        Map(AttributeName.withDefaultNS("col1") -> AttributeString("val1"),
-            AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
-        )
-      ),
       Entity(
         "name1",
         "typeA",
@@ -1462,6 +1450,50 @@ class CompactEntityProviderSpec
           AttributeName.withDefaultNS("col2") -> AttributeString("val2"),
           AttributeName.withDefaultNS("existingCol") -> AttributeNumber(42)
         )
+      )
+    )
+  }
+
+  it should "skip noop updates" in {
+    val mockRepository = mock[CompactEntityRepository]
+
+    // provider using mocks
+    val provider = providerWithMocks(mockRepository, defaultEntityRequestArguments)
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val1")))
+      ),
+      EntityUpdateDefinition("name2",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("col1"), AttributeString("val2")))
+      )
+    )
+
+    val existingEntitiesByIdentifier: Map[EntityPointer, Entity] = Map(
+      EntityPointer("typeA", "name1") -> Entity("name1",
+                                                "typeA",
+                                                Map(
+                                                  AttributeName.withDefaultNS("col1") -> AttributeString("val1")
+                                                )
+      ),
+      EntityPointer("typeA", "name2") -> Entity("name2",
+                                                "typeA",
+                                                Map(
+                                                  AttributeName.withDefaultNS("col1") -> AttributeString("val1")
+                                                )
+      )
+    )
+
+    val actual = provider.applyAll(updates, existingEntitiesByIdentifier)
+    // The actual result is the entity after all operations are applied to it; the noop operations are skipped
+    actual shouldBe Seq(
+      Entity("name2",
+             "typeA",
+             Map(
+               AttributeName.withDefaultNS("col1") -> AttributeString("val2")
+             )
       )
     )
   }
@@ -1478,24 +1510,24 @@ class CompactEntityProviderSpec
 
     val sourceWorkspaceId = UUID.randomUUID
     val sourceWorkspace = Workspace("namespace",
-                                    "sourceWorkspace",
-                                    sourceWorkspaceId.toString,
-                                    "source-bucket",
-                                    None,
-                                    new DateTime(),
-                                    new DateTime(),
-                                    "creator",
-                                    Map.empty
+      "sourceWorkspace",
+      sourceWorkspaceId.toString,
+      "source-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
     val destWorkspace = Workspace("namespace",
-                                  "destWorkspace",
-                                  UUID.randomUUID.toString,
-                                  "dest-bucket",
-                                  None,
-                                  new DateTime(),
-                                  new DateTime(),
-                                  "creator",
-                                  Map.empty
+      "destWorkspace",
+      UUID.randomUUID.toString,
+      "dest-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
 
     val entityType = "sampleType"
@@ -1510,13 +1542,13 @@ class CompactEntityProviderSpec
 
     val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
     val result = Await.result(provider.copyEntities(sourceWorkspace,
-                                                    destWorkspace,
-                                                    entityType,
-                                                    entityNames,
-                                                    linkExistingEntities = false,
-                                                    defaultRequestContext
-                              ),
-                              atMost
+      destWorkspace,
+      entityType,
+      entityNames,
+      linkExistingEntities = false,
+      defaultRequestContext
+    ),
+      atMost
     )
 
     result.entitiesCopied.length shouldBe 3
@@ -1525,8 +1557,8 @@ class CompactEntityProviderSpec
 
     verify(mockQuery, times(1)).getEntityRefs(destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
     verify(mockQuery, times(1)).copyEntitiesToNewWorkspace(sourceWorkspace.workspaceIdAsUUID,
-                                                           destWorkspace.workspaceIdAsUUID,
-                                                           mockEntityRefs.toSet
+      destWorkspace.workspaceIdAsUUID,
+      mockEntityRefs.toSet
     )
   }
 
@@ -1539,24 +1571,24 @@ class CompactEntityProviderSpec
       .thenReturn(DBIO.successful(1))
 
     val sourceWorkspace = Workspace("namespace",
-                                    "sourceWorkspace",
-                                    UUID.randomUUID.toString,
-                                    "source-bucket",
-                                    None,
-                                    new DateTime(),
-                                    new DateTime(),
-                                    "creator",
-                                    Map.empty
+      "sourceWorkspace",
+      UUID.randomUUID.toString,
+      "source-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
     val destWorkspace = Workspace("namespace",
-                                  "destWorkspace",
-                                  UUID.randomUUID.toString,
-                                  "dest-bucket",
-                                  None,
-                                  new DateTime(),
-                                  new DateTime(),
-                                  "creator",
-                                  Map.empty
+      "destWorkspace",
+      UUID.randomUUID.toString,
+      "dest-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
 
     val entityType = "sampleType"
@@ -1568,13 +1600,13 @@ class CompactEntityProviderSpec
     val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
 
     val result = Await.result(provider.copyEntities(sourceWorkspace,
-                                                    destWorkspace,
-                                                    entityType,
-                                                    entityNames,
-                                                    linkExistingEntities = false,
-                                                    defaultRequestContext
-                              ),
-                              atMost
+      destWorkspace,
+      entityType,
+      entityNames,
+      linkExistingEntities = false,
+      defaultRequestContext
+    ),
+      atMost
     )
     result.entitiesCopied shouldBe empty
     result.hardConflicts shouldBe Seq(EntityHardConflict(entityType, "entity1"))
@@ -1582,8 +1614,8 @@ class CompactEntityProviderSpec
 
     verify(mockQuery, times(1)).getEntityRefs(destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
     verify(mockQuery, times(0)).copyEntitiesToNewWorkspace(sourceWorkspace.workspaceIdAsUUID,
-                                                           destWorkspace.workspaceIdAsUUID,
-                                                           mockEntityRefs.toSet
+      destWorkspace.workspaceIdAsUUID,
+      mockEntityRefs.toSet
     )
 
   }
@@ -1597,24 +1629,24 @@ class CompactEntityProviderSpec
       .thenReturn(DBIO.successful(1))
 
     val sourceWorkspace = Workspace("namespace",
-                                    "sourceWorkspace",
-                                    UUID.randomUUID.toString,
-                                    "source-bucket",
-                                    None,
-                                    new DateTime(),
-                                    new DateTime(),
-                                    "creator",
-                                    Map.empty
+      "sourceWorkspace",
+      UUID.randomUUID.toString,
+      "source-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
     val destWorkspace = Workspace("namespace",
-                                  "destWorkspace",
-                                  UUID.randomUUID.toString,
-                                  "dest-bucket",
-                                  None,
-                                  new DateTime(),
-                                  new DateTime(),
-                                  "creator",
-                                  Map.empty
+      "destWorkspace",
+      UUID.randomUUID.toString,
+      "dest-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
 
     val entityType = "sampleType"
@@ -1632,13 +1664,13 @@ class CompactEntityProviderSpec
 
     val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
     val result = Await.result(provider.copyEntities(sourceWorkspace,
-                                                    destWorkspace,
-                                                    entityType,
-                                                    entityNames,
-                                                    linkExistingEntities = false,
-                                                    defaultRequestContext
-                              ),
-                              atMost
+      destWorkspace,
+      entityType,
+      entityNames,
+      linkExistingEntities = false,
+      defaultRequestContext
+    ),
+      atMost
     )
 
     result.entitiesCopied shouldBe empty
@@ -1649,8 +1681,8 @@ class CompactEntityProviderSpec
 
     verify(mockQuery, times(1)).getEntityRefs(destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
     verify(mockQuery, times(0)).copyEntitiesToNewWorkspace(sourceWorkspace.workspaceIdAsUUID,
-                                                           destWorkspace.workspaceIdAsUUID,
-                                                           mockEntityRefs.toSet
+      destWorkspace.workspaceIdAsUUID,
+      mockEntityRefs.toSet
     )
   }
 
@@ -1663,24 +1695,24 @@ class CompactEntityProviderSpec
       .thenReturn(DBIO.successful(1))
 
     val sourceWorkspace = Workspace("namespace",
-                                    "sourceWorkspace",
-                                    UUID.randomUUID.toString,
-                                    "source-bucket",
-                                    None,
-                                    new DateTime(),
-                                    new DateTime(),
-                                    "creator",
-                                    Map.empty
+      "sourceWorkspace",
+      UUID.randomUUID.toString,
+      "source-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
     val destWorkspace = Workspace("namespace",
-                                  "destWorkspace",
-                                  UUID.randomUUID.toString,
-                                  "dest-bucket",
-                                  None,
-                                  new DateTime(),
-                                  new DateTime(),
-                                  "creator",
-                                  Map.empty
+      "destWorkspace",
+      UUID.randomUUID.toString,
+      "dest-bucket",
+      None,
+      new DateTime(),
+      new DateTime(),
+      "creator",
+      Map.empty
     )
 
     val entityType = "sampleType"
@@ -1700,13 +1732,13 @@ class CompactEntityProviderSpec
 
     val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
     val result = Await.result(provider.copyEntities(sourceWorkspace,
-                                                    destWorkspace,
-                                                    entityType,
-                                                    entityNames,
-                                                    linkExistingEntities = true,
-                                                    defaultRequestContext
-                              ),
-                              atMost
+      destWorkspace,
+      entityType,
+      entityNames,
+      linkExistingEntities = true,
+      defaultRequestContext
+    ),
+      atMost
     )
 
     result.entitiesCopied.length shouldBe 1
@@ -1715,8 +1747,8 @@ class CompactEntityProviderSpec
 
     verify(mockQuery, times(1)).getEntityRefs(destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
     verify(mockQuery, times(1)).copyEntitiesToNewWorkspace(sourceWorkspace.workspaceIdAsUUID,
-                                                           destWorkspace.workspaceIdAsUUID,
-                                                           mockEntityRefs.toSet
+      destWorkspace.workspaceIdAsUUID,
+      mockEntityRefs.toSet
     )
   }
 
