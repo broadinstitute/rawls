@@ -52,30 +52,16 @@ class SubmissionCostServiceImpl(defaultTableName: String,
       Future.successful(Map.empty[String, Float])
     } else {
       for {
-        // try looking up the workflows via the submission ID.
-        // this makes for a smaller query string (though no faster).
-        submissionCosts <- executeSubmissionCostsQuery(
-          submissionId,
+        // Lookup-only costs for the requested workflow IDs
+        workflowCosts <- executeWorkflowCostsQuery(
+          workflowIds,
           googleProjectId,
           submissionDate,
           terminalStatusDate,
           tableName,
           datePartitionColumn
         )
-        // if that doesn't return anything, fall back to
-        fallbackCosts <-
-          if (submissionCosts.size() == 0)
-            executeWorkflowCostsQuery(
-              workflowIds,
-              googleProjectId,
-              submissionDate,
-              terminalStatusDate,
-              tableName,
-              datePartitionColumn
-            )
-          else
-            Future.successful(submissionCosts)
-      } yield extractCostResults(fallbackCosts)
+      } yield extractCostResults(workflowCosts)
     }
   }
 

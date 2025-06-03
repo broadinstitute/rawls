@@ -3,11 +3,13 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
+import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
@@ -18,13 +20,18 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceFutureWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{
+  setTraceSpanAttribute,
+  traceDBIOWithParent,
+  traceFutureWithParent
+}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.dbio.DBIO
+import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
 import java.sql.SQLException
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 object EntityService {
@@ -78,9 +85,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                                 Some(WorkspaceAttributeSpecs(all = false))
             )
           }
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-            entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-          }
+          entityProvider <- getProviderWithTracing(workspaceContext, localContext)
           result <- traceFutureWithParent("EntityProvider.createEntity", localContext) { s =>
             entityProvider.createEntity(entity, s)
           }
@@ -97,11 +102,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
       } flatMap { workspaceContext =>
         val entityFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-            entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s)
-            )
-          }
+          entityProvider <- getProviderWithTracing(workspaceContext, localContext)
           entity <- traceFutureWithParent("EntityProvider.getEntity", localContext) { s =>
             entityProvider.getEntity(entityType, entityName, s)
           }
@@ -133,9 +134,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                                 Some(WorkspaceAttributeSpecs(all = false))
             )
           }
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-            entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-          }
+          entityProvider <- getProviderWithTracing(workspaceContext, localContext)
           result <- traceFutureWithParent("EntityProvider.updateEntity", localContext) { s =>
             entityProvider.updateEntity(entityType, entityName, operations, s)
           }
@@ -160,11 +159,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           )
         } flatMap { workspaceContext =>
           val deleteFuture = for {
-            entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-              entityManager.resolveProviderFuture(
-                EntityRequestArguments(workspaceContext, s)
-              )
-            }
+            entityProvider <- getProviderWithTracing(workspaceContext, localContext)
             _ <- traceFutureWithParent("entityProvider.deleteEntities", localContext) { s =>
               entityProvider.deleteEntities(entRefs.map(_.toPointer), s)
             }
@@ -193,11 +188,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
       } flatMap { workspaceContext =>
         val deleteFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-            entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s)
-            )
-          }
+          entityProvider <- getProviderWithTracing(workspaceContext, localContext)
           numberOfEntitiesDeleted <- traceFutureWithParent("EntityProvider.deleteEntitiesOfType", localContext) { s =>
             entityProvider.deleteEntitiesOfType(entityType, s)
           }
@@ -230,9 +221,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                               Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-        }
+        entityProvider <- getProviderWithTracing(workspaceContext, localContext)
         result <- traceFutureWithParent("EntityProvider.deleteEntityAttributes", localContext) { s =>
           entityProvider.deleteEntityAttributes(entityType, attributeNames, s)
         }
@@ -253,9 +242,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                               Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-        }
+        entityProvider <- getProviderWithTracing(workspaceContext, localContext)
         result <- traceFutureWithParent("EntityProvider.renameEntity", localContext) { s =>
           entityProvider.renameEntity(entityType, entityName, newName, s)
         }
@@ -274,9 +261,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                               Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-        }
+        entityProvider <- getProviderWithTracing(workspaceContext, localContext)
         result <- traceFutureWithParent("EntityProvider.renameEntityType", localContext) { s =>
           entityProvider.renameEntityType(oldName, renameInfo, s)
         }
@@ -298,9 +283,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                               Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-        }
+        entityProvider <- getProviderWithTracing(workspaceContext, localContext)
         result <- traceFutureWithParent("EntityProvider.evaluateExpression", localContext) { s =>
           entityProvider.evaluateExpression(entityType, entityName, expression, s)
         }
@@ -318,15 +301,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
       } flatMap { workspaceContext =>
         val metadataFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-            entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s)
-            )
-          }
-          _ = setTraceSpanAttribute(localContext,
-                                    AttributeKey.stringKey("providerType"),
-                                    entityProvider.getClass.getSimpleName
-          )
+          entityProvider <- getProviderWithTracing(workspaceContext, localContext)
           metadata <- traceFutureWithParent("EntityProvider.entityTypeMetadata", localContext) { s =>
             entityProvider.entityTypeMetadata(useCache, s)
           }
@@ -347,9 +322,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                               Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-        }
+        entityProvider <- getProviderWithTracing(workspaceContext, localContext)
         result = entityProvider.listEntities(entityType)
       } yield result).recover(
         sqlLoggingRecover(s"listEntities: $workspaceName $entityType")
@@ -374,11 +347,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
       } flatMap { workspaceContext =>
         val queryFuture = for {
-          entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-            entityManager.resolveProviderFuture(
-              EntityRequestArguments(workspaceContext, s)
-            )
-          }
+          entityProvider <- getProviderWithTracing(workspaceContext, localContext)
           metadataAndEntitySource <- traceFutureWithParent("EntityProvider.queryEntitiesSource", localContext) { s =>
             entityProvider.queryEntitiesSource(entityType, query, s)
           }
@@ -410,9 +379,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWsCtx.workspaceId, s)
         }
         _ = authDomainCheck(sourceAD.toSet, destAD.toSet)
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(destWsCtx, s))
-        }
+        entityProvider <- getProviderWithTracing(destWsCtx, localContext)
         entityCopyResponse <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
           entityProvider
             .copyEntities(sourceWsCtx,
@@ -442,11 +409,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
     } flatMap { workspaceContext =>
       for {
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", parentContext) { s =>
-          entityManager.resolveProviderFuture(
-            EntityRequestArguments(workspaceContext, s)
-          )
-        }
+        entityProvider <- getProviderWithTracing(workspaceContext, parentContext)
         entities <-
           if (upsert) {
             traceFutureWithParent("EntityProvider.batchUpsertEntities", parentContext) { s =>
@@ -482,7 +445,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     updatedEntities: Seq[Entity]
   ): ReadWriteAction[Traversable[Entity]] =
     for {
-      provider <- DBIO.from(entityManager.resolveProviderFuture(EntityRequestArguments(workspace, ctx)))
+      provider <- DBIO.from(getProviderWithTracing(workspace, ctx))
       res <- provider.saveWorkflowOutputEntities(dataAccess, workspace, updatedEntities)
     } yield res
 
@@ -491,7 +454,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                            entityIds: Seq[Long]
   ): ReadAction[Map[Long, Entity]] =
     for {
-      provider <- DBIO.from(entityManager.resolveProviderFuture(EntityRequestArguments(workspace, ctx)))
+      provider <- DBIO.from(getProviderWithTracing(workspace, ctx))
       res <- provider.listWorkflowEntities(dataAccess, workspace, entityIds)
     } yield res
 
@@ -508,9 +471,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                               Some(WorkspaceAttributeSpecs(all = false))
           )
         }
-        entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
-          entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
-        }
+        entityProvider <- getProviderWithTracing(workspaceContext, localContext)
         result <- traceFutureWithParent("EntityProvider.renameAttribute", localContext) { s =>
           entityProvider.renameAttribute(entityType, oldAttributeName, attributeRenameRequest, s)
         }
@@ -544,101 +505,228 @@ class EntityService(protected val ctx: RawlsRequestContext,
   }
 
   /**
-    * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to compact (Quicksilver) format.
-    *
-    * This migration method is unoptimized and in flux; use at your own risk
-    *
+    * Helper to get the appropriate EntityProvider for the workspace while also adding tracing info
     */
-  def quicksilverMigration(workspaceName: WorkspaceName): Future[Map[String, Int]] = {
-    implicit val system: ActorSystem = ActorSystem("quicksilverMigration")
-
+  private def getProviderWithTracing(workspaceContext: Workspace,
+                                     localContext: RawlsRequestContext
+  ): Future[EntityProvider] =
     for {
-      // verify owner of workspace.
-      // TODO CORE-364: require some kind of admin permission via asFCAdmin or a resource type admin instead?
-      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
-                                                              SamWorkspaceActions.own,
-                                                              Some(WorkspaceAttributeSpecs(all = false))
-      )
-
-      // confirm if this is already a quicksilver workspace by checking settings
-      workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
-      settings <- workspaceSettingService.getWorkspaceSettings(workspaceName)
-      _ = if (
-        settings
-          .find(_.isInstanceOf[CompactDataTablesSetting])
-          .asInstanceOf[Option[CompactDataTablesSetting]]
-          .exists(_.config.enabled)
-      ) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
+      entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
+        entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
       }
+      _ = setTraceSpanAttribute(localContext,
+                                AttributeKey.stringKey("providerType"),
+                                entityProvider.getClass.getSimpleName
+      )
+    } yield entityProvider
 
-      // get the local (legacy) provider
-      localProvider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
+  /**
+    * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to
+    * compact (Quicksilver) format.
+    * The migration relies on temp tables; the batchSize setting ensures the temp tables do not grow too large.
+    *
+    * @param workspaceName the name of the workspace to migrate
+    * @param batchSize the number of entities to migrate in a single batch; defaults to 50,000
+    */
+  def quicksilverMigration(workspaceName: WorkspaceName, batchSize: Int = 50000): Future[Int] =
+    traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
+      for {
+        // verify owner of workspace.
+        workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", s) { _ =>
+          getV2WorkspaceContextAndPermissions(workspaceName,
+                                              SamWorkspaceActions.own,
+                                              Some(WorkspaceAttributeSpecs(all = false))
+          )
+        }
+        workspaceId = workspaceContext.workspaceIdAsUUID
 
-      // get the list of entity types in this workspace
-      entityTypeMetadata <- localProvider.entityTypeMetadata(useCache = true, ctx)
+        // confirm if this is already a quicksilver workspace by checking settings
+        workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
+        settings <- traceFutureWithParent("getWorkspaceSettings", s) { _ =>
+          workspaceSettingService.getWorkspaceSettings(workspaceName)
+        }
+        _ = if (
+          settings
+            .find(_.isInstanceOf[CompactDataTablesSetting])
+            .asInstanceOf[Option[CompactDataTablesSetting]]
+            .exists(_.config.enabled)
+        ) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
+        }
 
-      // start a transaction; here's where we do a bunch of writes
-      _ <- dataSource.inTransaction { dataAccess =>
-        val shardId: String = dataAccess.determineShard(workspaceContext.workspaceIdAsUUID)
+        // start a transaction; here's where we do a bunch of writes
+        userResult <- dataSource.inTransaction { dataAccess =>
+          val shardId: String = dataAccess.determineShard(workspaceId)
 
-        // loop over entity types
-        def allTypesResult: Iterable[ReadWriteAction[Iterator[Int]]] =
-          entityTypeMetadata.map { case (entityType, metadata) =>
-            logger.info(s"Quicksilver migration:     - $entityType (${metadata.count}) ...")
+          val stopwatch = StopWatch.createStarted()
 
-            val thisTypeList: ReadAction[Seq[Entity]] = DBIO.from(
-              localProvider
-                .listEntities(entityType)
-                .runWith(Sink.seq)
-            )
+          logger.info(
+            s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
+          )
 
-            val thisTypeInserts: ReadWriteAction[Iterator[Int]] = thisTypeList flatMap { entities =>
-              // batch inserts into chunks of 400 entities at a time
-              val batches = entities.grouped(400)
+          withIncreasedSortMemory(dataAccess) {
+            for {
+              // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
+              // for each batch. later queries will use those boundaries to migrate entities in batches, which
+              // prevents the temp tables from growing too large.
+              batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
+              // niceties for logging
+              indexedBoundaries = batchBoundaries.zipWithIndex
 
-              DBIO.sequence(batches.map { batch =>
-                // ... insert each batch into the temp table
-                dataAccess.compactEntityQuery.migrationInsertAttributesToTempTable(batch)
+              // for each batch, migrate the entities in that batch
+              updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
+                quicksilverMigrateBatch(workspaceId,
+                                        shardId,
+                                        boundary,
+                                        dataAccess,
+                                        idx,
+                                        indexedBoundaries.size,
+                                        stopwatch,
+                                        s
+                )
               })
-            }
+              numEntitiesUpdated = updateCounts.sum
 
-            thisTypeInserts
+              // populate the ENTITY_REFS table for this workspace
+              _ <- traceDBIOWithParent("migrationAddReferences", s) { _ =>
+                dataAccess.compactEntityQuery.migrationAddReferences(workspaceId, shardId)
+              }
+              _ = logger.info(
+                s"Quicksilver migration $workspaceId: populated ENTITY_REFS (${stopwatch.formatTime()}) ..."
+              )
+
+              /** *** don't delete legacy data; we'll do that en masse after everything is migrated
+              *  // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
+              *  _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
+              *  _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
+              *  shardId
+              *  )
+              *  // delete the all_attribute_values column for this workspace
+              *  _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
+              *  _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
+              * *** */
+
+              _ = logger.info(
+                s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+              )
+            } yield numEntitiesUpdated
           }
 
-        for {
-          // create temp table
-          _ <- dataAccess.compactEntityQuery.migrationCreateTempTable
-          // insert entity name, entity type, and attributes to the temp table
-          _ = logger.info(s"Quicksilver migration: inserting to temp table ...")
-          _ <- DBIO.sequence(allTypesResult)
-          // update ENTITY from the contents of the temp table
-          _ = logger.info(s"Quicksilver migration: updating ENTITY from temp table ...")
-          _ <- dataAccess.compactEntityQuery.migrationUpdateFromTempTable(workspaceContext.workspaceIdAsUUID)
-          // populate the ENTITY_REFS table for this workspace
-          _ = logger.info(s"Quicksilver migration: populating ENTITY_REFS ...")
-          _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
-          // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
-          _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
-          _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
-                                                                             shardId
-          )
-          // delete the all_attribute_values column for this workspace
-          _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
-          _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
+        }
 
-          _ <- dataAccess.compactEntityQuery.migrationDeleteTempTable
-          _ = logger.info(s"Quicksilver migration: done!")
-        } yield ()
+        // finally, change the workspace to be quicksilver-enabled
+        _ <- traceFutureWithParent("setWorkspaceSettings", s) { _ =>
+          workspaceSettingService.setWorkspaceSettings(
+            workspaceName,
+            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+          )
+        }
+
+        // return a count of entities updated
+      } yield userResult
+    }
+
+  /** Executes a database operation `op` in a session using 8MB of `sort_buffer_size` memory,
+    * then resets the sort buffer size back to its original value */
+  private def withIncreasedSortMemory[T](dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] =
+    for {
+      // get the current value of MySQL sort_buffer_size
+      defaultSortBufferSize <- dataAccess.compactEntityQuery.getSortBufferSetting
+      // set sort buffer size to 8MB; this avoids MySQL errors during migration
+      // with an "Out of sort memory, consider increasing server sort buffer size" message.
+      // see also https://bugs.mysql.com/bug.php?id=103225
+      _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(8388608L)
+      // execute the requested operation, then reset sort buffer size to its original value
+      result <- op andFinally dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
+    } yield result
+
+  private case class MigrationBoundary(startEntityId: Long, endEntityId: Long)
+
+  /**
+   * Calculate the boundaries for each batch of entities to migrate
+   * This method returns a sequence of MigrationBoundary objects, each containing the start and end entity ids
+   * for a batch. The batch sizes are determined by the batchSize parameter.
+   */
+  private def quicksilverCalculateBatches(workspaceId: UUID,
+                                          batchSize: Int,
+                                          dataAccess: DataAccess
+  ): ReadAction[Seq[MigrationBoundary]] = {
+
+    def findNextBatch(accum: Seq[MigrationBoundary], startingId: Long): ReadAction[Seq[MigrationBoundary]] =
+      dataAccess.compactEntityQuery.findMaxBatchId(batchSize, startingId, workspaceId).flatMap {
+        case None | Some(0L) => DBIO.successful(accum)
+        case Some(nextLimit) => findNextBatch(accum :+ MigrationBoundary(startingId, nextLimit), nextLimit)
       }
 
-      // finally, change the workspace to be quicksilver-enabled
-      _ <- workspaceSettingService.setWorkspaceSettings(
-        workspaceName,
-        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-      )
-
-      // return a count of entities updated
-    } yield entityTypeMetadata.map { case (entityType, metadata) => (entityType, metadata.count) }
+    findNextBatch(Seq.empty, -1)
   }
+
+  /**
+    * Perform the work to migrate a single batch of entities from legacy to compact format.
+    * This method will:
+    *   - create temporary tables for attributes and entities
+    *   - populate the attribute temp table with JSON-normalized attributes
+    *   - populate the entity temp table with a single JSON object per entity
+    *   - update the ENTITY table from the entity temp table
+    *   - drop the temporary tables
+    */
+  private def quicksilverMigrateBatch(workspaceId: UUID,
+                                      shardId: String,
+                                      boundary: MigrationBoundary,
+                                      dataAccess: DataAccess,
+                                      batchIdx: Int,
+                                      totalBatches: Int,
+                                      stopwatch: StopWatch,
+                                      parentContext: RawlsRequestContext
+  ): ReadWriteAction[Int] = {
+
+    // instrumentation helper
+    def logAndTrace[T, E <: Effect](spanName: String, logMessage: String)(
+      op: DBIOAction[T, NoStream, E]
+    ): DBIOAction[T, NoStream, E with Effect] =
+      traceDBIOWithParent(spanName, parentContext) { _ =>
+        op
+      }.map { result =>
+        logger.info(
+          s"Quicksilver migration $workspaceId batch ${batchIdx + 1}/$totalBatches: $logMessage (${stopwatch.formatTime()}) ..."
+        )
+        result
+      }
+
+    (for {
+      // create temp tables
+      _ <- logAndTrace("migrationCreateTempTables", "created migration temp tables") {
+        DBIO.seq(dataAccess.compactEntityQuery.migrationCreateAttributeTempTable,
+                 dataAccess.compactEntityQuery.migrationCreateEntityTempTable
+        )
+      }
+      // normalize attributes to JSON scalars and insert into the temp table
+      _ <- logAndTrace("migrationPopulateAttributeTempTable", "populated attribute temp table") {
+        dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceId,
+                                                                          shardId,
+                                                                          boundary.startEntityId,
+                                                                          boundary.endEntityId
+        )
+      }
+      // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
+      _ <- logAndTrace("migrationPopulateEntityTempTable", "populated entity temp table") {
+        dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
+      }
+
+      // update ENTITY from the contents of the temp table
+      numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTable", "updated ENTITY from temp table") {
+        dataAccess.compactEntityQuery.migrationUpdateEntityTable(workspaceId)
+      }
+
+    } yield numEntitiesUpdated) andFinally
+      // drop temp tables
+      // this explicitly uses create/drop table instead of truncate to avoid implicit transaction commits:
+      // https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html
+      logAndTrace("migrationDropTempTables", "dropped temp tables") {
+        DBIO.seq(dataAccess.compactEntityQuery.migrationDropAttributeTempTable,
+                 dataAccess.compactEntityQuery.migrationDropEntityTempTable
+        )
+      }
+  }
+
 }

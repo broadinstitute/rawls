@@ -357,7 +357,7 @@ trait EntityApiService extends UserInfoDirectives {
                   entityServiceConstructor(ctx)
                     .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName))
                     .map { migrationResults =>
-                      StatusCodes.OK -> migrationResults
+                      StatusCodes.OK -> Map("entitiesUpdated" -> migrationResults)
                     }
                 }
               }
