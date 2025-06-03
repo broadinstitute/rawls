@@ -717,6 +717,39 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   }
 
+  behavior of "copyEntities"
+
+  it should "copyEntities from sourceWorkspace to destinationWorkspace" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+    val entityType = "typeA"
+    // Create entities in source workspace
+    val updates = Seq(
+      EntityUpdateDefinition("name1", entityType, Seq()),
+      EntityUpdateDefinition("name2", entityType, Seq())
+    )
+    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+
+    // Copy entities to destination workspace
+    val copiedEntities = Await.result(
+      provider.copyEntities(minimalTestData.workspace,
+                            minimalTestData.workspace2,
+                            entityType,
+                            updates.map(_.name),
+                            linkExistingEntities = false,
+                            defaultRequestContext
+      ),
+      atMost
+    )
+
+    copiedEntities.entitiesCopied should contain theSameElementsAs Seq(
+      AttributeEntityReference(entityType, "name1"),
+      AttributeEntityReference(entityType, "name2")
+    )
+    copiedEntities.hardConflicts shouldBe empty
+    copiedEntities.softConflicts shouldBe empty
+
+  }
+
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================

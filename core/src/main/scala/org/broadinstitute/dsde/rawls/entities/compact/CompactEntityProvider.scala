@@ -142,7 +142,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                     val softConflicts = conflicts.toSeq.map(_.toPointer).toSet
                     if (softConflicts.isEmpty || linkExistingEntities) {
                       copyEntitiesExcludingAnySoftConflicts(
-                        entityReferenceMap,
+                        entitiesToCopyRefs,
                         entityReferences,
                         softConflicts,
                         sourceWorkspaceContext.workspaceIdAsUUID,
@@ -165,13 +165,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
    * are in the set of soft conflicts. Return an EntityCopyResponse containing a Seq of entities
    * that were copied.
    */
-  private def copyEntitiesExcludingAnySoftConflicts(entityReferenceMap: Set[RefMapping],
+  private def copyEntitiesExcludingAnySoftConflicts(entitiesToCopyRefs: Set[EntityPointer],
                                                     entityReferences: Set[EntityPointer],
                                                     softConflicts: Set[EntityPointer],
                                                     sourceWorkspaceId: UUID,
                                                     destWorkspaceId: UUID
   ) = {
-    val allEntityRefs: Set[EntityPointer] = entityReferenceMap.map(_.from) ++ entityReferences
+    val allEntityRefs: Set[EntityPointer] = entitiesToCopyRefs ++ entityReferences
     val entitiesToCopy: Set[EntityPointer] = allEntityRefs diff softConflicts
     repository.queries
       .copyEntitiesToNewWorkspace(
