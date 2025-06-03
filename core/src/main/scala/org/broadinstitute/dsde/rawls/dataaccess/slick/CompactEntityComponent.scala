@@ -297,7 +297,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * @param fromAttributes the attributes in the fromType entities that contain references to other entities
     * @return the number of rows deleted
     *
-    * TODO: execution plan
+    * execution plan: pretty messy, but no full table scans. Uses temporary tables, unions, table functions (JSON_TABLE),
+    *   and subqueries. Makes use of ENTITY.idx_entity_type_name and ENTITY_REFS.unq_from_to indexes.
+    *
     */
   def deleteAllReferencesFromAttributes(workspaceId: UUID,
                                         fromType: String,
@@ -323,7 +325,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                 END,
                 '$$[*]' COLUMNS(value json PATH '$$')
               ) AS jt
-              where JSON_TYPE(value) = 'OBJECT'
+              where workspace_id = $workspaceId
+              and entity_type = $fromType
+              and JSON_TYPE(value) = 'OBJECT'
               and JSON_CONTAINS_PATH(value, 'all', $entityTypePath, $entityNamePath)
            """
       }
@@ -714,7 +718,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * TODO CORE-468: execution plan
+    * `execution plan: subquery Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
     */
   def anyAttributeExists(workspaceId: UUID,
                          entityType: String,
@@ -738,7 +742,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if a reference-containing attribute exists in any entity of the given type and workspace.
     *
-    * TODO CORE-468: execution plan
+    * `execution plan: subquery Using index condition; Using where. Index used: idx_entity_type_name`
     */
   def anyAttributeHasReference(workspaceId: UUID,
                                entityType: String,
