@@ -237,7 +237,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   def copyEntitiesToNewWorkspace(sourceWs: UUID,
                                  destWs: UUID,
-                                 entityRefs: Set[EntityPointer] = Set()
+                                 entityRefs: Set[EntityPointer] = Set(),
+                                 batchSize: Int = driverComponent.batchSize
   ): ReadWriteAction[(Int, Int)] = {
 
     def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
@@ -246,7 +247,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
         entityRefsCopiedCount <- copyEntityReferences(sourceWs, destWs, chunk)
       } yield (entitiesCopiedCount, entityRefsCopiedCount)
 
-    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(driverComponent.batchSize)
+    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 

@@ -1544,10 +1544,12 @@ class CompactEntityProviderSpec
           )
         )
       )
-    when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]]))
+    when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
       .thenReturn(DBIO.successful((3, 0)))
 
-    val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
+    val config = CompactEntityProviderConfig()
+    val provider =
+      providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)
     val result = Await.result(provider.copyEntities(sourceWorkspace,
                                                     destWorkspace,
                                                     entityType,
@@ -1565,7 +1567,8 @@ class CompactEntityProviderSpec
     verify(mockQuery, times(1)).getEntityRefs(destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
     verify(mockQuery, times(1)).copyEntitiesToNewWorkspace(sourceWorkspace.workspaceIdAsUUID,
                                                            destWorkspace.workspaceIdAsUUID,
-                                                           mockEntityRefs.toSet
+                                                           mockEntityRefs.toSet,
+                                                           config.batchCopyBatchSize
     )
   }
 
@@ -1738,10 +1741,12 @@ class CompactEntityProviderSpec
           Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))
         )
       )
-    when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]]))
+    when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
       .thenReturn(DBIO.successful((1, 0)))
 
-    val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
+    val config = CompactEntityProviderConfig()
+    val provider =
+      providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)
     val result = Await.result(provider.copyEntities(sourceWorkspace,
                                                     destWorkspace,
                                                     entityType,
@@ -1759,7 +1764,8 @@ class CompactEntityProviderSpec
     verify(mockQuery, times(1)).getEntityRefs(destWorkspace.workspaceIdAsUUID, mockEntityRefs.toSet)
     verify(mockQuery, times(1)).copyEntitiesToNewWorkspace(sourceWorkspace.workspaceIdAsUUID,
                                                            destWorkspace.workspaceIdAsUUID,
-                                                           mockEntityRefs.toSet
+                                                           mockEntityRefs.toSet,
+                                                           config.batchCopyBatchSize
     )
   }
 

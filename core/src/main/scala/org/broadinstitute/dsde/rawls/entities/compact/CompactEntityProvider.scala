@@ -174,7 +174,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       .copyEntitiesToNewWorkspace(
         sourceWorkspaceId,
         destWorkspaceId,
-        entitiesToCopy
+        entitiesToCopy,
+        config.batchCopyBatchSize
       )
     EntityCopyResponse(
       entitiesToCopy.map(_.toAttributeEntityReference).toSeq,
