@@ -83,7 +83,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
           builder.build(requestArguments) match {
             case Success(provider) =>
               // Wrap the provider with AuditLoggingEntityProvider
-              new AuditLoggingEntityProvider(provider, requestArguments.workspace)
+              new AuditLoggingEntityProvider(provider, requestArguments)
             case Failure(regrets: DataEntityException) =>
               throw new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage))
             case Failure(ex: Throwable) =>
