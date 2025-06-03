@@ -1,8 +1,6 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import akka.http.scaladsl.model.StatusCodes
-import io.circe.Json
-import io.circe.parser.parse
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.entities.base.{ExpressionEvaluationContext, ExpressionEvaluationSupport}
@@ -13,7 +11,6 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
   Attribute,
   AttributeName,
-  AttributeNull,
   AttributeValue,
   AttributeValueList,
   ErrorReport,
@@ -28,18 +25,28 @@ import scala.util.{Failure, Success, Try}
 
 class CompactExpressionEvaluator(repository: CompactEntityRepository) extends ExpressionEvaluationSupport {
 
-  // TODO replace with queryRelatedRecordsWithArray
+  // TODO figure out examples and correct answers, then write tests
   def evaluateExpression(workspaceId: UUID, expression: String, entityType: String, entityName: String)(implicit
     executionContext: ExecutionContext
   ): Future[Seq[AttributeValue]] = {
-    val lookup = parseLookups(expression)
+    val lookups = parseLookups(expression)
 
-    repository.dataSource.inTransaction { _ =>
-      lookUpToQuery(workspaceId, lookup, entityType, entityName)
-    }
+    repository.dataSource
+      .inTransaction { _ =>
+        repository.queries.queryRelatedRecordsWithArray(workspaceId, entityType, entityName, lookups, Seq.empty)
+      }
+      .map { entityRecords =>
+        // It's easier to pick out individual attributes from an Entity
+        val allRecords = entityRecords.values.flatten.toSeq.map(_.toEntity)
+        lookups.flatMap { lookup =>
+          val attrName = AttributeName.fromDelimitedName(lookup.attributeName)
+          allRecords.flatMap(_.attributes.get(attrName)).collect { case av: AttributeValue =>
+            av
+          }
+        }
+      }
   }
 
-  // TODO alllllll the error handling, correctly
   def evaluateExpressions(workspaceId: UUID,
                           expressionEvaluationContext: ExpressionEvaluationContext,
                           gatherInputsResult: MethodConfigResolver.GatherInputsResult
@@ -72,6 +79,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         )
       )
     } else {
+      val rootEntityType = rootEntityTypeOpt.get
       // TODO if there are multiple inputs, how does that affect the query?
       val inputFutures =
         gatherInputsResult.processableInputs.toSeq.map { input =>
@@ -90,7 +98,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                   case Some(record) =>
                     // Convert the single CompactEntityRecord into a Map for buildValidationInputs
                     val entityRecords = Map(entityName -> Seq(record))
-                    buildValidationInputs(entityRecords, inputMap)
+                    buildValidationInputs(entityRecords, inputMap, rootEntityType, entityName)
                   case None =>
                     LazyList.empty[SubmissionValidationEntityInputs]
                 }
@@ -106,18 +114,18 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                   )
                 }
                 .map { entityRecords =>
-                  buildValidationInputs(entityRecords, inputMap)
+                  buildValidationInputs(entityRecords, inputMap, rootEntityType, entityName)
                 }
 
           }
         }
       Future.sequence(inputFutures).map { results =>
         results.flatten
-          .groupBy(_.entityName) // Group by entityName
+          .groupBy(_.entityName)
           .map { case (entityName, inputs) =>
             SubmissionValidationEntityInputs(
               entityName = entityName,
-              inputResolutions = inputs.flatMap(_.inputResolutions).toSet // Combine all SubmissionValidationValue sets
+              inputResolutions = inputs.flatMap(_.inputResolutions).toSet
             )
           }
           .to(LazyList)
@@ -125,36 +133,82 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     }
   }
 
+  // TODO i'm really not sure i'm doing this rootEntityType thing correctly
   def buildValidationInputs(
     entityRecords: Map[String, Seq[CompactEntityRecord]],
-    lookupsWithInputNames: Seq[(AttributeLookup, String)]
-  ): LazyList[SubmissionValidationEntityInputs] =
-    // TODO why do i have a list of records for each entity again??
-    entityRecords
-      .map { case (entityName, records) =>
-        val record =
-          records.head.toEntity // TODO I think I only care about the first record, so I shouldn't need a list should I??
+    lookupsWithInputNames: Seq[(AttributeLookup, String)],
+    rootEntityType: String,
+    rootEntityName: String
+  ): LazyList[SubmissionValidationEntityInputs] = {
+    // Flatten all records to check their types
+    val allRecords = entityRecords.values.flatten.toSeq
 
-        val validationValues: Set[SubmissionValidationValue] = lookupsWithInputNames.map { case (lookup, inputName) =>
-          val attrName = AttributeName.fromDelimitedName(lookup.attributeName)
-          val attrValue: Option[Attribute] = record.attributes.get(attrName)
-          // TODO What should the error message be?  Does it really have to be an error?
-          val error =
-            if (record.attributes.contains(attrName)) None else Some("This attribute does not exist on this entity")
+    // If all records are of the rootEntityType, use their names as the entityNames
+    if (allRecords.forall(_.entityType == rootEntityType)) {
 
-          SubmissionValidationValue(
-            value = attrValue,
-            error = error,
-            inputName = inputName
+      // TODO why do i have a list of records for each entity again??
+      entityRecords
+        .map { case (entityName, records) =>
+          val record =
+            records.head.toEntity // TODO I think I only care about the first record, so I shouldn't need a list should I??
+
+          val validationValues: Set[SubmissionValidationValue] = lookupsWithInputNames.map { case (lookup, inputName) =>
+            val attrName = AttributeName.fromDelimitedName(lookup.attributeName)
+            val attrValue: Option[Attribute] = record.attributes.get(attrName)
+            // TODO What should the error message be?  When is it an error and not just null?
+            val error =
+              if (record.attributes.contains(attrName)) None else Some("This attribute does not exist on this entity")
+
+            SubmissionValidationValue(
+              value = attrValue,
+              error = error,
+              inputName = inputName
+            )
+          }.toSet
+
+          SubmissionValidationEntityInputs(
+            entityName = entityName,
+            inputResolutions = validationValues
           )
-        }.toSet
+        }
+        .to(LazyList)
+    } else {
+      // Group all attribute values for each input into an AttributeValueList
+      val validationValues: Set[SubmissionValidationValue] = lookupsWithInputNames.map { case (lookup, inputName) =>
+        val attrName = AttributeName.fromDelimitedName(lookup.attributeName)
+        val attrs: Seq[Attribute] = allRecords.map(_.toEntity).flatMap(_.attributes.get(attrName))
+        val value: Option[Attribute] =
+          if (attrs.isEmpty) None
+          else if (attrs.length == 1) {
+            attrs.head match {
+              case avl: AttributeValueList => Some(avl)
+              case av: AttributeValue      => Some(AttributeValueList(Seq(av)))
+              case _                       => None
+            }
+          } else {
+            val allValues: Seq[AttributeValue] = attrs.flatMap {
+              case avl: AttributeValueList => avl.list
+              case av: AttributeValue      => Seq(av)
+              case _                       => Seq.empty
+            }
+            Some(AttributeValueList(allValues))
+          }
+        val error = if (value.nonEmpty) None else Some("No attributes found for this input")
+        SubmissionValidationValue(
+          value = value,
+          error = error,
+          inputName = inputName
+        )
+      }.toSet
 
+      LazyList(
         SubmissionValidationEntityInputs(
-          entityName = entityName,
+          entityName = rootEntityName,
           inputResolutions = validationValues
         )
-      }
-      .to(LazyList)
+      )
+    }
+  }
 
   def parseLookups(expression: String): Seq[AttributeLookup] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
@@ -169,10 +223,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     }
   }
 
-  // TODO multiple lookups but in a smarter way
-  // TODO do we need to care about workspace attributes?
-  // group lookups according to root, add root to attributelookup
-  //
+  // TODO delete
   def lookUpToQuery(workspaceId: UUID, lookups: Seq[AttributeLookup], entityType: String, entityName: String)(implicit
     executionContext: ExecutionContext
   ): ReadAction[Seq[AttributeValue]] =
@@ -186,7 +237,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         else
           repository.queries.queryRelationsForAttribute(
             workspaceId,
-            lookup.relations(0).getText, // TODO what happens if there are multiple relations
+            lookup.relations(0).getText,
             lookup.attributeName,
             entityType,
             entityName
@@ -194,92 +245,4 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       })
       .map(_.flatten)
 
-  /*
-  def queryFromLookup
-
-import scala.collection.mutable.LinkedHashMap
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
-
-case class Relation(relationColName: String, relationEntityType: String)
-case class Record(id: String, attributes: Map[String, Any])
-
-class EntityDao(namedTemplate: NamedParameterJdbcTemplate) {
-
-  def queryRelatedRecordsWithArray(
-      collectionId: String,
-      arrayEntityType: String,
-      arrayEntityId: String,
-      arrayRelations: List[Relation],
-      relations: List[Relation],
-      pageSize: Int,
-      offset: Int
-  ): LinkedHashMap[String, List[Record]] = {
-    require(arrayRelations.nonEmpty, "Array relations must not be empty")
-
-    val rootEntityType = arrayRelations.last.relationEntityType
-    val queryEntityType = if (relations.isEmpty) rootEntityType else relations.last.relationEntityType
-
-    val sql =
-      s"""
-         |WITH RECURSIVE entity_hierarchy AS (
-         |  SELECT
-         |    e.entity_id AS root_id,
-         |    e.entity_id,
-         |    e.entity_type,
-         |    e.attributes
-         |  FROM ENTITY e
-         |  WHERE e.entity_id = :arrayEntityId AND e.entity_type = :arrayEntityType
-         |
-         |  UNION ALL
-         |
-         |  SELECT
-         |    h.root_id,
-         |    e.entity_id,
-         |    e.entity_type,
-         |    e.attributes
-         |  FROM entity_hierarchy h
-         |  JOIN ENTITY e
-            ON (
-              JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$.attrs.', :relationColName, '.entity_id'))) = e.entity_id
-              AND JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$.attrs.', :relationColName, '.entity_type'))) = e.entity_type
-            )
-            OR (
-              JSON_CONTAINS(
-                JSON_EXTRACT(h.attributes, CONCAT('$.attrs.', :relationColName)),
-                JSON_OBJECT('entity_id', e.entity_id, 'entity_type', e.entity_type)
-              )
-            )
-         |)
-         |SELECT root_id, entity_id, entity_type, attributes
-         |FROM entity_hierarchy
-         |WHERE entity_type = :queryEntityType
-         |LIMIT :pageSize OFFSET :offset
-       """.stripMargin
-
-    val params = new MapSqlParameterSource()
-      .addValue("arrayEntityId", arrayEntityId)
-      .addValue("arrayEntityType", arrayEntityType)
-      .addValue("relationColName", arrayRelations.head.relationColName) // Adjust for dynamic relations
-      .addValue("queryEntityType", queryEntityType)
-      .addValue("pageSize", pageSize)
-      .addValue("offset", offset)
-
-    val results = namedTemplate.query(sql, params, (rs, _) => {
-      Record(
-        id = rs.getString("entity_id"),
-        attributes = Map(
-          "entity_type" -> rs.getString("entity_type"),
-          "attributes" -> rs.getString("attributes")
-        )
-      )
-    })
-
-    results
-      .groupBy(_.id)
-      .map { case (rootId, records) => rootId -> records.toList }
-      .to(LinkedHashMap)
-  }
-}
-   */
 }
