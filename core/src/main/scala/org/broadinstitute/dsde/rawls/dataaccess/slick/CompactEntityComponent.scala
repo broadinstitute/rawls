@@ -286,7 +286,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     if (entities.isEmpty) {
       DBIO.successful(Set.empty[RefMapping])
     } else {
-      val entityTypeNameClauses = generateTypeNameSql(entities)
+      val entityTypeNameClauses =
+        generateTypeNameSql(entities, typeColumn = "from_entity_type", nameColumn = "from_name")
 
       val baseSql = concatSqlActions(
         sql"""with recursive EntityReferences as (
@@ -296,9 +297,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
               and (""",
         reduceSqlActionsWithDelim(entityTypeNameClauses.toSeq, sql" or "),
         sql""")
-            """
+           """
       )
-
       val recursiveSql = sql"""
             union distinct
             select er.workspace_id, er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
@@ -306,7 +306,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
             join ENTITY_REFS er
             on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
             where er.workspace_id = $workspaceId
-          )
+            )
         """
 
       val finalSql = sql"""
@@ -351,9 +351,9 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
              where e.workspace_id = $sourceWorkspaceId
              and deleted = 0
              and ( """,
-        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or ")
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
       )
-      sql""" );"""
       sql.asUpdate
     }
 
