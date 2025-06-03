@@ -810,6 +810,15 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       val whereSql = sql" where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0 and "
 
       concatSqlActions(startSql, removeSql, whereSql, hasAttributesClause).asUpdate
+      /* The final query looks like:
+
+          update ENTITY set record_version = record_version + 1,
+            attributes = JSON_REMOVE(attributes, '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
+          where workspace_id = ?
+            and entity_type = ?
+            and deleted = = 0
+            and JSON_CONTAINS_PATH(attributes, 'one', '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
+       */
     }
 
   // ====================================================================================================

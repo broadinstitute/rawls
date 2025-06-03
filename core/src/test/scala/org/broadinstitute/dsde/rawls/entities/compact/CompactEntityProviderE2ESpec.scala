@@ -6,6 +6,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
   AddUpdateAttribute,
@@ -715,6 +716,185 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       Entity("name2", "typeA", Map(AttributeName.withDefaultNS("bar") -> AttributeNumber(2)))
     )
 
+  }
+
+  behavior of "deleteEntityAttributes"
+
+  it should "delete attributes from entities" in withMinimalTestDatabase { _ =>
+    // create providers for workspace1 and workspace2
+    val repository = new CompactEntityRepository(slickDataSource)
+    val ws1Provider = new CompactEntityProvider(defaultEntityRequestArguments, repository)(ec, system)
+    val ws2Provider = new CompactEntityProvider(
+      defaultEntityRequestArguments.copy(workspace = minimalTestData.workspace2),
+      repository
+    )(ec, system)
+
+    // define attributes
+    val attrName1 = AttributeName.withDefaultNS("attr1")
+    val attrName2 = AttributeName.withDefaultNS("attr2")
+    val attrName3 = AttributeName.withDefaultNS("attr3")
+    val attrName4 = AttributeName.withDefaultNS("attr4")
+    val attrName5 = AttributeName.withDefaultNS("attr5")
+
+    val attrMap1 = Map(
+      attrName1 -> AttributeNumber(1),
+      attrName2 -> AttributeNumber(2),
+      attrName3 -> AttributeNumber(3)
+    )
+    val attrMap2 = Map(
+      attrName2 -> AttributeNumber(2),
+      attrName3 -> AttributeNumber(3),
+      attrName4 -> AttributeNumber(4)
+    )
+    val attrMap3 = Map(
+      attrName3 -> AttributeNumber(3),
+      attrName4 -> AttributeNumber(4),
+      attrName5 -> AttributeNumber(5)
+    )
+
+    val thing1 = Entity("one", "thing", attrMap1)
+    val thing2 = Entity("two", "thing", attrMap2)
+    val thing3 = Entity("three", "thing", attrMap3)
+
+    val item1 = Entity("one", "item", attrMap1)
+    val item2 = Entity("two", "item", attrMap2)
+    val item3 = Entity("three", "item", attrMap3)
+
+    // insert the things and items to both workspace1 and workspace2
+    Seq(thing1, thing2, thing3, item1, item2, item3).foreach { entity =>
+      Await.result(
+        ws1Provider.createEntity(entity, defaultRequestContext),
+        atMost
+      )
+      Await.result(
+        ws2Provider.createEntity(entity, defaultRequestContext),
+        atMost
+      )
+    }
+
+    // verify metadata
+    val expectedAttributesBefore = Seq(attrName1, attrName2, attrName3, attrName4, attrName5).map(toDelimitedName)
+    Seq(ws1Provider, ws2Provider) foreach { provider =>
+      val metadata = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+      metadata.size shouldBe 2 // two entity types: "thing" and "item"
+      metadata("thing").count shouldBe 3
+      metadata("item").count shouldBe 3
+      metadata("thing").attributeNames should contain theSameElementsAs expectedAttributesBefore
+      metadata("item").attributeNames should contain theSameElementsAs expectedAttributesBefore
+    }
+
+    // delete attr1 and attr5 from "thing" in workspace1
+    Await.result(ws1Provider.deleteEntityAttributes("thing", Set(attrName1, attrName5), defaultRequestContext), atMost)
+
+    // in workspace1, "thing" should have attr2, attr3, and attr4 but "item" should have all attributes
+    val ws1Metadata = Await.result(ws1Provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    ws1Metadata.size shouldBe 2 // two entity types: "thing" and "item"
+    ws1Metadata("thing").count shouldBe 3
+    ws1Metadata("item").count shouldBe 3
+    ws1Metadata("thing").attributeNames should contain theSameElementsAs Seq(attrName2, attrName3, attrName4).map(
+      toDelimitedName
+    )
+    ws1Metadata("item").attributeNames should contain theSameElementsAs expectedAttributesBefore
+
+    // in workspace1, both "thing" and "item" should have all attributes
+    val ws2Metadata = Await.result(ws2Provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    ws2Metadata.size shouldBe 2 // two entity types: "thing" and "item"
+    ws2Metadata("thing").count shouldBe 3
+    ws2Metadata("item").count shouldBe 3
+    ws2Metadata("thing").attributeNames should contain theSameElementsAs expectedAttributesBefore
+    ws2Metadata("item").attributeNames should contain theSameElementsAs expectedAttributesBefore
+
+  }
+
+  it should "delete attributes containing references" in withMinimalTestDatabase { _ =>
+    // create providers for workspace1 and workspace2
+    val repository = new CompactEntityRepository(slickDataSource)
+    val ws1Provider = new CompactEntityProvider(defaultEntityRequestArguments, repository)(ec, system)
+    val ws2Provider = new CompactEntityProvider(
+      defaultEntityRequestArguments.copy(workspace = minimalTestData.workspace2),
+      repository
+    )(ec, system)
+
+    // insert target entities into both workspaces
+    Range(1, 4).foreach { idx =>
+      Await.result(
+        ws1Provider.createEntity(Entity(s"targetName$idx", "targetType", Map()), defaultRequestContext),
+        atMost
+      )
+      Await.result(
+        ws2Provider.createEntity(Entity(s"targetName$idx", "targetType", Map()), defaultRequestContext),
+        atMost
+      )
+    }
+
+    // define pointers for each of the target entities
+    val targetPointer1 = EntityPointer("targetType", "targetName1")
+    val targetPointer2 = EntityPointer("targetType", "targetName2")
+    val targetPointer3 = EntityPointer("targetType", "targetName3")
+
+    // insert entities containing references into both workspaces
+    val attrName1 = AttributeName.withDefaultNS("attr1")
+    val attrName2 = AttributeName.withDefaultNS("attr2")
+    val attrName3 = AttributeName.withDefaultNS("attr3")
+
+    val sourceEntity1 = Entity(
+      "sourceName1",
+      "sourceType",
+      Map(
+        attrName1 -> AttributeEntityReference("targetType", "targetName1"),
+        attrName2 -> AttributeEntityReference("targetType", "targetName2")
+      )
+    )
+    val sourceEntity2 = Entity(
+      "sourceName2",
+      "sourceType",
+      Map(
+        attrName2 -> AttributeEntityReference("targetType", "targetName2"),
+        attrName3 -> AttributeEntityReference("targetType", "targetName3")
+      )
+    )
+
+    Seq(sourceEntity1, sourceEntity2).foreach { entity =>
+      Await.result(ws1Provider.createEntity(entity, defaultRequestContext), atMost)
+      Await.result(ws2Provider.createEntity(entity, defaultRequestContext), atMost)
+    }
+
+    // verify references in both workspaces
+    Seq(ws1Provider, ws2Provider) foreach { provider =>
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName1"))
+      ) should contain theSameElementsAs Seq(targetPointer1, targetPointer2)
+      runAndWait(
+        provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
+                                                      EntityPointer("sourceType", "sourceName2")
+        )
+      ) should contain theSameElementsAs Seq(targetPointer2, targetPointer3)
+    }
+
+    // delete attr1 and attr3 from "sourceType" in workspace1 only
+    Await.result(
+      ws1Provider.deleteEntityAttributes("sourceType", Set(attrName1, attrName3), defaultRequestContext),
+      atMost
+    )
+    // retrieve references for workspace 1 and ensure the references were deleted
+    runAndWait(
+      ws1Provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName1"))
+    ) should contain theSameElementsAs Seq(targetPointer2)
+    runAndWait(
+      ws1Provider.repository.queries.getReferencesFrom(wsid, EntityPointer("sourceType", "sourceName2"))
+    ) should contain theSameElementsAs Seq(targetPointer2)
+
+    // retrieve references for workspace 2 and ensure the references were NOT deleted
+    runAndWait(
+      ws2Provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
+                                                       EntityPointer("sourceType", "sourceName1")
+      )
+    ) should contain theSameElementsAs Seq(targetPointer1, targetPointer2)
+    runAndWait(
+      ws2Provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
+                                                       EntityPointer("sourceType", "sourceName2")
+      )
+    ) should contain theSameElementsAs Seq(targetPointer2, targetPointer3)
   }
 
   // ====================================================================================================
