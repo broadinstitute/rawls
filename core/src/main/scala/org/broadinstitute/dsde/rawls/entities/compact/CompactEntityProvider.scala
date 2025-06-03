@@ -44,6 +44,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
+import slick.dbio.DBIO
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
@@ -100,12 +101,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] = ???
+  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // FIXME: implement this
 
   def listWorkflowEntities(dataAccess: DataAccess,
                            workspace: Workspace,
                            entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = ???
+  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // FIXME: implement this
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
