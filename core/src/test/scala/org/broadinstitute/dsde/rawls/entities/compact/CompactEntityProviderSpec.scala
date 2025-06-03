@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{RefMapping, _}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
 import org.broadinstitute.dsde.rawls.entities.exceptions._
@@ -1535,7 +1535,15 @@ class CompactEntityProviderSpec
     val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
     when(mockQuery.getEntityRefs(any[UUID], any[Set[EntityPointer]])).thenReturn(DBIO.successful(Seq.empty))
     when(mockQuery.getEntitySubtrees(sourceWorkspaceId, entityType, entityNames.toSet))
-      .thenReturn(DBIO.successful(Set(RefMapping(EntityPointer(entityType, "entity1"), Set.empty))))
+      .thenReturn(
+        DBIO.successful(
+          Set(
+            RefMapping(EntityPointer(entityType, "entity1"), Set.empty),
+            RefMapping(EntityPointer(entityType, "entity2"), Set.empty),
+            RefMapping(EntityPointer(entityType, "entity3"), Set.empty)
+          )
+        )
+      )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]]))
       .thenReturn(DBIO.successful((3, 0)))
 
