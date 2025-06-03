@@ -126,13 +126,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID,
           entitiesToCopyRefs.toSet
         )
-        result: EntityCopyResponse =
+        result <-
           if (hardConflicts.nonEmpty) {
-              EntityCopyResponse(
+              DBIO.successful(EntityCopyResponse(
                 Seq.empty,
                 hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)),
                 Seq.empty
-            )
+            ))
           } else {
             repository.queries
               .getEntitySubtrees(sourceWorkspaceContext.workspaceIdAsUUID, entityType, entityNames.toSet)
