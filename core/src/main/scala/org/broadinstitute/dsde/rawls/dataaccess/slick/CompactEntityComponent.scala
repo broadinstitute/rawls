@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProviderConfig, CompactEntitySerialization}
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -31,13 +31,10 @@ trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
 
   /** low-level raw SQL queries for ENTITY. */
-  def compactEntityQuery(config: CompactEntityProviderConfig): CompactEntityQuery =
-    new CompactEntityQuery(this, config)
+  object compactEntityQuery extends CompactEntityQuery(this)
 }
 
-class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntityProviderConfig)
-    extends RawSqlQuery
-    with CompactEntitySerialization {
+class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery with CompactEntitySerialization {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
@@ -249,7 +246,7 @@ class CompactEntityQuery(driverComponent: DriverComponent, config: CompactEntity
         entityRefsCopiedCount <- copyEntityReferences(sourceWs, destWs, chunk)
       } yield (entitiesCopiedCount, entityRefsCopiedCount)
 
-    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(config.batchCopyBatchSize)
+    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(driverComponent.batchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 

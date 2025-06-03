@@ -9,7 +9,6 @@ import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProviderConfig
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
@@ -37,8 +36,7 @@ object EntityService {
                   entityManager: EntityManager,
                   pageSizeLimit: Int,
                   workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
-                    None, // only used for Quicksilver migration
-                  compactEntityProviderConfig: CompactEntityProviderConfig
+                    None // only used for Quicksilver migration
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext, system: ActorSystem): EntityService =
     new EntityService(ctx,
                       dataSource,
@@ -46,8 +44,7 @@ object EntityService {
                       entityManager,
                       workbenchMetricBaseName,
                       pageSizeLimit,
-                      workspaceSettingServiceConstructor,
-                      compactEntityProviderConfig
+                      workspaceSettingServiceConstructor
     )
 }
 
@@ -58,8 +55,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                     override val workbenchMetricBaseName: String,
                     pageSizeLimit: Int,
                     workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
-                      None, // only used for Quicksilver migration
-                    compactEntityProviderConfig: CompactEntityProviderConfig
+                      None // only used for Quicksilver migration
 )(implicit protected val executionContext: ExecutionContext, system: ActorSystem)
     extends WorkspaceSupport
     with EntitySupport
@@ -601,7 +597,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
 
               DBIO.sequence(batches.map { batch =>
                 // ... insert each batch into the temp table
-                dataAccess.compactEntityQuery(compactEntityProviderConfig).migrationInsertAttributesToTempTable(batch)
+                dataAccess.compactEntityQuery.migrationInsertAttributesToTempTable(batch)
               })
             }
 
@@ -610,32 +606,26 @@ class EntityService(protected val ctx: RawlsRequestContext,
 
         for {
           // create temp table
-          _ <- dataAccess.compactEntityQuery(compactEntityProviderConfig).migrationCreateTempTable
+          _ <- dataAccess.compactEntityQuery.migrationCreateTempTable
           // insert entity name, entity type, and attributes to the temp table
           _ = logger.info(s"Quicksilver migration: inserting to temp table ...")
           _ <- DBIO.sequence(allTypesResult)
           // update ENTITY from the contents of the temp table
           _ = logger.info(s"Quicksilver migration: updating ENTITY from temp table ...")
-          _ <- dataAccess
-            .compactEntityQuery(compactEntityProviderConfig)
-            .migrationUpdateFromTempTable(workspaceContext.workspaceIdAsUUID)
+          _ <- dataAccess.compactEntityQuery.migrationUpdateFromTempTable(workspaceContext.workspaceIdAsUUID)
           // populate the ENTITY_REFS table for this workspace
           _ = logger.info(s"Quicksilver migration: populating ENTITY_REFS ...")
-          _ <- dataAccess
-            .compactEntityQuery(compactEntityProviderConfig)
-            .migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
+          _ <- dataAccess.compactEntityQuery.migrationAddReferences(workspaceContext.workspaceIdAsUUID, shardId)
           // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
           _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
-          _ <- dataAccess
-            .compactEntityQuery(compactEntityProviderConfig)
-            .migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID, shardId)
+          _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
+                                                                             shardId
+          )
           // delete the all_attribute_values column for this workspace
           _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
-          _ <- dataAccess
-            .compactEntityQuery(compactEntityProviderConfig)
-            .migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
+          _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
 
-          _ <- dataAccess.compactEntityQuery(compactEntityProviderConfig).migrationDeleteTempTable
+          _ <- dataAccess.compactEntityQuery.migrationDeleteTempTable
           _ = logger.info(s"Quicksilver migration: done!")
         } yield ()
       }
