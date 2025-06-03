@@ -1535,7 +1535,7 @@ class CompactEntityProviderSpec
     val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
     when(mockQuery.getEntityRefs(any[UUID], any[Set[EntityPointer]])).thenReturn(DBIO.successful(Seq.empty))
     when(mockQuery.getEntitySubtrees(sourceWorkspaceId, entityType, entityNames.toSet))
-      .thenReturn(DBIO.successful(Map.from(mockEntityRefs.map(ref => ref -> Set.empty))))
+      .thenReturn(DBIO.successful(Set(RefMapping(EntityPointer(entityType, "entity1"), Set.empty))))
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]]))
       .thenReturn(DBIO.successful((3, 0)))
 
@@ -1658,7 +1658,9 @@ class CompactEntityProviderSpec
       .thenReturn(DBIO.successful(Seq(CompactEntityRefRecord(2, "entity2", entityType))))
     when(mockQuery.getEntitySubtrees(sourceWorkspace.workspaceIdAsUUID, entityType, entityNames.toSet))
       .thenReturn(
-        DBIO.successful(Map.from(mockEntityRefs.map(ref => ref -> Set(EntityPointer(entityType, "entity2")))))
+        DBIO.successful(
+          Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))
+        )
       )
 
     val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
@@ -1724,7 +1726,9 @@ class CompactEntityProviderSpec
       .thenReturn(DBIO.successful(Seq(CompactEntityRefRecord(2, "entity2", entityType))))
     when(mockQuery.getEntitySubtrees(sourceWorkspace.workspaceIdAsUUID, entityType, entityNames.toSet))
       .thenReturn(
-        DBIO.successful(Map.from(mockEntityRefs.map(ref => ref -> Set(EntityPointer(entityType, "entity2")))))
+        DBIO.successful(
+          Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))
+        )
       )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]]))
       .thenReturn(DBIO.successful((1, 0)))
