@@ -527,6 +527,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
     } yield entityProvider
 
+  /**
+   * Determine if a workspace has the CompactDataTables setting enabled.
+   */
   private def isCompactDataTableSettingEnabled(workspaceName: WorkspaceName): Future[Boolean] =
     workspaceSettingServiceConstructor match {
       case Some(serviceConstructor) =>

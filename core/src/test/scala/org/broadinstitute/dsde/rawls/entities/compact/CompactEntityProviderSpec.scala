@@ -1531,10 +1531,11 @@ class CompactEntityProviderSpec
 
     val entityType = "sampleType"
     val entityNames = Seq("entity1", "entity2", "entity3")
+    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
 
     val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
     when(mockQuery.getEntityRefs(any[UUID], any[Set[EntityPointer]])).thenReturn(DBIO.successful(Seq.empty))
-    when(mockQuery.getEntitySubtrees(sourceWorkspaceId, entityType, entityNames.toSet))
+    when(mockQuery.recursiveGetEntityReferences(sourceWorkspaceId, entitiesToCopyRefs))
       .thenReturn(
         DBIO.successful(
           Set(
@@ -1661,13 +1662,14 @@ class CompactEntityProviderSpec
 
     val entityType = "sampleType"
     val entityNames = Seq("entity1")
+    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
 
     val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
     when(mockQuery.getEntityRefs(destWorkspace.workspaceIdAsUUID, Set(EntityPointer(entityType, "entity1"))))
       .thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityRefs(destWorkspace.workspaceIdAsUUID, Set(EntityPointer(entityType, "entity2"))))
       .thenReturn(DBIO.successful(Seq(CompactEntityRefRecord(2, "entity2", entityType))))
-    when(mockQuery.getEntitySubtrees(sourceWorkspace.workspaceIdAsUUID, entityType, entityNames.toSet))
+    when(mockQuery.recursiveGetEntityReferences(sourceWorkspace.workspaceIdAsUUID, entitiesToCopyRefs))
       .thenReturn(
         DBIO.successful(
           Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))
@@ -1729,13 +1731,14 @@ class CompactEntityProviderSpec
 
     val entityType = "sampleType"
     val entityNames = Seq("entity1")
+    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
 
     val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
     when(mockQuery.getEntityRefs(destWorkspace.workspaceIdAsUUID, Set(EntityPointer(entityType, "entity1"))))
       .thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityRefs(destWorkspace.workspaceIdAsUUID, Set(EntityPointer(entityType, "entity2"))))
       .thenReturn(DBIO.successful(Seq(CompactEntityRefRecord(2, "entity2", entityType))))
-    when(mockQuery.getEntitySubtrees(sourceWorkspace.workspaceIdAsUUID, entityType, entityNames.toSet))
+    when(mockQuery.recursiveGetEntityReferences(sourceWorkspace.workspaceIdAsUUID, entitiesToCopyRefs))
       .thenReturn(
         DBIO.successful(
           Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))

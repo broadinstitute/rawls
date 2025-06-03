@@ -119,12 +119,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = {
 
-    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name))
+    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
     val copyResult = repository.dataSource.inTransaction { _ =>
       for {
-        hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID,
-                                                          entitiesToCopyRefs.toSet
-        )
+        hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs)
         result <-
           if (hardConflicts.nonEmpty) {
             DBIO.successful(
@@ -136,7 +134,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
             )
           } else {
             repository.queries
-              .getEntitySubtrees(sourceWorkspaceContext.workspaceIdAsUUID, entityType, entityNames.toSet)
+              .recursiveGetEntityReferences(sourceWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs)
               .flatMap { entityReferenceMap =>
                 val entityReferences = entityReferenceMap.flatMap(_.to)
                 repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).flatMap {
@@ -162,6 +160,11 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     copyResult
   }
 
+  /**
+   * Copy all entities from sourceWorkspaceId to destWorkspaceId, excluding any entities that
+   * are in the set of soft conflicts. Return an EntityCopyResponse containing a Seq of entities
+   * that were copied.
+   */
   private def copyEntitiesExcludingAnySoftConflicts(entityReferenceMap: Set[RefMapping],
                                                     entityReferences: Set[EntityPointer],
                                                     softConflicts: Set[EntityPointer],
@@ -186,6 +189,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }
   }
 
+  /**
+   * For each entity in the entityReferenceMap, check any of the entites that it references
+   * are in the set of soft conflicts. If so, create an EntitySoftConflict for that entity
+   */
   def unmergedSoftConflicts(entityReferenceMap: Set[RefMapping],
                             softConflicts: Set[EntityPointer]
   ): DBIOAction[EntityCopyResponse, NoStream, Effect] = {

@@ -235,6 +235,19 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       query.as[CompactEntityRefRecord]
     }
 
+  /**
+   * Copies entities and their references from a source workspace to a destination workspace.
+   *
+   * This method performs the following operations:
+   * - Copies the specified entities from the source workspace to the destination workspace.
+   * - Copies the references associated with those entities to the destination workspace.
+   * - Handles the copying in batches to optimize performance and avoid memory issues.
+   *
+   * Execution Plan:
+   *         - Splits the entities into batches based on the `batchSize`.
+   *         - Copies each batch of entities and their references using `copyEntities` and `copyEntityReferences`.
+   *         - Aggregates the results from all batches to return the total counts.
+   */
   def copyEntitiesToNewWorkspace(sourceWs: UUID,
                                  destWs: UUID,
                                  entityRefs: Set[EntityPointer] = Set(),
@@ -256,16 +269,19 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     }
   }
 
-  def getEntitySubtrees(workspaceId: UUID,
-                        entityType: String,
-                        entityNames: Set[String]
-  ): ReadAction[Set[RefMapping]] = {
-    val refs = entityNames.map(name => EntityPointer(entityType, name))
-    for {
-      allRefs <- recursiveGetEntityReferences(workspaceId, refs)
-    } yield allRefs
-  }
-
+  /**
+   * Recursively retrieves all entity references for a given set of entities in a workspace.
+   *
+   * This method performs a recursive query on the `ENTITY_REFS` table to find all downstream entities
+   * referenced by the input entities. It returns a `Set[RefMapping]`, where each `RefMapping` contains:
+   * - `from`: The originating entity.
+   * - `to`: A set of entities that the originating entity references, including all downstream references.
+   *
+   * Execution Plan:
+   * - Uses recursive SQL queries to traverse the `ENTITY_REFS` table.
+   * - Performs a union operation to include all downstream references.
+   * - Groups the results by the originating entity and maps them to `RefMapping`.
+   */
   def recursiveGetEntityReferences(workspaceId: UUID, entities: Set[EntityPointer]): ReadAction[Set[RefMapping]] =
     if (entities.isEmpty) {
       DBIO.successful(Set.empty[RefMapping])
@@ -311,6 +327,18 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
       }
     }
 
+  /**
+   * Copies entities from a source workspace to a destination workspace.
+   *
+   * This method inserts new rows into the `ENTITY` table for the destination workspace
+   * based on the entities in the source workspace. It excludes entities that are marked as deleted.
+   *
+   * Execution Plan:
+   * - If `refs` is empty, returns 0 without performing any database operations.
+   * - Generates SQL clauses for the entity type and name pairs in `refs`.
+   * - Executes an `INSERT INTO ... SELECT` query to copy entities from the source workspace to the destination workspace.
+   * - Excludes entities marked as deleted in the source workspace.
+   */
   def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
     if (refs.isEmpty) {
       DBIO.successful(0)
@@ -330,9 +358,16 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     }
 
   /**
-   * Given a destWorkspaceId: UUID and refs: Set[EntityPointer]
-   * select rows from ENTITY_REFS table for the source workspace where the from_entity_type and from_name are in the refs set
-   * and insert new rows into ENTITY_REFS table for the destWorkspaceId with the same from_entity_type and from_name
+   * Copies entity references from a source workspace to a destination workspace.
+   *
+   * This method inserts rows into the `ENTITY_REFS` table for the destination workspace
+   * based on the references in the source workspace. It ensures that the `from_entity_type`
+   * and `from_name` match the provided set of `EntityPointer` objects.
+   *
+   * Execution Plan:
+   * - If `refs` is empty, returns 0 without performing any database operations.
+   * - Generates SQL clauses for the `from_entity_type` and `from_name` pairs in `refs`.
+   * - Executes an `INSERT INTO ... SELECT` query to copy references from the source workspace to the destination workspace.
    */
   def copyEntityReferences(sourceWorkspaceId: UUID,
                            destWorkspaceId: UUID,
