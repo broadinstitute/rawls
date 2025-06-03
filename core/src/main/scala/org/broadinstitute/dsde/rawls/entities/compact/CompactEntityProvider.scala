@@ -46,7 +46,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
-import slick.dbio.DBIO
+import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
@@ -122,7 +122,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name))
     val copyResult = repository.dataSource.inTransaction { _ =>
       for {
-        // Get hard conflicts
         hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID,
                                                           entitiesToCopyRefs.toSet
         )
@@ -140,15 +139,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
               .getEntitySubtrees(sourceWorkspaceContext.workspaceIdAsUUID, entityType, entityNames.toSet)
               .flatMap { entityReferenceMap =>
                 val entityReferences = entityReferenceMap.flatMap(_.to)
-                repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).map {
+                repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).flatMap {
                   conflicts =>
                     val softConflicts = conflicts.toSeq.map(_.toPointer).toSet
                     if (softConflicts.isEmpty || linkExistingEntities) {
-                      copyEntitiesExcludingAnySoftConflicts(entityReferenceMap,
-                                                            entityReferences,
-                                                            softConflicts,
-                                                            sourceWorkspaceContext.workspaceIdAsUUID,
-                                                            destWorkspaceContext.workspaceIdAsUUID
+                      copyEntitiesExcludingAnySoftConflicts(
+                        entityReferenceMap,
+                        entityReferences,
+                        softConflicts,
+                        sourceWorkspaceContext.workspaceIdAsUUID,
+                        destWorkspaceContext.workspaceIdAsUUID
                       )
                     } else {
                       unmergedSoftConflicts(entityReferenceMap, softConflicts)
@@ -177,16 +177,18 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         entitiesToCopy,
         config.batchCopyBatchSize
       )
-    EntityCopyResponse(
-      entitiesToCopy.map(_.toAttributeEntityReference).toSeq,
-      Seq.empty,
-      Seq.empty
-    )
+      .map { _ =>
+        EntityCopyResponse(
+          entitiesToCopy.map(_.toAttributeEntityReference).toSeq,
+          Seq.empty,
+          Seq.empty
+        )
+      }
   }
 
   def unmergedSoftConflicts(entityReferenceMap: Set[RefMapping],
                             softConflicts: Set[EntityPointer]
-  ): EntityCopyResponse = {
+  ): DBIOAction[EntityCopyResponse, NoStream, Effect] = {
     val unmergedSoftConflicts = entityReferenceMap.flatMap { refMapping =>
       val conflicts = refMapping.to
         .intersect(softConflicts)
@@ -198,7 +200,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         None
       }
     }.toSeq
-    EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts)
+    DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
   }
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
