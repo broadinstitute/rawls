@@ -25,10 +25,8 @@ import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import slick.sql.SqlStreamingAction
-import slick.util.SQLBuilder
 import spray.json._
 
-import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 
 trait CompactEntityComponent extends LazyLogging {

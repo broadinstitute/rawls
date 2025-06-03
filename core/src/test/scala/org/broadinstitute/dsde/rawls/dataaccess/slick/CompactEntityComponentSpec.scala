@@ -28,7 +28,6 @@ import spray.json._
 
 import java.sql.SQLIntegrityConstraintViolationException
 import java.util.UUID
-import scala.concurrent.Future
 import scala.util.Random
 
 class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
@@ -821,7 +820,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(Entity("entityName1", "entityType2", attrsMap), wsid2)
 
     // delete only workspace1, entityType1
-    val actual = runAndWait(q.deleteAttributes(wsid, "entityType1", Set(attr2, attr3)))
+    runAndWait(q.deleteAttributes(wsid, "entityType1", Set(attr2, attr3)))
 
     // verify each entity
     runAndWait(
@@ -930,14 +929,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
     actualDelete shouldBe 2 // should delete the 2 valid references
 
-    val expectedRemaining = (fakeRefs.map { fake =>
+    val expectedRemaining = fakeRefs.map { fake =>
       RefPointerRecord(wsid,
                        fake.from.entityType,
                        fake.from.entityName,
                        fake.to.head.entityType,
                        fake.to.head.entityName
       )
-    }) ++ Set(validRef1, validRef2).map { otherWorkspaceRef =>
+    } ++ Set(validRef1, validRef2).map { otherWorkspaceRef =>
       RefPointerRecord(
         testData.workspaceNoAttrs.workspaceIdAsUUID,
         otherWorkspaceRef.from.entityType,
@@ -1214,8 +1213,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "deleteEntities"
 
   it should "delete the specified entities in the given workspace" in withMinimalTestDatabase { _ =>
-    import driver.api._ // for bespoke SQL queries
-
     val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
 
     val entityType1 = "entityType1"
@@ -1338,8 +1335,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "deleteEntitiesOfType"
 
   it should "delete entities of the given type in the given workspace" in withMinimalTestDatabase { _ =>
-    import driver.api._ // for bespoke SQL queries
-
     val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
 
     val entityType1 = "entityType1"
