@@ -2,29 +2,14 @@ package org.broadinstitute.dsde.rawls.entities.base
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
+import com.typesafe.scalalogging.LazyLogging
 import net.logstash.logback.argument.StructuredArguments
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeName,
-  AttributeRename,
-  AttributeValue,
-  Entity,
-  EntityCopyResponse,
-  EntityPointer,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  EntityTypeRename,
-  JsonSupport,
-  RawlsRequestContext,
-  SubmissionValidationEntityInputs,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeRename, AttributeValue, Entity, EntityCopyResponse, EntityPointer, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, JsonSupport, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
 import org.slf4j.LoggerFactory
 import spray.json._
 
@@ -52,11 +37,7 @@ object AuditJsonSupport extends AuditJsonSupport
  * @param requestArguments The request arguments containing workspace and context information
  */
 class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArguments: EntityRequestArguments)
-    extends EntityProvider {
-  private val log = LoggerFactory.getLogger(classOf[AuditLoggingEntityProvider])
-
-  import AuditJsonSupport._
-
+    extends EntityProvider with LazyLogging {
   override def entityStoreId: Option[String] = delegate.entityStoreId
 
   /**
@@ -81,7 +62,8 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
       )
     )
 
-    log.info("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
+    import AuditJsonSupport._
+    logger.info("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
   }
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
