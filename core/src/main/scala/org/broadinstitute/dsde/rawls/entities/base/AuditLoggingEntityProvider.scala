@@ -8,12 +8,43 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeRename, AttributeValue, Entity, EntityCopyResponse, EntityPointer, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeName,
+  AttributeRename,
+  AttributeValue,
+  Entity,
+  EntityCopyResponse,
+  EntityPointer,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  EntityTypeMetadata,
+  EntityTypeRename,
+  JsonSupport,
+  RawlsRequestContext,
+  SubmissionValidationEntityInputs,
+  Workspace
+}
 import org.slf4j.LoggerFactory
+import spray.json._
 
 import scala.concurrent.Future
-import scala.jdk.CollectionConverters._
 import scala.util.Try
+// Case classes for structured audit logging
+case class WorkspaceInfo(id: String, namespace: String, name: String)
+case class UserInfo(id: String, email: String)
+case class AuditInfo(function: String, workspace: WorkspaceInfo, user: UserInfo)
+
+// JSON support for audit case classes
+class AuditJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
+  implicit val WorkspaceInfoFormat: RootJsonFormat[WorkspaceInfo] = jsonFormat3(WorkspaceInfo)
+  implicit val UserInfoFormat: RootJsonFormat[UserInfo] = jsonFormat2(UserInfo)
+  implicit val AuditInfoFormat: RootJsonFormat[AuditInfo] = jsonFormat3(AuditInfo)
+}
+
+object AuditJsonSupport extends AuditJsonSupport
 
 /**
  * EntityProvider implementation that logs audit information before delegating to another EntityProvider
@@ -23,6 +54,8 @@ import scala.util.Try
 class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArguments: EntityRequestArguments)
     extends EntityProvider {
   private val log = LoggerFactory.getLogger(classOf[AuditLoggingEntityProvider])
+
+  import AuditJsonSupport._
 
   override def entityStoreId: Option[String] = delegate.entityStoreId
 
@@ -34,23 +67,21 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     val workspace = requestArguments.workspace
     val ctx = requestArguments.ctx
 
-    // Using a Map structure that will be properly serialized by the logging framework
-    val auditInfo = Map(
-      "audit" -> Map(
-        "function" -> functionName,
-        "workspace" -> Map(
-          "id" -> workspace.workspaceId,
-          "namespace" -> workspace.namespace,
-          "name" -> workspace.name
-        ),
-        "user" -> Map(
-          "id" -> ctx.userInfo.userSubjectId,
-          "email" -> ctx.userInfo.userEmail
-        )
+    // Create structured audit info using case classes
+    val auditInfo = AuditInfo(
+      function = functionName,
+      workspace = WorkspaceInfo(
+        id = workspace.workspaceId,
+        namespace = workspace.namespace,
+        name = workspace.name
+      ),
+      user = UserInfo(
+        id = ctx.userInfo.userSubjectId.value,
+        email = ctx.userInfo.userEmail.value
       )
     )
 
-    log.info("Entity operation audit", StructuredArguments.entries(auditInfo.asJava))
+    log.info("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
   }
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
