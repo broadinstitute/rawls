@@ -2057,7 +2057,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   behavior of "copyEntities"
 
-  it should "copy entities and references from source workspace to destination workspace" in withMinimalTestDatabase {
+  it should "copy entities from source workspace to destination workspace" in withMinimalTestDatabase {
     _ =>
       val sourceWorkspaceId = minimalTestData.workspace.workspaceIdAsUUID
       val destinationWorkspaceId = minimalTestData.workspace2.workspaceIdAsUUID
@@ -2139,6 +2139,30 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       RefMapping(entity1, Set(entity2, entity3)),
       RefMapping(entity2, Set(entity4)),
       RefMapping(entity3, Set(entity4))
+    )
+  }
+
+  it should "get recursive entity references with cycles" in withMinimalTestDatabase { _ =>
+    // Define workspace
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    // Create entities
+    val entity1 = EntityPointer("entityType1", "entityName1")
+    val entity2 = EntityPointer("entityType1", "entityName2")
+
+    // Insert references to form a recursive structure
+    val refMapping1 = RefMapping(entity1, Set(entity2))
+    val refMapping2 = RefMapping(entity2, Set(entity1))
+
+    runAndWait(q.insertReferences(workspaceId, Set(refMapping1, refMapping2)))
+
+    // Perform the recursive query
+    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1)))
+
+    // Verify the result
+    recursiveReferences should contain theSameElementsAs Set(
+      RefMapping(entity1, Set(entity2)),
+      RefMapping(entity2, Set(entity1))
     )
   }
 
