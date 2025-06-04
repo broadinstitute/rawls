@@ -85,7 +85,6 @@ object Dependencies {
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.31.1"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.10"
-  val gcpLogging: ModuleID = "com.google.cloud" % "google-cloud-logging-logback" % "0.127.11-alpha"
   val janino: ModuleID = "org.codehaus.janino" % "janino" % "3.1.12" // For if-else logic in logging config
 
   val workbenchLibsHash = "80e4b8d"
@@ -283,7 +282,6 @@ object Dependencies {
     azureCoreManagement,
     policyService,
     logstashLogback,
-    gcpLogging,
     janino
   )
 
