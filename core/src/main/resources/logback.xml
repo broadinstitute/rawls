@@ -7,16 +7,22 @@
     </if>
 
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <!-- See http://logback.qos.ch/manual/layouts.html -->
-            <!-- See http://doc.akka.io/docs/akka/2.0/scala/logging.html -->
-            <pattern>[%level] [%d{HH:mm:ss.SSS}] [%thread] %logger{36} - %msg%n</pattern>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <level>severity</level>
+            </fieldNames>
         </encoder>
     </appender>
 
     <appender name="Console-GCP" class="com.google.cloud.logging.logback.LoggingAppender">
         <enhancer>com.google.cloud.logging.logback.TraceLoggingEventEnhancer</enhancer>
         <redirectToStdout>true</redirectToStdout>
+    </appender>
+
+    <appender name="Console-Standard" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <Pattern>%date %-5level [%thread] %logger{36}: %message%n</Pattern>
+        </encoder>
     </appender>
 
     <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">

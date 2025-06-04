@@ -96,7 +96,7 @@ start_server () {
     -e JAVA_OPTS="$JAVA_OPTS" \
     -e GOOGLE_APPLICATION_CREDENTIALS='/etc/rawls-account.json' \
     -e GIT_HASH=$GIT_HASH \
-    -e RAWLS_LOG_APPENDER=console \
+    -e RAWLS_LOG_APPENDER=Console-Standard \
     sbtscala/scala-sbt:eclipse-temurin-17.0.15_6_1.11.1_2.13.16 \
     bash -c "git config --global --add safe.directory /app && sbt clean \~reStart"
 
