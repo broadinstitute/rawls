@@ -381,7 +381,39 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             entityName: String,
                             newName: String,
                             parentContext: RawlsRequestContext
-  ): Future[Int] = ???
+  ): Future[Int] = {
+    // Check if the newName is the same as the old name
+    if (newName == entityName) {
+      throw new RawlsExceptionWithErrorReport(
+        errorReport = ErrorReport(StatusCodes.BadRequest, s"New name $newName is the same as the old name $entityName")
+      )
+    }
+    // Validate the newName
+    EntityUtils.validateEntityName(newName)
+    // Perform the rename in a transaction
+    val renameFuture = repository.dataSource.inTransaction { _ =>
+      for {
+        // Check if the newName already exists
+        newNameExists <- repository.queries.getEntity(workspaceId, entityType, newName)
+        _ = if (newNameExists.nonEmpty) {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Conflict, s"$entityType/$newName already exists as an entity")
+          )
+        }
+        // Check if the Entity exists, throw an error if it does not
+        entityExists <- repository.queries.getEntity(workspaceId, entityType, entityName)
+        _ = if (entityExists.isEmpty) {
+          throw new EntityNotFoundException(s"Can't find entity $entityType/$entityName")
+        }
+        // Perform the rename
+        entityRowsUpdated <- repository.queries.renameEntity(workspaceId, entityType, entityName, newName)
+      } yield entityRowsUpdated
+    }
+    // Fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
+    withWorkspaceLastModified(renameFuture)
+    // return the future
+    renameFuture
+  }
 
   override def renameEntityType(oldName: String,
                                 renameInfo: EntityTypeRename,
