@@ -719,35 +719,72 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   behavior of "copyEntities"
 
-  it should "copyEntities from sourceWorkspace to destinationWorkspace" in withMinimalTestDatabase { _ =>
+  it should "copy entities and entity references from source to destination workspace" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
-    val entityType = "typeA"
-    // Create entities in source workspace
-    val updates = Seq(
-      EntityUpdateDefinition("name1", entityType, Seq()),
-      EntityUpdateDefinition("name2", entityType, Seq())
-    )
-    Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
-    // Copy entities to destination workspace
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition(
+        "name2",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("ref"), AttributeEntityReference("typeA", "name1")))
+      ),
+      EntityUpdateDefinition(
+        "name3",
+        "typeB",
+        Seq(
+          AddUpdateAttribute(
+            AttributeName.withDefaultNS("refs"),
+            AttributeEntityReferenceList(
+              Seq(
+                AttributeEntityReference("typeA", "name1"),
+                AttributeEntityReference("typeA", "name2")
+              )
+            )
+          )
+        )
+      )
+    )
+
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 3
+
     val copiedEntities = Await.result(
       provider.copyEntities(minimalTestData.workspace,
                             minimalTestData.workspace2,
-                            entityType,
-                            updates.map(_.name),
+                            "typeB",
+                            Seq("name3"),
                             linkExistingEntities = false,
                             defaultRequestContext
       ),
       atMost
     )
-
     copiedEntities.entitiesCopied should contain theSameElementsAs Seq(
-      AttributeEntityReference(entityType, "name1"),
-      AttributeEntityReference(entityType, "name2")
+      AttributeEntityReference("typeA", "name1"),
+      AttributeEntityReference("typeA", "name2"),
+      AttributeEntityReference("typeB", "name3")
     )
     copiedEntities.hardConflicts shouldBe empty
     copiedEntities.softConflicts shouldBe empty
 
+  }
+
+  it should "not copy entity that does not exist in source workspace" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+    val copiedEntities = Await.result(
+      provider.copyEntities(
+        minimalTestData.workspace,
+        minimalTestData.workspace2,
+        "typeA",
+        Seq("nonExistentEntity"),
+        linkExistingEntities = false,
+        defaultRequestContext
+      ),
+      atMost
+    )
+    copiedEntities.entitiesCopied shouldBe empty
+    copiedEntities.hardConflicts shouldBe empty
+    copiedEntities.softConflicts shouldBe empty
   }
 
   // ====================================================================================================
