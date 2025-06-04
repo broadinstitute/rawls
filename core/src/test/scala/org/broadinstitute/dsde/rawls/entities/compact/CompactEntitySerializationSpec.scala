@@ -1,17 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
 import org.broadinstitute.dsde.rawls.entities.exceptions.CompactEntityDeserializationException
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
-  AttributeEntityReferenceList,
-  AttributeName,
-  AttributeNumber,
-  AttributeString,
-  Entity
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNumber, AttributeString, Entity}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import spray.json.{JsNumber, JsObject}
+import spray.json.{JsArray, JsNumber, JsObject}
 
 class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with CompactEntitySerialization {
 
@@ -52,7 +45,7 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
       val serialized = toSql(entity.attributes)
       val actual = serialized.fields.get(ATTRS_KEY)
       actual should not be empty
-      actual.get shouldBe a[JsObject]
+      actual.get shouldBe a[JsArray]
       // this intentionally does not test the details of how the AttributeMap is serialized; that is done elsewhere.
       // this only tests that the serialized AttributeMap is a sub-object located in an "attrs" key
     }
@@ -96,7 +89,7 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
 
   it should "throw if the version number is out of range" in {
     val input =
-      """{ "v": 2, "attrs": {} }"""
+      """{ "v": 3, "attrs": {} }"""
     intercept[CompactEntityDeserializationException] {
       fromSql(Option(input))
     }
