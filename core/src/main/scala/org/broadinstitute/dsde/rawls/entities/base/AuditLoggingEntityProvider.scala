@@ -9,19 +9,35 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeRename, AttributeValue, Entity, EntityCopyResponse, EntityPointer, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, JsonSupport, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
-import org.slf4j.LoggerFactory
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeName,
+  AttributeRename,
+  AttributeValue,
+  Entity,
+  EntityCopyResponse,
+  EntityPointer,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  EntityTypeMetadata,
+  EntityTypeRename,
+  JsonSupport,
+  RawlsRequestContext,
+  SubmissionValidationEntityInputs,
+  Workspace
+}
 import spray.json._
 
 import scala.concurrent.Future
 import scala.util.Try
+
 // Case classes for structured audit logging
 case class WorkspaceInfo(id: String, namespace: String, name: String)
 case class UserInfo(id: String, email: String)
 case class AuditInfo(function: String, workspace: WorkspaceInfo, user: UserInfo)
 
 // JSON support for audit case classes
-class AuditJsonSupport extends JsonSupport {
+object AuditJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
   implicit val WorkspaceInfoFormat: RootJsonFormat[WorkspaceInfo] = jsonFormat3(WorkspaceInfo)
@@ -29,15 +45,14 @@ class AuditJsonSupport extends JsonSupport {
   implicit val AuditInfoFormat: RootJsonFormat[AuditInfo] = jsonFormat3(AuditInfo)
 }
 
-object AuditJsonSupport extends AuditJsonSupport
-
 /**
  * EntityProvider implementation that logs audit information before delegating to another EntityProvider
  * @param delegate The EntityProvider implementation to delegate to after logging
  * @param requestArguments The request arguments containing workspace and context information
  */
 class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArguments: EntityRequestArguments)
-    extends EntityProvider with LazyLogging {
+    extends EntityProvider
+    with LazyLogging {
   override def entityStoreId: Option[String] = delegate.entityStoreId
 
   /**
@@ -223,17 +238,4 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     logAudit("updateEntity")
     delegate.updateEntity(entityType, entityName, operations, parentContext)
   }
-}
-
-// Companion object to provide a factory method
-object AuditLoggingEntityProvider {
-
-  /**
-   * Creates a new AuditLoggingEntityProvider that wraps the provided delegate
-   * @param delegate The EntityProvider implementation to delegate to after logging
-   * @param requestArguments The request arguments containing workspace and context information
-   * @return A new AuditLoggingEntityProvider instance
-   */
-  def apply(delegate: EntityProvider, requestArguments: EntityRequestArguments): AuditLoggingEntityProvider =
-    new AuditLoggingEntityProvider(delegate, requestArguments)
 }
