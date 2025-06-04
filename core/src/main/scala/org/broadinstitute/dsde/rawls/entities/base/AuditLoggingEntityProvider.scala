@@ -47,22 +47,23 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     val workspace = requestArguments.workspace
     val ctx = requestArguments.ctx
 
-    // Using structured logging format compatible with Google Cloud Logging
-    log.info(
-      s"""{"message":"Entity operation audit",
-         |"audit": {
-         |  "function": "$functionName",
-         |  "workspace": {
-         |    "id": "${workspace.workspaceId}",
-         |    "namespace": "${workspace.namespace}",
-         |    "name": "${workspace.name}"
-         |  },
-         |  "user": {
-         |    "id": "${ctx.userInfo.userSubjectId}",
-         |    "email": "${ctx.userInfo.userEmail}"
-         |  }
-         |}}""".stripMargin.replaceAll("\n", "")
+    // Using a Map structure that will be properly serialized by the logging framework
+    val auditInfo = Map(
+      "audit" -> Map(
+        "function" -> functionName,
+        "workspace" -> Map(
+          "id" -> workspace.workspaceId,
+          "namespace" -> workspace.namespace,
+          "name" -> workspace.name
+        ),
+        "user" -> Map(
+          "id" -> ctx.userInfo.userSubjectId,
+          "email" -> ctx.userInfo.userEmail
+        )
+      )
     )
+
+    log.info("Entity operation audit", auditInfo)
   }
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],

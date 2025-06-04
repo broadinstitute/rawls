@@ -1,11 +1,22 @@
 <configuration>
 
+    <if condition='!isDefined("RAWLS_LOG_APPENDER")'>
+        <then>
+            <variable name="RAWLS_LOG_APPENDER" value="Console-GCP" />
+        </then>
+    </if>
+
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <!-- See http://logback.qos.ch/manual/layouts.html -->
             <!-- See http://doc.akka.io/docs/akka/2.0/scala/logging.html -->
             <pattern>[%level] [%d{HH:mm:ss.SSS}] [%thread] %logger{36} - %msg%n</pattern>
         </encoder>
+    </appender>
+
+    <appender name="Console-GCP" class="com.google.cloud.logging.logback.LoggingAppender">
+        <enhancer>com.google.cloud.logging.logback.TraceLoggingEventEnhancer</enhancer>
+        <redirectToStdout>true</redirectToStdout>
     </appender>
 
     <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
@@ -40,59 +51,59 @@
 
     <logger name="org.broadinstitute.dsde" level="info" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </logger>
 
     <logger name="org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor" level="debug" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
     <logger name="org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor" level="debug" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
     <logger name="org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor" level="debug" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
     <logger name="org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO" level="debug" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </logger>
 
     <logger name="org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO" level="debug" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </logger>
 
     <logger name="org.broadinstitute.dsde.rawls.dataaccess.SubmissionCostServiceImpl" level="debug" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </logger>
 
     <logger name="org.broadinstitute.dsde.rawls.util.HttpClientUtils" level="debug" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
     <logger name="akka" level="info" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </logger>
@@ -102,19 +113,19 @@
     <!--
     <logger name="slick.jdbc.JdbcBackend.statement" level="DEBUG" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
     </logger>
     -->
     <!--
     <logger name="slick.jdbc.JdbcBackend.benchmark" level="DEBUG" additivity="false">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
     </logger>
     -->
 
     <root level="warn">
         <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </root>
