@@ -40,8 +40,11 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         val allRecords = entityRecords.values.flatten.toSeq.map(_.toEntity)
         lookups.flatMap { lookup =>
           val attrName = AttributeName.fromDelimitedName(lookup.attributeName)
-          allRecords.flatMap(_.attributes.get(attrName)).collect { case av: AttributeValue =>
-            av
+          val attrs: Seq[Attribute] = allRecords.flatMap(_.attributes.get(attrName))
+          attrs.flatMap {
+            case avl: AttributeValueList => avl.list
+            case av: AttributeValue      => Seq(av)
+            case _                       => Seq.empty
           }
         }
       }

@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityRepository, 
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.{
+  AttributeName,
   AttributeNumber,
   AttributeString,
   AttributeValueList,
@@ -681,6 +682,146 @@ class CompactExpressionEvaluatorSpec
           )
         )
       )
+    )
+  }
+
+  "evaluateExpression" should "return attribute values for a simple attribute" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+        org.mockito.ArgumentMatchers.eq(sampleGood.name),
+        any(),
+        any()
+      )
+    ).thenReturn(
+      DBIO.successful(
+        Map(sampleGood.name -> Seq(sampleGoodAsCER))
+      )
+    )
+
+    val resultFut = compactExpressionEvaluator.evaluateExpression(
+      workspace.workspaceIdAsUUID,
+      "this.blah",
+      sampleGood.entityType,
+      sampleGood.name
+    )
+
+    val result = resultFut.futureValue
+    result should contain only AttributeNumber(1)
+  }
+
+  it should "return all attribute values for an attribute reference in a set" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
+        org.mockito.ArgumentMatchers.eq(sampleSet.name),
+        any(),
+        any()
+      )
+    ).thenReturn(
+      DBIO.successful(
+        Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
+      )
+    )
+
+    val resultFut = compactExpressionEvaluator.evaluateExpression(
+      workspace.workspaceIdAsUUID,
+      "this.samples.blah",
+      sampleSet.entityType,
+      sampleSet.name
+    )
+
+    val result = resultFut.futureValue
+    result should contain theSameElementsAs Seq(AttributeNumber(1), AttributeNumber(2))
+  }
+
+  // TODO is this an empty Seq or an error?
+  it should "return an empty Seq if no attributes are found" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+        org.mockito.ArgumentMatchers.eq(sampleGood.name),
+        any(),
+        any()
+      )
+    ).thenReturn(
+      DBIO.successful(
+        Map(sampleGood.name -> Seq(sampleGoodAsCER))
+      )
+    )
+
+    val resultFut = compactExpressionEvaluator.evaluateExpression(
+      workspace.workspaceIdAsUUID,
+      "this.nonexistent",
+      sampleGood.entityType,
+      sampleGood.name
+    )
+
+    val result = resultFut.futureValue
+    result shouldBe empty
+  }
+
+  it should "return all values from AttributeValueList attributes" in withConfigData {
+    val entityWithList = sampleGood.copy(attributes =
+      Map(AttributeName("default", "foo") -> AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2))))
+    )
+    val entityWithListCER = toCompactEntityRecord(entityWithList)
+
+    when(
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(entityWithList.entityType),
+        org.mockito.ArgumentMatchers.eq(entityWithList.name),
+        any(),
+        any()
+      )
+    ).thenReturn(
+      DBIO.successful(
+        Map(entityWithList.name -> Seq(entityWithListCER))
+      )
+    )
+
+    val resultFut = compactExpressionEvaluator.evaluateExpression(
+      workspace.workspaceIdAsUUID,
+      "this.foo",
+      entityWithList.entityType,
+      entityWithList.name
+    )
+
+    val result = resultFut.futureValue
+    result should contain theSameElementsAs Seq(AttributeNumber(1), AttributeNumber(2))
+  }
+
+  it should "return values from a mixed expression" in withConfigData {
+    // TODO figure out what relations are passed in and refine both this and the actual call to the query
+    when(
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
+        org.mockito.ArgumentMatchers.eq(sampleSet.name),
+        any(),
+        any()
+      )
+    ).thenReturn(
+      DBIO.successful(
+        Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleMissingValue.name -> Seq(sampleMissingValueAsCER))
+      )
+    )
+
+    val resultFut = compactExpressionEvaluator.evaluateExpression(
+      workspace.workspaceIdAsUUID,
+      "[[10,11,12],this.samples.blah]",
+      sampleSet.entityType,
+      sampleSet.name
+    )
+
+    val result = resultFut.futureValue
+    // [[10,11,12],[1]]
+    result should contain theSameElementsAs Seq(Seq(AttributeNumber(10), AttributeNumber(12), AttributeNumber(12)),
+                                                Seq(AttributeNumber(1))
     )
   }
 
