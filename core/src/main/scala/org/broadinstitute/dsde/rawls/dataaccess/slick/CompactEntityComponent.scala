@@ -65,7 +65,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     GetResult(r => CompactEntityVersionRecord(r.<<, r.<<, r.<<, r.<<))
 
   implicit val getKeysRecord: GetResult[KeysRecord] =
-    GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
+    GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<))
 
   implicit val getEntityTypeAndAttributeKey: GetResult[EntityTypeAndAttributeKey] =
     GetResult(r => EntityTypeAndAttributeKey(r.<<, AttributeName.fromDelimitedName(r.<<)))
@@ -260,58 +260,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     countExisting(workspaceId, refs).map(count => count == refs.size)
 
   /**
-   * Delete all rows in ENTITY_REFS for the specified entities
-   *
-   * Returns the number of rows deleted
-   *
-   * `execution plan: Uses unq_from_to index. Extra: Using where`
-   */
-  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[EntityPointer]): ReadWriteAction[Int] = {
-    val typeNameClauses = generateTypeNameSql(fromRefs, typeColumn = "from_entity_type", nameColumn = "from_name")
-
-    val baseSql =
-      sql"""delete from ENTITY_REFS
-        where workspace_id = $workspaceId
-        and ("""
-
-    concatSqlActions(baseSql, reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "), sql")").asUpdate
-  }
-
-  /**
-   * Delete all rows in ENTITY_REFS for all entities of the given type
-   *
-   * Returns the number of rows deleted
-   *
-   * `execution plan: Uses unq_from_to index. Extra: Using where`
-   */
-  def deleteAllReferencesFromType(workspaceId: UUID, fromType: String): ReadWriteAction[Int] =
-    sql"""delete from ENTITY_REFS where workspace_id = $workspaceId and from_entity_type = $fromType""".asUpdate
-
-  /**
-    * Insert references into ENTITY_REFS.
-    *
-    * Returns the number of rows upserted.
-    *
-    * `execution plan: multi-row insert`
-    */
-  def insertReferences(workspaceId: UUID, references: Set[RefMapping]): ReadWriteAction[Int] =
-    // short-circuit
-    if (references.isEmpty) {
-      DBIO.successful(0)
-    } else {
-      val baseSql =
-        sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name) values """
-
-      val valuesSql = references.flatMap { refPointers =>
-        refPointers.to.map { toEntity =>
-          sql"($workspaceId, ${refPointers.from.entityType}, ${refPointers.from.entityName}, ${toEntity.entityType}, ${toEntity.entityName})"
-        }
-      }
-
-      concatSqlActions(baseSql, reduceSqlActionsWithDelim(valuesSql.toSeq)).asUpdate
-    }
-
-  /**
    * Get all entity attribute keys for a workspace.
    *
    * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
@@ -329,8 +277,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
     // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
     sql"""SELECT entity_type, COUNT(*)
-      FROM ENTITY_KEYS
-      WHERE workspace_id = $workspaceId
+      #$fromEntityWhereNotDeleted
+      AND workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
 
   /**
@@ -780,7 +728,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // `execution plan: single row constant; fully indexed by primary key`
   @VisibleForTesting
   protected[slick] def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
-    val query = sql"""select id, workspace_id, entity_type, attribute_keys, last_updated
+    val query = sql"""select id, workspace_id, entity_type, attribute_keys
             from ENTITY_KEYS
             where id = $entityId;""".as[KeysRecord]
     uniqueResult(query)

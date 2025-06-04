@@ -200,8 +200,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val savedEntity = insertAndGet(entity)
     // get the keys
     val actual = runAndWait(q.getKeys(savedEntity.id))
-    actual should not be empty
-    actual.get.attributeKeys shouldBe "[]"
+    actual shouldBe empty
   }
 
   it should "save keys for an entity with attributes" in withMinimalTestDatabase { _ =>
@@ -262,7 +261,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.existsAll(wsid, refs)) shouldBe false
   }
 
-  behavior of "insertReferences, getReferencesFrom, deleteAllReferencesFrom"
+  behavior of "getReferencesFrom"
 
   it should "insert and delete all" in withMinimalTestDatabase { _ =>
     // the entity doing the referencing: the "source"
@@ -273,10 +272,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // source should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
     // insert rows
-    runAndWait(q.insertReferences(wsid, Set(RefMapping(from, tos.toSet)))) shouldBe tos.size
     runAndWait(q.getReferencesFrom(wsid, from)) should contain theSameElementsAs tos
     // delete rows
-    runAndWait(q.deleteAllReferencesFrom(wsid, Set(from))) shouldBe tos.size
     runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
   }
 
@@ -294,115 +291,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // sources should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
     runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
-    // insert
-    runAndWait(
-      q.insertReferences(wsid, Set(RefMapping(from1, tos1.toSet), RefMapping(from2, tos2.toSet)))
-    ) shouldBe tos1.size + tos2.size
+
     runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs tos1
     runAndWait(q.getReferencesFrom(wsid, from2)) should contain theSameElementsAs tos2
-  }
-
-  it should "delete references for multiple entities" in withMinimalTestDatabase { _ =>
-    // the entities doing the referencing: the "sources"
-    val from1 = EntityPointer("fromType", "fromName1")
-    val from2 = EntityPointer("fromType", "fromName2")
-    val from3 = EntityPointer("fromType", "fromName3")
-    // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
-    val target2 = EntityPointer("targetType", "targetName2")
-    val target3 = EntityPointer("targetType", "targetName3")
-    val target4 = EntityPointer("targetType", "targetName4")
-    val target5 = EntityPointer("targetType", "targetName5")
-    val target6 = EntityPointer("targetType", "targetName6")
-
-    // source should have no rows in ENTITY_REFS table
-    runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from3)) shouldBe empty
-
-    // references to insert
-    val pointers1 = RefMapping(from1, Set(target1, target2))
-    val pointers2 = RefMapping(from2, Set(target2, target3, target4))
-    val pointers3 = RefMapping(from3, Set(target4, target5, target6))
-
-    // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
-    runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs pointers1.to
-    runAndWait(q.getReferencesFrom(wsid, from2)) should contain theSameElementsAs pointers2.to
-    runAndWait(q.getReferencesFrom(wsid, from3)) should contain theSameElementsAs pointers3.to
-    // delete rows
-    runAndWait(
-      q.deleteAllReferencesFrom(wsid, Set(from1, from2, from3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
-    runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from3)) shouldBe empty
-  }
-
-  it should "only delete references in the given workspace" in withMinimalTestDatabase { _ =>
-    // the entities doing the referencing: the "sources"
-    val from1 = EntityPointer("fromType", "fromName1")
-    // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
-    val target2 = EntityPointer("targetType", "targetName2")
-
-    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
-
-    // Insert references into different workspaces. Note that both workspaces reuse the "from" entity type/name
-    runAndWait(
-      q.insertReferences(wsid, Set(RefMapping(from1, Set(target1))))
-    )
-    runAndWait(
-      q.insertReferences(wsid2, Set(RefMapping(from1, Set(target2))))
-    )
-    runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs Set(target1)
-    runAndWait(q.getReferencesFrom(wsid2, from1)) should contain theSameElementsAs Set(target2)
-    // delete rows from workspace 1 only
-    runAndWait(q.deleteAllReferencesFrom(wsid, Set(from1))) shouldBe 1
-    runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid2, from1)) should contain theSameElementsAs Set(target2)
-  }
-
-  behavior of "deleteAllReferencesFromType"
-
-  it should "only delete references for the given type" in withMinimalTestDatabase { _ =>
-    // referencing/source entities
-    val sourceType1 = "source1"
-    val sourceType2 = "source2"
-    val source1 = EntityPointer(sourceType1, "source1") // source1 and source2 have the same type
-    val source2 = EntityPointer(sourceType1, "source2")
-    val source3 = EntityPointer(sourceType2, "source3") // source3 has a different type
-
-    // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
-    val target2 = EntityPointer("targetType", "targetName2")
-    val target3 = EntityPointer("targetType", "targetName3")
-    val target4 = EntityPointer("targetType", "targetName4")
-    val target5 = EntityPointer("targetType", "targetName5")
-    val target6 = EntityPointer("targetType", "targetName6")
-    // source should have no rows in ENTITY_REFS table
-    val pointers1 = RefMapping(source1, Set(target1, target2))
-    val pointers2 = RefMapping(source2, Set(target3, target4, target5))
-    val pointers3 = RefMapping(source3, Set(target1, target3, target6))
-    // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
-    runAndWait(q.getReferencesFrom(wsid, source1)) should contain theSameElementsAs pointers1.to
-    runAndWait(q.getReferencesFrom(wsid, source2)) should contain theSameElementsAs pointers2.to
-    runAndWait(q.getReferencesFrom(wsid, source3)) should contain theSameElementsAs pointers3.to
-    // delete rows
-    runAndWait(
-      q.deleteAllReferencesFromType(
-        wsid,
-        sourceType1
-      )
-    ) shouldBe (pointers1.to.size + pointers2.to.size)
-    runAndWait(q.getReferencesFrom(wsid, source1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, source2)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, source3)) should contain theSameElementsAs pointers3.to
   }
 
   behavior of "listEntityKeys"
@@ -1038,10 +929,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers1 = RefMapping(source1, Set(target1, target2))
     val pointers2 = RefMapping(source2, Set(target3, target4, target5))
     val pointers3 = RefMapping(source3, Set(target1, target3, target6))
-    // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
+    // insert rows TODO FIXME
+
     runAndWait(q.getReferencesFrom(wsid, source1)) should contain theSameElementsAs pointers1.to
     runAndWait(q.getReferencesFrom(wsid, source2)) should contain theSameElementsAs pointers2.to
     runAndWait(q.getReferencesFrom(wsid, source3)) should contain theSameElementsAs pointers3.to
@@ -1071,9 +960,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers1 = RefMapping(source1, Set(target1))
     val pointers2 = RefMapping(source2, Set(target1))
     // insert rows for workspace 1
-    runAndWait(q.insertReferences(wsid, Set(pointers1))) shouldBe pointers1.to.size
+    // TODO FIXME
     // insert rows for workspace 2
-    runAndWait(q.insertReferences(wsid2, Set(pointers2))) shouldBe pointers2.to.size
+    // TODO FIXME
 
     runAndWait(q.getReferencesTo(wsid, Seq(target1))) should contain theSameElementsAs Seq(pointers1.from)
     runAndWait(q.getReferencesTo(wsid2, Seq(target1))) should contain theSameElementsAs Seq(pointers2.from)
@@ -1089,7 +978,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers1 = RefMapping(entity2, Set(entity1))
     val pointers2 = RefMapping(entity3, Set(entity1, entity2))
 
-    runAndWait(q.insertReferences(wsid, Set(pointers1, pointers2))) shouldBe pointers1.to.size + pointers2.to.size
+    // TODO FIXME
 
     // asking for references to entity1 and entity2 should exclude entity2 because entity2 is in the search criteria,
     //  even though entity2 references entity1
@@ -1117,9 +1006,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers2 = RefMapping(source2, Set(target2))
     val pointers3 = RefMapping(source3, Set(target1))
 
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe pointers1.to.size + pointers2.to.size + pointers3.to.size
+    // TODO FIXME
 
     val expected = Set(source2, source3)
     runAndWait(q.getReferencesToType(wsid, targetType1)) should contain theSameElementsAs expected
@@ -1136,9 +1023,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers2 = RefMapping(entity3, Set(entity1, entity2))
 
     // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2))
-    ) shouldBe pointers1.to.size + pointers2.to.size
+    // TODO FIXME
 
     // asking for references to entity1 should exclude entity2 because entity2 is of the same type,
     //  even though entity2 references entity1
@@ -1812,7 +1697,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       RefMapping(sourceEntity3.toPointer, Set(targetEntity1.toPointer))
     )
 
-    runAndWait(q.insertReferences(wsid, refMappings))
+    // TODO FIXME
 
     // Execute renameEntityType and verify the result
     val newTargetType = "newTargetType"
@@ -1922,16 +1807,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(targetEntity1, sourceEntity1, sourceEntity2, sourceEntity3))
 
     // these references does not exist in the attributes but makes the underlying rename query think so
-    runAndWait(
-      q.insertReferences(
-        wsid,
-        Set(
-          RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer)),
-          RefMapping(sourceEntity2.toPointer, Set(targetEntity1.toPointer)),
-          RefMapping(sourceEntity3.toPointer, Set(targetEntity1.toPointer))
-        )
-      )
-    )
+    // TODO FIXME
 
     // Execute renameEntityType and verify the result
     val newTargetType = "newTargetType"
@@ -1969,13 +1845,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Insert all entities
     insertAndGetAll(Seq(targetEntity1, sourceEntity1))
 
-    runAndWait(
-      q.insertReferences(wsid,
-                         Set(
-                           RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer))
-                         )
-      )
-    )
+    // TODO FIXME
 
     // Execute renameEntityType, this time on sourceType which has no references
     val newSourceType = "newSourceType"
@@ -2020,7 +1890,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // Insert references - we need 1000 identical references
     val refMapping = RefMapping(sourceEntity.toPointer, Set(targetEntity.toPointer))
-    runAndWait(q.insertReferences(wsid, Set(refMapping)))
+    // TODO FIXME
 
     // Execute renameEntityType and verify the result
     val newTargetType = "newLargeRefTargetType"

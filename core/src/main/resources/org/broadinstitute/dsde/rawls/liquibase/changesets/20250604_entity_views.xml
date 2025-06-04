@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="entity_refs_and_keys_views" runOnChange="true">
+        <!-- drop the triggers that populate ENTITY_KEYS -->
+        <sql stripComments="true" endDelimiter="~">
+        DROP TRIGGER IF EXISTS after_entity_insert ~
+        DROP TRIGGER IF EXISTS after_entity_update ~
+        </sql>
+
+        <!-- drop the physical ENTITY_REFS and ENTITY_KEYS tables -->
+        <dropTable tableName="ENTITY_REFS" />
+        <dropTable tableName="ENTITY_KEYS" />
+
+        <!-- create the ENTITY_KEYS view -->
+        <createView viewName="ENTITY_KEYS" replaceIfExists="true">
+            SELECT id,
+                   workspace_id, entity_type,
+                   JSON_ARRAYAGG(attrName) as attribute_keys
+            FROM ENTITY AS outer_row
+            JOIN JSON_TABLE(
+                outer_row.attributes,
+                '$.attrs[*]' COLUMNS (attrName JSON PATH '$.a')
+            ) AS jt_outer
+            WHERE attributes is not null
+            GROUP BY id
+        </createView>
+
+        <!-- create the ENTITY_REFS view -->
+        <createView viewName="ENTITY_REFS" replaceIfExists="true">
+            SELECT workspace_id,
+                   id as from_entity_id,
+                   entity_type as from_entity_type,
+                   name as from_name,
+                   JSON_UNQUOTE(attrs_array->'$.a') as from_attribute_name,
+                   to_entity_type,
+                   to_name
+            FROM ENTITY AS e
+            JOIN JSON_TABLE(
+                e.attributes,
+                '$.attrs[*]' COLUMNS (attrs_array JSON PATH '$')
+            ) AS attrs_tbl
+            JOIN JSON_TABLE(
+                attrs_tbl.attrs_array,
+                '$.r[*]' COLUMNS (
+		            to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.t',
+		            to_name varchar(254) PATH '$.n'
+	            )
+            ) AS refs_tbl
+            WHERE attributes is not null
+                AND deleted = 0
+        </createView>
+
+    </changeSet>
+
+
+
+</databaseChangeLog>

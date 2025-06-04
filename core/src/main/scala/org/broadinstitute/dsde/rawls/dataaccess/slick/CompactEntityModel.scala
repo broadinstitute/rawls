@@ -58,7 +58,7 @@ case class CompactEntityVersionRecord(id: Long, name: String, entityType: String
 /**
   * model class for rows in the ENTITY_KEYS table
   */
-case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String, lastUpdated: Timestamp)
+case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attributeKeys: String)
 
 /**
   * model class for rows in the ENTITY_REFS table

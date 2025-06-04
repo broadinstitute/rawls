@@ -227,12 +227,12 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       _ = if (!allExist)
         throw new EntityReferenceNotFoundException("Some entity references do not exist")
 
-      _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toPointer).toSet)
-      _ <-
-        if (allReferences.nonEmpty)
-          repository.queries.insertReferences(workspaceId, allReferences)
-        else
-          DBIO.successful(0)
+//      _ <- repository.queries.deleteAllReferencesFrom(workspaceId, batch.map(_.toPointer).toSet)
+//      _ <-
+//        if (allReferences.nonEmpty)
+//          repository.queries.insertReferences(workspaceId, allReferences)
+//        else
+//          DBIO.successful(0)
     } yield entitiesCreated
 
 }

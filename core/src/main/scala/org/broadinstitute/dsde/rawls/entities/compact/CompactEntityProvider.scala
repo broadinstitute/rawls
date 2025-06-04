@@ -150,7 +150,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           )
 
         // save all references from this entity to other entities
-        _ <- repository.queries.insertReferences(workspaceId, refs)
+        // _ <- repository.queries.insertReferences(workspaceId, refs)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
@@ -168,8 +168,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesConflictException(referencingEntities.map(_.toAttributeEntityReference).toSet)
         }
-        // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, pointers.toSet)
         // hard-delete everything we can
         _ <- repository.queries.deleteEntities(workspaceId, pointers)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
@@ -186,8 +184,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
-        // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
         // hard-delete everything we can
         _ <- repository.queries.deleteEntitiesOfType(workspaceId, entityType)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
