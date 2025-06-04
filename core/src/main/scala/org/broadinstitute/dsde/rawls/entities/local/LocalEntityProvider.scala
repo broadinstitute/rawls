@@ -375,7 +375,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
     Source.fromPublisher(dataSource.database.stream(allAttrsStream))
   }
 
-  override def listEntities(entityType: EntityName): Source[Entity, NotUsed] = {
+  override def listEntities(entityType: String): Source[Entity, NotUsed] = {
     val dbSource = listEntitiesDbSource(workspaceContext, entityType)
     EntityStreamingUtils.gatherEntities(dataSource, dbSource)
   }
