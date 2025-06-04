@@ -2,30 +2,17 @@ package org.broadinstitute.dsde.rawls.entities.base
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
+import net.logstash.logback.argument.StructuredArguments
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeName,
-  AttributeRename,
-  AttributeValue,
-  Entity,
-  EntityCopyResponse,
-  EntityPointer,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  EntityTypeRename,
-  RawlsRequestContext,
-  SubmissionValidationEntityInputs,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeRename, AttributeValue, Entity, EntityCopyResponse, EntityPointer, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 /**
@@ -63,7 +50,7 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
       )
     )
 
-    log.info("Entity operation audit", auditInfo)
+    log.info("Entity operation audit", StructuredArguments.entries(auditInfo.asJava))
   }
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
