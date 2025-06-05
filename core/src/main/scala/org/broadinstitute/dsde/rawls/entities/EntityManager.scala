@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
+import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider, EntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
@@ -81,7 +81,9 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
           )
         case Some(builder) =>
           builder.build(requestArguments) match {
-            case Success(provider) => provider
+            case Success(provider) =>
+              // Wrap the provider with AuditLoggingEntityProvider
+              new AuditLoggingEntityProvider(provider, requestArguments)
             case Failure(regrets: DataEntityException) =>
               throw new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage))
             case Failure(ex: Throwable) =>
