@@ -925,6 +925,45 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceAdminResponse'
+  /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/deleteAzureWorkspace:
+    delete:
+      tags:
+        - admin
+        - workspaces
+      summary: Delete an Azure workspace
+      description: Delete a workspace of type MC calling Sam to delete the workspace resource and descendants, and removing all records from the Rawls database
+      operationId: adminDeleteAzureWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        204:
+          description: Workspace successfully deleted
+        400:
+          description: Workspace is not an MC workspace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an admin to delete an MC workspace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
   /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
     get:
       tags:
