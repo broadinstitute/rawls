@@ -264,17 +264,41 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "getReferencesFrom"
 
   it should "insert and delete all" in withMinimalTestDatabase { _ =>
-    // the entity doing the referencing: the "source"
-    val from = EntityPointer("fromType", "fromName")
     // entities being referenced: the "targets"
-    val tos: Seq[EntityPointer] = Range(1, 5) map (idx => EntityPointer("toType", s"toName$idx"))
+    val target1 = Entity(s"toName1", "toType", Map())
+    val target2 = Entity(s"toName2", "toType", Map())
+    val target3 = Entity(s"toName3", "toType", Map())
+    val target4 = Entity(s"toName4", "toType", Map())
+    val target5 = Entity(s"toName5", "toType", Map())
 
-    // source should have no rows in ENTITY_REFS table
-    runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
-    // insert rows
-    runAndWait(q.getReferencesFrom(wsid, from)) should contain theSameElementsAs tos
-    // delete rows
-    runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
+    val allTargets = Seq(target1, target2, target3, target4, target5)
+
+    // the entity doing the referencing: the "source"
+    val targetRefs = allTargets.map { target =>
+      AttributeEntityReference(target.entityType, target.name)
+    }
+    val sourceEntity = Entity("fromName",
+                              "fromType",
+                              Map(
+                                AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(targetRefs)
+                              )
+    )
+
+    // insert targets
+    allTargets.foreach { target =>
+      insertAndGet(target)
+    }
+
+    // source should have no rows in ENTITY_REFS table b/c we haven't inserted it yet
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity.toPointer)) shouldBe empty
+    // insert the source
+    insertAndGet(sourceEntity)
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity.toPointer)) should contain theSameElementsAs allTargets.map(
+      _.toPointer
+    )
+    // delete the source
+    runAndWait(q.deleteEntities(wsid, Seq(sourceEntity.toPointer)))
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity.toPointer)) shouldBe empty
   }
 
   it should "insert for multiple source entities" in withMinimalTestDatabase { _ =>
@@ -291,6 +315,35 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // sources should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
     runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
+
+    // insert targets
+    (tos1 ++ tos2).toSet[EntityPointer].foreach { targetPointer =>
+      insertAndGet(Entity(targetPointer.entityName, targetPointer.entityType, Map()))
+    }
+    // insert from1 with references of tos1
+    val tos1Refs = tos1.map { target =>
+      AttributeEntityReference(target.entityType, target.entityName)
+    }
+    insertAndGet(
+      Entity(from1.entityName,
+             from1.entityType,
+             Map(
+               AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(tos1Refs)
+             )
+      )
+    )
+    // insert from2 with references of tos2
+    val tos2Refs = tos2.map { target =>
+      AttributeEntityReference(target.entityType, target.entityName)
+    }
+    insertAndGet(
+      Entity(from2.entityName,
+             from2.entityType,
+             Map(
+               AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(tos2Refs)
+             )
+      )
+    )
 
     runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs tos1
     runAndWait(q.getReferencesFrom(wsid, from2)) should contain theSameElementsAs tos2
