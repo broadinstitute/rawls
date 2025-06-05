@@ -478,7 +478,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * Returns the number of entities that were renamed.
    *
-   * `execution plan: index range scan on idx_entity_type_name`
+   * TODO: `execution plan: `
    */
   def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
     // Update the entity name in the ENTITY table
@@ -489,28 +489,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           and name = $oldName
           and deleted = 0"""
 
-    // Update the entity from_name in the ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateFromNameSql =
-      sql"""update ENTITY_REFS
-            set from_name = $newName
-            where workspace_id = $workspaceId
-            and from_entity_type = $entityType
-            and from_name = $oldName"""
-
-    // Update the entity to_name in the ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateToNameSql =
-      sql"""update ENTITY_REFS
-            set to_name = $newName
-            where workspace_id = $workspaceId
-            and to_entity_type = $entityType
-            and to_name = $oldName"""
-
     // Get all paths in attributes that reference the old name
     // explain plan: non-unique index scan on idx_entity_type_name and idx_to
     val attrRefRegex =
-      s"'\\\\$$\\.${CompactEntitySerialization.ATTRS_KEY}\\.[^.]+\\.${AttributeFormat.ENTITY_NAME_KEY}'"
+      s"'\\\\$$\\.${CompactEntitySerialization.REFS_KEY}[^.]+\\.t'"
 
     val getReferencePathsInAttributesSql =
       sql"""
@@ -553,12 +535,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         if (paths.isEmpty) {
           DBIO.successful(0)
         } else {
-          DBIO.seq(
-            updateReferencesInAttributesSql(paths).asUpdate,
-            updateToNameSql.asUpdate
-          )
+          updateReferencesInAttributesSql(paths).asUpdate
         }
-      _ <- updateFromNameSql.asUpdate
       entityRowsUpdated <- updateEntityNameSql.asUpdate
     } yield entityRowsUpdated
   }
@@ -569,6 +547,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * Returns the number of entities that were renamed.
    *
    * TODO: `execution plan: `
+   * TODO: also update the sort value in $.attrs for scalar references
    */
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // Update the entity type in the ENTITY table
