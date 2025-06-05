@@ -282,9 +282,13 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
    * - Performs a union operation to include all downstream references.
    * - Groups the results by the originating entity and maps them to `RefMapping`.
    */
-  def recursiveGetEntityReferences(workspaceId: UUID, entities: Set[EntityPointer]): ReadAction[Set[RefMapping]] =
+  def recursiveGetEntityReferences(workspaceId: UUID, entities: Set[EntityPointer], batchSize: Int = driverComponent.batchSize): ReadAction[Set[RefMapping]] =
     if (entities.isEmpty) {
       DBIO.successful(Set.empty[RefMapping])
+    } else if (entities.size > batchSize) {
+      val batches = entities.grouped(batchSize).toSeq
+      DBIO.sequence(batches.map(batch => recursiveGetEntityReferences(workspaceId, batch.toSet)))
+        .map(_.flatten.toSet)
     } else {
       val entityTypeNameClauses =
         generateTypeNameSql(entities, typeColumn = "from_entity_type", nameColumn = "from_name")
