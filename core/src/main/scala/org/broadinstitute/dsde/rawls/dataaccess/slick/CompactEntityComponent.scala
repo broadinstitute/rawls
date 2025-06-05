@@ -25,6 +25,7 @@ import slick.sql.SqlStreamingAction
 import spray.json._
 
 import scala.concurrent.ExecutionContext
+import scala.util.Try
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -616,13 +617,21 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   //      methods in this section are used for building entity query functions
   // ====================================================================================================
 
+  // TODO: reusable function for '$.attrs[*]'
+  // TODO: search inside references too
   private def countEntitiesWithFilter(workspaceId: UUID,
                                       entityType: String,
                                       filter: SQLActionBuilder
   ): ReadWriteAction[Int] =
     concatSqlActions(
-      sql"select count(*) ",
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
+      sql"""select count(*)
+            from ENTITY e,
+            JSON_TABLE(attributes, '$$.attrs[*]' COLUMNS (
+		      attr_name varchar(254) PATH '$$.a',
+              attr_value JSON PATH '$$.v'
+	          )
+	        ) as jt where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0
+         """,
       filter
     ).as[Int].map(_.head)
 
@@ -630,15 +639,25 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                       entityType: String,
                                       entityQuery: EntityQuery,
                                       filter: SQLActionBuilder
-  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] = {
+
+    // sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
+    val fromClause = sql""" from ENTITY e,
+                           JSON_TABLE(attributes, '$$.attrs[*]' COLUMNS (
+                            attr_name varchar(254) PATH '$$.a',
+                            attr_value JSON PATH '$$.v'
+                            )
+                           ) as jt where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"""
+
     concatSqlActions(
       selectEntityColumns,
       filteredAttributesColumn(entityQuery),
-      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
+      fromClause,
       filter,
       orderBy(entityQuery),
       paginationClause(entityQuery)
     ).as[Entity]
+  }
 
   private val selectEntityColumns =
     sql"select name, entity_type, "
@@ -690,9 +709,18 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     )
   }
 
+  // TODO: SQL injection
+  // TODO: create a reusable helper function to generate searchCriteria
+  private def columnFilterCondition(columnFilter: EntityColumnFilter) = {
+    val aname = AttributeName.toDelimitedName(columnFilter.attributeName)
+    sql" and attr_name = $aname and CAST(JSON_UNQUOTE(attr_value) as CHAR) = ${columnFilter.term} "
+  }
+
+  /* v1 implementation:
   private def columnFilterCondition(columnFilter: EntityColumnFilter) =
     // CAST, JSON_UNQUOTE and JSON_EXTRACT are used to handle strings and numbers and do a case insensitive comparison
     sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
+   */
 
   private def orderBy(entityQuery: EntityQuery): SQLActionBuilder =
     concatSqlActions(
