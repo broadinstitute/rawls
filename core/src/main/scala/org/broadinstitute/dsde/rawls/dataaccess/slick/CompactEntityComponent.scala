@@ -263,20 +263,19 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
    * Get all entity attribute keys for a workspace.
    *
-   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
+   * TODO: `execution plan: `
    */
   def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
     sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      FROM ENTITY_KEYS , JSON_TABLE(CAST(attribute_keys as JSON), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
       where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
 
   /**
    * Gets the count of entities in a workspace, grouped by entity type.
    *
-   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
+    * TODO: `execution plan: `
    */
   def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
-    // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
     sql"""SELECT entity_type, COUNT(*)
       #$fromEntityWhereNotDeleted
       AND workspace_id = $workspaceId
@@ -284,7 +283,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   /**
    * Soft-deletes the given entities: removes their attributes and sets deleted=1 and deletedDate=now
-   * Does not remove rows from ENTITY_REFS table
    *
    * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
    */
@@ -307,7 +305,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   /**
    * Soft-deletes all entities of the given type: removes their attributes and sets deleted=1 and deletedDate=now
-   * Does not remove rows from ENTITY_REFS table
    *
    * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
    */
@@ -381,7 +378,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
-  // `execution plan: uses idx_to index. Extra: Using where; Using index` (I think this may also use unq_from_to in some cases)
+  // TODO: `execution plan: `
   def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
@@ -404,7 +401,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
-  // `execution plan: Uses unq_from_to index. Extra: Using where`
+  // TODO: `execution plan: `
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
     sql"""select from_entity_type, from_name
          from ENTITY_REFS
@@ -476,11 +473,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
 
   /**
-   * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.
+   * Rename an entity type, updating both the ENTITY table and embedded references in entity attributes.
    *
    * Returns the number of entities that were renamed.
    *
-   * `execution plan: multiple statements that update both ENTITY and ENTITY_REFS tables`
+   * TODO: `execution plan: `
    */
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // Update the entity type in the ENTITY table
@@ -538,7 +535,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         and json_unquote(json_search(e.attributes, 'all', $oldType)) REGEXP #$attrRefRegex
         """
 
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    // TODO: `execution plan: `
     def updateReferencesInAttributesSql(paths: Seq[String]) = {
       val replaceParamsSqls = paths.map(path => sql"$path, $newType")
       concatSqlActions(
@@ -602,7 +599,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    * TODO: `execution plan: `
     */
   def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
     sql"""select exists (select 1 from ENTITY_KEYS
@@ -682,7 +679,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   private def filterTermsCondition(filterTerms: Seq[String], operator: FilterOperator) = {
     // note the lower casing for case insensitive search
     val filterClauses = filterTerms.map { filterTerm =>
-      sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickQueryPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
+      sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
     }
     concatSqlActions(
       sql" and (",
@@ -693,7 +690,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   private def columnFilterCondition(columnFilter: EntityColumnFilter) =
     // CAST, JSON_UNQUOTE and JSON_EXTRACT are used to handle strings and numbers and do a case insensitive comparison
-    sql" and CAST(e.attributes ->> ${slickQueryPath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
+    sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
 
   private def orderBy(entityQuery: EntityQuery): SQLActionBuilder =
     concatSqlActions(
@@ -704,7 +701,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           // the order of the columns here is also the sort precedence, list length first, then scalar value
           // Sorting on a list column should sort by the list size and sorting on a scalar column sorts on the column value.
           // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
-          sql" e.attributes -> ${slickQueryPath(attr)}"
+          sql" e.attributes -> ${slickAttributePath(attr)}"
       },
       sql" #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
@@ -726,7 +723,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
          and from_name = ${from.entityName}""".as[EntityPointer]
 
   // return the ENTITY_KEYS row for a given entity
-  // `execution plan: single row constant; fully indexed by primary key`
+  // TODO: `execution plan: `
   @VisibleForTesting
   protected[slick] def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
     val query = sql"""select id, workspace_id, entity_type, attribute_keys

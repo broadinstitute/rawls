@@ -41,7 +41,7 @@ trait CompactEntitySerialization {
   // on the `ENTITY` database table
   val ATTRS_KEY: String = "attrs"
   // json key for the "query" values, used for sorting and filtering in entityQuery
-  val QUERY_KEY: String = "q"
+  val REFS_KEY: String = "refs"
 
   // the current serialization version
   val CURRENT_VERSION: Int = 2
@@ -51,51 +51,80 @@ trait CompactEntitySerialization {
     // v1 serialization format:
     // val attrsJson = attributes.toJson
     // v2 serialization format:
-    val sqlAttrs: Vector[SqlAttribute] = attributes.map { case (name, value) =>
-      SqlAttribute(
-        a = toDelimitedName(name),
-        v = value match {
-          case _: AttributeValue                                           => Some(value.toJson)
-          case _: AttributeValueList                                       => Some(value.toJson)
-          case AttributeValueEmptyList | AttributeEntityReferenceEmptyList => Some(JsArray.empty)
-          case _                                                           => None
-        },
-        r = value match {
-          case ref: AttributeEntityReference =>
-            Some(Seq(SqlEntityReference(n = ref.entityName, t = ref.entityType)))
-          case refList: AttributeEntityReferenceList =>
-            Some(refList.list.map(r => SqlEntityReference(n = r.entityName, t = r.entityType)))
-          case _ => None
-        },
-        s = value match {
-          case _: AttributeEntityReference => Some(true)
-          case _                           => None
-        }
-      )
-    }.toVector
-    val attrsJson = JsArray(sqlAttrs.map(_.toJson))
+//    val sqlAttrs: Vector[SqlAttribute] = attributes.map { case (name, value) =>
+//      SqlAttribute(
+//        a = toDelimitedName(name),
+//        v = value match {
+//          case _: AttributeValue                                           => Some(value.toJson)
+//          case _: AttributeValueList                                       => Some(value.toJson)
+//          case AttributeValueEmptyList | AttributeEntityReferenceEmptyList => Some(JsArray.empty)
+//          case _                                                           => None
+//        },
+//        r = value match {
+//          case ref: AttributeEntityReference =>
+//            Some(Seq(SqlEntityReference(n = ref.entityName, t = ref.entityType)))
+//          case refList: AttributeEntityReferenceList =>
+//            Some(refList.list.map(r => SqlEntityReference(n = r.entityName, t = r.entityType)))
+//          case _ => None
+//        },
+//        s = value match {
+//          case _: AttributeEntityReference => Some(true)
+//          case _                           => None
+//        }
+//      )
+//    }.toVector
+//    val attrsJson = JsArray(sqlAttrs.map(_.toJson))
+//
+//    val queryAttrs: Map[String, JsValue] = attributes.map { case (name, value) =>
+//      val aname = AttributeName.toDelimitedName(name)
+//      val jsval: JsValue = value match {
+//        case AttributeString(s)                      => JsString(s.take(500)) // TODO: what limit should we set?
+//        case AttributeNumber(n)                      => JsNumber(n)
+//        case AttributeBoolean(b)                     => JsBoolean(b)
+//        case AttributeValueList(l)                   => JsNumber(l.size)
+//        case AttributeEntityReferenceList(l)         => JsNumber(l.size)
+//        case AttributeEntityReference(_, entityName) => JsString(entityName)
+//        case AttributeValueRawJson(js)               => js
+//        case AttributeValueEmptyList | AttributeEntityReferenceEmptyList => JsNumber(0) // or should we use Int.max?
+//        case AttributeNull                                               => JsNull
+//      }
+//      aname -> jsval
+//    }
 
-    val queryAttrs: Map[String, JsValue] = attributes.map { case (name, value) =>
-      val aname = AttributeName.toDelimitedName(name)
-      val jsval: JsValue = value match {
-        case AttributeString(s)                      => JsString(s.take(500)) // TODO: what limit should we set?
-        case AttributeNumber(n)                      => JsNumber(n)
-        case AttributeBoolean(b)                     => JsBoolean(b)
-        case AttributeValueList(l)                   => JsNumber(l.size)
-        case AttributeEntityReferenceList(l)         => JsNumber(l.size)
-        case AttributeEntityReference(_, entityName) => JsString(entityName)
-        case AttributeValueRawJson(js)               => js
-        case AttributeValueEmptyList | AttributeEntityReferenceEmptyList => JsNumber(0) // or should we use Int.max?
-        case AttributeNull                                               => JsNull
+    // translate references and reference lists into sortable values;
+    // the references themselves are stored in a separate "refs" key
+    val jsonAttrs: AttributeMap = attributes.map { case (name, value) =>
+      val normalizedValue = value match {
+        case AttributeEntityReferenceList(l)         => AttributeNumber(l.size)
+        case AttributeEntityReference(_, entityName) => AttributeString(entityName)
+        case x                                       => x
       }
-      aname -> jsval
+      name -> normalizedValue
     }
+
+    val refObjects: Vector[SqlEntityReference] = attributes
+      .collect {
+        case (name, ref: AttributeEntityReference) =>
+          Seq(
+            SqlEntityReference(a = AttributeName.toDelimitedName(name),
+                               n = ref.entityName,
+                               t = ref.entityType,
+                               s = Some(true)
+            )
+          )
+        case (name, refList: AttributeEntityReferenceList) =>
+          refList.list.map(r =>
+            SqlEntityReference(a = AttributeName.toDelimitedName(name), n = r.entityName, t = r.entityType, s = None)
+          )
+      }
+      .flatten
+      .toVector
 
     JsObject(
       Map(
         VERSION_KEY -> JsNumber(CURRENT_VERSION),
-        ATTRS_KEY -> attrsJson,
-        QUERY_KEY -> JsObject(queryAttrs)
+        ATTRS_KEY -> jsonAttrs.toJson,
+        REFS_KEY -> JsArray(refObjects.map(_.toJson))
       )
     )
   }
@@ -110,13 +139,11 @@ trait CompactEntitySerialization {
         )
     }
 
-  val slickAttrsPath: String = s"$$.${ATTRS_KEY}"
+  val slickAttrsPath: String = s"$$.$ATTRS_KEY"
   def slickAttributePath(attributeName: String): String = s"""${slickAttrsPath}."${attributeName}""""
   def slickAttributePath(attributeName: AttributeName): String = slickAttributePath(toDelimitedName(attributeName))
 
-  val slickQueryPath: String = s"$$.${QUERY_KEY}"
-  def slickQueryPath(attributeName: String): String = s"""${slickQueryPath}."${attributeName}""""
-  def slickQueryPath(attributeName: AttributeName): String = slickQueryPath(toDelimitedName(attributeName))
+  val slickRefsPath: String = s"$$.$REFS_KEY"
 
   // retrieve the version number from the database's JSON
   private def getVersion(jso: JsObject): Int =
@@ -133,17 +160,32 @@ trait CompactEntitySerialization {
     }
 
   // retrieve the attributes packet from the database's JSON
-  private def getAttrs(jso: JsObject): JsArray =
+  private def getAttrs(jso: JsObject): JsObject =
     jso.fields.get(ATTRS_KEY) match {
-      case Some(jsa: JsArray) => jsa
+      case Some(jso: JsObject) => jso
       case None =>
         throw new CompactEntityDeserializationException(
-          s"wanted an attributes array; found none"
+          s"wanted an attributes object; found none"
         )
       // version could not be determined
       case Some(otherJsValue) =>
         throw new CompactEntityDeserializationException(
-          s"wanted an attributes array; found a ${otherJsValue.getClass.getName}"
+          s"wanted an attributes object; found a ${otherJsValue.getClass.getName}"
+        )
+    }
+
+  // retrieve the references packet from the database's JSON
+  private def getReferences(jso: JsObject): JsArray =
+    jso.fields.get(REFS_KEY) match {
+      case Some(jsa: JsArray) => jsa
+      case None =>
+        throw new CompactEntityDeserializationException(
+          s"wanted an references array; found none"
+        )
+      // version could not be determined
+      case Some(otherJsValue) =>
+        throw new CompactEntityDeserializationException(
+          s"wanted an references array; found a ${otherJsValue.getClass.getName}"
         )
     }
 
@@ -175,20 +217,47 @@ trait CompactEntitySerialization {
        */
       case 1 => getAttrs(jso).convertTo[AttributeMap]
 
-      /*  version 2 stores attributes in a normalized array
+      /*  version 2 stores references normalized and replaced with sortable/filterable values in the main
+            "attrs" object.
           {
             "v": 2,
-            "attrs": [
-                {"a": "hello", "v": "world"},
-                {"a": "refs", "r": [
-                    {"n": "1", "t": "test"},
-                    {"n": "2", "t": "test"}
-                ]}
+            "attrs": {
+              "attrName1": "Hello world",
+              "attrName2": "targetName1", // used for sorting/filtering
+              "attrName3": 2,             // used for sorting/filtering
+              "attrName4": 123,
+            },
+            "refs": [
+              {"a": "attrName2", "t": "targetType", "n": "targetName1", "s": true},
+              {"a": "attrName3", "t": "targetType", "n": "targetName1"},
+              {"a": "attrName3", "t": "targetType", "n": "targetName2"}
             ]
           }
        */
       case 2 =>
-        getAttrs(jso).convertTo[Seq[SqlAttribute]].map(_.toPair).toMap
+        val baseAttrs = getAttrs(jso).convertTo[AttributeMap]
+
+        val refs = getReferences(jso).convertTo[Seq[SqlEntityReference]]
+        val groupedRefs: Map[String, Seq[SqlEntityReference]] = refs.groupMap(_.a)(identity)
+        // for
+
+
+
+
+        val refAttrs: AttributeMap = groupedRefs.map { case (attributeName, refSeq) =>
+          val aname = AttributeName.fromDelimitedName(attributeName)
+          val attr: Attribute = if (refSeq.isEmpty) {
+            AttributeValueEmptyList // no references, so this is an empty list
+          } else if (refSeq.head.s.contains(true)) {
+            refSeq.head.toAttributeEntityReference // single scalar reference
+          } else {
+            AttributeEntityReferenceList(refSeq.map(_.toAttributeEntityReference)) // multiple references
+          }
+          aname -> attr
+        }.toMap
+
+        // layer references on top of the attribute map
+        baseAttrs ++ refAttrs
 
       case x =>
         throw new CompactEntityDeserializationException(
@@ -197,36 +266,15 @@ trait CompactEntitySerialization {
     }
 
   case class SqlEntityReference(
-    n: String, // entity name
-    t: String // entity type
+    a: String, // delimited attribute name (namespace:)name
+    n: String, // target entity name
+    t: String, // target entity type
+    s: Option[Boolean] // true if this reference is a scalar; false or None if it is a list
   ) {
     def toAttributeEntityReference: AttributeEntityReference =
       AttributeEntityReference(entityType = t, entityName = n)
   }
 
-  case class SqlAttribute(
-    a: String, // delimited attribute name (namespace:)name
-    v: Option[JsValue], // non-reference value; can be string, number, boolean, null, raw JSON, or array of any of those
-    r: Option[Seq[SqlEntityReference]], // references to other entities
-    s: Option[Boolean] // true if this reference is a scalar; false or None if it is a list
-  ) {
-    def toPair: (AttributeName, Attribute) = {
-      val name = AttributeName.fromDelimitedName(a)
-      val value = (v, r) match {
-        case (Some(value), None) => value.convertTo[Attribute]
-        case (None, Some(sqlRefs)) =>
-          if (s.getOrElse(false)) {
-            sqlRefs.head.toAttributeEntityReference
-          } else {
-            AttributeEntityReferenceList(sqlRefs.map(_.toAttributeEntityReference))
-          }
-        case _ => throw new RuntimeException("Unexpected combination of value and references in SqlAttribute")
-      }
-      (name, value)
-    }
-  }
-
-  implicit val sqlEntityReferenceFormat: RootJsonFormat[SqlEntityReference] = jsonFormat2(SqlEntityReference)
-  implicit val sqlAttributeFormat: RootJsonFormat[SqlAttribute] = jsonFormat4(SqlAttribute)
+  implicit val sqlEntityReferenceFormat: RootJsonFormat[SqlEntityReference] = jsonFormat4(SqlEntityReference)
 
 }

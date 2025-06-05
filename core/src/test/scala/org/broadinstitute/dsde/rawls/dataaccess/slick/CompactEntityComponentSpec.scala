@@ -201,7 +201,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val savedEntity = insertAndGet(entity)
     // get the keys
     val actual = runAndWait(q.getKeys(savedEntity.id))
-    actual shouldBe empty
+    actual should not be empty
+    actual.get.attributeKeys shouldBe "[]"
   }
 
   it should "save keys for an entity with attributes" in withMinimalTestDatabase { _ =>

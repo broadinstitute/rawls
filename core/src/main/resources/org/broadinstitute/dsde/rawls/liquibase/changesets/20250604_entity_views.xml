@@ -16,16 +16,9 @@
 
         <!-- create the ENTITY_KEYS view -->
         <createView viewName="ENTITY_KEYS" replaceIfExists="true">
-            SELECT id,
-                   workspace_id, entity_type,
-                   JSON_ARRAYAGG(attrName) as attribute_keys
-            FROM ENTITY AS outer_row
-            JOIN JSON_TABLE(
-                outer_row.attributes,
-                '$.attrs[*]' COLUMNS (attrName JSON PATH '$.a')
-            ) AS jt_outer
-            WHERE attributes is not null
-            GROUP BY id
+            SELECT id, workspace_id, entity_type, JSON_KEYS(attributes, '$.attrs') as attribute_keys
+            FROM ENTITY
+            WHERE deleted = 0 and attributes is not null
         </createView>
 
         <!-- create the ENTITY_REFS view -->
@@ -34,23 +27,22 @@
                    id as from_entity_id,
                    entity_type as from_entity_type,
                    name as from_name,
-                   JSON_UNQUOTE(attrs_array->'$.a') as from_attribute_name,
+                   from_attribute_name,
                    to_entity_type,
-                   to_name
-            FROM ENTITY AS e
+                   to_name,
+                   is_scalar
+            FROM ENTITY
             JOIN JSON_TABLE(
-                e.attributes,
-                '$.attrs[*]' COLUMNS (attrs_array JSON PATH '$')
-            ) AS attrs_tbl
-            JOIN JSON_TABLE(
-                attrs_tbl.attrs_array,
-                '$.r[*]' COLUMNS (
-		            to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.t',
-		            to_name varchar(254) PATH '$.n'
-	            )
+                attributes,
+                '$.refs[*]' COLUMNS (
+                    from_attribute_name varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.a',
+					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.t',
+		            to_name varchar(254) PATH '$.n',
+                    is_scalar boolean PATH '$.s'
+                 )
             ) AS refs_tbl
             WHERE attributes is not null
-                AND deleted = 0
+              AND deleted = 0
         </createView>
 
     </changeSet>
