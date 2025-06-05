@@ -1797,6 +1797,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
     runAndWait(q.insertReferences(wsid, refMappings))
 
+    // Verify references to the original entity before rename
+    runAndWait(q.getReferencesTo(wsid, Seq(originalEntity.toPointer))) should contain theSameElementsAs Seq(
+      sourceEntity1.toPointer,
+      sourceEntity2.toPointer
+    )
+
     // Rename the entity
     val newName = "newName"
     runAndWait(q.renameEntity(wsid, entityType, originalEntity.name, newName)) shouldBe 1
@@ -1817,6 +1823,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val updatedSourceEntity2 = runAndWait(q.getEntity(wsid, "sourceType", sourceEntity2.name)).get.toEntity
     updatedSourceEntity2.attributes(AttributeName.withDefaultNS("ref")) shouldBe renamedEntity.toReference
+
+    // Verify references to the renamed entity after rename
+    runAndWait(q.getReferencesTo(wsid, Seq(renamedEntity.toPointer))) should contain theSameElementsAs Seq(
+      sourceEntity1.toPointer,
+      sourceEntity2.toPointer
+    )
   }
 
   behavior of "renameEntityType"

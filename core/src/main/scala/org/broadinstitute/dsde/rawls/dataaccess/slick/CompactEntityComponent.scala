@@ -9,6 +9,7 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
+  AttributeFormat,
   AttributeName,
   AttributeRename,
   Entity,
@@ -562,7 +563,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
     // Get all paths in attributes that reference the old name
     // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    val attrRefRegex = """'\\$\\.attrs\\.[^.]+\\.entityName'"""
+    val attrRefRegex =
+      s"'\\\\$$\\.${CompactEntitySerialization.ATTRS_KEY}\\.[^.]+\\.${AttributeFormat.ENTITY_NAME_KEY}'"
+
     val getReferencePathsInAttributesSql =
       sql"""
     with entity_attrs as

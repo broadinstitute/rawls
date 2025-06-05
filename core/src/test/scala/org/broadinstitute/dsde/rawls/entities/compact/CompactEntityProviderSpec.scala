@@ -41,6 +41,7 @@ import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
 import slick.dbio.DBIO
 
@@ -988,7 +989,7 @@ class CompactEntityProviderSpec
     }
 
     exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
-    exception.errorReport.message should include(s"New name $newName is the same as the old name $oldName")
+    exception.errorReport.message should include("New name is the same as the entity name")
 
     verify(mockQueries, never()).renameEntity(any[UUID],
                                               ArgumentMatchers.eq(entityType),
@@ -1027,8 +1028,12 @@ class CompactEntityProviderSpec
     val oldName = "nonExistentName"
     val newName = "newName"
 
-    // Mock the non-existent entity to return None
-    when(mockQueries.getEntity(any[UUID], anyString(), anyString())).thenReturn(DBIO.successful(None))
+    // The new entity does not exist
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, newName)))))
+      .thenReturn(DBIO.successful(false))
+    // The old entity does not exist
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, oldName)))))
+      .thenReturn(DBIO.successful(false))
 
     val provider = providerWithMocks(mockQueries)
 
@@ -1036,7 +1041,7 @@ class CompactEntityProviderSpec
       Await.result(provider.renameEntity(entityType, oldName, newName, testContext), atMost)
     }
 
-    exception.getMessage should include(s"Can't find entity $entityType/$oldName")
+    exception.getMessage should include("Can't find entity name!")
 
     verify(mockQueries, never()).renameEntity(any[UUID],
                                               ArgumentMatchers.eq(entityType),
@@ -1052,24 +1057,21 @@ class CompactEntityProviderSpec
     val oldName = "oldName"
     val newName = "newName"
 
-    val oldEntityRec = CompactEntityRecord(1, oldName, entityType, UUID.randomUUID(), 0, deleted = false, Some("{}"))
-    val newEntityRec = CompactEntityRecord(2, newName, entityType, UUID.randomUUID(), 0, deleted = false, Some("{}"))
-
     // The old entity exists
-    when(mockQueries.getEntity(any[UUID], ArgumentMatchers.eq(entityType), ArgumentMatchers.eq(oldName)))
-      .thenReturn(DBIO.successful(Some(oldEntityRec)))
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, oldName)))))
+      .thenReturn(DBIO.successful(true))
     // The new entity already exists
-    when(mockQueries.getEntity(any[UUID], ArgumentMatchers.eq(entityType), ArgumentMatchers.eq(newName)))
-      .thenReturn(DBIO.successful(Some(newEntityRec)))
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, newName)))))
+      .thenReturn(DBIO.successful(true))
 
     val provider = providerWithMocks(mockQueries)
 
-    val exception = intercept[RawlsExceptionWithErrorReport] {
+    val exception = intercept[DataEntityException] {
       Await.result(provider.renameEntity(entityType, oldName, newName, testContext), atMost)
     }
 
-    exception.errorReport.statusCode.get shouldBe StatusCodes.Conflict
-    exception.errorReport.message should include(s"$entityType/$newName already exists as an entity")
+    exception.code shouldBe StatusCodes.Conflict
+    exception.getMessage should include(s"Destination $entityType $newName already exists")
 
     verify(mockQueries, never()).renameEntity(any[UUID],
                                               ArgumentMatchers.eq(entityType),
@@ -1085,14 +1087,13 @@ class CompactEntityProviderSpec
     val oldName = "oldName"
     val newName = "newName"
 
-    val oldEntityRec = CompactEntityRecord(1, oldName, entityType, UUID.randomUUID(), 0, deleted = false, Some("{}"))
-
     // The old entity exists
-    when(mockQueries.getEntity(any[UUID], ArgumentMatchers.eq(entityType), ArgumentMatchers.eq(oldName)))
-      .thenReturn(DBIO.successful(Some(oldEntityRec)))
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, oldName)))))
+      .thenReturn(DBIO.successful(true))
     // The new entity does not exist
-    when(mockQueries.getEntity(any[UUID], ArgumentMatchers.eq(entityType), ArgumentMatchers.eq(newName)))
-      .thenReturn(DBIO.successful(None))
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, newName)))))
+      .thenReturn(DBIO.successful(false))
+
     // The rename operation will update the entity
     when(
       mockQueries.renameEntity(any[UUID],

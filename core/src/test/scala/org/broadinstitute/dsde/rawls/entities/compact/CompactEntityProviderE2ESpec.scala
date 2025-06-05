@@ -6,7 +6,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
   AddUpdateAttribute,
@@ -696,7 +696,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     Await.result(provider.createEntity(Entity("entity2", "typeA", Map()), defaultRequestContext), atMost)
 
     // Attempt to rename the first entity to the name of the second entity
-    intercept[RawlsExceptionWithErrorReport] {
+    intercept[DataEntityException] {
       Await.result(provider.renameEntity("typeA", "entity1", "entity2", defaultRequestContext), atMost)
     }
   }
