@@ -984,7 +984,25 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers1 = RefMapping(source1, Set(target1, target2))
     val pointers2 = RefMapping(source2, Set(target3, target4, target5))
     val pointers3 = RefMapping(source3, Set(target1, target3, target6))
-    // insert rows TODO FIXME
+    // insert rows
+    val allTargets: Seq[Entity] = Seq(target1, target2, target3, target4, target5, target6).map { targetPointer =>
+      Entity(targetPointer.entityName, targetPointer.entityType, Map())
+    }
+    insertAndGetAll(allTargets)
+    val allSources: Seq[Entity] = Seq(pointers1, pointers2, pointers3).map { refMapping =>
+      Entity(
+        refMapping.from.entityName,
+        refMapping.from.entityType,
+        Map(
+          AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+            refMapping.to.map { target =>
+              AttributeEntityReference(target.entityType, target.entityName)
+            }.toSeq
+          )
+        )
+      )
+    }
+    insertAndGetAll(allSources)
 
     runAndWait(q.getReferencesFrom(wsid, source1)) should contain theSameElementsAs pointers1.to
     runAndWait(q.getReferencesFrom(wsid, source2)) should contain theSameElementsAs pointers2.to
@@ -999,7 +1017,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // target2 is referenced by source1; target6 is referenced by source3
     runAndWait(q.getReferencesTo(wsid, Seq(target2, target6))) should contain theSameElementsAs Seq(source1, source3)
-
   }
 
   it should "not find entities in other workspaces" in withMinimalTestDatabase { _ =>
@@ -1746,14 +1763,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // Insert all entities
     insertAndGetAll(Seq(targetEntity1, targetEntity2, sourceEntity1, sourceEntity2, sourceEntity3))
-
-    val refMappings = Set(
-      RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer, targetEntity2.toPointer)),
-      RefMapping(sourceEntity2.toPointer, Set(targetEntity2.toPointer)),
-      RefMapping(sourceEntity3.toPointer, Set(targetEntity1.toPointer))
-    )
-
-    // TODO FIXME
 
     // Execute renameEntityType and verify the result
     val newTargetType = "newTargetType"

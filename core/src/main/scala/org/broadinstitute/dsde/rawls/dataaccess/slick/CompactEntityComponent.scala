@@ -491,22 +491,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     // The best approach would be to add a custom MySQL function for JSON path replacement
     // For now, we'll do this in application code when accessing entities
 
-    // Update from_entity_type in ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateFromReferencesSql =
-      sql"""update ENTITY_REFS
-            set from_entity_type = $newType
-            where workspace_id = $workspaceId
-            and from_entity_type = $oldType"""
-
-    // Update to_entity_type in ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateToReferencesSql =
-      sql"""update ENTITY_REFS
-            set to_entity_type = $newType
-            where workspace_id = $workspaceId
-            and to_entity_type = $oldType"""
-
     // Get all paths in attributes that reference the old type
     // This is a bit tricky because the attributes column is JSON and we need to search for the old type
     // in all possible paths. We use JSON_SEARCH to find the paths and JSON_TABLE to extract them.
@@ -515,7 +499,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     // Uses ENTITY_REFS table to find the attributes that reference the old type so must be run before
     // the ENTITY_REFS table is updated.
     // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    val attrRefRegex = """'\\$\\.attrs\\.[^.]+\\.entityType'"""
+    val attrRefRegex = """'\\$\\.refs[^.]+\\.t'"""
     val getReferencePathsInAttributesSql =
       sql"""
         with entity_attrs as 
@@ -544,7 +528,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
           set e.attributes = JSON_REPLACE(e.attributes, 
         """,
-        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
+        reduceSqlActionsWithDelim(replaceParamsSqls, sql","),
         sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
       )
     }
@@ -556,12 +540,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         if (paths.isEmpty) {
           DBIO.successful(0)
         } else {
-          DBIO.seq(
-            updateReferencesInAttributesSql(paths).asUpdate,
-            updateToReferencesSql.asUpdate
-          )
+          updateReferencesInAttributesSql(paths).asUpdate
         }
-      _ <- updateFromReferencesSql.asUpdate
       entityRowsUpdated <- updateEntityTypeSql.asUpdate
     } yield entityRowsUpdated
   }
@@ -652,6 +632,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * Example sql produced:
    * JSON_OBJECT(
    *   'v', e.attributes -> '$.v',
+   *   'refs', e.attributes -> '$.refs',
    *   'attrs', JSON_OBJECT(
    *     ?, e.attributes -> ?,
    *     ?, e.attributes -> ?
@@ -666,6 +647,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         concatSqlActions(
           sql"""JSON_OBJECT(
                '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
+               '#${CompactEntitySerialization.REFS_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.REFS_KEY}',
                '#${CompactEntitySerialization.ATTRS_KEY}', JSON_OBJECT(""",
           reduceSqlActionsWithDelim(fieldSqls.toSeq, sql","),
           sql"))"

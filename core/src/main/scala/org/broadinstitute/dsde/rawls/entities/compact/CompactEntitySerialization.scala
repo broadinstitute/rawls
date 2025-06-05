@@ -180,12 +180,12 @@ trait CompactEntitySerialization {
       case Some(jsa: JsArray) => jsa
       case None =>
         throw new CompactEntityDeserializationException(
-          s"wanted an references array; found none"
+          s"wanted a references array; found none"
         )
       // version could not be determined
       case Some(otherJsValue) =>
         throw new CompactEntityDeserializationException(
-          s"wanted an references array; found a ${otherJsValue.getClass.getName}"
+          s"wanted a references array; found a ${otherJsValue.getClass.getName}"
         )
     }
 
@@ -239,12 +239,12 @@ trait CompactEntitySerialization {
 
         val refs = getReferences(jso).convertTo[Seq[SqlEntityReference]]
         val groupedRefs: Map[String, Seq[SqlEntityReference]] = refs.groupMap(_.a)(identity)
-        // for
+        // discard any references that do not have a matching base attribute
+        val filteredGroupedRefs: Map[String, Seq[SqlEntityReference]] = groupedRefs.filter { case (attributeName, _) =>
+          baseAttrs.contains(AttributeName.fromDelimitedName(attributeName))
+        }
 
-
-
-
-        val refAttrs: AttributeMap = groupedRefs.map { case (attributeName, refSeq) =>
+        val refAttrs: AttributeMap = filteredGroupedRefs.map { case (attributeName, refSeq) =>
           val aname = AttributeName.fromDelimitedName(attributeName)
           val attr: Attribute = if (refSeq.isEmpty) {
             AttributeValueEmptyList // no references, so this is an empty list
