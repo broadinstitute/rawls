@@ -7,14 +7,19 @@ import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
   Attribute,
+  AttributeBoolean,
   AttributeEntityReference,
   AttributeEntityReferenceEmptyList,
   AttributeEntityReferenceList,
   AttributeFormat,
   AttributeName,
+  AttributeNull,
+  AttributeNumber,
+  AttributeString,
   AttributeValue,
   AttributeValueEmptyList,
-  AttributeValueList
+  AttributeValueList,
+  AttributeValueRawJson
 }
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -35,6 +40,8 @@ trait CompactEntitySerialization {
   // json key for the attributes content. If this ever changes, make sure to also change the triggers
   // on the `ENTITY` database table
   val ATTRS_KEY: String = "attrs"
+  // json key for the "query" values, used for sorting and filtering in entityQuery
+  val QUERY_KEY: String = "q"
 
   // the current serialization version
   val CURRENT_VERSION: Int = 2
@@ -68,10 +75,27 @@ trait CompactEntitySerialization {
     }.toVector
     val attrsJson = JsArray(sqlAttrs.map(_.toJson))
 
+    val queryAttrs: Map[String, JsValue] = attributes.map { case (name, value) =>
+      val aname = AttributeName.toDelimitedName(name)
+      val jsval: JsValue = value match {
+        case AttributeString(s)                      => JsString(s.take(500)) // TODO: what limit should we set?
+        case AttributeNumber(n)                      => JsNumber(n)
+        case AttributeBoolean(b)                     => JsBoolean(b)
+        case AttributeValueList(l)                   => JsNumber(l.size)
+        case AttributeEntityReferenceList(l)         => JsNumber(l.size)
+        case AttributeEntityReference(_, entityName) => JsString(entityName)
+        case AttributeValueRawJson(js)               => js
+        case AttributeValueEmptyList | AttributeEntityReferenceEmptyList => JsNumber(0) // or should we use Int.max?
+        case AttributeNull                                               => JsNull
+      }
+      aname -> jsval
+    }
+
     JsObject(
       Map(
         VERSION_KEY -> JsNumber(CURRENT_VERSION),
-        ATTRS_KEY -> attrsJson
+        ATTRS_KEY -> attrsJson,
+        QUERY_KEY -> JsObject(queryAttrs)
       )
     )
   }
@@ -89,6 +113,10 @@ trait CompactEntitySerialization {
   val slickAttrsPath: String = s"$$.${ATTRS_KEY}"
   def slickAttributePath(attributeName: String): String = s"""${slickAttrsPath}."${attributeName}""""
   def slickAttributePath(attributeName: AttributeName): String = slickAttributePath(toDelimitedName(attributeName))
+
+  val slickQueryPath: String = s"$$.${QUERY_KEY}"
+  def slickQueryPath(attributeName: String): String = s"""${slickQueryPath}."${attributeName}""""
+  def slickQueryPath(attributeName: AttributeName): String = slickQueryPath(toDelimitedName(attributeName))
 
   // retrieve the version number from the database's JSON
   private def getVersion(jso: JsObject): Int =

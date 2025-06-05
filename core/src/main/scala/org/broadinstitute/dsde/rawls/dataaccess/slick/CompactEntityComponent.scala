@@ -617,21 +617,13 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   //      methods in this section are used for building entity query functions
   // ====================================================================================================
 
-  // TODO: reusable function for '$.attrs[*]'
-  // TODO: search inside references too
   private def countEntitiesWithFilter(workspaceId: UUID,
                                       entityType: String,
                                       filter: SQLActionBuilder
   ): ReadWriteAction[Int] =
     concatSqlActions(
-      sql"""select count(*)
-            from ENTITY e,
-            JSON_TABLE(attributes, '$$.attrs[*]' COLUMNS (
-		      attr_name varchar(254) PATH '$$.a',
-              attr_value JSON PATH '$$.v'
-	          )
-	        ) as jt where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0
-         """,
+      sql"select count(*) ",
+      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       filter
     ).as[Int].map(_.head)
 
@@ -639,25 +631,15 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                       entityType: String,
                                       entityQuery: EntityQuery,
                                       filter: SQLActionBuilder
-  ): SqlStreamingAction[Seq[Entity], Entity, Read] = {
-
-    // sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
-    val fromClause = sql""" from ENTITY e,
-                           JSON_TABLE(attributes, '$$.attrs[*]' COLUMNS (
-                            attr_name varchar(254) PATH '$$.a',
-                            attr_value JSON PATH '$$.v'
-                            )
-                           ) as jt where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"""
-
+  ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     concatSqlActions(
       selectEntityColumns,
       filteredAttributesColumn(entityQuery),
-      fromClause,
+      fromActiveEntitiesOfTypeInWorkspace(workspaceId, entityType),
       filter,
       orderBy(entityQuery),
       paginationClause(entityQuery)
     ).as[Entity]
-  }
 
   private val selectEntityColumns =
     sql"select name, entity_type, "
@@ -700,7 +682,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   private def filterTermsCondition(filterTerms: Seq[String], operator: FilterOperator) = {
     // note the lower casing for case insensitive search
     val filterClauses = filterTerms.map { filterTerm =>
-      sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
+      sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickQueryPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
     }
     concatSqlActions(
       sql" and (",
@@ -709,18 +691,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     )
   }
 
-  // TODO: SQL injection
-  // TODO: create a reusable helper function to generate searchCriteria
-  private def columnFilterCondition(columnFilter: EntityColumnFilter) = {
-    val aname = AttributeName.toDelimitedName(columnFilter.attributeName)
-    sql" and attr_name = $aname and CAST(JSON_UNQUOTE(attr_value) as CHAR) = ${columnFilter.term} "
-  }
-
-  /* v1 implementation:
   private def columnFilterCondition(columnFilter: EntityColumnFilter) =
     // CAST, JSON_UNQUOTE and JSON_EXTRACT are used to handle strings and numbers and do a case insensitive comparison
-    sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
-   */
+    sql" and CAST(e.attributes ->> ${slickQueryPath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
 
   private def orderBy(entityQuery: EntityQuery): SQLActionBuilder =
     concatSqlActions(
@@ -731,7 +704,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           // the order of the columns here is also the sort precedence, list length first, then scalar value
           // Sorting on a list column should sort by the list size and sorting on a scalar column sorts on the column value.
           // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
-          sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
+          sql" e.attributes -> ${slickQueryPath(attr)}"
       },
       sql" #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
