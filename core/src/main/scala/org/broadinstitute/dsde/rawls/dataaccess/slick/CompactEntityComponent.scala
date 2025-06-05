@@ -9,6 +9,7 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
+  AttributeFormat,
   AttributeName,
   AttributeRename,
   Entity,
@@ -471,6 +472,96 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                 entityQuery: EntityQuery
   ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
+
+  /**
+   * Renames an entity in the ENTITY table.
+   *
+   * Returns the number of entities that were renamed.
+   *
+   * `execution plan: index range scan on idx_entity_type_name`
+   */
+  def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
+    // Update the entity name in the ENTITY table
+    // explain plan: index range scan on idx_entity_type_name
+    val updateEntityNameSql = sql"""update ENTITY set name = $newName, record_version = record_version + 1
+          where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and name = $oldName
+          and deleted = 0"""
+
+    // Update the entity from_name in the ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateFromNameSql =
+      sql"""update ENTITY_REFS
+            set from_name = $newName
+            where workspace_id = $workspaceId
+            and from_entity_type = $entityType
+            and from_name = $oldName"""
+
+    // Update the entity to_name in the ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateToNameSql =
+      sql"""update ENTITY_REFS
+            set to_name = $newName
+            where workspace_id = $workspaceId
+            and to_entity_type = $entityType
+            and to_name = $oldName"""
+
+    // Get all paths in attributes that reference the old name
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    val attrRefRegex =
+      s"'\\\\$$\\.${CompactEntitySerialization.ATTRS_KEY}\\.[^.]+\\.${AttributeFormat.ENTITY_NAME_KEY}'"
+
+    val getReferencePathsInAttributesSql =
+      sql"""
+    with entity_attrs as
+      (select e.attributes
+      from ENTITY e
+      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+      where er.workspace_id = $workspaceId
+      and er.to_name = $oldName)
+    select name_path
+    from entity_attrs e,
+    json_table(json_search(e.attributes, 'all', $oldName), '$$[*]' COLUMNS( name_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
+    where name_path REGEXP #$attrRefRegex
+    union
+    select json_unquote(json_search(e.attributes, 'all', $oldName))
+    from entity_attrs e
+    where json_type(json_search(e.attributes, 'all', $oldName)) != 'ARRAY'
+    and json_unquote(json_search(e.attributes, 'all', $oldName)) REGEXP #$attrRefRegex
+    """
+
+    // Update attributes with references to the old name
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    def updateReferencesInAttributesSql(paths: Seq[String]) = {
+      val replaceParamsSqls = paths.map(path => sql"$path, $newName")
+      concatSqlActions(
+        sql"""
+      update ENTITY e
+      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+      set e.attributes = JSON_REPLACE(e.attributes,
+    """,
+        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
+        sql""") where er.workspace_id = $workspaceId and er.to_name = $oldName"""
+      )
+    }
+
+    // Execute all updates
+    for {
+      paths <- getReferencePathsInAttributesSql.as[String]
+      _ <-
+        if (paths.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          DBIO.seq(
+            updateReferencesInAttributesSql(paths).asUpdate,
+            updateToNameSql.asUpdate
+          )
+        }
+      _ <- updateFromNameSql.asUpdate
+      entityRowsUpdated <- updateEntityNameSql.asUpdate
+    } yield entityRowsUpdated
+  }
 
   /**
    * Rename an entity type, updating both the ENTITY table and embedded references in entity attributes.
