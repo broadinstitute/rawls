@@ -204,7 +204,7 @@ trait AdminApiService extends UserInfoDirectives {
                       .map(_ => StatusCodes.NoContent)
                   }
                 }
-            } ~
+              } ~
               path("id") {
                 get {
                   complete {
