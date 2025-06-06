@@ -12,13 +12,16 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReportSource,
   RawlsRequestContext,
   SamResourceTypeAdminActions,
+  SamResourceTypeName,
   SamResourceTypeNames,
+  SamWorkspacePolicyNames,
   Workspace,
   WorkspaceAdminResponse,
   WorkspaceAttributeSpecs,
   WorkspaceDetails,
   WorkspaceFeatureFlag,
-  WorkspaceName
+  WorkspaceName,
+  WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.util._
 
@@ -107,6 +110,60 @@ class WorkspaceAdminService(
       settings
     )
 
+  /**
+   * Admin endpoint to delete a workspace of type MC
+   */
+  def adminDeleteMcWorkspace(workspaceName: WorkspaceName): Future[Unit] =
+    asFCAdmin {
+      for {
+        // Get workspace to verify it's an MC workspace and to get its ID
+        workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
+        workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceName))
+        _ = if (workspace.workspaceType != WorkspaceType.McWorkspace) {
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Workspace ${workspaceName} is not an MC workspace")
+          )
+        }
+
+        // Add the current caller to the workspace owner policy to ensure they have sufficient permissions
+        _ <- samDAO.admin.addUserToPolicy(
+          SamResourceTypeNames.workspace,
+          workspace.workspaceId,
+          SamWorkspacePolicyNames.owner,
+          ctx.userInfo.userEmail.value,
+          ctx
+        )
+
+        _ <- recursivelyDeleteSamResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+        _ <- workspaceRepository.deleteWorkspace(workspaceName)
+      } yield ()
+    }
+
+  /**
+   * Recursively delete a SAM resource and all its children
+   * @param resourceTypeName the resource type
+   * @param resourceId the resource ID
+   * @param ctx the request context
+   * @return Future[Unit]
+   */
+  private[workspace] def recursivelyDeleteSamResource(resourceTypeName: SamResourceTypeName,
+                                                      resourceId: String,
+                                                      ctx: RawlsRequestContext
+  ): Future[Unit] =
+    for {
+      // Get all child resources
+      children <- samDAO.listResourceChildren(resourceTypeName, resourceId, ctx)
+
+      // Recursively delete each child resource
+      _ <- Future.traverse(children) { child =>
+        recursivelyDeleteSamResource(SamResourceTypeName(child.resourceTypeName), child.resourceId, ctx)
+      }
+
+      // Delete the resource itself
+      _ <- samDAO.deleteResource(resourceTypeName, resourceId, ctx)
+      _ = logger.info(s"Successfully deleted SAM resource $resourceTypeName/$resourceId")
+    } yield ()
+
   // moved out of WorkspaceSupport because the only usage was in this file,
   // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport
   private def withWorkspaceContext[T](workspaceName: WorkspaceName,
@@ -117,5 +174,4 @@ class WorkspaceAdminService(
       case None            => throw NoSuchWorkspaceException(workspaceName)
       case Some(workspace) => op(workspace)
     }
-
 }
