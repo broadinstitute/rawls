@@ -1029,6 +1029,40 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
 
+  /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/id:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: get workspace ID by namespace and name
+      description: Returns the workspace ID for a workspace identified by namespace and name
+      operationId: adminGetWorkspaceId
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: string
+                description: The workspace ID
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an admin to get a workspace ID
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+
   /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
