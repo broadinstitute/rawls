@@ -164,6 +164,20 @@ class WorkspaceAdminService(
       _ = logger.info(s"Successfully deleted SAM resource $resourceTypeName/$resourceId")
     } yield ()
 
+  def getWorkspaceId(workspaceName: WorkspaceName): Future[Option[String]] =
+    for {
+      userIsAdmin <- samDAO.admin
+        .userHasResourceTypeAdminPermission(SamResourceTypeNames.workspace,
+                                            SamResourceTypeAdminActions.readSummaryInformation,
+                                            ctx
+        )
+      _ = if (!userIsAdmin)
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.Forbidden, "You must be an admin to call this API.")
+        )
+      workspaceOpt <- workspaceRepository.getWorkspaceId(workspaceName)
+    } yield workspaceOpt.map(_.toString)
+
   // moved out of WorkspaceSupport because the only usage was in this file,
   // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport
   private def withWorkspaceContext[T](workspaceName: WorkspaceName,
