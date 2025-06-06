@@ -3,7 +3,7 @@
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="entity_refs_and_keys_views" runOnChange="true">
+    <changeSet logicalFilePath="dummy" author="davidan" id="entity_refs_and_keys_views">
         <!-- drop the triggers that populate ENTITY_KEYS -->
         <sql stripComments="true" endDelimiter="~">
         DROP TRIGGER IF EXISTS after_entity_insert ~

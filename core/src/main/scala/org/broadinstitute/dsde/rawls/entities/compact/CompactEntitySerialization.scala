@@ -50,46 +50,6 @@ trait CompactEntitySerialization {
   def toSql(attributes: AttributeMap): JsObject = {
     // v1 serialization format:
     // val attrsJson = attributes.toJson
-    // v2 serialization format:
-//    val sqlAttrs: Vector[SqlAttribute] = attributes.map { case (name, value) =>
-//      SqlAttribute(
-//        a = toDelimitedName(name),
-//        v = value match {
-//          case _: AttributeValue                                           => Some(value.toJson)
-//          case _: AttributeValueList                                       => Some(value.toJson)
-//          case AttributeValueEmptyList | AttributeEntityReferenceEmptyList => Some(JsArray.empty)
-//          case _                                                           => None
-//        },
-//        r = value match {
-//          case ref: AttributeEntityReference =>
-//            Some(Seq(SqlEntityReference(n = ref.entityName, t = ref.entityType)))
-//          case refList: AttributeEntityReferenceList =>
-//            Some(refList.list.map(r => SqlEntityReference(n = r.entityName, t = r.entityType)))
-//          case _ => None
-//        },
-//        s = value match {
-//          case _: AttributeEntityReference => Some(true)
-//          case _                           => None
-//        }
-//      )
-//    }.toVector
-//    val attrsJson = JsArray(sqlAttrs.map(_.toJson))
-//
-//    val queryAttrs: Map[String, JsValue] = attributes.map { case (name, value) =>
-//      val aname = AttributeName.toDelimitedName(name)
-//      val jsval: JsValue = value match {
-//        case AttributeString(s)                      => JsString(s.take(500)) // TODO: what limit should we set?
-//        case AttributeNumber(n)                      => JsNumber(n)
-//        case AttributeBoolean(b)                     => JsBoolean(b)
-//        case AttributeValueList(l)                   => JsNumber(l.size)
-//        case AttributeEntityReferenceList(l)         => JsNumber(l.size)
-//        case AttributeEntityReference(_, entityName) => JsString(entityName)
-//        case AttributeValueRawJson(js)               => js
-//        case AttributeValueEmptyList | AttributeEntityReferenceEmptyList => JsNumber(0) // or should we use Int.max?
-//        case AttributeNull                                               => JsNull
-//      }
-//      aname -> jsval
-//    }
 
     // translate references and reference lists into sortable values;
     // the references themselves are stored in a separate "refs" key
@@ -102,6 +62,7 @@ trait CompactEntitySerialization {
       name -> normalizedValue
     }
 
+    // collect all references and translate them to SqlEntityReference objects
     val refObjects: Vector[SqlEntityReference] = attributes
       .collect {
         case (name, ref: AttributeEntityReference) =>
@@ -235,15 +196,16 @@ trait CompactEntitySerialization {
           }
        */
       case 2 =>
+        // extract the base attributes from the JSON
         val baseAttrs = getAttrs(jso).convertTo[AttributeMap]
 
+        // extract the references from the JSON
         val refs = getReferences(jso).convertTo[Seq[SqlEntityReference]]
         val groupedRefs: Map[String, Seq[SqlEntityReference]] = refs.groupMap(_.a)(identity)
         // discard any references that do not have a matching base attribute
         val filteredGroupedRefs: Map[String, Seq[SqlEntityReference]] = groupedRefs.filter { case (attributeName, _) =>
           baseAttrs.contains(AttributeName.fromDelimitedName(attributeName))
         }
-
         val refAttrs: AttributeMap = filteredGroupedRefs.map { case (attributeName, refSeq) =>
           val aname = AttributeName.fromDelimitedName(attributeName)
           val attr: Attribute = if (refSeq.isEmpty) {
@@ -254,9 +216,9 @@ trait CompactEntitySerialization {
             AttributeEntityReferenceList(refSeq.map(_.toAttributeEntityReference)) // multiple references
           }
           aname -> attr
-        }.toMap
+        }
 
-        // layer references on top of the attribute map
+        // layer the references on top of the base attribute map
         baseAttrs ++ refAttrs
 
       case x =>
@@ -265,6 +227,7 @@ trait CompactEntitySerialization {
         )
     }
 
+  // SQL representation of an entity reference. We use single-character field names to save space in the database.
   case class SqlEntityReference(
     a: String, // delimited attribute name (namespace:)name
     n: String, // target entity name

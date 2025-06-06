@@ -148,9 +148,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new RawlsConcurrentModificationException(
             s"Detected concurrent modifications to entity ${savedEntityRecord.toPointer}."
           )
-
-        // save all references from this entity to other entities
-        // _ <- repository.queries.insertReferences(workspaceId, refs)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete

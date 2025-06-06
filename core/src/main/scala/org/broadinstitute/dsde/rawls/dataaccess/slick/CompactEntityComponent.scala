@@ -478,6 +478,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * Returns the number of entities that were renamed.
    *
+   * TODO: use the simplified SQL from `renameEntityType`, using string-replace
+   *
    * TODO: `execution plan: `
    */
   def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
@@ -556,81 +558,27 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
             where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
 
+    // Update all embedded references in the $.refs array.
+    // This is done via JSON_REPLACE(CAST(REPLACE(JSON_EXTRACT))). Explaining from the inside out:
+    //   - JSON_EXTRACT(attributes, '$$.refs') gets the refs array
+    //   - REPLACE(...) treats the refs array as a plain string, and replaces all occurrences of
+    //      the old type with the new type
+    //   - CAST(... as JSON) converts the modified string back to a JSON array
+    //   - JSON_REPLACE(...) replaces the original refs array with the modified one
+    // We use a string replace here because it is significantly more performant than calling JSON_REPLACE
+    //  individually for each value that needs to be changed. Since we control the serialization format of the
+    //  refs array, and only perform the string replace inside that array, we avoid any problems with other
+    //  user-supplied values.
     val updateReferencesInAttributesSql = sql"""update ENTITY
-    set attributes = REPLACE(attributes, '"t": "#$oldType"', '"t": "#$newType"')
-    where workspace_id = $workspaceId
-    and deleted = 0
-    and JSON_CONTAINS(attributes, JSON_OBJECT('t', $oldType), '$$.refs')""".asUpdate
+            set attributes = JSON_REPLACE(attributes, '$$.refs',
+              CAST(REPLACE(JSON_EXTRACT(attributes, '$$.refs'), '"t": "#$oldType"', '"t": "#$newType"') as JSON))
+            where workspace_id = $workspaceId
+            and deleted = 0
+            and JSON_CONTAINS(attributes, JSON_OBJECT('t', $oldType), '$$.refs')""".asUpdate
 
     // Execute all updates in same transaction
     for {
-      paths <- updateReferencesInAttributesSql
-      entityRowsUpdated <- updateEntityTypeSql.asUpdate
-    } yield entityRowsUpdated
-  }
-
-  /**
-   * Rename an entity type, updating both the ENTITY table and embedded references in entity attributes.
-   *
-   * Returns the number of entities that were renamed.
-   *
-   * TODO: `execution plan: `
-   * TODO: also update the sort value in $.attrs for scalar references
-   */
-  def renameEntityTypeOLD(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
-    // Update the entity type in the ENTITY table
-    // explain plan: index range scan on idx_entity_type_name
-    val updateEntityTypeSql =
-      sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
-            where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
-
-    // Update entity references in the attributes JSON column
-    // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
-    // The best approach would be to add a custom MySQL function for JSON path replacement
-    // For now, we'll do this in application code when accessing entities
-
-    // Get all paths in attributes that reference the old type
-    // This is a bit tricky because the attributes column is JSON and we need to search for the old type
-    // in all possible paths. We use JSON_SEARCH to find the paths and JSON_TABLE to extract them.
-    // We also need to handle the case where the reference is singular or not in an array.
-    // Also exclude values in the json that match the old type but are not entity references.
-    // Uses ENTITY_REFS table to find the attributes that reference the old type so must be run before
-    // the ENTITY_REFS table is updated.
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    val attrRefRegex = """'\\$\\.refs[^.]+\\.t'"""
-    val getReferencePathsInAttributesSql =
-      sql"""
-        select type_path
-        from ENTITY e,
-        json_table(json_search(e.attributes, 'all', $oldType, null, '$$.refs[*].t'), '$$[*]' COLUMNS( type_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
-        where workspace_id = $workspaceId
-        and type_path REGEXP #$attrRefRegex
-        order by type_path desc
-        """
-    // descending order is very important here; it optimizes how MySQL processes the JSON_REPLACE calls
-
-    // TODO: `execution plan: `
-    def updateReferencesInAttributesSql(paths: Seq[String]) = {
-      val replaceParamsSqls = paths.map(path => sql"$path, $newType")
-      concatSqlActions(
-        sql"""
-          update ENTITY e 
-          set e.attributes = JSON_REPLACE(e.attributes,
-        """,
-        reduceSqlActionsWithDelim(replaceParamsSqls, sql","),
-        sql""") where e.workspace_id = $workspaceId and JSON_CONTAINS(e.attributes, $oldType, '$$.refs[*].t')"""
-      )
-    }
-
-    // Execute all updates in same transaction
-    for {
-      paths <- getReferencePathsInAttributesSql.as[String]
-      _ <-
-        if (paths.isEmpty) {
-          DBIO.successful(0)
-        } else {
-          updateReferencesInAttributesSql(paths).asUpdate
-        }
+      _ <- updateReferencesInAttributesSql
       entityRowsUpdated <- updateEntityTypeSql.asUpdate
     } yield entityRowsUpdated
   }
@@ -638,6 +586,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Renames a single attribute across all entities of the given type and workspace.
     * This method assumes the old and new attribute names have already been validated!
+    *
+    * TODO: also update in $.refs
     *
     * `Using where. Index used: idx_entity_type_name`
     */
