@@ -23,26 +23,23 @@
 
         <!-- create the ENTITY_REFS view -->
         <createView viewName="ENTITY_REFS" replaceIfExists="true">
-            SELECT workspace_id,
+            SELECT distinct workspace_id,
                    id as from_entity_id,
                    entity_type as from_entity_type,
                    name as from_name,
                    from_attribute_name,
                    to_entity_type,
-                   to_name,
-                   is_scalar
+                   to_name
             FROM ENTITY
             JOIN JSON_TABLE(
                 attributes,
                 '$.refs[*]' COLUMNS (
                     from_attribute_name varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.a',
 					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.t',
-		            to_name varchar(254) PATH '$.n',
-                    is_scalar boolean PATH '$.s'
+		            to_name varchar(254) PATH '$.n'
                  )
             ) AS refs_tbl
-            WHERE attributes is not null
-              AND deleted = 0
+            WHERE deleted = 0 and attributes is not null
         </createView>
 
     </changeSet>

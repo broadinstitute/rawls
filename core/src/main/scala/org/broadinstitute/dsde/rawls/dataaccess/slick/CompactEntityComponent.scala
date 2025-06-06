@@ -542,6 +542,34 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   /**
+    * Rename an entity type, updating both the ENTITY table and embedded references in entity attributes.
+    *
+    * Returns the number of entities that were renamed.
+    *
+    * TODO: `execution plan: `
+    * TODO: also update the sort value in $.attrs for scalar references
+    */
+  def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
+    // Update the entity type in the ENTITY table
+    // explain plan: index range scan on idx_entity_type_name
+    val updateEntityTypeSql =
+      sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
+            where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
+
+    val updateReferencesInAttributesSql = sql"""update ENTITY
+    set attributes = REPLACE(attributes, '"t": "#$oldType"', '"t": "#$newType"')
+    where workspace_id = $workspaceId
+    and deleted = 0
+    and JSON_CONTAINS(attributes, JSON_OBJECT('t', $oldType), '$$.refs')""".asUpdate
+
+    // Execute all updates in same transaction
+    for {
+      paths <- updateReferencesInAttributesSql
+      entityRowsUpdated <- updateEntityTypeSql.asUpdate
+    } yield entityRowsUpdated
+  }
+
+  /**
    * Rename an entity type, updating both the ENTITY table and embedded references in entity attributes.
    *
    * Returns the number of entities that were renamed.
@@ -549,7 +577,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * TODO: `execution plan: `
    * TODO: also update the sort value in $.attrs for scalar references
    */
-  def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
+  def renameEntityTypeOLD(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // Update the entity type in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
     val updateEntityTypeSql =
@@ -572,22 +600,14 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     val attrRefRegex = """'\\$\\.refs[^.]+\\.t'"""
     val getReferencePathsInAttributesSql =
       sql"""
-        with entity_attrs as 
-          (select e.attributes
-          from ENTITY e
-          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-          where er.workspace_id = $workspaceId
-          and er.to_entity_type = $oldType)
         select type_path
-        from entity_attrs e,
-        json_table(json_search(e.attributes, 'all', $oldType), '$$[*]' COLUMNS( type_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
-        where type_path REGEXP #$attrRefRegex
-        union
-        select json_unquote(json_search(e.attributes, 'all', $oldType))
-        from entity_attrs e
-        where json_type(json_search(e.attributes, 'all', $oldType)) != 'ARRAY'
-        and json_unquote(json_search(e.attributes, 'all', $oldType)) REGEXP #$attrRefRegex
+        from ENTITY e,
+        json_table(json_search(e.attributes, 'all', $oldType, null, '$$.refs[*].t'), '$$[*]' COLUMNS( type_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
+        where workspace_id = $workspaceId
+        and type_path REGEXP #$attrRefRegex
+        order by type_path desc
         """
+    // descending order is very important here; it optimizes how MySQL processes the JSON_REPLACE calls
 
     // TODO: `execution plan: `
     def updateReferencesInAttributesSql(paths: Seq[String]) = {
@@ -595,11 +615,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       concatSqlActions(
         sql"""
           update ENTITY e 
-          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-          set e.attributes = JSON_REPLACE(e.attributes, 
+          set e.attributes = JSON_REPLACE(e.attributes,
         """,
         reduceSqlActionsWithDelim(replaceParamsSqls, sql","),
-        sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
+        sql""") where e.workspace_id = $workspaceId and JSON_CONTAINS(e.attributes, $oldType, '$$.refs[*].t')"""
       )
     }
 
@@ -768,7 +787,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /** look up the types&names of all entities referenced by the given entity */
   @VisibleForTesting
   def getReferencesFrom(workspaceId: UUID, from: EntityPointer): ReadAction[Seq[EntityPointer]] =
-    sql"""select to_entity_type, to_name
+    sql"""select distinct to_entity_type, to_name
          from ENTITY_REFS
          where workspace_id = $workspaceId
          and from_entity_type = ${from.entityType}
