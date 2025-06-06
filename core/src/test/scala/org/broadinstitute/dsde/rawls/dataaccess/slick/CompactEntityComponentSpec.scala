@@ -2246,6 +2246,73 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
   }
 
+  behavior of "renameEntity"
+
+  it should "rename an entity and update all references" in withMinimalTestDatabase { _ =>
+    // Create the original entity
+    val entityType = "testType"
+    val originalEntity = Entity("originalName", entityType, Map())
+    insertAndGet(originalEntity)
+
+    // Create source entities referencing the original entity
+    val sourceEntity1 = Entity(
+      "sourceEntity1",
+      "sourceType",
+      Map(
+        AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(
+          Seq(originalEntity.toReference)
+        )
+      )
+    )
+    val sourceEntity2 = Entity(
+      "sourceEntity2",
+      "sourceType",
+      Map(
+        AttributeName.withDefaultNS("ref") -> originalEntity.toReference
+      )
+    )
+    insertAndGetAll(Seq(sourceEntity1, sourceEntity2))
+
+    val refMappings = Set(
+      RefMapping(sourceEntity1.toPointer, Set(originalEntity.toPointer)),
+      RefMapping(sourceEntity2.toPointer, Set(originalEntity.toPointer))
+    )
+    runAndWait(q.insertReferences(wsid, refMappings))
+
+    // Verify references to the original entity before rename
+    runAndWait(q.getReferencesTo(wsid, Seq(originalEntity.toPointer))) should contain theSameElementsAs Seq(
+      sourceEntity1.toPointer,
+      sourceEntity2.toPointer
+    )
+
+    // Rename the entity
+    val newName = "newName"
+    runAndWait(q.renameEntity(wsid, entityType, originalEntity.name, newName)) shouldBe 1
+
+    // Verify the entity was renamed
+    val renamedEntity = runAndWait(q.getEntity(wsid, entityType, newName)).get.toEntity
+    renamedEntity.name shouldBe newName
+
+    // Verify the old name no longer exists
+    runAndWait(q.getEntity(wsid, entityType, originalEntity.name)) shouldBe None
+
+    // Verify references in source entities are updated
+    val updatedSourceEntity1 = runAndWait(q.getEntity(wsid, "sourceType", sourceEntity1.name)).get.toEntity
+    updatedSourceEntity1
+      .attributes(AttributeName.withDefaultNS("refList"))
+      .asInstanceOf[AttributeEntityReferenceList]
+      .list should contain theSameElementsAs Seq(renamedEntity.toReference)
+
+    val updatedSourceEntity2 = runAndWait(q.getEntity(wsid, "sourceType", sourceEntity2.name)).get.toEntity
+    updatedSourceEntity2.attributes(AttributeName.withDefaultNS("ref")) shouldBe renamedEntity.toReference
+
+    // Verify references to the renamed entity after rename
+    runAndWait(q.getReferencesTo(wsid, Seq(renamedEntity.toPointer))) should contain theSameElementsAs Seq(
+      sourceEntity1.toPointer,
+      sourceEntity2.toPointer
+    )
+  }
+
   behavior of "renameEntityType"
 
   it should "rename an entity type and update all references" in withMinimalTestDatabase { _ =>
