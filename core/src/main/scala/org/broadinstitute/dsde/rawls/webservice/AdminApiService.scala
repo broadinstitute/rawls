@@ -194,7 +194,16 @@ trait AdminApiService extends UserInfoDirectives {
                     }
                   }
                 }
-            }
+            } ~
+              path("deleteAzureWorkspace") {
+                delete {
+                  complete {
+                    workspaceAdminServiceConstructor(ctx)
+                      .adminDeleteMcWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                      .map(_ => StatusCodes.NoContent)
+                  }
+                }
+              }
           } ~
             path(Segment) { workspaceId =>
               get {
