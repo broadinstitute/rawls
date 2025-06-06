@@ -1027,35 +1027,81 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val source2 = EntityPointer("sourceType", "source2")
 
     // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
+    val target1 = Entity("targetName1", "targetType", Map())
 
-    val pointers1 = RefMapping(source1, Set(target1))
-    val pointers2 = RefMapping(source2, Set(target1))
-    // insert rows for workspace 1
-    // TODO FIXME
-    // insert rows for workspace 2
-    // TODO FIXME
+    // insert rows for workspace 1: source1 has a reference to target1, source2 does not
+    insertAndGetAll(
+      Seq(
+        target1,
+        Entity(
+          source1.entityName,
+          source1.entityType,
+          Map(
+            AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+              Seq(AttributeEntityReference("targetType", "targetName1"))
+            )
+          )
+        ),
+        Entity(source2.entityName, source2.entityType, Map())
+      ),
+      wsid
+    )
 
-    runAndWait(q.getReferencesTo(wsid, Seq(target1))) should contain theSameElementsAs Seq(pointers1.from)
-    runAndWait(q.getReferencesTo(wsid2, Seq(target1))) should contain theSameElementsAs Seq(pointers2.from)
+    // insert rows for workspace 2: source2 has a reference to target1, source1 does not
+    insertAndGetAll(
+      Seq(
+        target1,
+        Entity(
+          source1.entityName,
+          source1.entityType,
+          Map(
+          )
+        ),
+        Entity(
+          source2.entityName,
+          source2.entityType,
+          Map(
+            AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+              Seq(AttributeEntityReference("targetType", "targetName1"))
+            )
+          )
+        )
+      ),
+      wsid2
+    )
+
+    runAndWait(q.getReferencesTo(wsid, Seq(target1.toPointer))) should contain theSameElementsAs Seq(source1)
+    runAndWait(q.getReferencesTo(wsid2, Seq(target1.toPointer))) should contain theSameElementsAs Seq(source2)
   }
 
   it should "exclude entities included in the search" in withMinimalTestDatabase { _ =>
     // define entities
-    val entity1 = EntityPointer("entityType", "name1")
-    val entity2 = EntityPointer("entityType", "name2")
-    val entity3 = EntityPointer("entityType", "name3")
-
     // entity2 references entity1; entity3 references both entity1 and entity2
-    val pointers1 = RefMapping(entity2, Set(entity1))
-    val pointers2 = RefMapping(entity3, Set(entity1, entity2))
+    val entity1 = Entity("name1", "entityType", Map())
+    val entity2 =
+      Entity("name2",
+             "entityType",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name)
+             )
+      )
+    val entity3 = Entity(
+      "name3",
+      "entityType",
+      Map(
+        AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name),
+        AttributeName.withDefaultNS("ref2") -> AttributeEntityReference(entity2.entityType, entity2.name)
+      )
+    )
 
-    // TODO FIXME
+    insertAndGetAll(Seq(entity1, entity2, entity3))
 
     // asking for references to entity1 and entity2 should exclude entity2 because entity2 is in the search criteria,
     //  even though entity2 references entity1
-    val expected = Set(entity3)
-    runAndWait(q.getReferencesTo(wsid, Seq(entity1, entity2))).toSet should contain theSameElementsAs expected
+    val expected = Set(entity3.toPointer)
+    runAndWait(
+      q.getReferencesTo(wsid, Seq(entity1.toPointer, entity2.toPointer))
+    ).toSet should contain theSameElementsAs expected
 
   }
 
@@ -1078,7 +1124,27 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers2 = RefMapping(source2, Set(target2))
     val pointers3 = RefMapping(source3, Set(target1))
 
-    // TODO FIXME
+    // insert targets
+    insertAndGetAll(
+      Seq(target1, target2, target3).map { targetPointer =>
+        Entity(targetPointer.entityName, targetPointer.entityType, Map())
+      }
+    )
+    // insert sources and their references to the targets
+    val sourcesWithReferences = Seq(pointers1, pointers2, pointers3).map { refMapping =>
+      Entity(
+        refMapping.from.entityName,
+        refMapping.from.entityType,
+        Map(
+          AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+            refMapping.to.map { target =>
+              AttributeEntityReference(target.entityType, target.entityName)
+            }.toSeq
+          )
+        )
+      )
+    }
+    insertAndGetAll(sourcesWithReferences)
 
     val expected = Set(source2, source3)
     runAndWait(q.getReferencesToType(wsid, targetType1)) should contain theSameElementsAs expected
@@ -1086,20 +1152,30 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "not return source entities of the same type" in withMinimalTestDatabase { _ =>
     // define entities
-    val entity1 = EntityPointer("entityTypeA", "name1")
-    val entity2 = EntityPointer("entityTypeA", "name2")
-    val entity3 = EntityPointer("entityTypeB", "name3")
-
     // entity2 references entity1; entity3 references both entity1 and entity2
-    val pointers1 = RefMapping(entity2, Set(entity1))
-    val pointers2 = RefMapping(entity3, Set(entity1, entity2))
+    // entity3 has a different entity type
+    val entity1 = Entity("name1", "entityTypeA", Map())
+    val entity2 =
+      Entity("name2",
+             "entityTypeA",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name)
+             )
+      )
+    val entity3 = Entity(
+      "name3",
+      "entityTypeB",
+      Map(
+        AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name),
+        AttributeName.withDefaultNS("ref2") -> AttributeEntityReference(entity2.entityType, entity2.name)
+      )
+    )
 
-    // insert rows
-    // TODO FIXME
+    insertAndGetAll(Seq(entity1, entity2, entity3))
 
     // asking for references to entity1 should exclude entity2 because entity2 is of the same type,
     //  even though entity2 references entity1
-    runAndWait(q.getReferencesToType(wsid, "entityTypeA")).toSet should contain theSameElementsAs Set(entity3)
+    runAndWait(q.getReferencesToType(wsid, "entityTypeA")).toSet should contain theSameElementsAs Set(entity3.toPointer)
 
   }
 
