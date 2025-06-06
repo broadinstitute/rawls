@@ -55,9 +55,10 @@ trait CompactEntitySerialization {
     // the references themselves are stored in a separate "refs" key
     val jsonAttrs: AttributeMap = attributes.map { case (name, value) =>
       val normalizedValue = value match {
-        case AttributeEntityReferenceList(l)         => AttributeNumber(l.size)
-        case AttributeEntityReference(_, entityName) => AttributeString(entityName)
-        case x                                       => x
+        case AttributeEntityReferenceList(l) if l.isEmpty => AttributeEntityReferenceEmptyList
+        case AttributeEntityReferenceList(l)              => AttributeNumber(l.size)
+        case AttributeEntityReference(_, entityName)      => AttributeString(entityName)
+        case x                                            => x
       }
       name -> normalizedValue
     }
