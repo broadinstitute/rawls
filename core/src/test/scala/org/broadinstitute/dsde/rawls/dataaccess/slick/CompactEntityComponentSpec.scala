@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.RelationContext
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
@@ -556,11 +556,20 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     Mockito.when(mockRelationContext.getText).thenReturn("samples")
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(wsid,
-                                     "sample_set",
-                                     "set1",
-                                     List(AttributeLookup(List(mockRelationContext), "type")),
-                                     List.empty
+      q.queryRelatedRecordsWithArray(
+        wsid,
+        "sample_set",
+        "set1",
+//                                     List(ExpressionLookup(List(mockRelationContext), "type")),
+        List(
+          ExpressionLookup(
+            expression = "this.type",
+            relations = List(mockRelationContext),
+            attributeName = Some("type"),
+            values = Seq.empty
+          )
+        ),
+        List.empty
       )
     )
     result.get(sample.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSample)
@@ -603,11 +612,20 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     Mockito.when(mockRelationContext.getText).thenReturn("samples")
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(minimalTestData.workspace.workspaceIdAsUUID,
-                                     "sample_set",
-                                     "set1",
-                                     List(AttributeLookup(List(mockRelationContext), "type")),
-                                     List.empty
+      q.queryRelatedRecordsWithArray(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+//                                     List(ExpressionLookup(List(mockRelationContext), "type")),
+        List(
+          ExpressionLookup(
+            expression = "this.type",
+            relations = List(mockRelationContext),
+            attributeName = Some("type"),
+            values = Seq.empty
+          )
+        ),
+        List.empty
       )
     )
     // TODO this returns multiple of each entity.  is there a case where that makes sense or should the method reduce it to one each?
@@ -652,8 +670,24 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
-        List(AttributeLookup(List(), "samples")),
-        List(AttributeLookup(List(mockRelationContextParticipant), "type"))
+//        List(ExpressionLookup(List(), "samples")),
+        List(
+          ExpressionLookup(
+            expression = "this.samples",
+            relations = List(),
+            attributeName = Some("samples"),
+            values = Seq.empty
+          )
+        ),
+//        List(ExpressionLookup(List(mockRelationContextParticipant), "type")),
+        List(
+          ExpressionLookup(
+            expression = "this.type",
+            relations = List(mockRelationContextParticipant),
+            attributeName = Some("type"),
+            values = Seq.empty
+          )
+        )
       )
     )
     result.get(participant.name).toSeq.flatten should contain(insertedParticipant)
@@ -711,8 +745,24 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
-        List(AttributeLookup(List(), "samples")),
-        List(AttributeLookup(List(mockRelationContextParticipant), "type"))
+//        List(ExpressionLookup(List(), "samples")),
+        List(
+          ExpressionLookup(
+            expression = "this.samples",
+            relations = List(),
+            attributeName = Some("samples"),
+            values = Seq.empty
+          )
+        ),
+//        List(ExpressionLookup(List(mockRelationContextParticipant), "type")),
+        List(
+          ExpressionLookup(
+            expression = "this.type",
+            relations = List(mockRelationContextParticipant),
+            attributeName = Some("type"),
+            values = Seq.empty
+          )
+        )
       )
     )
     result.get(participant1.name).toSeq.flatten should contain(insertedParticipant1)
@@ -793,8 +843,24 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
-        List(AttributeLookup(List(), "samples")),
-        List(AttributeLookup(List(mockRelationContextParticipant), "type"))
+//        List(ExpressionLookup(List(), "samples")),
+        List(
+          ExpressionLookup(
+            expression = "this.samples",
+            relations = List(),
+            attributeName = Some("samples"),
+            values = Seq.empty
+          )
+        ),
+//        List(ExpressionLookup(List(mockRelationContextParticipant), "type")),
+        List(
+          ExpressionLookup(
+            expression = "this.type",
+            relations = List(mockRelationContextParticipant),
+            attributeName = Some("type"),
+            values = Seq.empty
+          )
+        )
       )
     )
     result.get(participant1.name).toSeq.flatten should contain(insertedParticipant1)
@@ -836,11 +902,20 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     Mockito.when(mockRelationContext.getText).thenReturn("samples")
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(wsid,
-                                     "sample_set",
-                                     "set1",
-                                     List(AttributeLookup(List(mockRelationContext), "type")),
-                                     List.empty
+      q.queryRelatedRecordsWithArray(
+        wsid,
+        "sample_set",
+        "set1",
+//                                     List(ExpressionLookup(List(mockRelationContext), "type")),
+        List(
+          ExpressionLookup(
+            expression = "this.type",
+            relations = List(mockRelationContext),
+            attributeName = Some("type"),
+            values = Seq.empty
+          )
+        ),
+        List.empty
       )
     )
     result.get(sample1.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSampleWS1)

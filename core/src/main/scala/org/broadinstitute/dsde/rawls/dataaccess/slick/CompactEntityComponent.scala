@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -607,8 +607,8 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     workspaceId: UUID,
     arrayEntityType: String,
     arrayEntityId: String,
-    arrayRelations: Seq[AttributeLookup],
-    relations: Seq[AttributeLookup]
+    arrayRelations: Seq[ExpressionLookup],
+    relations: Seq[ExpressionLookup]
   ): ReadAction[Map[String, Seq[CompactEntityRecord]]] = {
     require(arrayRelations.nonEmpty, "Array relations must not be empty")
 
@@ -619,7 +619,7 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     if (arrayRelations.nonEmpty) {
       arrayRelations.head.relations.foreach(r => relationChain += r.getText)
       if (relations.nonEmpty) {
-        relationChain += arrayRelations.head.attributeName
+        relationChain += arrayRelations.head.attributeName.getOrElse("")
       }
     }
     // For each relation, add its relation context if present, then its attributeName
@@ -627,13 +627,16 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     if (relations.nonEmpty) {
       relations.dropRight(1).foreach { rel =>
         rel.relations.headOption.foreach(r => relationChain += r.getText)
-        relationChain += rel.attributeName
+        relationChain += rel.attributeName.getOrElse("")
       }
       // For the last relation, only add its relation context if present (not its attributeName)
       relations.lastOption.flatMap(_.relations.headOption).foreach(r => relationChain += r.getText)
     }
-    relationChain.toList
 
+    relationChain.transform(item =>
+      if (item.length > 1) item.dropRight(1) else item
+    ) // TODO why do these have periods at the end and what to do about it
+    relationChain.toList
     // The base join finds the starting entity and gets its relevant relation attributes to find the next entities to query for
     val baseJoin =
       sql"""
@@ -704,11 +707,13 @@ JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.roo
     } else Seq.empty
 
     // The last join should find the final entities that will be returned by the method
+    // TODO is adding a DISTINCT the correct way to make sure i only get one of each record or is there a different join i could do?
+    // Or should I just clean it up at the end when I map the entities?
     val lastRelation = relationChain.last
     val lastLevel = relationChain.length
     val lastJoin =
       sql"""
-    SELECT
+    SELECT DISTINCT
       e.id,
       e.name,
       e.entity_type,

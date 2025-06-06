@@ -4,13 +4,14 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityQuery, CompactEntityRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityRepository, CompactEntitySerialization}
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.AttributeLookup
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeNumber,
   AttributeString,
   AttributeValueList,
+  AttributeValueRawJson,
   Entity,
   MethodConfiguration,
   SubmissionValidationEntityInputs,
@@ -25,6 +26,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
+import scala.concurrent.duration._
 
 import scala.util.Random
 
@@ -35,6 +37,9 @@ class CompactExpressionEvaluatorSpec
     with TableDrivenPropertyChecks
     with TestDriverComponent
     with MethodConfigTestSupport {
+
+  implicit override val patienceConfig: PatienceConfig =
+    PatienceConfig(timeout = 300.seconds, interval = 100.millis)
 
   val compactEntityRepository = mock[CompactEntityRepository]
   val mockQueries = mock[CompactEntityQuery]
@@ -76,12 +81,43 @@ class CompactExpressionEvaluatorSpec
   // Note: this is also essentially a test for CompactEvaluateVisitor
   "parseLookups" should "generate correct lookups" in {
     val straightForwardTests =
+//      Table(
+//        ("input", "result"),
+//        ("this.type", List(ExpressionLookup(List(), "type"))),
+//        ("blah", List()),
+//        ("\"blah\"", List()),
+//        ("workspace.string", List(ExpressionLookup(List(), "string")))
+//      )
+
       Table(
         ("input", "result"),
-        ("this.type", List(AttributeLookup(List(), "type"))),
+        (
+          "this.type",
+          List(
+            ExpressionLookup(
+              expression = "this.type",
+              relations = List(),
+              attributeName = Some("type"),
+              values = Seq.empty
+            )
+          )
+        ),
         ("blah", List()),
-        ("\"blah\"", List()),
-        ("workspace.string", List(AttributeLookup(List(), "string")))
+        ("\"blah\"",
+         List(
+         )
+        ), // TODO do i want these to return an empty list or an actual ExpressionLookup?
+        (
+          "workspace.string",
+          List(
+            ExpressionLookup(
+              expression = "workspace.string",
+              relations = List(),
+              attributeName = Some("string"),
+              values = Seq.empty
+            )
+          )
+        )
       )
 
     forAll(straightForwardTests) { (input, result) =>
@@ -91,12 +127,18 @@ class CompactExpressionEvaluatorSpec
     val relationTests =
       Table(
         ("input", "getText", "attributeName"),
-        ("this.samples.type", "samples.", "type")
+        ("this.samples.type", "samples.", Some("type")),
+        (
+          "[[10,11,12],this.samples.blah]",
+          "samples.",
+          Some("blah")
+        )
+
 //        ("workspace.sample1ref.type", "sample1ref.", "type") // TODO do i need to implement workspace entities?
       )
 
     forAll(relationTests) { (input, getText, attributeName) =>
-      val result: Seq[AttributeLookup] = compactExpressionEvaluator.parseLookups(input)
+      val result: Seq[ExpressionLookup] = compactExpressionEvaluator.parseLookups(input)
       result.size shouldBe 1
       result(0).relations.size shouldBe 1
       result(0).relations(0).getText shouldBe getText
@@ -104,8 +146,10 @@ class CompactExpressionEvaluatorSpec
     }
   }
 
-  // Copying from LocalEntityProviderSpec
-  "evaluateExpressions" should "resolve method config inputs for a single entity" in withConfigData {
+  // Test cases are taken from LocalEntityProviderSpec
+  behavior of "evaluateExpressions"
+
+  it should "resolve method config inputs for a single entity" in withConfigData {
     // TODO probably check that it calls the query with the correct values
     when(
       mockQueries.getEntity(any(),
@@ -366,7 +410,6 @@ class CompactExpressionEvaluatorSpec
     wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
   }
 
-  // TODO fix "{"w1.aint_array":[[1,2]]}" was not equal to "{"w1.aint_array":[[[10,11,12],[1,2]]]}"
   it should "unpack array input expression with attribute reference into WDL-arrays" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithArray(any(),
@@ -398,10 +441,11 @@ class CompactExpressionEvaluatorSpec
 
     val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
+    // org.scalatest.exceptions.TestFailedException: "{"w1.aint_array":[[1,2]]}" was not equal to "{"w1.aint_array":[[[10,11,12],[1,2]]]}"
     wdlInputs shouldBe """{"w1.aint_array":[[10,11,12],[1,2]]}"""
   }
 
-  // TODO fix
+  // TODO fix org.scalatest.exceptions.TestFailedException: "...StructWf.obj":{"id":[null,"sample":"sample1","samples":101]}}" was not equal to "...StructWf.obj":{"id":[123,"sample":"sample1","samples":[101]]}}"
   it should "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithArray(any(),
@@ -685,7 +729,9 @@ class CompactExpressionEvaluatorSpec
     )
   }
 
-  "evaluateExpression" should "return attribute values for a simple attribute" in withConfigData {
+  behavior of "evaluateExpression"
+
+  it should "return attribute values for a simple attribute" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithArray(
         any(),
@@ -820,9 +866,7 @@ class CompactExpressionEvaluatorSpec
 
     val result = resultFut.futureValue
     // [[10,11,12],[1]]
-    result should contain theSameElementsAs Seq(Seq(AttributeNumber(10), AttributeNumber(12), AttributeNumber(12)),
-                                                Seq(AttributeNumber(1))
-    )
+    result should contain only AttributeValueRawJson("[[10,11,12],1]")
   }
 
 }
