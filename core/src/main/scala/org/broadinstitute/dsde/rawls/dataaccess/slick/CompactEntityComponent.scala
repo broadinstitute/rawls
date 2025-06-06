@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 
 import java.sql.Timestamp
@@ -478,67 +479,41 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * Returns the number of entities that were renamed.
    *
-   * TODO: use the simplified SQL from `renameEntityType`, using string-replace
+   * TODO: also update the sortable value in the '$.attrs' object for any scalar references to the entity being renamed
    *
    * TODO: `execution plan: `
    */
   def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
+    // validation ensures that oldName and newName are SQL-safe
+    EntityUtils.validateEntityName(oldName)
+    EntityUtils.validateEntityName(newName)
     // Update the entity name in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
-    val updateEntityNameSql = sql"""update ENTITY set name = $newName, record_version = record_version + 1
-          where workspace_id = $workspaceId
-          and entity_type = $entityType
-          and name = $oldName
-          and deleted = 0"""
+    val updateEntityNameSql =
+      sql"""update ENTITY set name = $newName, record_version = record_version + 1
+            where workspace_id = $workspaceId and name = $oldName and deleted = 0"""
 
-    // Get all paths in attributes that reference the old name
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    val attrRefRegex =
-      s"'\\\\$$\\.${CompactEntitySerialization.REFS_KEY}[^.]+\\.t'"
+    // Update all embedded references in the $.refs array.
+    // This is done via JSON_REPLACE(CAST(REPLACE(JSON_EXTRACT))). Explaining from the inside out:
+    //   - JSON_EXTRACT(attributes, '$$.refs') gets the refs array
+    //   - REPLACE(...) treats the refs array as a plain string, and replaces all occurrences of
+    //      the old name with the new name
+    //   - CAST(... as JSON) converts the modified string back to a JSON array
+    //   - JSON_REPLACE(...) replaces the original refs array with the modified one
+    // We use a string replace here because it is significantly more performant than calling JSON_REPLACE
+    //  individually for each value that needs to be changed. Since we control the serialization format of the
+    //  refs array, and only perform the string replace inside that array, we avoid any problems with other
+    //  user-supplied values.
+    val updateReferencesInAttributesSql = sql"""update ENTITY
+            set attributes = JSON_REPLACE(attributes, '$$.refs',
+              CAST(REPLACE(JSON_EXTRACT(attributes, '$$.refs'), '"n": "#$oldName"', '"n": "#$newName"') as JSON))
+            where workspace_id = $workspaceId
+            and deleted = 0
+            and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName), '$$.refs')""".asUpdate
 
-    val getReferencePathsInAttributesSql =
-      sql"""
-    with entity_attrs as
-      (select e.attributes
-      from ENTITY e
-      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-      where er.workspace_id = $workspaceId
-      and er.to_name = $oldName)
-    select name_path
-    from entity_attrs e,
-    json_table(json_search(e.attributes, 'all', $oldName), '$$[*]' COLUMNS( name_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
-    where name_path REGEXP #$attrRefRegex
-    union
-    select json_unquote(json_search(e.attributes, 'all', $oldName))
-    from entity_attrs e
-    where json_type(json_search(e.attributes, 'all', $oldName)) != 'ARRAY'
-    and json_unquote(json_search(e.attributes, 'all', $oldName)) REGEXP #$attrRefRegex
-    """
-
-    // Update attributes with references to the old name
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    def updateReferencesInAttributesSql(paths: Seq[String]) = {
-      val replaceParamsSqls = paths.map(path => sql"$path, $newName")
-      concatSqlActions(
-        sql"""
-      update ENTITY e
-      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-      set e.attributes = JSON_REPLACE(e.attributes,
-    """,
-        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
-        sql""") where er.workspace_id = $workspaceId and er.to_name = $oldName"""
-      )
-    }
-
-    // Execute all updates
+    // Execute all updates in same transaction
     for {
-      paths <- getReferencePathsInAttributesSql.as[String]
-      _ <-
-        if (paths.isEmpty) {
-          DBIO.successful(0)
-        } else {
-          updateReferencesInAttributesSql(paths).asUpdate
-        }
+      _ <- updateReferencesInAttributesSql
       entityRowsUpdated <- updateEntityNameSql.asUpdate
     } yield entityRowsUpdated
   }
@@ -549,9 +524,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * Returns the number of entities that were renamed.
     *
     * TODO: `execution plan: `
-    * TODO: also update the sort value in $.attrs for scalar references
     */
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
+    // validation ensures that oldType and newType are SQL-safe
+    EntityUtils.validateEntityType(oldType)
+    EntityUtils.validateEntityType(newType)
     // Update the entity type in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
     val updateEntityTypeSql =
@@ -722,7 +699,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           // the order of the columns here is also the sort precedence, list length first, then scalar value
           // Sorting on a list column should sort by the list size and sorting on a scalar column sorts on the column value.
           // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
-          sql" e.attributes -> ${slickAttributePath(attr)}"
+          sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
       },
       sql" #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
@@ -737,7 +714,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /** look up the types&names of all entities referenced by the given entity */
   @VisibleForTesting
   def getReferencesFrom(workspaceId: UUID, from: EntityPointer): ReadAction[Seq[EntityPointer]] =
-    sql"""select distinct to_entity_type, to_name
+    sql"""select to_entity_type, to_name
          from ENTITY_REFS
          where workspace_id = $workspaceId
          and from_entity_type = ${from.entityType}
