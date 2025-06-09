@@ -11,11 +11,40 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.compact.batch.BatchHandling
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.{CountAndSource, EntityQueryStrategy}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{AttributeException, DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException, EntityNotFoundException, EntityReferenceNotFoundException, UnsupportedEntityOperationException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  AttributeException,
+  DataEntityException,
+  DeleteEntitiesConflictException,
+  DeleteEntitiesOfTypeConflictException,
+  EntityNotFoundException,
+  EntityReferenceNotFoundException,
+  UnsupportedEntityOperationException
+}
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeRename, AttributeValue, Entity, EntityCopyResponse, EntityHardConflict, EntityPointer, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntitySoftConflict, EntityTypeMetadata, EntityTypeRename, ErrorReport, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
+import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
+  AttributeEntityReference,
+  AttributeEntityReferenceList,
+  AttributeName,
+  AttributeRename,
+  AttributeValue,
+  Entity,
+  EntityCopyResponse,
+  EntityHardConflict,
+  EntityPointer,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  EntitySoftConflict,
+  EntityTypeMetadata,
+  EntityTypeRename,
+  ErrorReport,
+  RawlsRequestContext,
+  SubmissionValidationEntityInputs,
+  Workspace
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
@@ -89,8 +118,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             linkExistingEntities: Boolean,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = {
-    val start = System.nanoTime()
-    val resultFuture = {
       val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
       val copyResult = repository.dataSource.inTransaction { _ =>
         for {
@@ -106,13 +133,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
               )
             } else {
               repository.queries
-                .recursiveGetEntityReferences(sourceWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs, config.batchCopyBatchSize)
+                .recursiveGetEntityReferences(sourceWorkspaceContext.workspaceIdAsUUID,
+                                              entitiesToCopyRefs,
+                                              config.batchCopyBatchSize
+                )
                 .flatMap { entityReferenceMap =>
                   val entities = entityReferenceMap.map(_.from)
                   val entityReferences = entityReferenceMap.flatMap(_.to)
-                  logger.info(
-                    s"Copying ${entities.size} entities and ${entityReferences.size} references from workspace ${sourceWorkspaceContext.workspaceId} to workspace ${destWorkspaceContext.workspaceId}"
-                  )
                   repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).flatMap {
                     conflicts =>
                       val softConflicts = conflicts.toSeq.map(_.toPointer).toSet
@@ -134,12 +161,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }
       withWorkspaceLastModified(copyResult)
       copyResult
-    }
-    resultFuture.onComplete { _ =>
-      val durationMs = (System.nanoTime() - start) / 1000000
-      logger.info(s"copyEntities took ${durationMs}ms using batchSize ${config.batchCopyBatchSize}")
-    }(executionContext)
-    resultFuture
   }
 
   /**
