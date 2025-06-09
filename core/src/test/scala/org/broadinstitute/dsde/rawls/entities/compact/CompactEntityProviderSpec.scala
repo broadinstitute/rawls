@@ -1500,6 +1500,7 @@ class CompactEntityProviderSpec
   behavior of "copyEntities"
 
   it should "copy entities from source workspace to destination workspace when no conflicts are present" in {
+    val config = CompactEntityProviderConfig()
     val mockQuery = mock[CompactEntityQuery]
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
@@ -1535,7 +1536,7 @@ class CompactEntityProviderSpec
 
     val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
     when(mockQuery.getEntityRefs(any[UUID], any[Set[EntityPointer]])).thenReturn(DBIO.successful(Seq.empty))
-    when(mockQuery.recursiveGetEntityReferences(sourceWorkspaceId, entitiesToCopyRefs))
+    when(mockQuery.recursiveGetEntityReferences(sourceWorkspaceId, entitiesToCopyRefs, config.batchCopyBatchSize))
       .thenReturn(
         DBIO.successful(
           Set(
@@ -1548,7 +1549,6 @@ class CompactEntityProviderSpec
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
       .thenReturn(DBIO.successful((3, 0)))
 
-    val config = CompactEntityProviderConfig()
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)
     val result = Await.result(provider.copyEntities(sourceWorkspace,
@@ -1632,6 +1632,7 @@ class CompactEntityProviderSpec
   }
 
   it should "not copy entities when soft conflicts are present and linkExistingEntities is false" in {
+    val config = CompactEntityProviderConfig()
     val mockQuery = mock[CompactEntityQuery]
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
@@ -1669,7 +1670,12 @@ class CompactEntityProviderSpec
       .thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityRefs(destWorkspace.workspaceIdAsUUID, Set(EntityPointer(entityType, "entity2"))))
       .thenReturn(DBIO.successful(Seq(CompactEntityRefRecord(2, "entity2", entityType))))
-    when(mockQuery.recursiveGetEntityReferences(sourceWorkspace.workspaceIdAsUUID, entitiesToCopyRefs))
+    when(
+      mockQuery.recursiveGetEntityReferences(sourceWorkspace.workspaceIdAsUUID,
+                                             entitiesToCopyRefs,
+                                             config.batchCopyBatchSize
+      )
+    )
       .thenReturn(
         DBIO.successful(
           Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))
@@ -1701,6 +1707,7 @@ class CompactEntityProviderSpec
   }
 
   it should "exclude copying soft conflicts when soft conflicts are present and linkExistingEntities is true" in {
+    val config = CompactEntityProviderConfig()
     val mockQuery = mock[CompactEntityQuery]
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
@@ -1738,7 +1745,12 @@ class CompactEntityProviderSpec
       .thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityRefs(destWorkspace.workspaceIdAsUUID, Set(EntityPointer(entityType, "entity2"))))
       .thenReturn(DBIO.successful(Seq(CompactEntityRefRecord(2, "entity2", entityType))))
-    when(mockQuery.recursiveGetEntityReferences(sourceWorkspace.workspaceIdAsUUID, entitiesToCopyRefs))
+    when(
+      mockQuery.recursiveGetEntityReferences(sourceWorkspace.workspaceIdAsUUID,
+                                             entitiesToCopyRefs,
+                                             config.batchCopyBatchSize
+      )
+    )
       .thenReturn(
         DBIO.successful(
           Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))
@@ -1747,7 +1759,6 @@ class CompactEntityProviderSpec
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
       .thenReturn(DBIO.successful((1, 0)))
 
-    val config = CompactEntityProviderConfig()
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)
     val result = Await.result(provider.copyEntities(sourceWorkspace,
