@@ -44,9 +44,10 @@ trait CompactEntitySlickComponent {
     def workspaceId = column[UUID]("workspace_id")
     def entityType = column[String]("entity_type")
     def attributeKeys = column[String]("attribute_keys")
+    def lastUpdated = column[Timestamp]("last_updated")
 
     def * =
-      (id, workspaceId, entityType, attributeKeys) <> (KeysRecord.tupled, KeysRecord.unapply)
+      (id, workspaceId, entityType, attributeKeys, lastUpdated) <> (KeysRecord.tupled, KeysRecord.unapply)
   }
 
   /** high-level Slick query object for ENTITY */

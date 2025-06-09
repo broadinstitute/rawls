@@ -265,22 +265,22 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
    * Get all entity attribute keys for a workspace.
    *
-   * TODO: `execution plan: `
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
    */
   def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
     sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY_KEYS , JSON_TABLE(CAST(attribute_keys as JSON), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
       where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
 
   /**
    * Gets the count of entities in a workspace, grouped by entity type.
    *
-    * TODO: `execution plan: `
+   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
    */
   def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
     sql"""SELECT entity_type, COUNT(*)
-      #$fromEntityWhereNotDeleted
-      AND workspace_id = $workspaceId
+      FROM ENTITY_KEYS
+      WHERE workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
 
   /**
@@ -620,7 +620,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * TODO: `execution plan: `
+    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
     */
   def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
     sql"""select exists (select 1 from ENTITY_KEYS
@@ -746,10 +746,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
          and from_name = ${from.entityName}""".as[EntityPointer]
 
   // return the ENTITY_KEYS row for a given entity
-  // TODO: `execution plan: `
+  // `execution plan: single row constant; fully indexed by primary key`
   @VisibleForTesting
   protected[slick] def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
-    val query = sql"""select id, workspace_id, entity_type, attribute_keys
+    val query = sql"""select id, workspace_id, entity_type, attribute_keys, last_updated
             from ENTITY_KEYS
             where id = $entityId;""".as[KeysRecord]
     uniqueResult(query)
