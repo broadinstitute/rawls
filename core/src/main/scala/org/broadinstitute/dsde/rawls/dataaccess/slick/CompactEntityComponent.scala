@@ -535,7 +535,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName) where e.id = attrnames.id;
          """.asUpdate
 
-
     // Execute all updates in same transaction
     for {
       _ <- updateSortValues
