@@ -10,7 +10,6 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
-  AttributeFormat,
   AttributeName,
   AttributeRename,
   Entity,
@@ -27,7 +26,6 @@ import slick.sql.SqlStreamingAction
 import spray.json._
 
 import scala.concurrent.ExecutionContext
-import scala.util.Try
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -485,7 +483,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * TODO: `execution plan: `
    */
   def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
-    // validation ensures that oldName and newName are SQL-safe
+    // validation ensures that entityType, oldName, and newName are SQL-safe
     EntityUtils.validateEntityName(oldName)
     EntityUtils.validateEntityName(newName)
     EntityUtils.validateEntityType(entityType)
@@ -510,7 +508,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     //  user-supplied values.
     val updateReferencesInAttributesSql = sql"""update ENTITY
             set attributes = JSON_REPLACE(attributes, $slickRefsPath,
-              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), '"n": "#$oldName"', "t": "#$entityType"'', '"n": "#$newName", "t": "#$entityType"') as JSON))
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), '"n": "#$oldName", "t": "#$entityType"', '"n": "#$newName", "t": "#$entityType"') as JSON))
             where workspace_id = $workspaceId
             and deleted = 0
             and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType), $slickRefsPath)""".asUpdate
@@ -530,7 +528,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             attrnames as (
               select paths.id,
                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
-                JSON_EXTRACT(attributes, CONCAT(paths.path, '.s')) as is_scalar,
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.z')) as is_scalar,
                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
               from ENTITY e join paths on e.id = paths.id
               having is_scalar = true and entity_type = $entityType
@@ -540,7 +538,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName) where e.id = attrnames.id;
          """.asUpdate
 
-    // Execute all updates in same transaction
+    // Execute all updates
     for {
       _ <- updateSortValues
       _ <- updateReferencesInAttributesSql

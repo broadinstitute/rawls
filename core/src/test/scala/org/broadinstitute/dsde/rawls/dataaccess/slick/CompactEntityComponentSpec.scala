@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.SqlEntityData
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -1825,12 +1827,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
     insertAndGetAll(Seq(sourceEntity1, sourceEntity2))
 
-    val refMappings = Set(
-      RefMapping(sourceEntity1.toPointer, Set(originalEntity.toPointer)),
-      RefMapping(sourceEntity2.toPointer, Set(originalEntity.toPointer))
-    )
-    // TODO FIXME
-
     // Verify references to the original entity before rename
     runAndWait(q.getReferencesTo(wsid, Seq(originalEntity.toPointer))) should contain theSameElementsAs Seq(
       sourceEntity1.toPointer,
@@ -1863,6 +1859,89 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       sourceEntity1.toPointer,
       sourceEntity2.toPointer
     )
+  }
+
+  it should "rename in both $.attrs and $.refs when updating references" in withMinimalTestDatabase { _ =>
+    // Create the original entity
+    val entityType = "testType"
+    val originalEntity = Entity("originalName", entityType, Map())
+    insertAndGet(originalEntity)
+
+    // Create source entities referencing the original entity
+    val sourceEntity1 = Entity(
+      "sourceEntity1",
+      "sourceType",
+      Map(
+        AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(
+          Seq(originalEntity.toReference)
+        )
+      )
+    )
+    val sourceEntity2 = Entity(
+      "sourceEntity2",
+      "sourceType",
+      Map(
+        AttributeName.withDefaultNS("ref") -> originalEntity.toReference
+      )
+    )
+    insertAndGetAll(Seq(sourceEntity1, sourceEntity2))
+
+    // Rename the entity
+    val newName = "newName"
+    runAndWait(q.renameEntity(wsid, entityType, originalEntity.name, newName)) shouldBe 1
+
+    // Verify the entity was renamed
+    val renamedEntity = runAndWait(q.getEntity(wsid, entityType, newName)).get.toEntity
+    renamedEntity.name shouldBe newName
+
+    // verify that "originalName" is now "newName" in $.attrs for sourceEntity2
+    val source2 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity2"))
+    source2 should not be empty
+    source2.get.attributes should not be empty
+    val rawData2 =
+      source2.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    rawData2.attrs(AttributeName.withDefaultNS("ref")) shouldBe AttributeString("newName")
+
+    // N.B. sourceEntity1 has a reference list, so it doesn't get the rename in $.attrs
+    // verify that $.attrs for sourceEntity1 is still `1`
+    val source1 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity1"))
+    source1 should not be empty
+    source1.get.attributes should not be empty
+    val rawData1 =
+      source1.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    rawData1.attrs(AttributeName.withDefaultNS("refList")) shouldBe AttributeNumber(1)
+
+  }
+
+  it should "respect entity type when renaming" in withMinimalTestDatabase { _ =>
+    // Create the original entity
+    val entityType = "testType"
+    val originalEntity = Entity("originalName", entityType, Map())
+    insertAndGet(originalEntity)
+
+    // Create another entity with the same name but a different type
+    val otherEntityType = s"$entityType-other"
+    val otherEntity = Entity(originalEntity.name, otherEntityType, Map())
+    insertAndGet(otherEntity)
+
+    // Rename the entity
+    val newName = "newName"
+    runAndWait(q.renameEntity(wsid, entityType, originalEntity.name, newName)) shouldBe 1
+
+    // Verify the entity was renamed
+    val renamedEntity = runAndWait(q.getEntity(wsid, entityType, newName)).get.toEntity
+    renamedEntity.name shouldBe newName
+
+    // Verify the old name no longer exists
+    runAndWait(q.getEntity(wsid, entityType, originalEntity.name)) shouldBe None
+
+    // Verify the other entity still exists
+    val otherEntityLookup = runAndWait(q.getEntity(wsid, otherEntity.entityType, otherEntity.name)).get.toEntity
+    otherEntityLookup shouldBe otherEntity
+
+    // Verify nothing exists at the other entity's type plus the new name
+    val otherEntityRenamedLookup = runAndWait(q.getEntity(wsid, otherEntity.entityType, newName))
+    otherEntityRenamedLookup shouldBe None
   }
 
   behavior of "renameEntityType"

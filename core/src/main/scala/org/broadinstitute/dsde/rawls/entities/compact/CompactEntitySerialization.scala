@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
+import autovalue.shaded.com.google.common.annotations.VisibleForTesting
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityAttributeListSerializer
 import org.broadinstitute.dsde.rawls.entities.exceptions.CompactEntityDeserializationException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -30,7 +32,7 @@ object CompactEntitySerialization extends CompactEntitySerialization
 /**
   * Methods to serialize attributes to/deserialize attributes from the database
   */
-trait CompactEntitySerialization {
+trait CompactEntitySerialization extends LazyLogging {
 
   // defines how list attributes are translated to/from JSON
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
@@ -48,17 +50,17 @@ trait CompactEntitySerialization {
 
   // translate a AttributeMap into a JsValue suitable for persisting into the db
   def toSql(attributes: AttributeMap): JsObject = {
-    // v1 serialization format:
-    // val attrsJson = attributes.toJson
-
     // translate references and reference lists into sortable values;
     // the references themselves are stored in a separate "refs" key
     val jsonAttrs: AttributeMap = attributes.map { case (name, value) =>
       val normalizedValue = value match {
         case AttributeEntityReferenceList(l) if l.isEmpty => AttributeEntityReferenceEmptyList
-        case AttributeEntityReferenceList(l)              => AttributeNumber(l.size)
-        case AttributeEntityReference(_, entityName)      => AttributeString(entityName)
-        case x                                            => x
+        // TODO: should AttributeEntityReferenceList(l) return
+        //  AttributeValueList(l.map(r => AttributeString(r.entityName))) instead? That would allow for filtering,
+        //  at the cost of additional duplication.
+        case AttributeEntityReferenceList(l)         => AttributeNumber(l.size)
+        case AttributeEntityReference(_, entityName) => AttributeString(entityName)
+        case x                                       => x
       }
       name -> normalizedValue
     }
@@ -71,12 +73,12 @@ trait CompactEntitySerialization {
             SqlEntityReference(a = AttributeName.toDelimitedName(name),
                                n = ref.entityName,
                                t = ref.entityType,
-                               s = Some(true)
+                               z = Some(true)
             )
           )
         case (name, refList: AttributeEntityReferenceList) =>
           refList.list.map(r =>
-            SqlEntityReference(a = AttributeName.toDelimitedName(name), n = r.entityName, t = r.entityType, s = None)
+            SqlEntityReference(a = AttributeName.toDelimitedName(name), n = r.entityName, t = r.entityType, z = None)
           )
       }
       .flatten
@@ -186,7 +188,7 @@ trait CompactEntitySerialization {
             "attrs": {
               "attrName1": "Hello world",
               "attrName2": "targetName1", // used for sorting/filtering
-              "attrName3": 2,             // used for sorting/filtering
+              "attrName3": 2,             // used for sorting
               "attrName4": 123,
             },
             "refs": [
@@ -208,15 +210,21 @@ trait CompactEntitySerialization {
           baseAttrs.contains(AttributeName.fromDelimitedName(attributeName))
         }
         val refAttrs: AttributeMap = filteredGroupedRefs.map { case (attributeName, refSeq) =>
-          val aname = AttributeName.fromDelimitedName(attributeName)
+          val attrName = AttributeName.fromDelimitedName(attributeName)
           val attr: Attribute = if (refSeq.isEmpty) {
             AttributeValueEmptyList // no references, so this is an empty list
-          } else if (refSeq.head.s.contains(true)) {
+          } else if (refSeq.head.z.contains(true)) {
+            if (refSeq.size > 1) {
+              logger.warn(
+                s"Found ${refSeq.size} ref entries for attribute $attributeName, but expected a scalar." +
+                  " Using only the first of those entries."
+              )
+            }
             refSeq.head.toAttributeEntityReference // single scalar reference
           } else {
             AttributeEntityReferenceList(refSeq.map(_.toAttributeEntityReference)) // multiple references
           }
-          aname -> attr
+          attrName -> attr
         }
 
         // layer the references on top of the base attribute map
@@ -229,11 +237,14 @@ trait CompactEntitySerialization {
     }
 
   // SQL representation of an entity reference. We use single-character field names to save space in the database.
+  // Note also that MySQL stores keys alphabetically. The order of keys is important for functionality like
+  // rename-entity which manipulates the string representation of the JSON and expects e.g. "n" and "t" in a
+  // specific order and next to each other.
   case class SqlEntityReference(
     a: String, // delimited attribute name (namespace:)name
     n: String, // target entity name
     t: String, // target entity type
-    s: Option[Boolean] // true if this reference is a scalar; false or None if it is a list
+    z: Option[Boolean] // true if this reference is a scalar; false or None if it is a list
   ) {
     def toAttributeEntityReference: AttributeEntityReference =
       AttributeEntityReference(entityType = t, entityName = n)
@@ -241,4 +252,10 @@ trait CompactEntitySerialization {
 
   implicit val sqlEntityReferenceFormat: RootJsonFormat[SqlEntityReference] = jsonFormat4(SqlEntityReference)
 
+  // Representation of the raw serialization format for entities in the db, without the post-processing
+  // performed by `deserialize()`. Used by tests to verify functionality.
+  @VisibleForTesting
+  case class SqlEntityData(v: Int, attrs: AttributeMap, refs: Seq[SqlEntityReference])
+
+  implicit val sqlEntityDataFormat: RootJsonFormat[SqlEntityData] = jsonFormat3(SqlEntityData)
 }
