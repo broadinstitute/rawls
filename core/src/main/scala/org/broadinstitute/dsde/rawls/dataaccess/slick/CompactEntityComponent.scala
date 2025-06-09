@@ -511,8 +511,34 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             and deleted = 0
             and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName), '$$.refs')""".asUpdate
 
+    // Update sortable values in the $.attrs object.
+    //  1. search $.refs to find all reference whose target name is equal to $oldName
+    //  2. extract the attribute name and isScalar boolean for each of those references
+    //  3. filter to those references where isScalar is true
+    //  4. update the specific entity/attribute name combinations
+    val updateSortValues =
+      sql"""with paths as(
+              select id,
+              REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.n', '') as path
+              from ENTITY
+              having path is not null
+            ),
+            attrnames as (
+              select paths.id,
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.s')) as is_scalar
+              from ENTITY e join paths on e.id = paths.id
+              having is_scalar = true
+            )
+          update ENTITY e
+          join attrnames on e.id = attrnames.id
+          set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName) where e.id = attrnames.id;
+         """.asUpdate
+
+
     // Execute all updates in same transaction
     for {
+      _ <- updateSortValues
       _ <- updateReferencesInAttributesSql
       entityRowsUpdated <- updateEntityNameSql.asUpdate
     } yield entityRowsUpdated
