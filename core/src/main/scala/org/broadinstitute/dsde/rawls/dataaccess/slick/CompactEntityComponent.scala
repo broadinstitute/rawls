@@ -68,7 +68,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     GetResult(r => CompactEntityVersionRecord(r.<<, r.<<, r.<<, r.<<))
 
   implicit val getKeysRecord: GetResult[KeysRecord] =
-    GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<))
+    GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
   implicit val getEntityTypeAndAttributeKey: GetResult[EntityTypeAndAttributeKey] =
     GetResult(r => EntityTypeAndAttributeKey(r.<<, AttributeName.fromDelimitedName(r.<<)))
@@ -278,6 +278,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
    */
   def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
+    // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
     sql"""SELECT entity_type, COUNT(*)
       FROM ENTITY_KEYS
       WHERE workspace_id = $workspaceId
@@ -487,11 +488,14 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     // validation ensures that oldName and newName are SQL-safe
     EntityUtils.validateEntityName(oldName)
     EntityUtils.validateEntityName(newName)
+    EntityUtils.validateEntityType(entityType)
     // Update the entity name in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
-    val updateEntityNameSql =
-      sql"""update ENTITY set name = $newName, record_version = record_version + 1
-            where workspace_id = $workspaceId and name = $oldName and deleted = 0"""
+    val updateEntityNameSql = sql"""update ENTITY set name = $newName, record_version = record_version + 1
+          where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and name = $oldName
+          and deleted = 0"""
 
     // Update all embedded references in the $.refs array.
     // This is done via JSON_REPLACE(CAST(REPLACE(JSON_EXTRACT))). Explaining from the inside out:
@@ -505,11 +509,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     //  refs array, and only perform the string replace inside that array, we avoid any problems with other
     //  user-supplied values.
     val updateReferencesInAttributesSql = sql"""update ENTITY
-            set attributes = JSON_REPLACE(attributes, '$$.refs',
-              CAST(REPLACE(JSON_EXTRACT(attributes, '$$.refs'), '"n": "#$oldName"', '"n": "#$newName"') as JSON))
+            set attributes = JSON_REPLACE(attributes, $slickRefsPath,
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), '"n": "#$oldName"', "t": "#$entityType"'', '"n": "#$newName", "t": "#$entityType"') as JSON))
             where workspace_id = $workspaceId
             and deleted = 0
-            and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName), '$$.refs')""".asUpdate
+            and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType), $slickRefsPath)""".asUpdate
 
     // Update sortable values in the $.attrs object.
     //  1. search $.refs to find all reference whose target name is equal to $oldName
@@ -526,9 +530,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             attrnames as (
               select paths.id,
                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
-                JSON_EXTRACT(attributes, CONCAT(paths.path, '.s')) as is_scalar
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.s')) as is_scalar,
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
               from ENTITY e join paths on e.id = paths.id
-              having is_scalar = true
+              having is_scalar = true and entity_type = $entityType
             )
           update ENTITY e
           join attrnames on e.id = attrnames.id
@@ -572,11 +577,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     //  refs array, and only perform the string replace inside that array, we avoid any problems with other
     //  user-supplied values.
     val updateReferencesInAttributesSql = sql"""update ENTITY
-            set attributes = JSON_REPLACE(attributes, '$$.refs',
-              CAST(REPLACE(JSON_EXTRACT(attributes, '$$.refs'), '"t": "#$oldType"', '"t": "#$newType"') as JSON))
+            set attributes = JSON_REPLACE(attributes, $slickRefsPath,
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), '"t": "#$oldType"', '"t": "#$newType"') as JSON))
             where workspace_id = $workspaceId
             and deleted = 0
-            and JSON_CONTAINS(attributes, JSON_OBJECT('t', $oldType), '$$.refs')""".asUpdate
+            and JSON_CONTAINS(attributes, JSON_OBJECT('t', $oldType), $slickRefsPath)""".asUpdate
 
     // Execute all updates in same transaction
     for {
