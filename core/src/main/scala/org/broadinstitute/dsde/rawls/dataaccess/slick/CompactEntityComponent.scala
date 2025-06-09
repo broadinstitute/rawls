@@ -548,48 +548,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       case _ => AttributeNull
     }
 
-  // Written by AI!
-  // TODO return all of attributes, then the caller will extract the actual attribute values
-  // TODO also take in multiple entityNames
-  def queryRelationsForAttribute(workspaceId: UUID,
-                                 relation: String,
-                                 attributeName: String,
-                                 entityType: String,
-                                 entityName: String
-  ): ReadAction[Seq[AttributeValue]] =
-    sql"""SELECT JSON_EXTRACT(e2.attributes, '$$.attrs.#$attributeName') AS value
-    FROM ENTITY e1
-  JOIN JSON_TABLE(
-    CASE
-      WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'ARRAY'
-  THEN JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')
-  WHEN JSON_TYPE(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation')) = 'OBJECT'
-  THEN JSON_ARRAY(JSON_EXTRACT(e1.attributes, '$$.attrs.#$relation'))
-  ELSE NULL
-    END,
-  '$$[*]' COLUMNS (
-    entityType VARCHAR(255) PATH '$$.entityType',
-  entityName VARCHAR(255) PATH '$$.entityName'
-  )
-  ) refs
-  ON 1=1
-  JOIN ENTITY e2
-  ON e2.entity_type = refs.entityType
-  AND e2.name = refs.entityName
-  WHERE e1.workspace_id = $workspaceId
-  AND e1.entity_type = $entityType
-  AND e1.name = $entityName""".as[String].map { seq =>
-      seq.map {
-        case jsonString if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
-          try
-            WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
-          catch {
-            case _: Exception => AttributeNull
-          }
-        case _ => AttributeNull
-      }
-    }
-
   // Written by/with AI (including the javadoc!)
   /**
    * Queries related records in a workspace by traversing relationships defined in the attributes of entities.
@@ -621,7 +579,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     val relationChain = collection.mutable.ArrayBuffer[String]()
     // Traverse the relations inside the first arrayRelation, if any
     if (arrayRelations.nonEmpty) {
-      arrayRelations.head.relations.foreach(r => relationChain += r.getText)
+      arrayRelations.head.relations.foreach(r => relationChain += r.attributeName().getText)
       if (relations.nonEmpty) {
         relationChain += arrayRelations.head.attributeName.getOrElse("")
       }
@@ -630,16 +588,13 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     // But skip the last attributeName (that's the final attribute to extract)
     if (relations.nonEmpty) {
       relations.dropRight(1).foreach { rel =>
-        rel.relations.headOption.foreach(r => relationChain += r.getText)
+        rel.relations.headOption.foreach(r => relationChain += r.attributeName().getText)
         relationChain += rel.attributeName.getOrElse("")
       }
       // For the last relation, only add its relation context if present (not its attributeName)
-      relations.lastOption.flatMap(_.relations.headOption).foreach(r => relationChain += r.getText)
+      relations.lastOption.flatMap(_.relations.headOption).foreach(r => relationChain += r.attributeName().getText)
     }
 
-    relationChain.transform(item =>
-      if (item.length > 1) item.dropRight(1) else item
-    ) // TODO why do these have periods at the end and what to do about it
     relationChain.toList
     // The base join finds the starting entity and gets its relevant relation attributes to find the next entities to query for
     val baseJoin =
