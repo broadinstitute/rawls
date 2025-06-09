@@ -2124,32 +2124,31 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   behavior of "copyEntities"
 
-  it should "copy entities from source workspace to destination workspace" in withMinimalTestDatabase {
-    _ =>
-      val sourceWorkspaceId = minimalTestData.workspace.workspaceIdAsUUID
-      val destinationWorkspaceId = minimalTestData.workspace2.workspaceIdAsUUID
+  it should "copy entities from source workspace to destination workspace" in withMinimalTestDatabase { _ =>
+    val sourceWorkspaceId = minimalTestData.workspace.workspaceIdAsUUID
+    val destinationWorkspaceId = minimalTestData.workspace2.workspaceIdAsUUID
 
-      val entity1 =
-        Entity("entityName1", "entityType1", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1")))
-      val entity2 =
-        Entity("entityName2", "entityType1", Map(AttributeName.withDefaultNS("attr2") -> AttributeNumber(42)))
-      val entity3 =
-        Entity("entityName3", "entityType2", Map(AttributeName.withDefaultNS("attr3") -> AttributeString("value3")))
-      insertAndGetAll(Seq(entity1, entity2, entity3), sourceWorkspaceId)
+    val entity1 =
+      Entity("entityName1", "entityType1", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1")))
+    val entity2 =
+      Entity("entityName2", "entityType1", Map(AttributeName.withDefaultNS("attr2") -> AttributeNumber(42)))
+    val entity3 =
+      Entity("entityName3", "entityType2", Map(AttributeName.withDefaultNS("attr3") -> AttributeString("value3")))
+    insertAndGetAll(Seq(entity1, entity2, entity3), sourceWorkspaceId)
 
-      val copiedEntitiesResult = runAndWait(
-        q.copyEntities(sourceWorkspaceId,
-                       destinationWorkspaceId,
-                       Set(entity1.toPointer, entity2.toPointer, entity3.toPointer)
-        )
+    val copiedEntitiesResult = runAndWait(
+      q.copyEntities(sourceWorkspaceId,
+                     destinationWorkspaceId,
+                     Set(entity1.toPointer, entity2.toPointer, entity3.toPointer)
       )
+    )
 
-      copiedEntitiesResult shouldBe 3
+    copiedEntitiesResult shouldBe 3
 
-      val copiedEntities = runAndWait(q.listEntities(destinationWorkspaceId, "entityType1")) ++ runAndWait(
-        q.listEntities(destinationWorkspaceId, "entityType2")
-      )
-      copiedEntities.map(_.toEntity) should contain theSameElementsAs Seq(entity1, entity2, entity3)
+    val copiedEntities = runAndWait(q.listEntities(destinationWorkspaceId, "entityType1")) ++ runAndWait(
+      q.listEntities(destinationWorkspaceId, "entityType2")
+    )
+    copiedEntities.map(_.toEntity) should contain theSameElementsAs Seq(entity1, entity2, entity3)
 
   }
 

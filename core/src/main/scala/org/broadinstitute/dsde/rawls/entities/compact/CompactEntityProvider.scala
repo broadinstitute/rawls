@@ -118,49 +118,49 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             linkExistingEntities: Boolean,
                             parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse] = {
-      val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
-      val copyResult = repository.dataSource.inTransaction { _ =>
-        for {
-          hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs)
-          result <-
-            if (hardConflicts.nonEmpty) {
-              DBIO.successful(
-                EntityCopyResponse(
-                  Seq.empty,
-                  hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)),
-                  Seq.empty
-                )
+    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
+    val copyResult = repository.dataSource.inTransaction { _ =>
+      for {
+        hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs)
+        result <-
+          if (hardConflicts.nonEmpty) {
+            DBIO.successful(
+              EntityCopyResponse(
+                Seq.empty,
+                hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)),
+                Seq.empty
               )
-            } else {
-              repository.queries
-                .recursiveGetEntityReferences(sourceWorkspaceContext.workspaceIdAsUUID,
-                                              entitiesToCopyRefs,
-                                              config.batchCopyBatchSize
-                )
-                .flatMap { entityReferenceMap =>
-                  val entities = entityReferenceMap.map(_.from)
-                  val entityReferences = entityReferenceMap.flatMap(_.to)
-                  repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).flatMap {
-                    conflicts =>
-                      val softConflicts = conflicts.toSeq.map(_.toPointer).toSet
-                      if (softConflicts.isEmpty || linkExistingEntities) {
-                        copyEntitiesExcludingAnySoftConflicts(
-                          entities,
-                          entityReferences,
-                          softConflicts,
-                          sourceWorkspaceContext.workspaceIdAsUUID,
-                          destWorkspaceContext.workspaceIdAsUUID
-                        )
-                      } else {
-                        unmergedSoftConflicts(entityReferenceMap, softConflicts)
-                      }
-                  }
+            )
+          } else {
+            repository.queries
+              .recursiveGetEntityReferences(sourceWorkspaceContext.workspaceIdAsUUID,
+                                            entitiesToCopyRefs,
+                                            config.batchCopyBatchSize
+              )
+              .flatMap { entityReferenceMap =>
+                val entities = entityReferenceMap.map(_.from)
+                val entityReferences = entityReferenceMap.flatMap(_.to)
+                repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).flatMap {
+                  conflicts =>
+                    val softConflicts = conflicts.toSeq.map(_.toPointer).toSet
+                    if (softConflicts.isEmpty || linkExistingEntities) {
+                      copyEntitiesExcludingAnySoftConflicts(
+                        entities,
+                        entityReferences,
+                        softConflicts,
+                        sourceWorkspaceContext.workspaceIdAsUUID,
+                        destWorkspaceContext.workspaceIdAsUUID
+                      )
+                    } else {
+                      unmergedSoftConflicts(entityReferenceMap, softConflicts)
+                    }
                 }
-            }
-        } yield result
-      }
-      withWorkspaceLastModified(copyResult)
-      copyResult
+              }
+          }
+      } yield result
+    }
+    withWorkspaceLastModified(copyResult)
+    copyResult
   }
 
   /**
