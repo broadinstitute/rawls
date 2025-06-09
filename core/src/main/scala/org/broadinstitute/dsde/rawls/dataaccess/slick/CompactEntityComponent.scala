@@ -9,6 +9,7 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
+  AttributeFormat,
   AttributeName,
   AttributeRename,
   Entity,
@@ -34,7 +35,10 @@ trait CompactEntityComponent extends LazyLogging {
   object compactEntityQuery extends CompactEntityQuery(this)
 }
 
-class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery with CompactEntitySerialization {
+class CompactEntityQuery(driverComponent: DriverComponent)
+    extends CompactEntityMigration
+    with RawSqlQuery
+    with CompactEntitySerialization {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
@@ -702,6 +706,96 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
 
   /**
+   * Renames an entity in the ENTITY table.
+   *
+   * Returns the number of entities that were renamed.
+   *
+   * `execution plan: index range scan on idx_entity_type_name`
+   */
+  def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
+    // Update the entity name in the ENTITY table
+    // explain plan: index range scan on idx_entity_type_name
+    val updateEntityNameSql = sql"""update ENTITY set name = $newName, record_version = record_version + 1
+          where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and name = $oldName
+          and deleted = 0"""
+
+    // Update the entity from_name in the ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateFromNameSql =
+      sql"""update ENTITY_REFS
+            set from_name = $newName
+            where workspace_id = $workspaceId
+            and from_entity_type = $entityType
+            and from_name = $oldName"""
+
+    // Update the entity to_name in the ENTITY_REFS table
+    // explain plan: index range scan on unq_from_to
+    val updateToNameSql =
+      sql"""update ENTITY_REFS
+            set to_name = $newName
+            where workspace_id = $workspaceId
+            and to_entity_type = $entityType
+            and to_name = $oldName"""
+
+    // Get all paths in attributes that reference the old name
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    val attrRefRegex =
+      s"'\\\\$$\\.${CompactEntitySerialization.ATTRS_KEY}\\.[^.]+\\.${AttributeFormat.ENTITY_NAME_KEY}'"
+
+    val getReferencePathsInAttributesSql =
+      sql"""
+    with entity_attrs as
+      (select e.attributes
+      from ENTITY e
+      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+      where er.workspace_id = $workspaceId
+      and er.to_name = $oldName)
+    select name_path
+    from entity_attrs e,
+    json_table(json_search(e.attributes, 'all', $oldName), '$$[*]' COLUMNS( name_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
+    where name_path REGEXP #$attrRefRegex
+    union
+    select json_unquote(json_search(e.attributes, 'all', $oldName))
+    from entity_attrs e
+    where json_type(json_search(e.attributes, 'all', $oldName)) != 'ARRAY'
+    and json_unquote(json_search(e.attributes, 'all', $oldName)) REGEXP #$attrRefRegex
+    """
+
+    // Update attributes with references to the old name
+    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
+    def updateReferencesInAttributesSql(paths: Seq[String]) = {
+      val replaceParamsSqls = paths.map(path => sql"$path, $newName")
+      concatSqlActions(
+        sql"""
+      update ENTITY e
+      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
+      set e.attributes = JSON_REPLACE(e.attributes,
+    """,
+        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
+        sql""") where er.workspace_id = $workspaceId and er.to_name = $oldName"""
+      )
+    }
+
+    // Execute all updates
+    for {
+      paths <- getReferencePathsInAttributesSql.as[String]
+      _ <-
+        if (paths.isEmpty) {
+          DBIO.successful(0)
+        } else {
+          DBIO.seq(
+            updateReferencesInAttributesSql(paths).asUpdate,
+            updateToNameSql.asUpdate
+          )
+        }
+      _ <- updateFromNameSql.asUpdate
+      entityRowsUpdated <- updateEntityNameSql.asUpdate
+    } yield entityRowsUpdated
+  }
+
+  /**
    * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.
    *
    * Returns the number of entities that were renamed.
@@ -937,63 +1031,6 @@ class CompactEntityQuery(driverComponent: DriverComponent) extends RawSqlQuery w
 
   private def paginationClause(entityQuery: EntityQuery): SQLActionBuilder =
     sql" limit ${entityQuery.pageSize} offset ${entityQuery.offset}"
-
-  // ====================================================================================================
-  //  migration helpers
-  //      methods in this section are only used for migrating data from legacy->compact format
-  // ====================================================================================================
-
-  def migrationCreateTempTable: ReadWriteAction[Int] =
-    sql"""create temporary table ENTITY_MIGRATION_TEMP(
-                name varchar(254) CHARACTER SET utf8 COLLATE utf8_bin NOT NULL,
-                entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
-                attributes json,
-                UNIQUE KEY `idx_temp_entity_type_name` (entity_type,name));""".asUpdate
-
-  def migrationDeleteTempTable: ReadWriteAction[Int] =
-    sql"""drop temporary table ENTITY_MIGRATION_TEMP  ;""".asUpdate
-
-  def migrationInsertAttributesToTempTable(entities: Seq[Entity]): ReadWriteAction[Int] = {
-    val values = entities.map { entity =>
-      val attrsJson = toSql(entity.attributes)
-      sql"(${entity.name}, ${entity.entityType}, $attrsJson)"
-    }
-
-    val insertBase = sql"""insert into ENTITY_MIGRATION_TEMP(name, entity_type, attributes)
-          values """
-
-    concatSqlActions(insertBase, reduceSqlActionsWithDelim(values, sql",")).asUpdate
-  }
-
-  def migrationUpdateFromTempTable(workspaceId: UUID): ReadWriteAction[Int] =
-    sql"""update ENTITY e
-          join ENTITY_MIGRATION_TEMP tmp
-          on e.name = tmp.name and e.entity_type = tmp.entity_type and e.workspace_id = $workspaceId
-          set e.attributes = tmp.attributes;""".asUpdate
-
-  def migrationClearAllAttributesString(workspaceId: UUID): ReadWriteAction[Int] =
-    sql"""update ENTITY
-          set all_attribute_values = null
-          where workspace_id = $workspaceId;""".asUpdate
-
-  def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
-    sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name)
-         select e.workspace_id,
-          e.entity_type, e.name,
-          r.entity_type, r.name
-         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea, ENTITY r
-         where ea.owner_id = e.id
-         and e.workspace_id = $workspaceId
-         and e.deleted = 0
-         and ea.value_entity_ref is not null
-         and ea.value_entity_ref = r.id;""".asUpdate
-
-  // note this cleans up legacy attributes for soft-deleted entities as well as active entities
-  def migrationDeleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
-    sql"""delete ea
-         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
-         where ea.owner_id = e.id
-         and e.workspace_id = $workspaceId""".asUpdate
 
   // ====================================================================================================
   //  testing helpers

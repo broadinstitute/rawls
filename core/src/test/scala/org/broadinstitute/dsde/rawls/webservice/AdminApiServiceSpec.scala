@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeReferen
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
 
@@ -256,6 +257,37 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           }
       }
     }
+  }
+
+  it should "return workspace ID for a valid workspace" in {
+    val workspaceAdminService = mock[WorkspaceAdminService]
+    when(workspaceAdminService.getWorkspaceId(constantData.workspace.toWorkspaceName))
+      .thenReturn(Future.successful(Option(constantData.workspace.workspaceId)))
+    val service = new MockApiService(workspaceAdminServiceConstructor = _ => workspaceAdminService)
+
+    val idApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/id"
+    Get(idApiUrl) ~>
+      sealRoute(service.adminRoutes()) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String])(status)
+        println(responseAs[String])
+        assertResult(s"\"${constantData.workspace.workspaceId}\"")(responseAs[String])
+      }
+  }
+
+  it should "return 404 when getting ID for a non-existent workspace" in {
+    val workspaceAdminService = mock[WorkspaceAdminService]
+    when(workspaceAdminService.getWorkspaceId(any())).thenReturn(Future.successful(None))
+    val service = new MockApiService(workspaceAdminServiceConstructor = _ => workspaceAdminService)
+
+    val nonExistentWorkspace = "nonexistent-workspace"
+    val idApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/$nonExistentWorkspace/id"
+
+    Get(idApiUrl) ~>
+      sealRoute(service.adminRoutes()) ~>
+      check {
+        assertResult(StatusCodes.NotFound)(status)
+      }
   }
 
   it should "get a workspace with its current settings" in {

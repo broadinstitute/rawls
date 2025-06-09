@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceAdminService
 import spray.json.DefaultJsonProtocol._
+import spray.json.JsString
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -194,7 +195,28 @@ trait AdminApiService extends UserInfoDirectives {
                     }
                   }
                 }
-            }
+            } ~
+              path("deleteAzureWorkspace") {
+                delete {
+                  complete {
+                    workspaceAdminServiceConstructor(ctx)
+                      .adminDeleteMcWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                      .map(_ => StatusCodes.NoContent)
+                  }
+                }
+              } ~
+              path("id") {
+                get {
+                  complete {
+                    workspaceAdminServiceConstructor(ctx)
+                      .getWorkspaceId(WorkspaceName(workspaceNamespace, workspaceName))
+                      .map {
+                        case Some(id) => StatusCodes.OK -> Option(JsString(id))
+                        case None     => StatusCodes.NotFound -> None
+                      }
+                  }
+                }
+              }
           } ~
             path(Segment) { workspaceId =>
               get {

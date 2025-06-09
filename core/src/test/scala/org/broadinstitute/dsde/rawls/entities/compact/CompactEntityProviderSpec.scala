@@ -43,6 +43,7 @@ import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
 import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
 import slick.dbio.DBIO
 
@@ -974,7 +975,148 @@ class CompactEntityProviderSpec
     actual shouldBe 123
   }
 
-  "renameEntity" should "have tests" is pending
+  behavior of "renameEntity"
+
+  it should "throw BadRequest if the new name is the same as the old name" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val entityType = "entityType"
+    val oldName = "sameName"
+    val newName = "sameName"
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameEntity(entityType, oldName, newName, testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+    exception.errorReport.message should include("New name is the same as the entity name")
+
+    verify(mockQueries, never()).renameEntity(any[UUID],
+                                              ArgumentMatchers.eq(entityType),
+                                              ArgumentMatchers.eq(oldName),
+                                              ArgumentMatchers.eq(newName)
+    )
+  }
+
+  it should "throw BadRequest if the new name is invalid" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val provider = providerWithMocks(mockQueries)
+
+    val entityType = "entityType"
+    val oldName = "oldName"
+    val newName = "no! @@bad@@"
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.renameEntity(entityType, oldName, newName, testContext), atMost)
+    }
+
+    exception.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+    exception.errorReport.message should include("Invalid entity name")
+
+    verify(mockQueries, never()).renameEntity(any[UUID],
+                                              ArgumentMatchers.eq(entityType),
+                                              ArgumentMatchers.eq(oldName),
+                                              ArgumentMatchers.eq(newName)
+    )
+  }
+
+  it should "throw NotFound if the entity does not exist" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val entityType = "entityType"
+    val oldName = "nonExistentName"
+    val newName = "newName"
+
+    // The new entity does not exist
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, newName)))))
+      .thenReturn(DBIO.successful(false))
+    // The old entity does not exist
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, oldName)))))
+      .thenReturn(DBIO.successful(false))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[EntityNotFoundException] {
+      Await.result(provider.renameEntity(entityType, oldName, newName, testContext), atMost)
+    }
+
+    exception.getMessage should include("Can't find entity name!")
+
+    verify(mockQueries, never()).renameEntity(any[UUID],
+                                              ArgumentMatchers.eq(entityType),
+                                              ArgumentMatchers.eq(oldName),
+                                              ArgumentMatchers.eq(newName)
+    )
+  }
+
+  it should "throw Conflict if the new entity name already exists" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val entityType = "existingType"
+    val oldName = "oldName"
+    val newName = "newName"
+
+    // The old entity exists
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, oldName)))))
+      .thenReturn(DBIO.successful(true))
+    // The new entity already exists
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, newName)))))
+      .thenReturn(DBIO.successful(true))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val exception = intercept[DataEntityException] {
+      Await.result(provider.renameEntity(entityType, oldName, newName, testContext), atMost)
+    }
+
+    exception.code shouldBe StatusCodes.Conflict
+    exception.getMessage should include(s"Destination $entityType $newName already exists")
+
+    verify(mockQueries, never()).renameEntity(any[UUID],
+                                              ArgumentMatchers.eq(entityType),
+                                              ArgumentMatchers.eq(oldName),
+                                              ArgumentMatchers.eq(newName)
+    )
+  }
+
+  it should "successfully rename an entity" in {
+    val mockQueries = mock[slickDataSource.dataAccess.compactEntityQuery.type]
+
+    val entityType = "entityType"
+    val oldName = "oldName"
+    val newName = "newName"
+
+    // The old entity exists
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, oldName)))))
+      .thenReturn(DBIO.successful(true))
+    // The new entity does not exist
+    when(mockQueries.existsAll(any[UUID], ArgumentMatchers.eq(Set(EntityPointer(entityType, newName)))))
+      .thenReturn(DBIO.successful(false))
+
+    // The rename operation will update the entity
+    when(
+      mockQueries.renameEntity(any[UUID],
+                               ArgumentMatchers.eq(entityType),
+                               ArgumentMatchers.eq(oldName),
+                               ArgumentMatchers.eq(newName)
+      )
+    ).thenReturn(DBIO.successful(1))
+
+    val provider = providerWithMocks(mockQueries)
+
+    val result = Await.result(provider.renameEntity(entityType, oldName, newName, testContext), atMost)
+
+    result shouldBe 1
+
+    verify(mockQueries).renameEntity(any[UUID],
+                                     ArgumentMatchers.eq(entityType),
+                                     ArgumentMatchers.eq(oldName),
+                                     ArgumentMatchers.eq(newName)
+    )
+  }
 
   behavior of "renameEntityType"
 
