@@ -3,9 +3,10 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.exceptions.EntityNotFoundException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
@@ -675,6 +676,120 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
                            )
     )
 
+  }
+
+  behavior of "renameEntity"
+
+  it should "not rename a non-existent entity" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Attempt to rename a non-existent entity
+    intercept[EntityNotFoundException] {
+      Await.result(provider.renameEntity("typeA", "nonExistentName", "newName", defaultRequestContext), atMost)
+    }
+  }
+
+  it should "not rename an entity to an existing name" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create two entities
+    Await.result(provider.createEntity(Entity("entity1", "typeA", Map()), defaultRequestContext), atMost)
+    Await.result(provider.createEntity(Entity("entity2", "typeA", Map()), defaultRequestContext), atMost)
+
+    // Attempt to rename the first entity to the name of the second entity
+    intercept[DataEntityException] {
+      Await.result(provider.renameEntity("typeA", "entity1", "entity2", defaultRequestContext), atMost)
+    }
+  }
+
+  it should "rename an entity without references" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create an entity
+    val originalEntity = Entity("oldName", "typeA", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
+    Await.result(provider.createEntity(originalEntity, defaultRequestContext), atMost)
+
+    // Rename the entity
+    val renamedEntity =
+      Await.result(provider.renameEntity("typeA", "oldName", "newName", defaultRequestContext), atMost)
+
+    // Validate the renamed entity
+    renamedEntity shouldBe 1
+
+    // Ensure the old name no longer exists
+    intercept[EntityNotFoundException] {
+      Await.result(provider.getEntity("typeA", "oldName", defaultRequestContext), atMost)
+    }
+  }
+
+  it should "rename an entity with references" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create target entities
+    val target1 = Entity("target1", "targetType", Map())
+    val target2 = Entity("target2", "targetType", Map())
+    Await.result(provider.createEntity(target1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(target2, defaultRequestContext), atMost)
+
+    // Create the entity to be renamed, with a reference
+    val entityToRename = Entity(
+      "entity1",
+      "typeA",
+      Map(AttributeName.withDefaultNS("ref") -> target1.toReference)
+    )
+    Await.result(provider.createEntity(entityToRename, defaultRequestContext), atMost)
+
+    // Rename the entity
+    val renamedEntity =
+      Await.result(provider.renameEntity("typeA", entityToRename.name, "renamedEntity", defaultRequestContext), atMost)
+
+    // Validate the renamed entity
+    renamedEntity shouldBe 1
+
+    // Ensure the old name no longer exists
+    intercept[EntityNotFoundException] {
+      Await.result(provider.getEntity("typeA", entityToRename.name, defaultRequestContext), atMost)
+    }
+
+    // Validate the reference still points to the correct target
+    val updatedEntity = Await.result(provider.getEntity("typeA", "renamedEntity", defaultRequestContext), atMost)
+    updatedEntity.attributes(AttributeName.withDefaultNS("ref")) shouldBe target1.toReference
+  }
+
+  it should "rename an entity that is a reference" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create the target entity to be renamed
+    val targetEntity = Entity("targetEntity", "targetType", Map())
+    Await.result(provider.createEntity(targetEntity, defaultRequestContext), atMost)
+
+    // Create a referencing entity that points to the target entity
+    val referencingEntity = Entity(
+      "referencingEntity",
+      "refType",
+      Map(AttributeName.withDefaultNS("ref") -> targetEntity.toReference)
+    )
+    Await.result(provider.createEntity(referencingEntity, defaultRequestContext), atMost)
+
+    // Rename the target entity
+    val renamedEntity =
+      Await.result(provider.renameEntity("targetType", "targetEntity", "renamedTarget", defaultRequestContext), atMost)
+
+    // Validate the renamed entity
+    renamedEntity shouldBe 1
+
+    // Ensure the old name no longer exists
+    intercept[EntityNotFoundException] {
+      Await.result(provider.getEntity("targetType", "targetEntity", defaultRequestContext), atMost)
+    }
+
+    // Validate the reference in the referencing entity is updated
+    val updatedReferencingEntity =
+      Await.result(provider.getEntity("refType", "referencingEntity", defaultRequestContext), atMost)
+    updatedReferencingEntity.attributes(AttributeName.withDefaultNS("ref")) shouldBe AttributeEntityReference(
+      "targetType",
+      "renamedTarget"
+    )
   }
 
   behavior of "renameAttribute"

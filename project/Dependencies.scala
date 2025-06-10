@@ -71,6 +71,7 @@ object Dependencies {
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.18"
+  val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "8.1"
   val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
@@ -84,6 +85,7 @@ object Dependencies {
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.32.0"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.10"
+  val janino: ModuleID = "org.codehaus.janino" % "janino" % "3.1.12" // For if-else logic in logging config
 
   val workbenchLibsHash = "80e4b8d"
 
@@ -278,7 +280,9 @@ object Dependencies {
     jerseyJnhConnector,
     azureIdentity,
     azureCoreManagement,
-    policyService
+    policyService,
+    logstashLogback,
+    janino
   )
 
   val pact4sV = "0.10.0"
