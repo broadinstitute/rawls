@@ -83,17 +83,10 @@ class CompactExpressionEvaluatorSpec
       .futureValue // blocks and returns result or throws
   }
 
+  // TODO add tests for complex expressions
   // Note: this is also essentially a test for CompactEvaluateVisitor
   "parseLookups" should "generate correct lookups" in {
     val straightForwardTests =
-//      Table(
-//        ("input", "result"),
-//        ("this.type", List(ExpressionLookup(List(), "type"))),
-//        ("blah", List()),
-//        ("\"blah\"", List()),
-//        ("workspace.string", List(ExpressionLookup(List(), "string")))
-//      )
-
       Table(
         ("input", "result"),
         (
@@ -111,7 +104,7 @@ class CompactExpressionEvaluatorSpec
         ("\"blah\"",
          List(
          )
-        ), // TODO do i want these to return an empty list or an actual ExpressionLookup?
+        ),
         (
           "workspace.string",
           List(
@@ -493,7 +486,7 @@ class CompactExpressionEvaluatorSpec
     wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101]}}"""
   }
 
-  //TODO org.scalatest.exceptions.TestFailedException:
+  // TODO org.scalatest.exceptions.TestFailedException:
   // "....obj":{"foo":{"bar":[101},"id":123,"sample":"sample1","samples":101]}}" was not equal to
   // "....obj":{"foo":{"bar":[[101]},"id":123,"sample":"sample1","samples":[101]]}}"
   // Expression: """{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah,"foo":{"bar":this.samples.blah}}"""
@@ -919,7 +912,7 @@ class CompactExpressionEvaluatorSpec
     result should contain only AttributeValueRawJson("[[10,11,12],1]")
   }
 
-  behavior of "buildPlans"
+  behavior of "buildQueryPlans"
 
   it should "return a queryplan for each relation level" in {
     val mockSampleAttributeContext = Mockito.mock(classOf[AttributeNameContext])
@@ -948,7 +941,7 @@ class CompactExpressionEvaluatorSpec
       ExpressionLookup(complexExpression, List(mockSampleRelationContext), Some("blah"), Seq.empty)
 
     // The expressions above all together should result in 3 queries: one for the base entity, one for base -> samples, and one for base -> samples -> participants
-    val result = compactExpressionEvaluator.buildPlans(
+    val result = compactExpressionEvaluator.buildQueryPlans(
       Seq(relationExpressionLookup,
           plainExpressionLookup,
           chainedExpressionLookup,

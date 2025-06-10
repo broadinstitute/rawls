@@ -717,25 +717,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   ): SqlStreamingAction[Seq[Entity], Entity, Read] =
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
 
-  def queryEntityForAttribute(workspaceId: UUID,
-                              attributeName: String,
-                              entityType: String,
-                              entityName: String
-  ): ReadAction[AttributeValue] =
-    sql"""select json_extract(attributes, '$$.attrs.#$attributeName')
-      from ENTITY
-      where workspace_id = $workspaceId
-      and entity_type = $entityType
-      and name = $entityName""".as[String].headOption.map {
-      case Some(jsonString) if jsonString != null && jsonString.trim.nonEmpty && jsonString != "null" =>
-        try
-          WorkspaceJsonSupport.attributeFormat.read(jsonString.parseJson).asInstanceOf[AttributeValue]
-        catch {
-          case _: Exception => AttributeNull
-        }
-      case _ => AttributeNull
-    }
-
   // Written by/with AI (including the javadoc!)
   /**
    * Queries related records in a workspace by traversing relationships defined in the attributes of entities.

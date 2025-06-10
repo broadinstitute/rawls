@@ -444,26 +444,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
-  behavior of "queryEntitiesForAttributes"
-
-  it should "get the attribute from an entity" in withMinimalTestDatabase { _ =>
-    val sample1 = Entity(
-      "sample1",
-      "sample",
-      Map(AttributeName.withDefaultNS("attr5") -> AttributeString("value5"),
-          AttributeName.withDefaultNS("attr6") -> AttributeString("value6")
-      )
-    )
-
-    insertAndGet(
-      sample1
-    )
-    runAndWait(
-      q.queryEntityForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "attr5", "sample", "sample1")
-    ) shouldBe AttributeString("value5")
-
-  }
-
   behavior of "queryRelatedRecordsWithArray"
 
   it should "get the record for a single reference" in withMinimalTestDatabase { _ =>

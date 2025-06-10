@@ -49,7 +49,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     val visitor = new CompactEvaluateVisitor()
     val parsedTree = terraExpressionParser.root()
     val lookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-    val queryPlans = buildPlans(lookups)
+    val queryPlans = buildQueryPlans(lookups)
     val queryFutures: Seq[Future[Seq[ExpressionAndResult]]] = queryPlans map { plan =>
       executeQueryPlan(workspaceId, entityType, entityName, plan)
     }
@@ -109,78 +109,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
           case None             => Seq.empty
           case Some(expression) => parseLookups(expression)
         }
-//            repository.dataSource
-//              .inTransaction { _ =>
-//                repository.queries
-//                  .getEntity(workspaceId, entityType, entityName)
-//              } flatMap {
-//              case Some(record) =>
-//                // Convert the single CompactEntityRecord into a Map for buildValidationInputs
-//                val entityRecords = Map(entityName -> Seq(record))
-//                val inputFutures: Seq[Future[SubmissionValidationValue]] =
-//                  gatherInputsResult.processableInputs.toSeq.map { input =>
-//                    val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-//                    val visitor = new CompactEvaluateVisitor()
-//                    val parsedTree = terraExpressionParser.root()
-//                    val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-//                    val exprAndResults = inputLookups
-//                      .map { lookup =>
-//                        val attrNameOpt = lookup.attributeName
-//                        val entityValueMap: Map[String, Try[Iterable[AttributeValue]]] =
-//                          entityRecords.map { case (eName, records) =>
-//                            val values: Iterable[AttributeValue] = attrNameOpt match {
-//                              case Some(attrName) =>
-//                                records
-//                                  .map(_.toEntity)
-//                                  .flatMap(_.attributes.get(AttributeName.fromDelimitedName(attrName)))
-//                                  .collect { case av: AttributeValue => av }
-//                              case None =>
-//                                lookup.values
-//                            }
-//                            eName -> Success(values)
-//                          }
-//                        (lookup.expression, entityValueMap)
-//                      }
-//                    // Use InputExpressionReassembler to get the final result
-//                    val resultMap = InputExpressionReassembler.constructFinalInputValues(
-//                      exprAndResults,
-//                      parsedTree,
-//                      Some(Seq(entityName)),
-//                      None
-//                    )
-//                    // Build SubmissionValidationEntityInputs for each entity
-//                    Future.successful(
-//                      resultMap.get(entityName).flatMap(_.toOption).flatMap(_.headOption) match {
-//                        case Some(value) =>
-//                          SubmissionValidationValue(
-//                            value = Some(value),
-//                            error = None,
-//                            inputName = input.workflowInput.getName
-//                          )
-//                        case None =>
-//                          SubmissionValidationValue(
-//                            value = None,
-//                            error = Some("No value found"),
-//                            inputName = input.workflowInput.getName
-//                          )
-//                      }
-//                    )
-//                  }
-//                Future.sequence(inputFutures).map { inputResolutions =>
-//                  LazyList(
-//                    SubmissionValidationEntityInputs(
-//                      entityName = entityName,
-//                      inputResolutions = inputResolutions.toSet
-//                    )
-//                  )
-//                }
-//              case None =>
-//                Future.successful(LazyList.empty[SubmissionValidationEntityInputs])
-//            }
-//          case Some(expression) =>
-//            val entityLookups =  // Determines what the root entity is
-//            println("entityLookups: ", entityLookups)
-
+        // TODO use entitylookups?? surely it shouldn't work without it
         // Parse all input expressions and collect their lookups and parsed trees
         val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
           val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
@@ -194,7 +123,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         val allLookups = inputExpressionData.flatMap(_._3)
 
         // Build query plans for all lookups combined
-        val queryPlans = buildPlans(allLookups)
+        val queryPlans = buildQueryPlans(allLookups)
         println("queryPlans: ", queryPlans)
 
         // Execute all query plans
@@ -241,93 +170,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       }
     }
 
-//          val entityLookups = parseLookups(expression) //Determines what the root entity is
-//          val inputFutures: Seq[Future[Seq[(ExpressionEvaluationSupport.EntityName, SubmissionValidationValue)]]] =
-//            gatherInputsResult.processableInputs.toSeq.map { input =>
-//              val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-//              val visitor = new CompactEvaluateVisitor()
-//              val parsedTree = terraExpressionParser.root()
-//              val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-//              // TODO currently runs a query for each input.  should presumably only run one query
-//              repository.dataSource
-//                .inTransaction { _ =>
-//                  repository.queries.queryRelatedRecordsWithArray(workspaceId,
-//                                                                  entityType,
-//                                                                  entityName,
-//                                                                  entityLookups,
-//                                                                  inputLookups
-//                  )
-//                }
-//                .map { entityRecords =>
-//                  val rootEntityType = rootEntityTypeOpt.get
-//                  val allRecords = entityRecords.values.flatten.toSeq
-//                  val recordsMatchRootEntity = allRecords.forall(_.entityType == rootEntityType)
-//                  val exprAndResults = inputLookups.map { lookup =>
-//                    val attrNameOpt = lookup.attributeName
-//                    // If the rootEntityType isn't the same as the entityRecords, then we need to map all the different records' values to the rootEntity
-//                    val entityValueMap: Map[String, Try[Iterable[AttributeValue]]] =
-//                      if (recordsMatchRootEntity) {
-//                        // Each entity gets its own values as before
-//                        entityRecords.map { case (eName, records) =>
-//                          val values: Iterable[AttributeValue] = attrNameOpt match {
-//                            case Some(attrName) =>
-//                              records
-//                                .map(_.toEntity)
-//                                .flatMap(_.attributes.get(AttributeName.fromDelimitedName(attrName)))
-//                                .flatMap {
-//                                  case avl: AttributeValueList => avl.list
-//                                  case av: AttributeValue      => Seq(av)
-//                                  case _                       => Seq.empty
-//                                }
-//                            case None =>
-//                              lookup.values
-//                          }
-//                          eName -> Success(values)
-//                        }
-//                      } else {
-//                        val values: Iterable[AttributeValue] = attrNameOpt match {
-//                          case Some(attrName) =>
-//                            allRecords
-//                              .map(_.toEntity)
-//                              .flatMap(_.attributes.get(AttributeName.fromDelimitedName(attrName)))
-//                              .flatMap {
-//                                case avl: AttributeValueList => avl.list
-//                                case av: AttributeValue      => Seq(av)
-//                                case _                       => Seq.empty
-//                              }
-//                          case None =>
-//                            lookup.values
-//                        }
-//                        Map(entityName -> Success(values))
-//                      }
-//                    (lookup.expression, entityValueMap)
-//                  }
-//                  // Use InputExpressionReassembler to get the final result
-//                  val rootEntityNames = if (recordsMatchRootEntity) entityRecords.keys.toSeq else Seq(entityName)
-//                  val resultMap = InputExpressionReassembler.constructFinalInputValues(
-//                    exprAndResults,
-//                    parsedTree,
-//                    Some(rootEntityNames),
-//                    None
-//                  )
-//                  convertToSubmissionValidationValues(resultMap, input)
-//                }
-//            }
-//          Future.sequence(inputFutures).map { resultsSeq =>
-//            CollectionUtils
-//              .groupByTuples(resultsSeq.flatten)
-//              .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-//                SubmissionValidationEntityInputs(
-//                  entityName = entityName,
-//                  inputResolutions = values.toSet
-//                )
-//              }
-//              .to(LazyList)
-//          }
-//      }
-//    }
-//  }
-
   // TODO this is now only used in one case; do we need a separate method anymore?
   // It's useful for testing the visitor
   def parseLookups(expression: String): Seq[ExpressionLookup] = {
@@ -343,7 +185,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     }
   }
 
-  // TODO update javadoc
   /**
    * This is a recursive function that walks down the relations lists of ExpressionLookups. Each
    * relation should correspond to a relation between entity types. We start with
@@ -352,15 +193,17 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
    * i.e. no relations. For all lookups that have more relations than
    * relation level, group them by the relation at that level (the first relation to start) and call
    * this method recursively for each grouping, prepending the relation to the result to build the relation chain.
+   * Keep track of the attributes needed for each relation level and the expression that generated it in order to collate
+   * results later.
    *
    * @param expressionLookups The ExpressionLookups to process, all of which must have the same value
    *     up to relationLevel
    * @param relationLevel The current relation level starting with 0 and incrementing with each
    *     recursive call
-   * @return A set of tuples containing: List of string representing the chain of relations,
-   *         list of strings representing the attributes to get from the entities at the end of the chain
+   * @return A seq of QueryPlans, which contain: List of string representing the chain of relations,
+   *         map of expression to list of strings representing the attributes to get from the entities at the end of the chain
    */
-  def buildPlans(
+  def buildQueryPlans(
     lookups: Seq[ExpressionLookup],
     relationLevel: Int = 0
   ): Seq[QueryPlan] = {
@@ -371,7 +214,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
 
     // Recursively process each group, incrementing the relation level
     val nextPlans = nextLookupByRelation.toSeq.flatMap { case (relation, groupedLookups) =>
-      buildPlans(groupedLookups, relationLevel + 1).map { plan =>
+      buildQueryPlans(groupedLookups, relationLevel + 1).map { plan =>
         plan.copy(relationChain = relation :: plan.relationChain)
       }
     }
@@ -390,6 +233,23 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     currentPlan ++ nextPlans
   }
 
+  /**
+   * Executes a single query plan to retrieve entity records and extract the required attributes.
+   * Processes the attained attributes into ExpressionAndResult tuples that can be consumed
+   * by the InputExpressionReassembler.
+   *
+   * @param workspaceId The UUID of the workspace containing the entities to query
+   * @param entityType The type of the starting entity (e.g., "sample_set", "sample")
+   * @param entityName The name of the specific entity to start the query from
+   * @param plan The QueryPlan containing:
+   *             - relationChain: List of relation names to traverse (e.g., ["samples", "participants"])
+   *             - expressionMappings: Map from expression strings to the set of attribute names
+   *               that expression needs from the entities at the end of the relation chain
+   * @return A Future containing a sequence of ExpressionAndResult tuples, where each tuple contains:
+   *         - The original expression string as the key
+   *         - A Map from entity name to Try[Iterable[AttributeValue]] containing the extracted
+   *           attribute values for that expression
+   */
   def executeQueryPlan(workspaceId: UUID, entityType: String, entityName: String, plan: QueryPlan)(implicit
     executionContext: ExecutionContext
   ): Future[Seq[ExpressionAndResult]] =
