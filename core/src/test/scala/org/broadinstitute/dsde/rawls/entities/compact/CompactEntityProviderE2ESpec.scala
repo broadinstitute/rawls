@@ -980,7 +980,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       ) should contain theSameElementsAs Seq(targetPointer1, targetPointer2)
       runAndWait(
         provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
-          EntityPointer("sourceType", "sourceName2")
+                                                      EntityPointer("sourceType", "sourceName2")
         )
       ) should contain theSameElementsAs Seq(targetPointer2, targetPointer3)
     }
@@ -1001,12 +1001,12 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // retrieve references for workspace 2 and ensure the references were NOT deleted
     runAndWait(
       ws2Provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
-        EntityPointer("sourceType", "sourceName1")
+                                                       EntityPointer("sourceType", "sourceName1")
       )
     ) should contain theSameElementsAs Seq(targetPointer1, targetPointer2)
     runAndWait(
       ws2Provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
-        EntityPointer("sourceType", "sourceName2")
+                                                       EntityPointer("sourceType", "sourceName2")
       )
     ) should contain theSameElementsAs Seq(targetPointer2, targetPointer3)
   }
