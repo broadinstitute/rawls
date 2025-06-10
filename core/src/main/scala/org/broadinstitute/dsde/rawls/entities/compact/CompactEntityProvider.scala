@@ -101,12 +101,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // FIXME: implement this
+  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // TODO CORE-483: implement this
 
   def listWorkflowEntities(dataAccess: DataAccess,
                            workspace: Workspace,
                            entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // FIXME: implement this
+  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // TODO CORE-483: implement this
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
@@ -417,7 +417,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     val newName = renameInfo.newName
 
     // Perform the rename in a transaction
-    val renameFuture = repository.dataSource.inTransaction { dataAccess =>
+    val renameFuture = repository.dataSource.inTransaction { _ =>
       for {
         // First check if the old entity type exists
         entityTypeCount <- repository.queries.countEntities(workspaceId, oldName)

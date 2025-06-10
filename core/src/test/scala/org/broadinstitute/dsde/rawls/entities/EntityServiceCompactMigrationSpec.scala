@@ -206,7 +206,7 @@ class EntityServiceCompactMigrationSpec
         """{"foo":"bar", "nested": {"stuff": [2,3,4,false]}}""".parseJson
       ),
       AttributeName.withDefaultNS("jsonArrAttr") -> AttributeValueRawJson("""[1,2,3,[4,5,6],[7,8,9]]""".parseJson),
-      /* TODO CORE-473: this migrates as an AttributeString, not AttributeValueRawJson. Does it matter?
+      /* This migrates as an AttributeString, not AttributeValueRawJson. We are ok with that.
       AttributeName.withDefaultNS("jsonStrAttr") -> AttributeValueRawJson(
         """"this is a string parsed as json"""".parseJson
       ),
@@ -218,7 +218,7 @@ class EntityServiceCompactMigrationSpec
                                                                                   testData.sample1.name
       ), // same as previous, to test de-duplication when inserting to ENTITY_REFS
       AttributeName.withDefaultNS("emptyList") -> AttributeValueEmptyList,
-      // TODO CORE-473: this migrates as an AttributeValueEmptyList. Does it matter? Both result in `[]`
+      // This migrates as an AttributeValueEmptyList. We are ok with that; both result in `[]`
       // AttributeName.withDefaultNS("emptyRefList") -> AttributeEntityReferenceEmptyList,
       AttributeName.withDefaultNS("valueList") -> AttributeValueList(
         Seq(

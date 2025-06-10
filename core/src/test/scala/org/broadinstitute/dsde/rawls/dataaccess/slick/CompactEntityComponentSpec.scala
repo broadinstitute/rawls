@@ -2093,9 +2093,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Insert all entities
     insertAndGetAll(Seq(targetEntity1, sourceEntity1, sourceEntity2, sourceEntity3))
 
-    // these references does not exist in the attributes but makes the underlying rename query think so
-    // TODO FIXME
-
     // Execute renameEntityType and verify the result
     val newTargetType = "newTargetType"
     runAndWait(q.renameEntityType(wsid, targetType, newTargetType)) shouldBe 1
@@ -2132,8 +2129,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Insert all entities
     insertAndGetAll(Seq(targetEntity1, sourceEntity1))
 
-    // TODO FIXME
-
     // Execute renameEntityType, this time on sourceType which has no references
     val newSourceType = "newSourceType"
     val result = runAndWait(q.renameEntityType(wsid, sourceType, newSourceType))
@@ -2154,7 +2149,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
   }
 
-  // TODO: times out. Is there a bug?
   it should "handle a list with 10000 entity references efficiently" in withMinimalTestDatabase { _ =>
     // Create target entity type that will be renamed
     val targetType = "largeRefTargetType"

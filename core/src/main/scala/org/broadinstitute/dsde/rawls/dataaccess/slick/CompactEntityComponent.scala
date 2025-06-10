@@ -379,7 +379,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
-  // TODO: `execution plan: `
+  // TODO CORE-541: `execution plan: `
   def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
@@ -402,7 +402,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
-  // TODO: `execution plan: `
+  // TODO CORE-541: `execution plan: `
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
     sql"""select from_entity_type, from_name
          from ENTITY_REFS
@@ -478,9 +478,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * Returns the number of entities that were renamed.
    *
-   * TODO: also update the sortable value in the '$.attrs' object for any scalar references to the entity being renamed
-   *
-   * TODO: `execution plan: `
+   * TODO CORE-541: `execution plan: `
    */
   def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
     // validation ensures that entityType, oldName, and newName are SQL-safe
@@ -551,7 +549,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     *
     * Returns the number of entities that were renamed.
     *
-    * TODO: `execution plan: `
+    * TODO CORE-541: `execution plan: `
     */
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // validation ensures that oldType and newType are SQL-safe
@@ -592,7 +590,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * Renames a single attribute across all entities of the given type and workspace.
     * This method assumes the old and new attribute names have already been validated!
     *
-    * TODO: also update in $.refs
+    * TODO CORE-542: also update in $.refs
     *
     * `Using where. Index used: idx_entity_type_name`
     */
