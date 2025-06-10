@@ -407,4 +407,79 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
       ArgumentMatchers.any()
     )
   }
+
+  "getWorkspaceId" should "return the workspace ID if the user is an admin and the workspace exists" in {
+    val workspaceName = workspace.toWorkspaceName
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspaceId(workspaceName))
+      .thenReturn(Future.successful(Option(workspace.workspaceIdAsUUID)))
+
+    val samAdminDAO = mock[SamAdminDAO]
+    when(
+      samAdminDAO.userHasResourceTypeAdminPermission(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.admin).thenReturn(samAdminDAO)
+
+    val service = workspaceAdminServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository
+    )
+
+    val result = Await.result(service.getWorkspaceId(workspaceName), Duration.Inf)
+    result shouldEqual Option(workspace.workspaceId)
+  }
+
+  it should "return None if the workspace does not exist" in {
+    val workspaceName = workspace.toWorkspaceName
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspaceId(workspaceName)).thenReturn(Future.successful(None))
+
+    val samAdminDAO = mock[SamAdminDAO]
+    when(
+      samAdminDAO.userHasResourceTypeAdminPermission(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(true))
+    val samDAO = mock[SamDAO]
+    when(samDAO.admin).thenReturn(samAdminDAO)
+
+    val service = workspaceAdminServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository
+    )
+
+    val result = Await.result(service.getWorkspaceId(workspaceName), Duration.Inf)
+    result shouldEqual None
+  }
+
+  it should "throw if the user is not an admin" in {
+    val workspaceName = workspace.toWorkspaceName
+
+    val samAdminDAO = mock[SamAdminDAO]
+    when(
+      samAdminDAO.userHasResourceTypeAdminPermission(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(SamResourceTypeAdminActions.readSummaryInformation),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(false))
+    val samDAO = mock[SamDAO]
+    when(samDAO.admin).thenReturn(samAdminDAO)
+
+    val service = workspaceAdminServiceConstructor(samDAO = samDAO)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getWorkspaceId(workspaceName), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
+  }
 }
