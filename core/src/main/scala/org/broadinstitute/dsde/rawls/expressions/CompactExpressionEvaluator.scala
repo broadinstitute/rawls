@@ -105,137 +105,138 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       } else {
         // If there's an expression, evaluate it to get the list of entities to run this job on.
         // Otherwise, use the entity given in the submission.
-        expressionEvaluationContext.expression match {
-          case None =>
-            repository.dataSource
-              .inTransaction { _ =>
-                repository.queries
-                  .getEntity(workspaceId, entityType, entityName)
-              } flatMap {
-              case Some(record) =>
-                // Convert the single CompactEntityRecord into a Map for buildValidationInputs
-                val entityRecords = Map(entityName -> Seq(record))
-                val inputFutures: Seq[Future[SubmissionValidationValue]] =
-                  gatherInputsResult.processableInputs.toSeq.map { input =>
-                    val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-                    val visitor = new CompactEvaluateVisitor()
-                    val parsedTree = terraExpressionParser.root()
-                    val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-                    val exprAndResults = inputLookups
-                      .map { lookup =>
-                        val attrNameOpt = lookup.attributeName
-                        val entityValueMap: Map[String, Try[Iterable[AttributeValue]]] =
-                          entityRecords.map { case (eName, records) =>
-                            val values: Iterable[AttributeValue] = attrNameOpt match {
-                              case Some(attrName) =>
-                                records
-                                  .map(_.toEntity)
-                                  .flatMap(_.attributes.get(AttributeName.fromDelimitedName(attrName)))
-                                  .collect { case av: AttributeValue => av }
-                              case None =>
-                                lookup.values
-                            }
-                            eName -> Success(values)
-                          }
-                        (lookup.expression, entityValueMap)
-                      }
-                    // Use InputExpressionReassembler to get the final result
-                    val resultMap = InputExpressionReassembler.constructFinalInputValues(
-                      exprAndResults,
-                      parsedTree,
-                      Some(Seq(entityName)),
-                      None
-                    )
-                    // Build SubmissionValidationEntityInputs for each entity
-                    Future.successful(
-                      resultMap.get(entityName).flatMap(_.toOption).flatMap(_.headOption) match {
-                        case Some(value) =>
-                          SubmissionValidationValue(
-                            value = Some(value),
-                            error = None,
-                            inputName = input.workflowInput.getName
-                          )
-                        case None =>
-                          SubmissionValidationValue(
-                            value = None,
-                            error = Some("No value found"),
-                            inputName = input.workflowInput.getName
-                          )
-                      }
-                    )
-                  }
-                Future.sequence(inputFutures).map { inputResolutions =>
-                  LazyList(
-                    SubmissionValidationEntityInputs(
-                      entityName = entityName,
-                      inputResolutions = inputResolutions.toSet
-                    )
-                  )
-                }
-              case None =>
-                Future.successful(LazyList.empty[SubmissionValidationEntityInputs])
-            }
-          case Some(expression) =>
-            val entityLookups = parseLookups(expression) // Determines what the root entity is
-            println("entityLookups: ", entityLookups)
+        val entityLookups: Seq[ExpressionLookup] = expressionEvaluationContext.expression match {
+          case None             => Seq.empty
+          case Some(expression) => parseLookups(expression)
+        }
+//            repository.dataSource
+//              .inTransaction { _ =>
+//                repository.queries
+//                  .getEntity(workspaceId, entityType, entityName)
+//              } flatMap {
+//              case Some(record) =>
+//                // Convert the single CompactEntityRecord into a Map for buildValidationInputs
+//                val entityRecords = Map(entityName -> Seq(record))
+//                val inputFutures: Seq[Future[SubmissionValidationValue]] =
+//                  gatherInputsResult.processableInputs.toSeq.map { input =>
+//                    val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
+//                    val visitor = new CompactEvaluateVisitor()
+//                    val parsedTree = terraExpressionParser.root()
+//                    val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+//                    val exprAndResults = inputLookups
+//                      .map { lookup =>
+//                        val attrNameOpt = lookup.attributeName
+//                        val entityValueMap: Map[String, Try[Iterable[AttributeValue]]] =
+//                          entityRecords.map { case (eName, records) =>
+//                            val values: Iterable[AttributeValue] = attrNameOpt match {
+//                              case Some(attrName) =>
+//                                records
+//                                  .map(_.toEntity)
+//                                  .flatMap(_.attributes.get(AttributeName.fromDelimitedName(attrName)))
+//                                  .collect { case av: AttributeValue => av }
+//                              case None =>
+//                                lookup.values
+//                            }
+//                            eName -> Success(values)
+//                          }
+//                        (lookup.expression, entityValueMap)
+//                      }
+//                    // Use InputExpressionReassembler to get the final result
+//                    val resultMap = InputExpressionReassembler.constructFinalInputValues(
+//                      exprAndResults,
+//                      parsedTree,
+//                      Some(Seq(entityName)),
+//                      None
+//                    )
+//                    // Build SubmissionValidationEntityInputs for each entity
+//                    Future.successful(
+//                      resultMap.get(entityName).flatMap(_.toOption).flatMap(_.headOption) match {
+//                        case Some(value) =>
+//                          SubmissionValidationValue(
+//                            value = Some(value),
+//                            error = None,
+//                            inputName = input.workflowInput.getName
+//                          )
+//                        case None =>
+//                          SubmissionValidationValue(
+//                            value = None,
+//                            error = Some("No value found"),
+//                            inputName = input.workflowInput.getName
+//                          )
+//                      }
+//                    )
+//                  }
+//                Future.sequence(inputFutures).map { inputResolutions =>
+//                  LazyList(
+//                    SubmissionValidationEntityInputs(
+//                      entityName = entityName,
+//                      inputResolutions = inputResolutions.toSet
+//                    )
+//                  )
+//                }
+//              case None =>
+//                Future.successful(LazyList.empty[SubmissionValidationEntityInputs])
+//            }
+//          case Some(expression) =>
+//            val entityLookups =  // Determines what the root entity is
+//            println("entityLookups: ", entityLookups)
 
-            // Parse all input expressions and collect their lookups and parsed trees
-            val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
-              val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-              val visitor = new CompactEvaluateVisitor()
-              val parsedTree = terraExpressionParser.root()
-              val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-              (input, parsedTree, inputLookups)
-            }
+        // Parse all input expressions and collect their lookups and parsed trees
+        val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
+          val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
+          val visitor = new CompactEvaluateVisitor()
+          val parsedTree = terraExpressionParser.root()
+          val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+          (input, parsedTree, inputLookups)
+        }
 
-            // Gather all ExpressionLookups from all inputs
-            val allLookups = inputExpressionData.flatMap(_._3)
+        // Gather all ExpressionLookups from all inputs
+        val allLookups = inputExpressionData.flatMap(_._3)
 
-            // Build query plans for all lookups combined
-            val queryPlans = buildPlans(allLookups)
-            println("queryPlans: ", queryPlans)
+        // Build query plans for all lookups combined
+        val queryPlans = buildPlans(allLookups)
+        println("queryPlans: ", queryPlans)
 
-            // Execute all query plans
-            val queryFutures: Seq[Future[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
-              executeQueryPlan(workspaceId, entityType, entityName, plan)
-            }
+        // Execute all query plans
+        val queryFutures: Seq[Future[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
+          executeQueryPlan(workspaceId, entityType, entityName, plan)
+        }
 
-            Future.sequence(queryFutures).flatMap { allQueryResults =>
-              val combinedExpressionAndResults: Seq[ExpressionAndResult] = allQueryResults.flatten
+        Future.sequence(queryFutures).flatMap { allQueryResults =>
+          val combinedExpressionAndResults: Seq[ExpressionAndResult] = allQueryResults.flatten
 
-              // Process each input separately using the combined query results
-              val inputFutures: Seq[Future[Seq[(ExpressionEvaluationSupport.EntityName, SubmissionValidationValue)]]] =
-                inputExpressionData.map { case (input, parsedTree, inputLookups) =>
+          // Process each input separately using the combined query results
+          val inputFutures: Seq[Future[Seq[(ExpressionEvaluationSupport.EntityName, SubmissionValidationValue)]]] =
+            inputExpressionData.map { case (input, parsedTree, inputLookups) =>
 
-                  // Filter ExpressionAndResults relevant to this input
-                  val relevantResults = combinedExpressionAndResults.filter { case (expression, _) =>
-                    inputLookups.exists(_.expression == expression)
-                  }
+              // Filter ExpressionAndResults relevant to this input
+              val relevantResults = combinedExpressionAndResults.filter { case (expression, _) =>
+                inputLookups.exists(_.expression == expression)
+              }
 
-                  Future.successful {
-                    // Use InputExpressionReassembler to get the final result for this input
-                    val resultMap = InputExpressionReassembler.constructFinalInputValues(
-                      relevantResults,
-                      parsedTree,
-                      Some(Seq(entityName)), // Use the original entityName as root
-                      None
-                    )
-                    convertToSubmissionValidationValues(resultMap, input)
-                  }
-                }
-
-              Future.sequence(inputFutures).map { resultsSeq =>
-                CollectionUtils
-                  .groupByTuples(resultsSeq.flatten)
-                  .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-                    SubmissionValidationEntityInputs(
-                      entityName = entityName,
-                      inputResolutions = values.toSet
-                    )
-                  }
-                  .to(LazyList)
+              Future.successful {
+                // Use InputExpressionReassembler to get the final result for this input
+                val resultMap = InputExpressionReassembler.constructFinalInputValues(
+                  relevantResults,
+                  parsedTree,
+                  Some(Seq(entityName)), // Use the original entityName as root
+                  None
+                )
+                convertToSubmissionValidationValues(resultMap, input)
               }
             }
+
+          Future.sequence(inputFutures).map { resultsSeq =>
+            CollectionUtils
+              .groupByTuples(resultsSeq.flatten)
+              .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
+                SubmissionValidationEntityInputs(
+                  entityName = entityName,
+                  inputResolutions = values.toSet
+                )
+              }
+              .to(LazyList)
+          }
         }
       }
     }
