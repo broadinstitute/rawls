@@ -285,6 +285,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * - Uses recursive SQL queries to traverse the `ENTITY_REFS` table.
    * - Performs a union operation to include all downstream references.
    * - Groups the results by the originating entity and maps them to `RefMapping`.
+   *
+   * execution plan:
+   *  - main query does a full scan on a derived table (the CTE result)
+   *  - anchor query (first select statement) uses the index idx_to to look up rows in ENTITY_REFS
+   *  - union does a full scan of the intermediate result and joins the recursive result (er1) to ENTITY_REFS using the index idx_to
+   *  - Combining the anchor and recursive result uses a temporary table
    */
   def recursiveGetEntityReferences(workspaceId: UUID,
                                    entities: Set[EntityPointer],
@@ -295,7 +301,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     } else if (entities.size > batchSize) {
       val batches = entities.grouped(batchSize).toSeq
       DBIO
-        .sequence(batches.map(batch => recursiveGetEntityReferences(workspaceId, batch.toSet)))
+        .sequence(batches.map(batch => recursiveGetEntityReferences(workspaceId, batch)))
         .map(_.flatten.toSet)
     } else {
       val entityTypeNameClauses =
@@ -350,6 +356,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * - Generates SQL clauses for the entity type and name pairs in `refs`.
    * - Executes an `INSERT INTO ... SELECT` query to copy entities from the source workspace to the destination workspace.
    * - Excludes entities marked as deleted in the source workspace.
+   *
+   * `query execution plan (for select): index range scan on idx_entity_type_name.`
    */
   def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
     if (refs.isEmpty) {
@@ -380,6 +388,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * - If `refs` is empty, returns 0 without performing any database operations.
    * - Generates SQL clauses for the `from_entity_type` and `from_name` pairs in `refs`.
    * - Executes an `INSERT INTO ... SELECT` query to copy references from the source workspace to the destination workspace.
+   *
+   * `query execution plan (for select): Uses idx_to index. Extra: Using where; Using index; Using temporary`
    */
   def copyEntityReferences(sourceWorkspaceId: UUID,
                            destWorkspaceId: UUID,

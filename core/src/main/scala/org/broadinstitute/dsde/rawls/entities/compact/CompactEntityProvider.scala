@@ -142,7 +142,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                 val entityReferences = entityReferenceMap.flatMap(_.to)
                 repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).flatMap {
                   conflicts =>
-                    val softConflicts = conflicts.toSeq.map(_.toPointer).toSet
+                    val softConflicts = conflicts.map(_.toPointer).toSet
                     if (softConflicts.isEmpty || linkExistingEntities) {
                       copyEntitiesExcludingAnySoftConflicts(
                         entities,
