@@ -466,7 +466,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   behavior of "queryRelatedRecordsWithArray"
 
-  // TODO am i repeating tests now that i refactored?
   it should "get the record for a single reference" in withMinimalTestDatabase { _ =>
     // Insert referenced entity
     val sample = Entity(
@@ -486,12 +485,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
     insertAndGet(set)
-
-//    // Can't really create a RelationContext so mock one that returns the correct values
-//    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-//    Mockito.when(mockAttributeContext.getText).thenReturn("samples")
-//    val mockRelationContext = Mockito.mock(classOf[RelationContext])
-//    Mockito.when(mockRelationContext.attributeName()).thenReturn(mockAttributeContext)
 
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
@@ -726,54 +719,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     result.get(participant2.name).toSeq.flatten should contain(insertedParticipant2)
     result.get(participant3.name).toSeq.flatten should contain(insertedParticipant3)
     result.get(participant4.name).toSeq.flatten should contain(insertedParticipant4)
-  }
-
-  it should "get the records for multiple lookups from the root entity" in withMinimalTestDatabase { _ =>
-    // sample_set -> sample
-
-    val sample1 = Entity(
-      "s1",
-      "sample",
-      Map(
-        AttributeName.withDefaultNS("number") -> AttributeNumber(1),
-        AttributeName.withDefaultNS("string") -> AttributeString("abc")
-      )
-    )
-
-    val sample2 = Entity(
-      "s2",
-      "sample",
-      Map(
-        AttributeName.withDefaultNS("number") -> AttributeNumber(2),
-        AttributeName.withDefaultNS("string") -> AttributeString("xyz")
-      )
-    )
-
-    val set = Entity(
-      "set1",
-      "sample_set",
-      Map(
-        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
-          List(AttributeEntityReference("sample", "s1"), AttributeEntityReference("sample", "s2"))
-        )
-      )
-    )
-    val insertedSample1 = insertAndGet(sample1)
-    val insertedSample2 = insertAndGet(sample2)
-    insertAndGet(set)
-
-    val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
-          "samples"
-        )
-      )
-    )
-    result.get(sample1.name).toSeq.flatten should contain(insertedSample1)
-    result.get(sample2.name).toSeq.flatten should contain(insertedSample2)
   }
 
   it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>

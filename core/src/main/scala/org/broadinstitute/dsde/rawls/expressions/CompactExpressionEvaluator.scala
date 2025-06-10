@@ -36,7 +36,6 @@ import scala.util.{Failure, Success, Try}
 
 case class QueryPlan(
   relationChain: List[String],
-  requiredAttributes: Set[String],
   expressionMappings: Map[String, Set[String]] // expression -> attributes it needs from this query
 )
 
@@ -45,7 +44,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
   def evaluateExpression(workspaceId: UUID, expression: String, entityType: String, entityName: String)(implicit
     executionContext: ExecutionContext
   ): Future[Seq[AttributeValue]] = {
-    // We need to get the parse tree to use for final input; can we extract this to a separate method somehow?
+    // We need to get the parse tree to use for final input
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new CompactEvaluateVisitor()
     val parsedTree = terraExpressionParser.root()
@@ -74,110 +73,174 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                           expressionEvaluationContext: ExpressionEvaluationContext,
                           gatherInputsResult: MethodConfigResolver.GatherInputsResult
   )(implicit executionContext: ExecutionContext): Future[LazyList[SubmissionValidationEntityInputs]] =
-    Future.successful(LazyList.empty)
-//  {
-//    // TODO is this necessarily an error?  when isn't it?
-//    val entityType = expressionEvaluationContext.entityType.getOrElse(
-//      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityType"))
-//    )
-//    val entityName = expressionEvaluationContext.entityName.getOrElse(
-//      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityName"))
-//    )
-//
-//    val rootEntityTypeOpt = expressionEvaluationContext.rootEntityType
-//    if (rootEntityTypeOpt.isEmpty) { // TODO Is this an error or what?
-//      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing rootEntityType")))
-//    } else if (
-//      expressionEvaluationContext.expression.isEmpty &&
-//      entityType != rootEntityTypeOpt.get
-//    ) {
-//      val whatYouGaveUs =
-//        if (expressionEvaluationContext.entityType.isDefined)
-//          s"an entity of type ${expressionEvaluationContext.entityType.get}"
-//        else "no entity"
-//      Future.failed(
-//        new RawlsExceptionWithErrorReport(
-//          errorReport = ErrorReport(
-//            StatusCodes.BadRequest,
-//            s"Method configuration expects an entity of type ${rootEntityTypeOpt.get}, but you gave us $whatYouGaveUs."
-//          )
-//        )
-//      )
-//    } else {
-//      // If there's an expression, evaluate it to get the list of entities to run this job on.
-//      // Otherwise, use the entity given in the submission.
-//      expressionEvaluationContext.expression match {
-//        case None =>
-//          repository.dataSource
-//            .inTransaction { _ =>
-//              repository.queries
-//                .getEntity(workspaceId, entityType, entityName)
-//            } flatMap {
-//            case Some(record) =>
-//              // Convert the single CompactEntityRecord into a Map for buildValidationInputs
-//              val entityRecords = Map(entityName -> Seq(record))
-//              val inputFutures: Seq[Future[SubmissionValidationValue]] =
-//                gatherInputsResult.processableInputs.toSeq.map { input =>
-//                  val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-//                  val visitor = new CompactEvaluateVisitor()
-//                  val parsedTree = terraExpressionParser.root()
-//                  val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-//                  val exprAndResults = inputLookups
-//                    .map { lookup =>
-//                      val attrNameOpt = lookup.attributeName
-//                      val entityValueMap: Map[String, Try[Iterable[AttributeValue]]] =
-//                        entityRecords.map { case (eName, records) =>
-//                          val values: Iterable[AttributeValue] = attrNameOpt match {
-//                            case Some(attrName) =>
-//                              records
-//                                .map(_.toEntity)
-//                                .flatMap(_.attributes.get(AttributeName.fromDelimitedName(attrName)))
-//                                .collect { case av: AttributeValue => av }
-//                            case None =>
-//                              lookup.values
-//                          }
-//                          eName -> Success(values)
-//                        }
-//                      (lookup.expression, entityValueMap)
-//                    }
-//                  // Use InputExpressionReassembler to get the final result
-//                  val resultMap = InputExpressionReassembler.constructFinalInputValues(
-//                    exprAndResults,
-//                    parsedTree,
-//                    Some(Seq(entityName)),
-//                    None
-//                  )
-//                  // Build SubmissionValidationEntityInputs for each entity
-//                  Future.successful(
-//                    resultMap.get(entityName).flatMap(_.toOption).flatMap(_.headOption) match {
-//                      case Some(value) =>
-//                        SubmissionValidationValue(
-//                          value = Some(value),
-//                          error = None,
-//                          inputName = input.workflowInput.getName
-//                        )
-//                      case None =>
-//                        SubmissionValidationValue(
-//                          value = None,
-//                          error = Some("No value found"),
-//                          inputName = input.workflowInput.getName
-//                        )
-//                    }
-//                  )
-//                }
-//              Future.sequence(inputFutures).map { inputResolutions =>
-//                LazyList(
-//                  SubmissionValidationEntityInputs(
-//                    entityName = entityName,
-//                    inputResolutions = inputResolutions.toSet
-//                  )
-//                )
-//              }
-//            case None =>
-//              Future.successful(LazyList.empty[SubmissionValidationEntityInputs])
-//          }
-//        case Some(expression) =>
-//          val entityLookups = parseLookups(expression)
+//    Future.successful(LazyList.empty)
+    {
+      // TODO is this necessarily an error?  when isn't it?
+      val entityType = expressionEvaluationContext.entityType.getOrElse(
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityType"))
+      )
+      val entityName = expressionEvaluationContext.entityName.getOrElse(
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing entityName"))
+      )
+
+      val rootEntityTypeOpt = expressionEvaluationContext.rootEntityType
+      if (rootEntityTypeOpt.isEmpty) { // TODO Is this an error or what?
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Missing rootEntityType")))
+      } else if (
+        expressionEvaluationContext.expression.isEmpty &&
+        entityType != rootEntityTypeOpt.get
+      ) {
+        val whatYouGaveUs =
+          if (expressionEvaluationContext.entityType.isDefined)
+            s"an entity of type ${expressionEvaluationContext.entityType.get}"
+          else "no entity"
+        Future.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.BadRequest,
+              s"Method configuration expects an entity of type ${rootEntityTypeOpt.get}, but you gave us $whatYouGaveUs."
+            )
+          )
+        )
+      } else {
+        // If there's an expression, evaluate it to get the list of entities to run this job on.
+        // Otherwise, use the entity given in the submission.
+        expressionEvaluationContext.expression match {
+          case None =>
+            repository.dataSource
+              .inTransaction { _ =>
+                repository.queries
+                  .getEntity(workspaceId, entityType, entityName)
+              } flatMap {
+              case Some(record) =>
+                // Convert the single CompactEntityRecord into a Map for buildValidationInputs
+                val entityRecords = Map(entityName -> Seq(record))
+                val inputFutures: Seq[Future[SubmissionValidationValue]] =
+                  gatherInputsResult.processableInputs.toSeq.map { input =>
+                    val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
+                    val visitor = new CompactEvaluateVisitor()
+                    val parsedTree = terraExpressionParser.root()
+                    val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+                    val exprAndResults = inputLookups
+                      .map { lookup =>
+                        val attrNameOpt = lookup.attributeName
+                        val entityValueMap: Map[String, Try[Iterable[AttributeValue]]] =
+                          entityRecords.map { case (eName, records) =>
+                            val values: Iterable[AttributeValue] = attrNameOpt match {
+                              case Some(attrName) =>
+                                records
+                                  .map(_.toEntity)
+                                  .flatMap(_.attributes.get(AttributeName.fromDelimitedName(attrName)))
+                                  .collect { case av: AttributeValue => av }
+                              case None =>
+                                lookup.values
+                            }
+                            eName -> Success(values)
+                          }
+                        (lookup.expression, entityValueMap)
+                      }
+                    // Use InputExpressionReassembler to get the final result
+                    val resultMap = InputExpressionReassembler.constructFinalInputValues(
+                      exprAndResults,
+                      parsedTree,
+                      Some(Seq(entityName)),
+                      None
+                    )
+                    // Build SubmissionValidationEntityInputs for each entity
+                    Future.successful(
+                      resultMap.get(entityName).flatMap(_.toOption).flatMap(_.headOption) match {
+                        case Some(value) =>
+                          SubmissionValidationValue(
+                            value = Some(value),
+                            error = None,
+                            inputName = input.workflowInput.getName
+                          )
+                        case None =>
+                          SubmissionValidationValue(
+                            value = None,
+                            error = Some("No value found"),
+                            inputName = input.workflowInput.getName
+                          )
+                      }
+                    )
+                  }
+                Future.sequence(inputFutures).map { inputResolutions =>
+                  LazyList(
+                    SubmissionValidationEntityInputs(
+                      entityName = entityName,
+                      inputResolutions = inputResolutions.toSet
+                    )
+                  )
+                }
+              case None =>
+                Future.successful(LazyList.empty[SubmissionValidationEntityInputs])
+            }
+          case Some(expression) =>
+            val entityLookups = parseLookups(expression) // Determines what the root entity is
+            println("entityLookups: ", entityLookups)
+
+            // Parse all input expressions and collect their lookups and parsed trees
+            val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
+              val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
+              val visitor = new CompactEvaluateVisitor()
+              val parsedTree = terraExpressionParser.root()
+              val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+              (input, parsedTree, inputLookups)
+            }
+
+            // Gather all ExpressionLookups from all inputs
+            val allLookups = inputExpressionData.flatMap(_._3)
+
+            // Build query plans for all lookups combined
+            val queryPlans = buildPlans(allLookups)
+            println("queryPlans: ", queryPlans)
+
+            // Execute all query plans
+            val queryFutures: Seq[Future[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
+              executeQueryPlan(workspaceId, entityType, entityName, plan)
+            }
+
+            Future.sequence(queryFutures).flatMap { allQueryResults =>
+              val combinedExpressionAndResults: Seq[ExpressionAndResult] = allQueryResults.flatten
+
+              // Process each input separately using the combined query results
+              val inputFutures: Seq[Future[Seq[(ExpressionEvaluationSupport.EntityName, SubmissionValidationValue)]]] =
+                inputExpressionData.map { case (input, parsedTree, inputLookups) =>
+
+                  // Filter ExpressionAndResults relevant to this input
+                  val relevantResults = combinedExpressionAndResults.filter { case (expression, _) =>
+                    inputLookups.exists(_.expression == expression)
+                  }
+
+                  Future.successful {
+                    // Use InputExpressionReassembler to get the final result for this input
+                    val resultMap = InputExpressionReassembler.constructFinalInputValues(
+                      relevantResults,
+                      parsedTree,
+                      Some(Seq(entityName)), // Use the original entityName as root
+                      None
+                    )
+                    convertToSubmissionValidationValues(resultMap, input)
+                  }
+                }
+
+              Future.sequence(inputFutures).map { resultsSeq =>
+                CollectionUtils
+                  .groupByTuples(resultsSeq.flatten)
+                  .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
+                    SubmissionValidationEntityInputs(
+                      entityName = entityName,
+                      inputResolutions = values.toSet
+                    )
+                  }
+                  .to(LazyList)
+              }
+            }
+        }
+      }
+    }
+
+//          val entityLookups = parseLookups(expression) //Determines what the root entity is
 //          val inputFutures: Seq[Future[Seq[(ExpressionEvaluationSupport.EntityName, SubmissionValidationValue)]]] =
 //            gatherInputsResult.processableInputs.toSeq.map { input =>
 //              val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
@@ -264,6 +327,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
 //    }
 //  }
 
+  // TODO this is now only used in one case; do we need a separate method anymore?
+  // It's useful for testing the visitor
   def parseLookups(expression: String): Seq[ExpressionLookup] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new CompactEvaluateVisitor()
@@ -313,11 +378,10 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     // Collect lookups at the current level (those with no more relations)
     val currentLevelLookups = lookups.filter(_.relations.size == relationLevel)
     val currentPlan = if (currentLevelLookups.nonEmpty) {
-      val requiredAttributes = currentLevelLookups.flatMap(_.attributeName).toSet
       val expressionMappings = currentLevelLookups.groupBy(_.expression).map { case (expr, exprLookups) =>
         expr -> exprLookups.flatMap(_.attributeName).toSet
       }
-      Seq(QueryPlan(Nil, requiredAttributes, expressionMappings))
+      Seq(QueryPlan(Nil, expressionMappings))
     } else {
       Seq.empty
     }

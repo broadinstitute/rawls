@@ -548,7 +548,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       case _ => AttributeNull
     }
 
-  // Written by/with AI (including the javadoc!) //TODO update javadoc
+  // Written by/with AI (including the javadoc!)
   /**
    * Queries related records in a workspace by traversing relationships defined in the attributes of entities.
    * This method supports recursive traversal of relationships, handling both arrays and objects in JSON attributes.
@@ -556,14 +556,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * @param workspaceId      The UUID of the workspace containing the entities.
    * @param arrayEntityType  The type of the root entity to start the query from.
    * @param arrayEntityId    The name of the root entity to start the query from.
-   * @param arrayRelations   A list of `AttributeLookup` objects defining the initial relationships to traverse.
-   *                         The first element in this list specifies the starting point for the query.
-   * @param relations        A list of `AttributeLookup` objects defining additional relationships to traverse.
-   *                         These relationships are applied after the initial `arrayRelations`.
+   * @param relationChain   A chain of strings representing the relation columns between entities
    * @return                 A `ReadAction` that resolves to a map where the keys are entity names and the values
    *                         are sequences of `CompactEntityRecord` objects representing the related entities.
    *                         The result includes all entities found by traversing the specified relationships.
-   * @throws IllegalArgumentException if `arrayRelations` is empty.
    */
   def queryRelatedRecordsWithArray(
     workspaceId: UUID,

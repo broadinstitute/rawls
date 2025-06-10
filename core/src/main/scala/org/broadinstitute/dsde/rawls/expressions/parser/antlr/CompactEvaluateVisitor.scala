@@ -16,27 +16,9 @@ object CompactEvaluateVisitor {
     relations: List[RelationContext],
     attributeName: Option[String], // None for literals
     values: Seq[AttributeValue] // the result of evaluating this lookup (from DB or literal)
-  ) {
-    // TODO is this needed anywhere
-    def toExpressionAndResult(
-      lookup: ExpressionLookup,
-      entityNames: Seq[String]
-    ): (String, Map[String, Try[Iterable[AttributeValue]]]) = {
-      val resultMap =
-        if (lookup.attributeName.isDefined)
-          // For entity lookups, build the map from DB results (already in lookup.values)
-          entityNames.map(name => name -> Success(lookup.values)).toMap
-        else
-          // For literals, just map the root entity to the literal value
-          entityNames.map(name => name -> Success(lookup.values)).toMap
-
-      (lookup.expression, resultMap)
-    }
-  }
-
+  )
 }
 
-//TODO will this need to be a seq or can we always get by with just one?
 class CompactEvaluateVisitor extends TerraExpressionBaseVisitor[Seq[ExpressionLookup]] {
 
   override protected def aggregateResult(aggregate: Seq[ExpressionLookup],
