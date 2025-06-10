@@ -700,7 +700,7 @@ class CompactEntityProviderSpec
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    val actual = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
 
     actual shouldBe Map()
   }
@@ -728,7 +728,7 @@ class CompactEntityProviderSpec
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    val actual = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
 
     actual shouldBe Map(
       "type1" -> EntityTypeMetadata(1, "type1" + Attributable.entityIdAttributeSuffix, Seq("keyA")),
