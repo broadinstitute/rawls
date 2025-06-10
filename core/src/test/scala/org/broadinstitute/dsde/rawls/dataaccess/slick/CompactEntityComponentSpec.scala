@@ -2443,6 +2443,116 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     updatedRefs should contain theSameElementsAs Seq(newTargetEntity.toPointer)
   }
 
+  behavior of "copyEntities"
+
+  it should "copy entities from source workspace to destination workspace" in withMinimalTestDatabase { _ =>
+    val sourceWorkspaceId = minimalTestData.workspace.workspaceIdAsUUID
+    val destinationWorkspaceId = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val entity1 =
+      Entity("entityName1", "entityType1", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1")))
+    val entity2 =
+      Entity("entityName2", "entityType1", Map(AttributeName.withDefaultNS("attr2") -> AttributeNumber(42)))
+    val entity3 =
+      Entity("entityName3", "entityType2", Map(AttributeName.withDefaultNS("attr3") -> AttributeString("value3")))
+    insertAndGetAll(Seq(entity1, entity2, entity3), sourceWorkspaceId)
+
+    val copiedEntitiesResult = runAndWait(
+      q.copyEntities(sourceWorkspaceId,
+                     destinationWorkspaceId,
+                     Set(entity1.toPointer, entity2.toPointer, entity3.toPointer)
+      )
+    )
+
+    copiedEntitiesResult shouldBe 3
+
+    val copiedEntities = runAndWait(q.listEntities(destinationWorkspaceId, "entityType1")) ++ runAndWait(
+      q.listEntities(destinationWorkspaceId, "entityType2")
+    )
+    copiedEntities.map(_.toEntity) should contain theSameElementsAs Seq(entity1, entity2, entity3)
+
+  }
+
+  it should "copy entityRefs from source workspace to destination workspace" in withMinimalTestDatabase { _ =>
+    // Define source and destination workspaces
+    val sourceWorkspaceId = minimalTestData.workspace.workspaceIdAsUUID
+    val destinationWorkspaceId = minimalTestData.workspace2.workspaceIdAsUUID
+
+    // Create entities in the source workspace
+    val entity1 =
+      Entity("entityName1", "entityType1", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1")))
+    val entity2 = Entity("entityName2", "entityType1", Map(AttributeName.withDefaultNS("attr2") -> AttributeNumber(42)))
+    val entity3 =
+      Entity("entityName3", "entityType2", Map(AttributeName.withDefaultNS("attr3") -> AttributeString("value3")))
+
+    // Insert entity references between entities
+    val refMapping = RefMapping(entity1.toPointer, Set(entity2.toPointer, entity3.toPointer))
+    runAndWait(q.insertReferences(sourceWorkspaceId, Set(refMapping)))
+
+    // Perform the copy operation
+    val copiedEntityRefsResult =
+      runAndWait(q.copyEntityReferences(sourceWorkspaceId, destinationWorkspaceId, Set(entity1.toPointer)))
+
+    // Verify the result
+    copiedEntityRefsResult shouldBe 2
+
+    // Verify references in the destination workspace
+    val copiedReferences = runAndWait(q.getReferencesFrom(destinationWorkspaceId, entity1.toPointer))
+    copiedReferences should contain theSameElementsAs Seq(entity2.toPointer, entity3.toPointer)
+  }
+
+  it should "get recursive entity references" in withMinimalTestDatabase { _ =>
+    // Define workspace
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    // Create entities
+    val entity1 = EntityPointer("entityType1", "entityName1")
+    val entity2 = EntityPointer("entityType1", "entityName2")
+    val entity3 = EntityPointer("entityType1", "entityName3")
+    val entity4 = EntityPointer("entityType1", "entityName4")
+
+    // Insert references to form a recursive structure
+    val refMapping1 = RefMapping(entity1, Set(entity2, entity3))
+    val refMapping2 = RefMapping(entity2, Set(entity4))
+    val refMapping3 = RefMapping(entity3, Set(entity4))
+
+    runAndWait(q.insertReferences(workspaceId, Set(refMapping1, refMapping2, refMapping3)))
+
+    // Perform the recursive query
+    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1)))
+
+    // Verify the result
+    recursiveReferences should contain theSameElementsAs Set(
+      RefMapping(entity1, Set(entity2, entity3)),
+      RefMapping(entity2, Set(entity4)),
+      RefMapping(entity3, Set(entity4))
+    )
+  }
+
+  it should "get recursive entity references with cycles" in withMinimalTestDatabase { _ =>
+    // Define workspace
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    // Create entities
+    val entity1 = EntityPointer("entityType1", "entityName1")
+    val entity2 = EntityPointer("entityType1", "entityName2")
+
+    // Insert references to form a recursive structure
+    val refMapping1 = RefMapping(entity1, Set(entity2))
+    val refMapping2 = RefMapping(entity2, Set(entity1))
+
+    runAndWait(q.insertReferences(workspaceId, Set(refMapping1, refMapping2)))
+
+    // Perform the recursive query
+    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1)))
+
+    // Verify the result
+    recursiveReferences should contain theSameElementsAs Set(
+      RefMapping(entity1, Set(entity2)),
+      RefMapping(entity2, Set(entity1))
+    )
+  }
+
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================
