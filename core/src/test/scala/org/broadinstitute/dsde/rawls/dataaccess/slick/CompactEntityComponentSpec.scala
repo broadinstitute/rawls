@@ -2239,21 +2239,35 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // Define references to form a recursive structure
     val entity4 = Entity("entityName4", "entityType1", Map())
-    val entity3 = Entity("entityName3", "entityType1", Map(
-      AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
-    ))
-    val entity2 = Entity("entityName2", "entityType1", Map(
-      AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
-    ))
-    val entity1 = Entity("entityName1", "entityType1", Map(
-      AttributeName.withDefaultNS("ref") -> AttributeEntityReferenceList(Seq(
-        AttributeEntityReference(entity2.entityType, entity2.name),
-        AttributeEntityReference(entity3.entityType, entity3.name)
-    ))))
+    val entity3 =
+      Entity("entityName3",
+             "entityType1",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
+             )
+      )
+    val entity2 =
+      Entity("entityName2",
+             "entityType1",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
+             )
+      )
+    val entity1 = Entity(
+      "entityName1",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference(entity2.entityType, entity2.name),
+            AttributeEntityReference(entity3.entityType, entity3.name)
+          )
+        )
+      )
+    )
 
     // insert all entities
     insertAndGetAll(Seq(entity4, entity3, entity2, entity1))
-
 
     // Perform the recursive query
     val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1.toPointer)))
@@ -2276,12 +2290,16 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(entity1, entity2))
 
     // Update the entities to contain a cycle
-    val entity1Update = entity1.copy(attributes = Map(
-      AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity2.entityType, entity2.name)
-    ))
-    val entity2Update = entity2.copy(attributes = Map(
-      AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
-    ))
+    val entity1Update = entity1.copy(attributes =
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity2.entityType, entity2.name)
+      )
+    )
+    val entity2Update = entity2.copy(attributes =
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
+      )
+    )
     runAndWait(q.batchCreateEntities(workspaceId, Seq(entity1Update, entity2Update), insertOnly = false))
 
     // Perform the recursive query

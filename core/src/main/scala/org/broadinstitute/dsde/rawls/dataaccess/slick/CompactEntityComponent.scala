@@ -269,7 +269,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 
-    allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum}
+    allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum }
   }
 
   /**
