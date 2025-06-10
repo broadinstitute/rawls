@@ -65,9 +65,9 @@ case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attribute
   */
 case class RefPointerRecord(workspaceId: UUID,
                             fromEntityType: String,
-                            fromEntityName: String,
+                            fromName: String,
                             toEntityType: String,
-                            toEntityName: String
+                            toName: String
 )
 
 /** all reference pointers from one entity to all its reference targets */

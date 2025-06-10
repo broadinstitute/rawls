@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
@@ -981,7 +980,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
       ) should contain theSameElementsAs Seq(targetPointer1, targetPointer2)
       runAndWait(
         provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
-                                                      EntityPointer("sourceType", "sourceName2")
+          EntityPointer("sourceType", "sourceName2")
         )
       ) should contain theSameElementsAs Seq(targetPointer2, targetPointer3)
     }
@@ -1002,14 +1001,84 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     // retrieve references for workspace 2 and ensure the references were NOT deleted
     runAndWait(
       ws2Provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
-                                                       EntityPointer("sourceType", "sourceName1")
+        EntityPointer("sourceType", "sourceName1")
       )
     ) should contain theSameElementsAs Seq(targetPointer1, targetPointer2)
     runAndWait(
       ws2Provider.repository.queries.getReferencesFrom(minimalTestData.workspace2.workspaceIdAsUUID,
-                                                       EntityPointer("sourceType", "sourceName2")
+        EntityPointer("sourceType", "sourceName2")
       )
     ) should contain theSameElementsAs Seq(targetPointer2, targetPointer3)
+  }
+
+  behavior of "copyEntities"
+
+  it should "copy entities and entity references from source to destination workspace" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition(
+        "name2",
+        "typeA",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("ref"), AttributeEntityReference("typeA", "name1")))
+      ),
+      EntityUpdateDefinition(
+        "name3",
+        "typeB",
+        Seq(
+          AddUpdateAttribute(
+            AttributeName.withDefaultNS("refs"),
+            AttributeEntityReferenceList(
+              Seq(
+                AttributeEntityReference("typeA", "name1"),
+                AttributeEntityReference("typeA", "name2")
+              )
+            )
+          )
+        )
+      )
+    )
+
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 3
+
+    val copiedEntities = Await.result(
+      provider.copyEntities(minimalTestData.workspace,
+                            minimalTestData.workspace2,
+                            "typeB",
+                            Seq("name3"),
+                            linkExistingEntities = false,
+                            defaultRequestContext
+      ),
+      atMost
+    )
+    copiedEntities.entitiesCopied should contain theSameElementsAs Seq(
+      AttributeEntityReference("typeA", "name1"),
+      AttributeEntityReference("typeA", "name2"),
+      AttributeEntityReference("typeB", "name3")
+    )
+    copiedEntities.hardConflicts shouldBe empty
+    copiedEntities.softConflicts shouldBe empty
+
+  }
+
+  it should "not copy entity that does not exist in source workspace" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+    val copiedEntities = Await.result(
+      provider.copyEntities(
+        minimalTestData.workspace,
+        minimalTestData.workspace2,
+        "typeA",
+        Seq("nonExistentEntity"),
+        linkExistingEntities = false,
+        defaultRequestContext
+      ),
+      atMost
+    )
+    copiedEntities.entitiesCopied shouldBe empty
+    copiedEntities.hardConflicts shouldBe empty
+    copiedEntities.softConflicts shouldBe empty
   }
 
   // ====================================================================================================
