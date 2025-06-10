@@ -2203,6 +2203,97 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     updatedRefs should contain theSameElementsAs Seq(newTargetEntity.toPointer)
   }
 
+  behavior of "copyEntities"
+
+  it should "copy entities from source workspace to destination workspace" in withMinimalTestDatabase { _ =>
+    val sourceWorkspaceId = minimalTestData.workspace.workspaceIdAsUUID
+    val destinationWorkspaceId = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val entity1 =
+      Entity("entityName1", "entityType1", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1")))
+    val entity2 =
+      Entity("entityName2", "entityType1", Map(AttributeName.withDefaultNS("attr2") -> AttributeNumber(42)))
+    val entity3 =
+      Entity("entityName3", "entityType2", Map(AttributeName.withDefaultNS("attr3") -> AttributeString("value3")))
+    insertAndGetAll(Seq(entity1, entity2, entity3), sourceWorkspaceId)
+
+    val copiedEntitiesResult = runAndWait(
+      q.copyEntities(sourceWorkspaceId,
+                     destinationWorkspaceId,
+                     Set(entity1.toPointer, entity2.toPointer, entity3.toPointer)
+      )
+    )
+
+    copiedEntitiesResult shouldBe 3
+
+    val copiedEntities = runAndWait(q.listEntities(destinationWorkspaceId, "entityType1")) ++ runAndWait(
+      q.listEntities(destinationWorkspaceId, "entityType2")
+    )
+    copiedEntities.map(_.toEntity) should contain theSameElementsAs Seq(entity1, entity2, entity3)
+
+  }
+
+  it should "get recursive entity references" in withMinimalTestDatabase { _ =>
+    // Define workspace
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    // Define references to form a recursive structure
+    val entity4 = Entity("entityName4", "entityType1", Map())
+    val entity3 = Entity("entityName3", "entityType1", Map(
+      AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
+    ))
+    val entity2 = Entity("entityName2", "entityType1", Map(
+      AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
+    ))
+    val entity1 = Entity("entityName1", "entityType1", Map(
+      AttributeName.withDefaultNS("ref") -> AttributeEntityReferenceList(Seq(
+        AttributeEntityReference(entity2.entityType, entity2.name),
+        AttributeEntityReference(entity3.entityType, entity3.name)
+    ))))
+
+    // insert all entities
+    insertAndGetAll(Seq(entity4, entity3, entity2, entity1))
+
+
+    // Perform the recursive query
+    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1.toPointer)))
+
+    // Verify the result
+    recursiveReferences should contain theSameElementsAs Set(
+      RefMapping(entity1.toPointer, Set(entity2.toPointer, entity3.toPointer)),
+      RefMapping(entity2.toPointer, Set(entity4.toPointer)),
+      RefMapping(entity3.toPointer, Set(entity4.toPointer))
+    )
+  }
+
+  it should "get recursive entity references with cycles" in withMinimalTestDatabase { _ =>
+    // Define workspace
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    // Create entities
+    val entity1 = Entity("entityName1", "entityType1", Map())
+    val entity2 = Entity("entityName2", "entityType1", Map())
+    insertAndGetAll(Seq(entity1, entity2))
+
+    // Update the entities to contain a cycle
+    val entity1Update = entity1.copy(attributes = Map(
+      AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity2.entityType, entity2.name)
+    ))
+    val entity2Update = entity2.copy(attributes = Map(
+      AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
+    ))
+    runAndWait(q.batchCreateEntities(workspaceId, Seq(entity1Update, entity2Update), insertOnly = false))
+
+    // Perform the recursive query
+    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1.toPointer)))
+
+    // Verify the result
+    recursiveReferences should contain theSameElementsAs Set(
+      RefMapping(entity1.toPointer, Set(entity2.toPointer)),
+      RefMapping(entity2.toPointer, Set(entity1.toPointer))
+    )
+  }
+
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================

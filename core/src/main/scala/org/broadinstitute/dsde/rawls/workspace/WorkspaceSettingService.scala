@@ -61,6 +61,13 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
       )
     }
 
+  def getWorkspaceSettingOfType(workspaceName: WorkspaceName,
+                                settingType: WorkspaceSettingType
+  ): Future[Option[WorkspaceSetting]] =
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.readSettings).flatMap { workspace =>
+      workspaceSettingRepository.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, settingType)
+    }
+
   // Returns applied settings on a workspace.
   def getWorkspaceSettings(workspaceName: WorkspaceName): Future[List[WorkspaceSetting]] =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.readSettings).flatMap { workspace =>

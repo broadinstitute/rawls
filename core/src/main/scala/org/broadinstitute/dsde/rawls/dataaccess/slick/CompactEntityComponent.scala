@@ -25,7 +25,8 @@ import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import spray.json._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -79,6 +80,19 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   implicit val getEntity: GetResult[Entity] =
     GetResult(r => Entity(r.<<, r.<<, fromSql(r.<<)))
+
+  implicit val getRefPointerRecord: GetResult[RefPointerRecord] =
+    GetResult(r =>
+      RefPointerRecord(
+        r.<<,
+        r.<<,
+        r.<<,
+        r.<<,
+        r.<<,
+        r.<<,
+        r.<<
+      )
+    )
 
   private val fromEntityWhereNotDeleted = "from ENTITY e where e.deleted = 0"
 
@@ -225,6 +239,141 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
       // execute
       query.as[CompactEntityRefRecord]
+    }
+
+  /**
+   * Copies entities and their references from a source workspace to a destination workspace.
+   *
+   * This method performs the following operations:
+   * - Copies the specified entities from the source workspace to the destination workspace.
+   * - Copies the references associated with those entities to the destination workspace.
+   * - Handles the copying in batches to optimize performance and avoid memory issues.
+   *
+   * Execution Plan:
+   *         - Splits the entities into batches based on the `batchSize`.
+   *         - Copies each batch of entities and their references using `copyEntities` and `copyEntityReferences`.
+   *         - Aggregates the results from all batches to return the total counts.
+   */
+  def copyEntitiesToNewWorkspace(sourceWs: UUID,
+                                 destWs: UUID,
+                                 entityRefs: Set[EntityPointer] = Set(),
+                                 batchSize: Int = driverComponent.batchSize
+  ): ReadWriteAction[Int] = {
+
+    def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
+      for {
+        entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
+      } yield entitiesCopiedCount
+
+    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
+
+    val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
+
+    allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum}
+  }
+
+  /**
+   * Recursively retrieves all entity references for a given set of entities in a workspace.
+   *
+   * This method performs a recursive query on the `ENTITY_REFS` table to find all downstream entities
+   * referenced by the input entities. It returns a `Set[RefMapping]`, where each `RefMapping` contains:
+   * - `from`: The originating entity.
+   * - `to`: A set of entities that the originating entity references, including all downstream references.
+   *
+   * Execution Plan:
+   * - Uses recursive SQL queries to traverse the `ENTITY_REFS` table.
+   * - Performs a union operation to include all downstream references.
+   * - Groups the results by the originating entity and maps them to `RefMapping`.
+   *
+   * execution plan:
+   *  - main query does a full scan on a derived table (the CTE result)
+   *  - anchor query (first select statement) uses the index idx_to to look up rows in ENTITY_REFS
+   *  - union does a full scan of the intermediate result and joins the recursive result (er1) to ENTITY_REFS using the index idx_to
+   *  - Combining the anchor and recursive result uses a temporary table
+   */
+  def recursiveGetEntityReferences(workspaceId: UUID,
+                                   entities: Set[EntityPointer],
+                                   batchSize: Int = driverComponent.batchSize
+  ): ReadAction[Set[RefMapping]] =
+    if (entities.isEmpty) {
+      DBIO.successful(Set.empty[RefMapping])
+    } else if (entities.size > batchSize) {
+      val batches = entities.grouped(batchSize).toSeq
+      DBIO
+        .sequence(batches.map(batch => recursiveGetEntityReferences(workspaceId, batch)))
+        .map(_.flatten.toSet)
+    } else {
+      val entityTypeNameClauses =
+        generateTypeNameSql(entities, typeColumn = "from_entity_type", nameColumn = "from_name")
+
+      val baseSql = concatSqlActions(
+        sql"""with recursive EntityReferences as (
+              select er.workspace_id, er.from_entity_id, er.from_entity_type, er.from_name, er.from_attribute_name, er.to_entity_type, er.to_name
+              from ENTITY_REFS er
+              where er.workspace_id = $workspaceId
+              and (""",
+        reduceSqlActionsWithDelim(entityTypeNameClauses.toSeq, sql" or "),
+        sql""")
+           """
+      )
+      val recursiveSql = sql"""
+            union distinct
+            select er.workspace_id, er.from_entity_id, er.from_entity_type, er.from_name, er.from_attribute_name, er.to_entity_type, er.to_name
+            from EntityReferences er1
+            join ENTITY_REFS er
+            on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
+            where er.workspace_id = $workspaceId
+            )
+        """
+
+      val finalSql = sql"""
+        select workspace_id, from_entity_id, from_entity_type, from_name, from_attribute_name, to_entity_type, to_name
+        from EntityReferences
+      """
+
+      concatSqlActions(baseSql, recursiveSql, finalSql).as[RefPointerRecord].map { rows =>
+        rows
+          .groupMap(row => EntityPointer(row.fromEntityType, row.fromName))(row =>
+            EntityPointer(row.toEntityType, row.toName)
+          )
+          .view
+          .mapValues(_.toSet)
+          .toMap
+          .map { case (key, value) => RefMapping(key, value) }
+          .toSet
+      }
+    }
+
+  /**
+   * Copies entities from a source workspace to a destination workspace.
+   *
+   * This method inserts new rows into the `ENTITY` table for the destination workspace
+   * based on the entities in the source workspace. It excludes entities that are marked as deleted.
+   *
+   * Execution Plan:
+   * - If `refs` is empty, returns 0 without performing any database operations.
+   * - Generates SQL clauses for the entity type and name pairs in `refs`.
+   * - Executes an `INSERT INTO ... SELECT` query to copy entities from the source workspace to the destination workspace.
+   * - Excludes entities marked as deleted in the source workspace.
+   *
+   * `query execution plan (for select): index range scan on idx_entity_type_name.`
+   */
+  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
+    if (refs.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+      val sql = concatSqlActions(
+        sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
+             select name, entity_type, $destWorkspaceId, record_version, 0, attributes
+             from ENTITY e
+             where e.workspace_id = $sourceWorkspaceId
+             and deleted = 0
+             and ( """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+      sql.asUpdate
     }
 
   /** Given a set of entity type/name pairs, return the count of those entities that exist.

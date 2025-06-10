@@ -301,6 +301,15 @@ trait ApiServiceSpec
     val requesterPaysSetupService =
       new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
+    override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
+      new WorkspaceSettingService(_,
+                                  new WorkspaceSettingRepository(slickDataSource),
+                                  new WorkspaceRepository(slickDataSource),
+                                  gcsDAO,
+                                  samDAO,
+                                  mock[GoogleStorageService[IO]]
+      )
+
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
       new WorkspaceSettingRepository(dataSource),
@@ -310,7 +319,13 @@ trait ApiServiceSpec
     )
 
     val entityServiceConstructor =
-      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000) _
+      EntityService.constructor(slickDataSource,
+                                samDAO,
+                                workbenchMetricBaseName = "test",
+                                entityManager,
+                                1000,
+                                Some(workspaceSettingServiceConstructor)
+      ) _
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
@@ -378,15 +393,6 @@ trait ApiServiceSpec
       leonardoDAO,
       workbenchMetricBaseName
     )
-
-    override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-      new WorkspaceSettingService(_,
-                                  new WorkspaceSettingRepository(slickDataSource),
-                                  new WorkspaceRepository(slickDataSource),
-                                  gcsDAO,
-                                  samDAO,
-                                  mock[GoogleStorageService[IO]]
-      )
 
     val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
     val spendReportingServiceConfig =
