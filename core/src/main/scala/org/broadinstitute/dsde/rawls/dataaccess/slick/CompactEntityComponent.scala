@@ -379,7 +379,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
-  // TODO CORE-541: `execution plan: `
+  //
+  // `execution plan:
+  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
+  //    Table function: json_table; Using temporary; Using where for view.`
   def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
@@ -402,7 +405,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
-  // TODO CORE-541: `execution plan: `
+  //
+  // `execution plan:
+  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
+  //    Table function: json_table; Using temporary; Using where for view.`
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
     sql"""select from_entity_type, from_name
          from ENTITY_REFS
@@ -478,7 +484,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * Returns the number of entities that were renamed.
    *
-   * TODO CORE-541: `execution plan: `
+   * execution plans:
+   *    updateEntityNameSql: index range scan on idx_entity_type_name
+   *    updateReferencesInAttributesSql: index range scan on idx_entity_type_name
+   *    updateSortValues: ugly. the two CTEs are materialized and the query does full table scans against those.
+   *      The initial "where workspace_id=?" on the first CTE uses the idx_entity_type_name index, and the following
+   *      full table scans are against only the materialized temp tables with rows matching the workspace id.
    */
   def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
     // validation ensures that entityType, oldName, and newName are SQL-safe
@@ -512,16 +523,17 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType), $slickRefsPath)""".asUpdate
 
     // Update sortable values in the $.attrs object.
-    //  1. search $.refs to find all reference whose target name is equal to $oldName
+    //  1. search $.refs to find all scalar references to the target type/name
     //  2. extract the attribute name and isScalar boolean for each of those references
-    //  3. filter to those references where isScalar is true
+    //  3. re-filter to those references where isScalar is true and entityType matches; this prevents false positives from JSON_SEARCH
     //  4. update the specific entity/attribute name combinations
     val updateSortValues =
       sql"""with paths as(
               select id,
               REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.n', '') as path
               from ENTITY
-              having path is not null
+              where workspace_id = $workspaceId
+              and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType, 'z', true), $slickRefsPath)
             ),
             attrnames as (
               select paths.id,
@@ -549,7 +561,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     *
     * Returns the number of entities that were renamed.
     *
-    * TODO CORE-541: `execution plan: `
+    * execution plan:
+    *     updateEntityTypeSql: index range scan on idx_entity_type_name
+    *     updateReferencesInAttributesSql: index range scan on idx_entity_type_name
     */
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
     // validation ensures that oldType and newType are SQL-safe
