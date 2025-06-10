@@ -332,7 +332,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   def listEntityKeysViaEntity(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
     sql"""SELECT distinct entity_type, attribute_key
       FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
-      where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
+      where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
 
   /**
    * Gets the count of entities in a workspace, grouped by entity type.
