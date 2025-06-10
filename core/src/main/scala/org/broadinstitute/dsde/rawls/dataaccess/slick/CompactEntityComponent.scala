@@ -664,9 +664,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     //  individually for each value that needs to be changed. Since we control the serialization format of the
     //  refs array, and only perform the string replace inside that array, we avoid any problems with other
     //  user-supplied values.
+    val oldRef = s""""n": "$oldName", "t": "$entityType""""
+    val newRef = s""""n": "$newName", "t": "$entityType""""
     val updateReferencesInAttributesSql = sql"""update ENTITY
             set attributes = JSON_REPLACE(attributes, $slickRefsPath,
-              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), '"n": "#$oldName", "t": "#$entityType"', '"n": "#$newName", "t": "#$entityType"') as JSON))
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $oldRef, $newRef) as JSON))
             where workspace_id = $workspaceId
             and deleted = 0
             and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType), $slickRefsPath)""".asUpdate
