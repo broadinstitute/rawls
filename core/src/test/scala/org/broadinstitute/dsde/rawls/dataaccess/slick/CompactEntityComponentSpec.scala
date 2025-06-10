@@ -439,6 +439,40 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
+  behavior of "listEntityKeysViaEntity"
+
+  it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>
+    // create 2 entity types with different attributes
+    val entityType1AttributeNames =
+      List("red", "green", "blue", "orange", "yellow", "purple").map(AttributeName.withDefaultNS)
+    val entityType1 = "entityType1"
+    createEntitiesWithKeys(entityType1AttributeNames, entityType1, wsid)
+
+    val entityType2AttributeNames =
+      List("circle", "square", "triangle", "rectangle", "oval", "hexagon").map(AttributeName.withDefaultNS)
+    val entityType2 = "entityType2"
+    createEntitiesWithKeys(entityType2AttributeNames, entityType2, wsid)
+
+    // create an entity with no attributes to make sure it does not break anything
+    insertAndGet(
+      Entity(
+        UUID.randomUUID().toString,
+        "noAttributes",
+        Map.empty
+      )
+    )
+
+    // create entities in a different workspace to make sure they are not included
+    createEntitiesWithKeys(entityType1AttributeNames, entityType2, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    val actual = runAndWait(q.listEntityKeysViaEntity(wsid))
+    actual should contain theSameElementsAs entityType1AttributeNames.map {
+      EntityTypeAndAttributeKey(entityType1, _)
+    } ++ entityType2AttributeNames.map {
+      EntityTypeAndAttributeKey(entityType2, _)
+    }
+  }
+
   behavior of "attributeExists"
 
   it should "find attributes" in withMinimalTestDatabase { _ =>
