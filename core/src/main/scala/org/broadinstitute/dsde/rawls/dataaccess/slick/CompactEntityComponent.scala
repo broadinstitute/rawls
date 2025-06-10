@@ -548,7 +548,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       case _ => AttributeNull
     }
 
-  // Written by/with AI (including the javadoc!)
+  // Written by/with AI (including the javadoc!) //TODO update javadoc
   /**
    * Queries related records in a workspace by traversing relationships defined in the attributes of entities.
    * This method supports recursive traversal of relationships, handling both arrays and objects in JSON attributes.
@@ -569,33 +569,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     workspaceId: UUID,
     arrayEntityType: String,
     arrayEntityId: String,
-    arrayRelations: Seq[ExpressionLookup],
-    relations: Seq[ExpressionLookup]
+    relationChain: Seq[String]
   ): ReadAction[Map[String, Seq[CompactEntityRecord]]] = {
-    require(arrayRelations.nonEmpty, "Array relations must not be empty")
-
-    // This always leaves out the last element, since that would be a specific element on a record
-    // This method should return the records and allow the attributes to be chosen by the caller
-    val relationChain = collection.mutable.ArrayBuffer[String]()
-    // Traverse the relations inside the first arrayRelation, if any
-    if (arrayRelations.nonEmpty) {
-      arrayRelations.head.relations.foreach(r => relationChain += r.attributeName().getText)
-      if (relations.nonEmpty) {
-        relationChain += arrayRelations.head.attributeName.getOrElse("")
-      }
-    }
-    // For each relation, add its relation context if present, then its attributeName
-    // But skip the last attributeName (that's the final attribute to extract)
-    if (relations.nonEmpty) {
-      relations.dropRight(1).foreach { rel =>
-        rel.relations.headOption.foreach(r => relationChain += r.attributeName().getText)
-        relationChain += rel.attributeName.getOrElse("")
-      }
-      // For the last relation, only add its relation context if present (not its attributeName)
-      relations.lastOption.flatMap(_.relations.headOption).foreach(r => relationChain += r.attributeName().getText)
-    }
-
-    relationChain.toList
     // The base join finds the starting entity and gets its relevant relation attributes to find the next entities to query for
     val baseJoin =
       sql"""

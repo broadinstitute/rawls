@@ -464,76 +464,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   }
 
-  //  behavior of "queryRelationsForAttribute"
-  //
-  //  it should "get the attributes from a single reference" in withMinimalTestDatabase { _ =>
-  //    // Insert referenced entities
-  //    val sample1 = Entity(
-  //      "sample1",
-  //      "sample",
-  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
-  //    )
-  //
-  //    val sample2 = Entity(
-  //      "sample2",
-  //      "sample",
-  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
-  //    )
-  //
-  //    // Referencing entity
-  //    val set1 = Entity(
-  //      "set1",
-  //      "sample_set",
-  //      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
-  //    )
-  //
-  //    insertAndGetAll(
-  //      Seq(sample1, sample2, set1)
-  //    )
-  //
-  //    runAndWait(
-  //      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
-  //    ) shouldBe Seq(AttributeString("a"))
-  //
-  //  }
-  //
-  //  it should "get the attributes from a list of references" in withMinimalTestDatabase { _ =>
-  //    // Insert referenced entities
-  //    val sample1 = Entity(
-  //      "sample1",
-  //      "sample",
-  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
-  //    )
-  //
-  //    val sample2 = Entity(
-  //      "sample2",
-  //      "sample",
-  //      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
-  //    )
-  //
-  //    // Referencing entity
-  //    val set1 = Entity(
-  //      "set1",
-  //      "sample_set",
-  //      Map(
-  //        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
-  //          Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
-  //        )
-  //      )
-  //    )
-  //
-  //    insertAndGetAll(
-  //      Seq(sample1, sample2, set1)
-  //    )
-  //
-  //    runAndWait(
-  //      q.queryRelationsForAttribute(minimalTestData.workspace.workspaceIdAsUUID, "samples", "type", "sample_set", "set1")
-  //    ) shouldBe Seq(AttributeString("a"), AttributeString("b"))
-  //
-  //  }
-
   behavior of "queryRelatedRecordsWithArray"
 
+  // TODO am i repeating tests now that i refactored?
   it should "get the record for a single reference" in withMinimalTestDatabase { _ =>
     // Insert referenced entity
     val sample = Entity(
@@ -554,27 +487,18 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGet(set)
 
-    // Can't really create a RelationContext so mock one that returns the correct values
-    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-    Mockito.when(mockAttributeContext.getText).thenReturn("samples")
-    val mockRelationContext = Mockito.mock(classOf[RelationContext])
-    Mockito.when(mockRelationContext.attributeName()).thenReturn(mockAttributeContext)
+//    // Can't really create a RelationContext so mock one that returns the correct values
+//    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
+//    Mockito.when(mockAttributeContext.getText).thenReturn("samples")
+//    val mockRelationContext = Mockito.mock(classOf[RelationContext])
+//    Mockito.when(mockRelationContext.attributeName()).thenReturn(mockAttributeContext)
 
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
         wsid,
         "sample_set",
         "set1",
-//                                     List(ExpressionLookup(List(mockRelationContext), "type")),
-        List(
-          ExpressionLookup(
-            expression = "this.type",
-            relations = List(mockRelationContext),
-            attributeName = Some("type"),
-            values = Seq.empty
-          )
-        ),
-        List.empty
+        List("samples")
       )
     )
     result.get(sample.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSample)
@@ -612,27 +536,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGet(set)
 
-    // Can't really create a RelationContext so mock one that returns the correct values
-    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-    Mockito.when(mockAttributeContext.getText).thenReturn("samples")
-    val mockRelationContext = Mockito.mock(classOf[RelationContext])
-    Mockito.when(mockRelationContext.attributeName()).thenReturn(mockAttributeContext)
-
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
-//                                     List(ExpressionLookup(List(mockRelationContext), "type")),
         List(
-          ExpressionLookup(
-            expression = "this.type",
-            relations = List(mockRelationContext),
-            attributeName = Some("type"),
-            values = Seq.empty
-          )
-        ),
-        List.empty
+          "samples"
+        )
       )
     )
     // TODO this returns multiple of each entity.  is there a case where that makes sense or should the method reduce it to one each?
@@ -665,33 +576,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGetAll(Seq(sample, set))
 
-    // Can't really create a RelationContext so mock one that returns the correct values
-    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-    Mockito.when(mockAttributeContext.getText).thenReturn("participant")
-    val mockRelationContextParticipant = Mockito.mock(classOf[RelationContext])
-    Mockito.when(mockRelationContextParticipant.attributeName()).thenReturn(mockAttributeContext)
-
-    // TODO is this the lookups that will exist/be given?
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
         List(
-          ExpressionLookup(
-            expression = "this.samples",
-            relations = List(),
-            attributeName = Some("samples"),
-            values = Seq.empty
-          )
-        ),
-        List(
-          ExpressionLookup(
-            expression = "this.type",
-            relations = List(mockRelationContextParticipant),
-            attributeName = Some("type"),
-            values = Seq.empty
-          )
+          "samples",
+          "participant"
         )
       )
     )
@@ -740,33 +632,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGetAll(Seq(sample1, sample2, set))
 
-    // Can't really create a RelationContext so mock one that returns the correct values
-    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-    Mockito.when(mockAttributeContext.getText).thenReturn("participant")
-    val mockRelationContextParticipant = Mockito.mock(classOf[RelationContext])
-    Mockito.when(mockRelationContextParticipant.attributeName()).thenReturn(mockAttributeContext)
-
-    // TODO is this the lookups that will exist/be given?
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
         List(
-          ExpressionLookup(
-            expression = "this.samples",
-            relations = List(),
-            attributeName = Some("samples"),
-            values = Seq.empty
-          )
-        ),
-        List(
-          ExpressionLookup(
-            expression = "this.type",
-            relations = List(mockRelationContextParticipant),
-            attributeName = Some("type"),
-            values = Seq.empty
-          )
+          "samples",
+          "participant"
         )
       )
     )
@@ -838,33 +711,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGetAll(Seq(sample1, sample2, set))
 
-    // Can't really create a RelationContext so mock one that returns the correct values
-    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-    Mockito.when(mockAttributeContext.getText).thenReturn("participant")
-    val mockRelationContextParticipant = Mockito.mock(classOf[RelationContext])
-    Mockito.when(mockRelationContextParticipant.attributeName()).thenReturn(mockAttributeContext)
-
-    // TODO is this the lookups that will exist/be given?
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
         List(
-          ExpressionLookup(
-            expression = "this.samples",
-            relations = List(),
-            attributeName = Some("samples"),
-            values = Seq.empty
-          )
-        ),
-        List(
-          ExpressionLookup(
-            expression = "this.type",
-            relations = List(mockRelationContextParticipant),
-            attributeName = Some("type"),
-            values = Seq.empty
-          )
+          "samples",
+          "participant"
         )
       )
     )
@@ -908,38 +762,13 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val insertedSample2 = insertAndGet(sample2)
     insertAndGet(set)
 
-    // Can't really create a RelationContext so mock one that returns the correct values
-    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-    Mockito.when(mockAttributeContext.getText).thenReturn("samples")
-    val mockRelationContext = Mockito.mock(classOf[RelationContext])
-    Mockito.when(mockRelationContext.attributeName()).thenReturn(mockAttributeContext)
-
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
         List(
-          ExpressionLookup(
-            expression = "this.samples",
-            relations = List(),
-            attributeName = Some("samples"),
-            values = Seq.empty
-          )
-        ),
-        List(
-          ExpressionLookup(
-            expression = "this.number",
-            relations = List(mockRelationContext),
-            attributeName = Some("number"),
-            values = Seq.empty
-          ),
-          ExpressionLookup(
-            expression = "this.string",
-            relations = List(mockRelationContext),
-            attributeName = Some("string"),
-            values = Seq.empty
-          )
+          "samples"
         )
       )
     )
@@ -975,26 +804,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGet(set)
 
-    // Can't really create a RelationContext so mock one that returns the correct values
-    val mockAttributeContext = Mockito.mock(classOf[AttributeNameContext])
-    Mockito.when(mockAttributeContext.getText).thenReturn("samples")
-    val mockRelationContext = Mockito.mock(classOf[RelationContext])
-    Mockito.when(mockRelationContext.attributeName()).thenReturn(mockAttributeContext)
-
     val result = runAndWait(
       q.queryRelatedRecordsWithArray(
         wsid,
         "sample_set",
         "set1",
-        List(
-          ExpressionLookup(
-            expression = "this.type",
-            relations = List(mockRelationContext),
-            attributeName = Some("type"),
-            values = Seq.empty
-          )
-        ),
-        List.empty
+        List("samples")
       )
     )
     result.get(sample1.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSampleWS1)

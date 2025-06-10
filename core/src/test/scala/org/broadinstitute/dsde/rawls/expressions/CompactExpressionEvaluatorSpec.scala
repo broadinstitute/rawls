@@ -5,6 +5,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityQuery, Compa
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityRepository, CompactEntitySerialization}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{
+  AttributeNameContext,
+  RelationContext
+}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
@@ -19,6 +23,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WdlSource
 }
 import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -26,9 +31,9 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
-import scala.concurrent.duration._
 
-import scala.util.Random
+import scala.concurrent.duration._
+import scala.util.{Random, Success}
 
 class CompactExpressionEvaluatorSpec
     extends AnyFlatSpec
@@ -186,12 +191,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve method config inputs for a set entity" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               any(),
-                                               org.mockito.ArgumentMatchers.eq("daSampleSet"),
-                                               any(),
-                                               any()
-      )
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -202,12 +202,7 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               any(),
-                                               org.mockito.ArgumentMatchers.eq("daSampleSet2"),
-                                               any(),
-                                               any()
-      )
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet2"), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -216,12 +211,7 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               any(),
-                                               org.mockito.ArgumentMatchers.eq("daSampleSet4"),
-                                               any(),
-                                               any()
-      )
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet4"), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -415,7 +405,6 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithArray(any(),
                                                org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
                                                org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                               any(),
                                                any()
       )
     )
@@ -451,7 +440,6 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithArray(any(),
                                                org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.entityType),
                                                org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name),
-                                               any(),
                                                any()
       )
     )
@@ -737,7 +725,6 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
         org.mockito.ArgumentMatchers.eq(sampleGood.name),
-        any(),
         any()
       )
     ).thenReturn(
@@ -763,7 +750,6 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet.name),
-        any(),
         any()
       )
     ).thenReturn(
@@ -790,7 +776,6 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
         org.mockito.ArgumentMatchers.eq(sampleGood.name),
-        any(),
         any()
       )
     ).thenReturn(
@@ -821,7 +806,6 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(entityWithList.entityType),
         org.mockito.ArgumentMatchers.eq(entityWithList.name),
-        any(),
         any()
       )
     ).thenReturn(
@@ -848,7 +832,6 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet.name),
-        any(),
         any()
       )
     ).thenReturn(
@@ -867,6 +850,112 @@ class CompactExpressionEvaluatorSpec
     val result = resultFut.futureValue
     // [[10,11,12],[1]]
     result should contain only AttributeValueRawJson("[[10,11,12],1]")
+  }
+
+  behavior of "buildPlans"
+
+  it should "return a queryplan for each relation level" in {
+    val mockSampleAttributeContext = Mockito.mock(classOf[AttributeNameContext])
+    Mockito.when(mockSampleAttributeContext.getText).thenReturn("samples")
+    val mockSampleRelationContext = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockSampleRelationContext.attributeName()).thenReturn(mockSampleAttributeContext)
+    val mockParticipantAttributeContext = Mockito.mock(classOf[AttributeNameContext])
+    Mockito.when(mockParticipantAttributeContext.getText).thenReturn("participants")
+    val mockParticipantRelationContext = Mockito.mock(classOf[RelationContext])
+    Mockito.when(mockParticipantRelationContext.attributeName()).thenReturn(mockParticipantAttributeContext)
+    val relationExpression = "this.samples.type"
+    val relationExpressionLookup =
+      ExpressionLookup(relationExpression, List(mockSampleRelationContext), Some("type"), Seq.empty)
+    val plainExpression = "this.foo"
+    val plainExpressionLookup = ExpressionLookup(plainExpression, List(), Some("foo"), Seq.empty)
+    val chainedExpression = "this.samples.participants.id"
+    val chainedExpressionLookup = ExpressionLookup(chainedExpression,
+                                                   List(mockSampleRelationContext, mockParticipantRelationContext),
+                                                   Some("id"),
+                                                   Seq.empty
+    )
+    val complexExpression = "{\"id\": this.bar, \"this.samples\": this.samples.blah}"
+    val complexExpressionLookup1 =
+      ExpressionLookup(complexExpression, List(), Some("bar"), Seq.empty)
+    val complexExpressionLookup2 =
+      ExpressionLookup(complexExpression, List(mockSampleRelationContext), Some("blah"), Seq.empty)
+
+    // The expressions above all together should result in 3 queries: one for the base entity, one for base -> samples, and one for base -> samples -> participants
+    val result = compactExpressionEvaluator.buildPlans(
+      Seq(relationExpressionLookup,
+          plainExpressionLookup,
+          chainedExpressionLookup,
+          complexExpressionLookup1,
+          complexExpressionLookup2
+      )
+    )
+    result.size shouldBe 3
+    result should contain theSameElementsAs (Seq(
+      QueryPlan(List(), Set("foo", "bar"), Map(plainExpression -> Set("foo"), complexExpression -> Set("bar"))),
+      QueryPlan(List("samples"),
+                Set("type", "blah"),
+                Map(relationExpression -> Set("type"), complexExpression -> Set("blah"))
+      ),
+      QueryPlan(List("samples", "participants"), Set("id"), Map(chainedExpression -> Set("id")))
+    ))
+
+  }
+
+  behavior of "executeQueryPlan"
+
+  it should "get the attributes from the entities" in withConfigData {
+    val expression = "this.samples.blah"
+    val queryPlan = QueryPlan(List("samples"), Set("blah"), Map(expression -> Set("blah")))
+
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+        )
+      )
+    val result = compactExpressionEvaluator
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", queryPlan)
+      .futureValue
+    result.size shouldBe 1
+    //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
+    result should contain theSameElementsAs (Seq(
+      (expression, Map("sampleset1" -> Success(Seq(AttributeNumber(1), AttributeNumber(2)))))
+    ))
+
+  }
+  it should "get multiple attributes from multiple expressions" in withConfigData {
+    val expression1 = "this.rawJsonDoubleArray"
+    val expression2 = "this.blah"
+    val queryPlan = QueryPlan(List("samples"),
+                              Set("rawJsonDoubleArray", "blah"),
+                              Map(expression1 -> Set("rawJsonDoubleArray"), expression2 -> Set("blah"))
+    )
+
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+        )
+      )
+    val result = compactExpressionEvaluator
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", queryPlan)
+      .futureValue
+    result.size shouldBe 2
+    //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
+    result should contain theSameElementsAs (Seq(
+      (expression2, Map("sampleset1" -> Success(Seq(AttributeNumber(1), AttributeNumber(2))))),
+      (expression1,
+       Map(
+         "sampleset1" -> Success(
+           Seq(AttributeValueRawJson("[[0,1,2],[3,4,5]]"), AttributeValueRawJson("[[3,4,5],[6,7,8]]"))
+         )
+       )
+      )
+    ))
   }
 
 }
