@@ -866,7 +866,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                                )
                                                as JSON))"""
 
-
       // SQL to pass the supplied attribute names as bind parameters; used by JSON_REMOVE and JSON_CONTAINS_PATH
       val attributeParameters =
         reduceSqlActionsWithDelim(attributeNames.map(attr => sql"${slickAttributePath(attr)}").toSeq, sql", ")

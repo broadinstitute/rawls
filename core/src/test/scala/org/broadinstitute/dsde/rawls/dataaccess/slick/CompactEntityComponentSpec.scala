@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.SqlEntityData
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.{SqlEntityData, SqlEntityReference}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -710,6 +710,97 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       attr3,
       attr4
     )
+  }
+
+  it should "update both $.attrs and $.refs in the entity" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("qux")
+
+    // insert some reference targets
+    val targets = (1 to 5).map { idx =>
+      Entity(s"target$idx", "targetType", Map())
+    }
+    insertAndGetAll(targets)
+
+    val entity1 = Entity(
+      "entityName1",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeEntityReference("targetType", "target1"),
+        attr4 -> AttributeEntityReferenceList(
+          Seq(
+            // note the "random" order of target3, target2, target 4 here
+            AttributeEntityReference("targetType", "target3"),
+            AttributeEntityReference("targetType", "target2"),
+            AttributeEntityReference("targetType", "target4")
+          )
+        )
+      )
+    )
+
+    insertAndGet(entity1)
+
+    val expectedInitialRefs = Seq(
+      SqlEntityReference(a = "library:baz", n = "target1", t = "targetType", z = Some(true)),
+      SqlEntityReference(a = "qux", n = "target3", t = "targetType", z = None),
+      SqlEntityReference(a = "qux", n = "target2", t = "targetType", z = None),
+      SqlEntityReference(a = "qux", n = "target4", t = "targetType", z = None)
+    )
+
+    val initialActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    initialActual should not be empty
+    initialActual.get.attributes should not be empty
+    val initialActualData = initialActual.get.attributes.get.parseJson
+      .convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    initialActualData.attrs.keys should contain theSameElementsAs Seq(attr1, attr2, attr3, attr4)
+    initialActualData.refs should contain theSameElementsAs expectedInitialRefs
+    // verify order for attr "qux" in refs
+    initialActualData.refs.filter(_.a == "qux") should contain theSameElementsInOrderAs expectedInitialRefs.filter(
+      _.a == "qux"
+    )
+
+    // delete attribute attr1 "foo"
+    runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr1)))
+
+    val nextActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    nextActual should not be empty
+    nextActual.get.attributes should not be empty
+    val nextActualData =
+      nextActual.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    nextActualData.attrs.keys should contain theSameElementsAs Seq(attr2, attr3, attr4)
+    nextActualData.refs should contain theSameElementsAs expectedInitialRefs
+    // verify order for attr "qux" in refs
+    nextActualData.refs.filter(_.a == "qux") should contain theSameElementsInOrderAs expectedInitialRefs.filter(
+      _.a == "qux"
+    )
+
+    // delete attribute attr3 "library:baz"
+    runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr3)))
+
+    val moreActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    moreActual should not be empty
+    moreActual.get.attributes should not be empty
+    val moreActualData =
+      moreActual.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    moreActualData.attrs.keys should contain theSameElementsAs Seq(attr2, attr4)
+    // refs should now only contain "qux"
+    moreActualData.refs should contain theSameElementsInOrderAs expectedInitialRefs.filter(_.a == "qux")
+
+    // delete attribute attr4 "qux"
+    runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr4)))
+
+    val lastActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    lastActual should not be empty
+    lastActual.get.attributes should not be empty
+    val lastActualData =
+      lastActual.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    lastActualData.attrs.keys should contain theSameElementsAs Seq(attr2)
+    // refs should now be empty
+    lastActualData.refs shouldBe empty
   }
 
   behavior of "renameAttribute"
@@ -2295,7 +2386,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(entityKeysQuery2).size shouldBe 2
   }
 
-  it should "not change non refereces that match the old name" in withMinimalTestDatabase { _ =>
+  it should "not change non references that match the old name" in withMinimalTestDatabase { _ =>
     // Create target entities
     val targetType = "targetType"
     val targetEntity1 = Entity("targetEntity1", targetType, Map())
@@ -2398,7 +2489,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Create a source entity with a list of 1000 references to the target entity
     val sourceType = "largeRefSourceType"
     val refList = AttributeEntityReferenceList(
-      (1 to 10000).map(_ => targetEntity.toReference).toSeq
+      (1 to 10000).map(_ => targetEntity.toReference)
     )
     val sourceEntity = Entity("sourceWithLargeRefList",
                               sourceType,
