@@ -3932,19 +3932,17 @@ class WorkspaceServiceSpec
     )
     val billingOwnerEmail = "billing email"
     when(
-      services.samDAO.listPoliciesForResource(
+      services.samDAO.getPolicySyncStatus(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(workspace.namespace),
+        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner),
         any
       )
     ).thenReturn(
       Future.successful(
-        Set(
-          SamPolicyWithNameAndEmail(
-            SamBillingProjectPolicyNames.owner,
-            SamPolicy(Set.empty, Set.empty, Set.empty),
-            WorkbenchEmail(billingOwnerEmail)
-          )
+        SamPolicySyncStatus(
+          "",
+          WorkbenchEmail(billingOwnerEmail)
         )
       )
     )
