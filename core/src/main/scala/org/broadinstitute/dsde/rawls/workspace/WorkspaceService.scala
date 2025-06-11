@@ -365,10 +365,10 @@ class WorkspaceService(
         WorkspacePolicy(
           input.getName,
           input.getNamespace,
-          Option(
-            input.getAdditionalData.asScala.toList
-              .map(data => Map.apply(data.getKey -> data.getValue))
-          ).getOrElse(List.empty)
+          Option(input.getAdditionalData)
+            .map(_.asScala.toList)
+            .getOrElse(List.empty)
+            .map(data => Map.apply(data.getKey -> data.getValue))
         )
       )
       .toList
