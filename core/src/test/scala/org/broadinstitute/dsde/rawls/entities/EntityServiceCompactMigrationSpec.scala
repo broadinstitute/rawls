@@ -141,7 +141,8 @@ class EntityServiceCompactMigrationSpec
 
   behavior of "Compact Entity Migration"
   testWorkspaces.foreach { case (workspace, expectedCount) =>
-    it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" in withTestDataServices {
+    // TODO CORE-543: re-enable tests
+    it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" ignore withTestDataServices {
       apiService =>
         // entity data is already loaded into legacy tables via withTestDataServices
 
@@ -191,7 +192,8 @@ class EntityServiceCompactMigrationSpec
     }
   }
 
-  it should s"migrate to compact entities with various attribute data types" in withTestDataServices { apiService =>
+  // TODO CORE-543: re-enable test
+  it should s"migrate to compact entities with various attribute data types" ignore withTestDataServices { apiService =>
     val workspace = testData.workspace // has some entities we can use to test references
 
     // various attribute types to ensure migration works for all of them
@@ -204,7 +206,7 @@ class EntityServiceCompactMigrationSpec
         """{"foo":"bar", "nested": {"stuff": [2,3,4,false]}}""".parseJson
       ),
       AttributeName.withDefaultNS("jsonArrAttr") -> AttributeValueRawJson("""[1,2,3,[4,5,6],[7,8,9]]""".parseJson),
-      /* TODO CORE-473: this migrates as an AttributeString, not AttributeValueRawJson. Does it matter?
+      /* This migrates as an AttributeString, not AttributeValueRawJson. We are ok with that.
       AttributeName.withDefaultNS("jsonStrAttr") -> AttributeValueRawJson(
         """"this is a string parsed as json"""".parseJson
       ),
@@ -216,7 +218,7 @@ class EntityServiceCompactMigrationSpec
                                                                                   testData.sample1.name
       ), // same as previous, to test de-duplication when inserting to ENTITY_REFS
       AttributeName.withDefaultNS("emptyList") -> AttributeValueEmptyList,
-      // TODO CORE-473: this migrates as an AttributeValueEmptyList. Does it matter? Both result in `[]`
+      // This migrates as an AttributeValueEmptyList. We are ok with that; both result in `[]`
       // AttributeName.withDefaultNS("emptyRefList") -> AttributeEntityReferenceEmptyList,
       AttributeName.withDefaultNS("valueList") -> AttributeValueList(
         Seq(

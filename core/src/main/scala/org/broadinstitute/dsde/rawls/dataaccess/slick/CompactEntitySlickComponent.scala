@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.model.AttributeName
 import slick.jdbc.MySQLProfile.api._
 
 import java.sql.Timestamp
@@ -32,14 +33,17 @@ trait CompactEntitySlickComponent {
   /** high-level Slick table for ENTITY_REFS */
   class CompactEntityRefTable(tag: Tag) extends Table[RefPointerRecord](tag, "ENTITY_REFS") {
     def workspaceId = column[UUID]("workspace_id")
+    def fromEntityId: Rep[Long] = column[Long]("from_entity_id")
     def fromEntityType = column[String]("from_entity_type")
     def fromName = column[String]("from_name")
+    def fromAttributeName = column[String]("from_attribute_name")
     def toEntityType = column[String]("to_entity_type")
     def toName = column[String]("to_name")
 
     def * =
-      (workspaceId, fromEntityType, fromName, toEntityType, toName) <> (RefPointerRecord.tupled,
-                                                                        RefPointerRecord.unapply
+      (workspaceId, fromEntityId, fromEntityType, fromName, fromAttributeName, toEntityType, toName) <> (
+        RefPointerRecord.tupled,
+        RefPointerRecord.unapply
       )
   }
 

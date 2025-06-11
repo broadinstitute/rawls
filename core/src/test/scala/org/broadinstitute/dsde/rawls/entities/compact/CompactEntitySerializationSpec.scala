@@ -2,16 +2,18 @@ package org.broadinstitute.dsde.rawls.entities.compact
 
 import org.broadinstitute.dsde.rawls.entities.exceptions.CompactEntityDeserializationException
 import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
   AttributeString,
+  AttributeValueList,
   Entity
 }
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import spray.json.{JsNumber, JsObject}
+import spray.json.{JsArray, JsNumber, JsObject}
 
 class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with CompactEntitySerialization {
 
@@ -58,6 +60,29 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     }
   }
 
+  behavior of "v2-specific serialization"
+
+  it should "serialize references into a normalized array with sortable values in attrs" in {
+    // shorthand for attrs
+    val singleref = AttributeName.withDefaultNS("singleref")
+    val reflist = AttributeName.withDefaultNS("reflist")
+
+    val serialized = toSql(refsEntity.attributes)
+    val actual = serialized.convertTo[SqlEntityData]
+
+    // check refs array
+    actual.refs should contain theSameElementsInOrderAs Seq(
+      SqlEntityReference(a = "singleref", t = "targetType", n = "targetName1", z = Some(true)),
+      SqlEntityReference(a = "reflist", t = "targetType", n = "targetName2", z = None),
+      SqlEntityReference(a = "reflist", t = "targetType", n = "targetName3", z = None)
+    )
+
+    actual.attrs.keys should contain(singleref)
+    actual.attrs(singleref) shouldBe AttributeString("targetName1")
+    actual.attrs.keys should contain(reflist)
+    actual.attrs(reflist) shouldBe AttributeNumber(2)
+  }
+
   behavior of "Attribute deserialization"
 
   private val expectedAttrs = Map(
@@ -96,7 +121,7 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
 
   it should "throw if the version number is out of range" in {
     val input =
-      """{ "v": 2, "attrs": {} }"""
+      """{ "v": 3, "attrs": {} }"""
     intercept[CompactEntityDeserializationException] {
       fromSql(Option(input))
     }
@@ -110,9 +135,54 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     }
   }
 
+  behavior of "v2-specific deserialization"
+
+  it should "deserialize with no references" in {
+    val input =
+      """{ "v": 2,
+         "attrs": {"hello": "world", "mynum": 42, "somelist": [true, false] },
+         "refs": []
+       }"""
+
+    val expected = Map(
+      AttributeName.fromDelimitedName("hello") -> AttributeString("world"),
+      AttributeName.fromDelimitedName("mynum") -> AttributeNumber(42),
+      AttributeName.fromDelimitedName("somelist") -> AttributeValueList(
+        Seq(AttributeBoolean(true), AttributeBoolean(false))
+      )
+    )
+
+    val actual = fromSql(Option(input))
+    actual shouldBe expected
+  }
+
+  it should "deserialize with references" in {
+    val input =
+      """{ "v": 2,
+           "attrs": {"hello": "world", "reflist": 1, "refscalar": "targetName2"},
+           "refs": [
+             {"a": "reflist", "n": "targetName1", "t": "targetType"},
+             {"a": "refscalar", "n": "targetName2", "t": "targetType", "z": true}
+           ]
+         }"""
+
+    val expected = Map(
+      AttributeName.fromDelimitedName("hello") -> AttributeString("world"),
+      AttributeName.fromDelimitedName("reflist") -> AttributeEntityReferenceList(
+        Seq(
+          AttributeEntityReference("targetType", "targetName1")
+        )
+      ),
+      AttributeName.fromDelimitedName("refscalar") -> AttributeEntityReference("targetType", "targetName2")
+    )
+
+    val actual = fromSql(Option(input))
+    actual shouldBe expected
+  }
+
   it should "throw if the attributes sub-object is missing" in {
     val input =
-      """{ "v": 1, "incorrect-key-for-attrs": {} }"""
+      """{ "v": 2, "incorrect-key-for-attrs": {}, "refs": [] }"""
     intercept[CompactEntityDeserializationException] {
       fromSql(Option(input))
     }
@@ -120,7 +190,23 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
 
   it should "throw if the attributes sub-object is an unexpected data type" in {
     val input =
-      """{ "v": 1, "attrs": false }"""
+      """{ "v": 2, "attrs": false, "refs": [] }"""
+    intercept[CompactEntityDeserializationException] {
+      fromSql(Option(input))
+    }
+  }
+
+  it should "throw if the references sub-object is missing" in {
+    val input =
+      """{ "v": 2, "attrs": {}, "incorrect-key-for-refs": [] }"""
+    intercept[CompactEntityDeserializationException] {
+      fromSql(Option(input))
+    }
+  }
+
+  it should "throw if the references sub-object is an unexpected data type" in {
+    val input =
+      """{ "v": 2, "attrs": {}, "refs": false }"""
     intercept[CompactEntityDeserializationException] {
       fromSql(Option(input))
     }
