@@ -5,6 +5,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.google.common.annotations.VisibleForTesting
+import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
@@ -45,7 +46,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, trace, traceDBIOWithParent}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
@@ -263,9 +264,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new DeleteEntitiesConflictException(referencingEntities.map(_.toAttributeEntityReference).toSet)
         }
         // hard-delete everything we can
-        _ <- repository.queries.deleteEntities(workspaceId, pointers)
+        numHardDeletes <- repository.queries.deleteEntities(workspaceId, pointers)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
         res <- repository.queries.batchHide(workspaceId, pointers)
+        _ = logger.info(s"deleteEntities for workspace $workspaceId: $numHardDeletes hard deletes, $res soft deletes")
+        _ = setTraceSpanAttribute(parentContext,
+                                  AttributeKey.longKey("hardDeletes"),
+                                  java.lang.Long.valueOf(numHardDeletes)
+        )
+        _ = setTraceSpanAttribute(parentContext, AttributeKey.longKey("softDeletes"), java.lang.Long.valueOf(res))
       } yield res
     }
 
@@ -279,12 +286,20 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
         // hard-delete everything we can
-        _ <- repository.queries.deleteEntitiesOfType(workspaceId, entityType)
+        numHardDeletes <- repository.queries.deleteEntitiesOfType(workspaceId, entityType)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
         res <- repository.queries.batchHideType(
           workspaceId,
           entityType
         )
+        _ = logger.info(
+          s"deleteEntitiesOfType($entityType) for workspace $workspaceId: $numHardDeletes hard deletes, $res soft deletes"
+        )
+        _ = setTraceSpanAttribute(parentContext,
+                                  AttributeKey.longKey("hardDeletes"),
+                                  java.lang.Long.valueOf(numHardDeletes)
+        )
+        _ = setTraceSpanAttribute(parentContext, AttributeKey.longKey("softDeletes"), java.lang.Long.valueOf(res))
       } yield res
     }
 

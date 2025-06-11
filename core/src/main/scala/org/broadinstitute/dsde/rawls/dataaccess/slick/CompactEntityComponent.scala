@@ -523,15 +523,15 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
     val endSql = sql""" and e.workspace_id = $workspaceId
           and e.id not in (
-            select value_entity_ref from WORKSPACE_ATTRIBUTE where owner_id = $workspaceId
+            select value_entity_ref from WORKSPACE_ATTRIBUTE where owner_id = $workspaceId and value_entity_ref is not null
               union
-            select ENTITY_ID from SUBMISSION where WORKSPACE_ID = $workspaceId
+            select ENTITY_ID from SUBMISSION where WORKSPACE_ID = $workspaceId and ENTITY_ID is not null
               union
-            select cw.ENTITY_ID from CANDIDATE_WORKFLOWS cw
+            select cw.ENTITY_ID from CANDIDATE_WORKFLOWS cw where ENTITY_ID is not null
               union
             select sa.value_entity_ref
             from SUBMISSION_ATTRIBUTE sa, SUBMISSION_VALIDATION sv, CANDIDATE_WORKFLOWS cw
-            where sa.owner_id = sv.id and sv.WORKFLOW_ID = cw.ID
+            where sa.owner_id = sv.id and sv.WORKFLOW_ID = cw.ID and value_entity_ref is not null
           )
        """
 
