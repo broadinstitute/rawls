@@ -218,7 +218,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
                                    ctx: RawlsRequestContext
   )(implicit
     ec: ExecutionContext
-  ): Unit =
+  ): Future[Unit] =
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
@@ -236,7 +236,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
           updateDiskLabels(workspaceId, newWorkspaceNamespace, oldWorkspaceNamespace, ctx)
         } catch {
           case revertException: Exception =>
-            logger.error(
+            logger.warn(
               s"Failed to revert workspace namespace label updates for workspaceId=$workspaceId. Error: ${revertException.getMessage}"
             )
         }

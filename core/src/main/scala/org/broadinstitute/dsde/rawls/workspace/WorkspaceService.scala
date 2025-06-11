@@ -882,6 +882,28 @@ class WorkspaceService(
           )
         }
 
+      _ <- leonardoService
+        .updateResourceLabelsOrRevert(workspace.workspaceIdAsUUID,
+                                      workspace.namespace,
+                                      destBillingProject.projectName.value,
+                                      ctx
+        )
+        .recoverWith { case ex =>
+          rollbackUpdateWorkspaceBillingInGCP(workspace,
+                                              oldBillingProjectOwnerPolicyEmail,
+                                              newBillingProjectOwnerPolicyEmail
+          )
+          rollbackUpdateWorkspaceBillingInSam(workspace,
+                                              oldBillingProjectOwnerPolicyEmail,
+                                              newBillingProjectOwnerPolicyEmail
+          )
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError, "Billing update failed in Leonardo", ex)
+            )
+          )
+        }
+
       // Update DB record for the workspace
       _ <- workspaceRepository
         .updateBilling(workspace.workspaceIdAsUUID,
