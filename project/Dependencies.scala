@@ -137,7 +137,7 @@ object Dependencies {
   val billingProfileManager = clientLibExclusions("bio.terra" % "billing-profile-manager-client" % "0.1.619-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.392")
-  val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
+  val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-eb6e861"
   val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.18-SNAPSHOT")
 
   // OpenTelemetry

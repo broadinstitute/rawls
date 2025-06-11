@@ -4,7 +4,7 @@ import okhttp3.{Dispatcher, Protocol}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
-import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, ResourcesApi, RuntimesApi}
+import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, DisksApi, ResourcesApi, RuntimesApi}
 import org.broadinstitute.dsde.workbench.client.leonardo.model._
 
 import java.util.UUID
@@ -43,14 +43,26 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     new RuntimesApi(apiClient)
   }
 
+  private def getDisksV2LeonardoApi(accessToken: String): DisksApi = {
+    val apiClient = getApiClient(accessToken)
+    new DisksApi(apiClient)
+  }
+
   override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean) =
     getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId.toString, deleteDisk)
 
   override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
     getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null, null).asScala.toSeq
 
+  override def updateAppConfig(token: String,
+                               googleProject: String,
+                               name: String,
+                               updateAppRequest: UpdateAppRequest
+  ): Unit =
+    getAppsV2LeonardoApi(token).updateApp(googleProject, name, updateAppRequest)
+
   override def listRuntimesByWorkspace(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
-    getRuntimesV2LeonardoApi(token).listRuntimesByWorkspaceV2(workspaceId.toString, null, false, null).asScala.toSeq
+    getRuntimesV2LeonardoApi(token).listRuntimesByWorkspaceV2(workspaceId.toString, null, null).asScala.toSeq
 
   override def updateRuntimeConfig(
     token: String,
@@ -61,7 +73,7 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     getRuntimesV2LeonardoApi(token).updateRuntime(googleProject, name, updateRuntimeRequest)
 
   override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
-    getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, false, null).asScala.toSeq
+    getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, null).asScala.toSeq
 
   override def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit =
     getRuntimesV2LeonardoApi(token).deleteAllRuntimesV2(workspaceId.toString, deleteDisk)
@@ -78,6 +90,21 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     val createAppRequest = buildAppRequest(appType, sourceWorkspaceId)
     getAppsV2LeonardoApi(token).createAppV2(workspaceId.toString, appName, createAppRequest)
   }
+
+  override def listDisksByWorkspaceNamespace(token: String,
+                                             workspaceNamespace: String
+  ): Seq[ListPersistentDiskResponse] = {
+    val labels = "workspaceNamespace=" + workspaceNamespace
+    getDisksV2LeonardoApi(token).listDisks(labels, null, null).asScala.toSeq
+  }
+
+  override def updateDiskConfig(
+    token: String,
+    googleProject: String,
+    name: String,
+    updateDiskRequest: UpdateDiskRequest
+  ): Unit =
+    getDisksV2LeonardoApi(token).updateDisk(googleProject, name, updateDiskRequest)
 
   override def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit =
     getResourcesLeonardoApi(token).cleanupAllResources(googleProjectId.value)
