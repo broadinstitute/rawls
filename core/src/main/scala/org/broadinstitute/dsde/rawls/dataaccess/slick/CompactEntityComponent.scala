@@ -854,8 +854,21 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       val allAttrNames = attributeNames.map(x => AttributeName.toDelimitedName(x).replace(":", "\\:")).mkString("|")
       val regex = s"""\\{\\"a\\": \\"(?:$allAttrNames)\\",[^}]+\\},?"""
 
-      // the additional REPLACE(..., ', ], ']') handles the case where we have removed the last object
-      // in the $.refs array and therefore need to remove the trailing comma
+      // Remove all elements in the $.refs array for the attributes we want to delete.
+      // This is done via JSON_REPLACE(CAST(REPLACE(REGEXP_REPLACE(JSON_EXTRACT)))). Explaining from the inside out:
+      //   - JSON_EXTRACT(attributes, '$$.refs') gets the refs array
+      //   - REGEXP_REPLACE(...) treats the refs array as a plain string, and deletes all elements matching our regex
+      //   - REPLACE(...) handles the case where we have removed the last object in the $.refs array
+      //                  and therefore need to remove the trailing comma
+      //   - CAST(... as JSON) converts the modified string back to a JSON array
+      //   - JSON_REPLACE(...) replaces the original refs array with the modified one
+      // We use a string replace here because it is significantly more performant than calling JSON_REMOVE
+      //  individually for each value that needs to be changed. Since we control the serialization format of the
+      //  refs array, and only perform the string replace inside that array, we avoid any problems with other
+      //  user-supplied values.
+      //
+      // All of this will be wrapped by JSON_REMOVE later - see the `removeSql` variable. That wrapping JSON_REMOVE
+      //  will handle removing the attributes from the `attrs` object.
       val replaceRefsSql = sql"""JSON_REPLACE(attributes,
                                               $slickRefsPath,
                                               CAST(
