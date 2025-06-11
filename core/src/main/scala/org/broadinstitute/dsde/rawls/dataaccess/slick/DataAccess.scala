@@ -88,8 +88,7 @@ trait DataAccess
       TableQuery[PendingBucketDeletionTable].delete andThen
       TableQuery[EntityAttributeTempTable].delete andThen
       TableQuery[WorkspaceAttributeTempTable].delete andThen
-      TableQuery[ExprEvalScratch].delete andThen
-      TableQuery[CompactEntityRefTable].delete
+      TableQuery[ExprEvalScratch].delete
   }
 
   def sqlDBStatus() =

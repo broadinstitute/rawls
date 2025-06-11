@@ -4,6 +4,8 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity, EntityPointer}
+import spray.json.DefaultJsonProtocol.{jsonFormat3, jsonFormat4}
+import spray.json.RootJsonFormat
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -64,8 +66,10 @@ case class KeysRecord(id: Long, workspaceId: UUID, entityType: String, attribute
   * model class for rows in the ENTITY_REFS table
   */
 case class RefPointerRecord(workspaceId: UUID,
+                            fromEntityId: Long,
                             fromEntityType: String,
                             fromName: String,
+                            fromAttribute: String,
                             toEntityType: String,
                             toName: String
 )
