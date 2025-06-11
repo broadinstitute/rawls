@@ -6,7 +6,6 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
-import org.broadinstitute.dsde.rawls.model.AttributeFormat.{ENTITY_NAME_KEY, ENTITY_TYPE_KEY}
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -28,7 +27,7 @@ import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import spray.json._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
 
 trait CompactEntityComponent extends LazyLogging {
@@ -411,22 +410,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     */
   def existsAll(workspaceId: UUID, refs: Set[EntityPointer]): ReadAction[Boolean] =
     countExisting(workspaceId, refs).map(count => count == refs.size)
-
-  /**
-    * Delete all rows in ENTITY_REFS representing references from specific attributes in entities of a given type.
-    * @param workspaceId the workspace containing references
-    * @param fromType the entity type containing reference
-    * @param fromAttributes the attributes in the fromType entities that contain references to other entities
-    * @return the number of rows deleted
-    *
-    * execution plan: pretty messy, but no full table scans. Uses temporary tables, unions, table functions (JSON_TABLE),
-    *   and subqueries. Makes use of ENTITY.idx_entity_type_name and ENTITY_REFS.unq_from_to indexes.
-    *
-    */
-  def deleteAllReferencesFromAttributes(workspaceId: UUID,
-                                        fromType: String,
-                                        fromAttributes: Set[AttributeName]
-  ): ReadWriteAction[Int] = ???
 
   /**
    * Get all entity attribute keys for a workspace.
@@ -855,28 +838,18 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                entityType: String,
                                attributeNames: Set[AttributeName]
   ): ReadAction[Boolean] = {
-    val containsClauses = attributeNames.map { attributeName =>
-      val refTypePathScalar = s"${slickAttributePath(attributeName)}.$ENTITY_TYPE_KEY"
-      val refNamePathScalar = s"${slickAttributePath(attributeName)}.$ENTITY_NAME_KEY"
-      val refTypePathArray = s"${slickAttributePath(attributeName)}[*].$ENTITY_TYPE_KEY"
-      val refNamePathArray = s"${slickAttributePath(attributeName)}[*].$ENTITY_NAME_KEY"
-      sql"""JSON_CONTAINS_PATH(attributes, 'all', $refTypePathScalar, $refNamePathScalar)
-              or
-            JSON_CONTAINS_PATH(attributes, 'all', $refTypePathArray, $refNamePathArray)
-         """
-    }
-    val clause = reduceSqlActionsWithDelim(containsClauses.toSeq, sql" or ")
+    // SQL to pass the supplied attribute names as bind parameters
+    val attributeParameters =
+      reduceSqlActionsWithDelim(attributeNames.map(attr => sql"${AttributeName.toDelimitedName(attr)}").toSeq, sql", ")
 
-    val baseSql =
-      sql"""select exists (select 1 from ENTITY
+    concatSqlActions(
+      sql"""select exists (select 1 from ENTITY_REFS
             where workspace_id = $workspaceId
-            and entity_type = $entityType
-            and deleted = 0
-            and ("""
-
-    concatSqlActions(baseSql, clause, sql"))")
-      .as[Boolean]
-      .head
+            and from_entity_type = $entityType
+            and from_attribute_name in (""",
+      attributeParameters,
+      sql"))"
+    ).as[Boolean].head
   }
 
   /**
@@ -897,13 +870,27 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         )
       )
     } else {
-      // SQL to pass the supplied attribute names as bind parameters
+      // Map all attributes-to-be-removed into a single regex. In pseudocode, this regex looks for:
+      //     {"a": "attr1 OR attr2 OR attr3", ... },
+      // with the final comma being optional.
+      // This should hit on any instance of any element of `attributeNames` inside the $.refs array.
+      val allAttrNames = attributeNames.map(x => AttributeName.toDelimitedName(x).replace(":", "\\:")).mkString("|")
+      val regex = s"""\\{"a": "(?:$allAttrNames)",[^}]+\\},?"""
+
+      val replaceRefsSql = sql"""JSON_REPLACE(attributes,
+                                              $slickRefsPath,
+                                              CAST(REGEXP_REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $regex, '') as JSON))"""
+
+
+      // SQL to pass the supplied attribute names as bind parameters; used by JSON_REMOVE and JSON_CONTAINS_PATH
       val attributeParameters =
         reduceSqlActionsWithDelim(attributeNames.map(attr => sql"${slickAttributePath(attr)}").toSeq, sql", ")
 
       // JSON_REMOVE to update the attributes json and delete the specified attributes
       val removeSql = concatSqlActions(
-        sql"JSON_REMOVE(attributes, ",
+        sql"JSON_REMOVE(",
+        replaceRefsSql,
+        sql", ",
         attributeParameters,
         sql")"
       )
@@ -924,7 +911,16 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       /* The final query looks like:
 
           update ENTITY set record_version = record_version + 1,
-            attributes = JSON_REMOVE(attributes, '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
+            attributes = JSON_REMOVE(
+                          JSON_REPLACE(attributes,
+                                       '$.refs',
+                                        CAST(
+                                          REGEXP_REPLACE(
+                                            JSON_EXTRACT(attributes,'$.refs'),
+                                            '\{"a": "(?:attrToRemove1|attrToRemove2)",[^}]+\},?',
+                                            '')
+                                        as JSON)),
+                         '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
           where workspace_id = ?
             and entity_type = ?
             and deleted = = 0

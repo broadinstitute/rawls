@@ -311,22 +311,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
               code = StatusCodes.BadRequest
             )
           }
-          // Does any entity exist which contains a reference in any of these attributes?
-          anyAttrHasReference <- repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
-          _ <-
-            // If none of these attributes contains a references, no need to issue an update to ENTITY_REFS
-            if (anyAttrHasReference) {
-              // If refs exist, delete from ENTITY_REFS where workspace_id matches, entity_type matches,
-              //   and to_entity_type+to_entity_name pairs exist in the column being deleted
-              repository.queries.deleteAllReferencesFromAttributes(
-                workspaceId,
-                entityType,
-                attributeNames
-              )
-            } else {
-              DBIO.successful(())
-            }
-
           // Remove the attributes from entities
           _ <- repository.queries.deleteAttributes(
             workspaceId,
@@ -335,7 +319,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           )
         } yield ()
       }
-
     }
 
   override def entityTypeMetadata(useCache: Boolean,
