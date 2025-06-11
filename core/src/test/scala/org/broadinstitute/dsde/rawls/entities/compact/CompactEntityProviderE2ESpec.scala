@@ -948,8 +948,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     // insert entities containing references into both workspaces
     val attrName1 = AttributeName.withDefaultNS("attr1")
-    val attrName2 = AttributeName.withDefaultNS("attr2")
-    val attrName3 = AttributeName.withDefaultNS("attr3")
+    val attrName2 = AttributeName.withLibraryNS("attr2")
+    val attrName3 = AttributeName.fromDelimitedName("import:attr3")
 
     val sourceEntity1 = Entity(
       "sourceName1",

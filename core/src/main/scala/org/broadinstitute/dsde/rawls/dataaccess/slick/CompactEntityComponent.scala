@@ -852,11 +852,19 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       // with the final comma being optional.
       // This should hit on any instance of any element of `attributeNames` inside the $.refs array.
       val allAttrNames = attributeNames.map(x => AttributeName.toDelimitedName(x).replace(":", "\\:")).mkString("|")
-      val regex = s"""\\{"a": "(?:$allAttrNames)",[^}]+\\},?"""
+      val regex = s"""\\{\\"a\\": \\"(?:$allAttrNames)\\",[^}]+\\},?"""
 
+      // the additional REPLACE(..., ', ], ']') handles the case where we have removed the last object
+      // in the $.refs array and therefore need to remove the trailing comma
       val replaceRefsSql = sql"""JSON_REPLACE(attributes,
                                               $slickRefsPath,
-                                              CAST(REGEXP_REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $regex, '') as JSON))"""
+                                              CAST(
+                                              REPLACE(
+                                                REGEXP_REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $regex, ''),
+                                                ', ]',
+                                                ']'
+                                               )
+                                               as JSON))"""
 
 
       // SQL to pass the supplied attribute names as bind parameters; used by JSON_REMOVE and JSON_CONTAINS_PATH
@@ -892,10 +900,13 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                           JSON_REPLACE(attributes,
                                        '$.refs',
                                         CAST(
-                                          REGEXP_REPLACE(
-                                            JSON_EXTRACT(attributes,'$.refs'),
-                                            '\{"a": "(?:attrToRemove1|attrToRemove2)",[^}]+\},?',
-                                            '')
+                                          REPLACE
+                                            REGEXP_REPLACE(
+                                              JSON_EXTRACT(attributes,'$.refs'),
+                                              '\{"a": "(?:attrToRemove1|attrToRemove2)",[^}]+\},?',
+                                              ''),
+                                            ', ]',
+                                            ']'
                                         as JSON)),
                          '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
           where workspace_id = ?
