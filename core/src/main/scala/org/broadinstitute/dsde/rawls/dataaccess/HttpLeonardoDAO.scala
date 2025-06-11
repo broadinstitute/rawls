@@ -42,11 +42,23 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     val apiClient = getApiClient(accessToken)
     new RuntimesApi(apiClient)
   }
+
   override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean) =
     getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId.toString, deleteDisk)
 
   override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
     getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null, null).asScala.toSeq
+
+  override def listRuntimesByWorkspace(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
+    getRuntimesV2LeonardoApi(token).listRuntimesByWorkspaceV2(workspaceId.toString, null, false, null).asScala.toSeq
+
+  override def updateRuntimeConfig(
+    token: String,
+    googleProject: String,
+    name: String,
+    updateRuntimeRequest: UpdateRuntimeRequest
+  ): Unit =
+    getRuntimesV2LeonardoApi(token).updateRuntime(googleProject, name, updateRuntimeRequest)
 
   override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
     getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, false, null).asScala.toSeq

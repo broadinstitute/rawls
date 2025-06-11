@@ -4,7 +4,12 @@ import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsApi
 import scala.concurrent.{ExecutionContext, Future}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, WorkspaceName}
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{
+  ListAppResponse,
+  ListRuntimeResponse,
+  UpdateRuntimeConfig,
+  UpdateRuntimeRequest
+}
 
 import java.util.UUID
 
@@ -22,6 +27,15 @@ trait LeonardoDAO {
   def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit
 
   def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse]
+
+  def listRuntimesByWorkspace(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
+
+  def updateRuntimeConfig(
+    token: String,
+    googleProject: String,
+    name: String,
+    updateRuntimeRequest: UpdateRuntimeRequest
+  ): Unit
 
   def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
 

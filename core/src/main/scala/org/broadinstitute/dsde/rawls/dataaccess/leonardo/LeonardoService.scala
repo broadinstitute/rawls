@@ -13,7 +13,8 @@ import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   AppStatus,
   ClusterStatus,
   ListAppResponse,
-  ListRuntimeResponse
+  ListRuntimeResponse,
+  UpdateRuntimeRequest
 }
 import org.broadinstitute.dsde.workbench.model.Notifications.WorkspaceName
 
@@ -162,4 +163,18 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
       }
     }
 
+  def updateWorkspaceNamespaceRuntimeLabels(workspace: Workspace, ctx: RawlsRequestContext): Unit = {
+    logger.info(s"Upserting workspace namespace label for [workspaceId=${workspace.workspaceIdAsUUID}]")
+    val updateRequest = new UpdateRuntimeRequest()
+    updateRequest.setLabelsToUpsert(Map("saturnWorkspaceNamespace" -> workspace.namespace))
+
+    val runtimes = leonardoDAO.listRuntimesByWorkspace(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+    runtimes.foreach { runtime =>
+      leonardoDAO.updateRuntimeConfig(ctx.userInfo.accessToken.token,
+                                      runtime.getGoogleProject,
+                                      runtime.getRuntimeName,
+                                      updateRequest
+      )
+    }
+  }
 }
