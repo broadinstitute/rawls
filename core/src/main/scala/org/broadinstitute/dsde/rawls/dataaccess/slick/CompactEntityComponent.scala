@@ -420,6 +420,18 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
 
   /**
+   * Get all entity attribute keys for a workspace.
+   *
+   * execution plan:
+   *    ENTITY: Using index condition (Using index condition; Using temporary); Using temporary
+   *    t: Table function: json_table; Using temporary
+   */
+  def listEntityKeysViaEntity(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
+    sql"""SELECT distinct entity_type, attribute_key
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
+
+  /**
    * Gets the count of entities in a workspace, grouped by entity type.
    *
    * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`

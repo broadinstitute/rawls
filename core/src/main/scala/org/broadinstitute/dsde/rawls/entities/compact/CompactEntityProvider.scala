@@ -299,7 +299,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     repository.dataSource.inTransaction(ReadOnly) { _ =>
       for {
         entityTypeAndKeys <- traceDBIOWithParent("listEntityKeys", parentContext) { _ =>
-          repository.queries.listEntityKeys(workspaceId)
+          // temporary hack to gather performance data: if useCache is true, calculate attributes via the ENTITY_KEYS table.
+          // if useCache is false, calculate attributes via the ENTITY table. We'll run these through perf tests over
+          // a period of time to see if ENTITY_KEYS offers significant benefit over ENTITY.
+          if (useCache)
+            repository.queries.listEntityKeys(workspaceId)
+          else
+            repository.queries.listEntityKeysViaEntity(workspaceId)
         }
         entityTypeAndCounts <- traceDBIOWithParent("countEntitiesGroupedByType", parentContext) { _ =>
           repository.queries.countEntitiesGroupedByType(workspaceId)
