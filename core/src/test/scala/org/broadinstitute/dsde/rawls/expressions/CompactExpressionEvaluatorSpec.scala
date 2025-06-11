@@ -43,6 +43,7 @@ class CompactExpressionEvaluatorSpec
     with TestDriverComponent
     with MethodConfigTestSupport {
 
+  // TODO this is just for debugging, remove or reduce
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = 300.seconds, interval = 100.millis)
 
@@ -270,6 +271,39 @@ class CompactExpressionEvaluatorSpec
 
   }
 
+  it should "resolve method config inputs for a set entity with root entity single type" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+        )
+      )
+
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(sampleSet2.entityType),
+                                  Some(sampleSet2.name),
+                                  Some("this.samples"),
+                                  Some(sampleGood.entityType)
+      )
+    val result = evalInputs(expressionEvaluationContext, configGood, littleWdl)
+    result should contain theSameElementsAs Seq(
+      SubmissionValidationEntityInputs(
+        sampleGood.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName)
+        )
+      ),
+      SubmissionValidationEntityInputs(
+        sampleGood2.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeNumber(2)), None, intArgNameWithWfName)
+        )
+      )
+    )
+  }
+
   it should "return error on missing values" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithArray(any(),
@@ -296,6 +330,7 @@ class CompactExpressionEvaluatorSpec
       .exists(_.inputResolutions.exists(v => v.inputName == intArgNameWithWfName && v.error.isDefined)) shouldBe true
   }
 
+  // TODO maybe also test error on missing entitytype and name?
   it should "error on missing input definitions" in withConfigData {
     // We don't use evalInputs here in order to catch and inspect the exception
     val expressionEvaluationContext =
@@ -309,6 +344,78 @@ class CompactExpressionEvaluatorSpec
     val ex = future.failed.futureValue
     ex shouldBe a[RawlsExceptionWithErrorReport]
     ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("Missing rootEntityType")
+  }
+
+  // TODO: legacy submissions fail here, but maybe we should let it pass?
+  //   - root entity type:set, no entity expression, input expression: this.samples.something - SVV with error Expected single value for workflow input, but evaluated result set had multiple values
+  // - root entity type: set, entity expression: this.samples, input expression: this.samples.something - "The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample_set.)
+  it should "error on root entity type/expression evaluation mismatch" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER),
+              sampleMissingValueAsCER.name -> Seq(sampleMissingValueAsCER)
+          )
+        )
+      )
+
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(sampleSet.entityType), Some(sampleSet.name), None, Some(sampleSet.entityType))
+    val gatherInputsResult =
+      methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl).get
+
+    val future = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID, expressionEvaluationContext, gatherInputsResult)
+
+    val ex = future.failed.futureValue
+    ex shouldBe a[RawlsExceptionWithErrorReport]
+    ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("Expected single value")
+
+    val expressionEvaluationContext2 =
+      ExpressionEvaluationContext(Some(sampleSet.entityType),
+                                  Some(sampleSet.name),
+                                  Some("this.samples"),
+                                  Some(sampleSet.entityType)
+      )
+    val gatherInputsResult2 =
+      methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl).get
+
+    val future2 = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID, expressionEvaluationContext2, gatherInputsResult2)
+
+    val ex2 = future2.failed.futureValue
+    ex2 shouldBe a[RawlsExceptionWithErrorReport]
+    ex2.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include(
+      "matched only entities of the wrong type"
+    )
+
+  }
+
+  it should "error on root entity type/input entity mismatch" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER),
+              sampleMissingValueAsCER.name -> Seq(sampleMissingValueAsCER)
+          )
+        )
+      )
+
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(sampleSet.entityType), Some(sampleSet.name), None, Some(sampleGood.entityType))
+    val gatherInputsResult =
+      methodConfigResolver.gatherInputs(userInfo, configEvenBetter, littleWdl).get
+
+    val future = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID, expressionEvaluationContext, gatherInputsResult)
+
+    val ex = future.failed.futureValue
+    ex shouldBe a[RawlsExceptionWithErrorReport]
+    ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("expects an entity of type")
 
   }
 
@@ -973,7 +1080,7 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", queryPlan)
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", "sampleset", queryPlan)
       .futureValue
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
@@ -982,6 +1089,7 @@ class CompactExpressionEvaluatorSpec
     ))
 
   }
+
   it should "get multiple attributes from multiple expressions" in withConfigData {
     val expression1 = "this.rawJsonDoubleArray"
     val expression2 = "this.blah"
@@ -997,7 +1105,7 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", queryPlan)
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", "sampleset", queryPlan)
       .futureValue
     result.size shouldBe 2
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
@@ -1009,6 +1117,30 @@ class CompactExpressionEvaluatorSpec
            Seq(AttributeValueRawJson("[[0,1,2],[3,4,5]]"), AttributeValueRawJson("[[3,4,5],[6,7,8]]"))
          )
        )
+      )
+    ))
+  }
+
+  it should "create separate results if entity type does not match root entity type" in withConfigData {
+    val expression = "this.samples.blah"
+    val queryPlan = QueryPlan(List("samples"), Map(expression -> Set("blah")))
+
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+        )
+      )
+    val result = compactExpressionEvaluator
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", "Sample", queryPlan)
+      .futureValue
+    result.size shouldBe 1
+    //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
+    result should contain theSameElementsAs (Seq(
+      (expression,
+       Map(sampleGood.name -> Success(Seq(AttributeNumber(1))), sampleGood2.name -> Success(Seq(AttributeNumber(2))))
       )
     ))
   }
