@@ -830,7 +830,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   /**
-    * Removed the specified attributes from all entities of the given type and workspace.
+    * Remove the specified attributes from all entities of the given type and workspace.
     *
     * `execution plan: index range scan on idx_entity_type_name (with lots of JSON and string manipulation)`
     */
