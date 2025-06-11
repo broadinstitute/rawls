@@ -2460,20 +2460,14 @@ class WorkspaceService(
             )
           )
         )
-      billingProjectPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.billingProject,
-                                                               workspace.namespace,
-                                                               parentContext
-      )
-      billingProjectOwnerEmail = billingProjectPolicies
-        .find(_.policyName == SamBillingProjectPolicyNames.owner)
-        .map(_.email)
-        .getOrElse(
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.InternalServerError,
-                        s"Unable to find project owner policy for billing project ${workspace.namespace}"
-            )
-          )
+      billingProjectOwnerEmail <- samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             workspace.namespace,
+                             SamBillingProjectPolicyNames.owner,
+                             parentContext
         )
+        .map(_.email)
+
       _ <- gcsDAO.changeProjectOwnerBucketIamBinding(GcsBucketName(workspace.bucketName),
                                                      Identity.group(billingProjectOwnerEmail.value),
                                                      Identity.group(workspaceProjectOwnerEmail.value)
