@@ -832,7 +832,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Removed the specified attributes from all entities of the given type and workspace.
     *
-    * Note this does NOT also update ENTITY_REFS; see ??? to do that.
+    * `execution plan: index range scan on idx_entity_type_name (with lots of JSON and string manipulation)`
     */
   def deleteAttributes(workspaceId: UUID,
                        entityType: String,
@@ -899,7 +899,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                           JSON_REPLACE(attributes,
                                        '$.refs',
                                         CAST(
-                                          REPLACE
+                                          REPLACE(
                                             REGEXP_REPLACE(
                                               JSON_EXTRACT(attributes,'$.refs'),
                                               '\{"a": "(?:attrToRemove1|attrToRemove2)",[^}]+\},?',
@@ -910,7 +910,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                          '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
           where workspace_id = ?
             and entity_type = ?
-            and deleted = = 0
+            and deleted = 0
             and JSON_CONTAINS_PATH(attributes, 'one', '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
        */
     }
