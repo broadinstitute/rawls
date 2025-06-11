@@ -855,11 +855,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       val regex = s"""\\{\\"a\\": \\"(?:$allAttrNames)\\",[^}]+\\},?"""
 
       // Remove all elements in the $.refs array for the attributes we want to delete.
-      // This is done via JSON_REPLACE(CAST(REPLACE(REGEXP_REPLACE(JSON_EXTRACT)))). Explaining from the inside out:
+      // This is done via JSON_REPLACE(CAST(REGEXP_REPLACE(REGEXP_REPLACE(JSON_EXTRACT)))). Explaining from the inside out:
       //   - JSON_EXTRACT(attributes, '$$.refs') gets the refs array
       //   - REGEXP_REPLACE(...) treats the refs array as a plain string, and deletes all elements matching our regex
-      //   - REPLACE(...) handles the case where we have removed the last object in the $.refs array
-      //                  and therefore need to remove the trailing comma
+      //   - REGEXP_REPLACE(...) handles the case where we have removed the last object in the $.refs array
+      //                           and therefore need to remove the trailing comma
       //   - CAST(... as JSON) converts the modified string back to a JSON array
       //   - JSON_REPLACE(...) replaces the original refs array with the modified one
       // We use a string replace here because it is significantly more performant than calling JSON_REMOVE
@@ -872,9 +872,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       val replaceRefsSql = sql"""JSON_REPLACE(attributes,
                                               $slickRefsPath,
                                               CAST(
-                                              REPLACE(
+                                              REGEXP_REPLACE(
                                                 REGEXP_REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $regex, ''),
-                                                ', ]',
+                                                ',[:space:]+\\]',
                                                 ']'
                                                )
                                                as JSON))"""
