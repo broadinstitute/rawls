@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="entity_refs_view">
+        <!-- drop the physical ENTITY_REFS table -->
+        <dropTable tableName="ENTITY_REFS" />
+
+        <!-- create the ENTITY_REFS view -->
+        <createView viewName="ENTITY_REFS" replaceIfExists="true">
+            SELECT distinct workspace_id,
+                   id as from_entity_id,
+                   entity_type as from_entity_type,
+                   name as from_name,
+                   from_attribute_name,
+                   to_entity_type,
+                   to_name
+            FROM ENTITY
+            JOIN JSON_TABLE(
+                attributes,
+                '$.refs[*]' COLUMNS (
+                    from_attribute_name varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.a',
+					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$.t',
+		            to_name varchar(254) PATH '$.n'
+                 )
+            ) AS refs_tbl
+            WHERE deleted = 0 and attributes is not null
+        </createView>
+    </changeSet>
+
+</databaseChangeLog>

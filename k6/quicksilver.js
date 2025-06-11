@@ -109,6 +109,15 @@ export const options = {
     },
     getEntityMetadataTest: {
       exec: 'getEntityMetadata',
+      tags: { rawlsApi: 'getEntityMetadata', feature: 'cached' },
+      env: { TEST_GROUP: 'test' },
+      executor: 'constant-vus',
+      vus: 3,
+      duration: '20s',
+      startTime: '88s',
+    },
+    getEntityMetadataTestUncached: {
+      exec: 'getEntityMetadataUncached',
       tags: { rawlsApi: 'getEntityMetadata', feature: 'uncached' },
       env: { TEST_GROUP: 'test' },
       executor: 'constant-vus',

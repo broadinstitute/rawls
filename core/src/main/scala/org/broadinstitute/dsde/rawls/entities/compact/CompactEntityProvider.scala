@@ -32,10 +32,12 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValue,
   Entity,
   EntityCopyResponse,
+  EntityHardConflict,
   EntityPointer,
   EntityQuery,
   EntityQueryResponse,
   EntityQueryResultMetadata,
+  EntitySoftConflict,
   EntityTypeMetadata,
   EntityTypeRename,
   ErrorReport,
@@ -44,13 +46,14 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{trace, traceDBIOWithParent}
-import slick.dbio.DBIO
+import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import slick.jdbc.ResultSetConcurrency.ReadOnly
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.Try
 
 /**
@@ -101,12 +104,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // FIXME: implement this
+  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // TODO CORE-483: implement this
 
   def listWorkflowEntities(dataAccess: DataAccess,
                            workspace: Workspace,
                            entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // FIXME: implement this
+  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // TODO CORE-483: implement this
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
@@ -114,7 +117,101 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             entityNames: Seq[String],
                             linkExistingEntities: Boolean,
                             parentContext: RawlsRequestContext
-  ): Future[EntityCopyResponse] = ???
+  ): Future[EntityCopyResponse] = {
+    val entitiesToCopyRefs = entityNames.map(name => EntityPointer(entityType, name)).toSet
+    val copyResult = repository.dataSource.inTransaction { _ =>
+      for {
+        hardConflicts <- repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs)
+        result <-
+          if (hardConflicts.nonEmpty) {
+            DBIO.successful(
+              EntityCopyResponse(
+                Seq.empty,
+                hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)),
+                Seq.empty
+              )
+            )
+          } else {
+            repository.queries
+              .recursiveGetEntityReferences(sourceWorkspaceContext.workspaceIdAsUUID,
+                                            entitiesToCopyRefs,
+                                            config.batchCopyBatchSize
+              )
+              .flatMap { entityReferenceMap =>
+                val entities = entityReferenceMap.map(_.from)
+                val entityReferences = entityReferenceMap.flatMap(_.to)
+                repository.queries.getEntityRefs(destWorkspaceContext.workspaceIdAsUUID, entityReferences).flatMap {
+                  conflicts =>
+                    val softConflicts = conflicts.map(_.toPointer).toSet
+                    if (softConflicts.isEmpty || linkExistingEntities) {
+                      copyEntitiesExcludingAnySoftConflicts(
+                        entities,
+                        entityReferences,
+                        softConflicts,
+                        sourceWorkspaceContext.workspaceIdAsUUID,
+                        destWorkspaceContext.workspaceIdAsUUID
+                      )
+                    } else {
+                      unmergedSoftConflicts(entityReferenceMap, softConflicts)
+                    }
+                }
+              }
+          }
+      } yield result
+    }
+    withWorkspaceLastModified(copyResult)
+    copyResult
+  }
+
+  /**
+   * Copy all entities from sourceWorkspaceId to destWorkspaceId, excluding any entities that
+   * are in the set of soft conflicts. Return an EntityCopyResponse containing a Seq of entities
+   * that were copied.
+   */
+  private def copyEntitiesExcludingAnySoftConflicts(entities: Set[EntityPointer],
+                                                    entityReferences: Set[EntityPointer],
+                                                    softConflicts: Set[EntityPointer],
+                                                    sourceWorkspaceId: UUID,
+                                                    destWorkspaceId: UUID
+  ) = {
+    val allEntityRefs: Set[EntityPointer] = entities ++ entityReferences
+    val entitiesToCopy: Set[EntityPointer] = allEntityRefs diff softConflicts
+    repository.queries
+      .copyEntitiesToNewWorkspace(
+        sourceWorkspaceId,
+        destWorkspaceId,
+        entitiesToCopy,
+        config.batchCopyBatchSize
+      )
+      .map { _ =>
+        EntityCopyResponse(
+          entitiesToCopy.map(_.toAttributeEntityReference).toSeq,
+          Seq.empty,
+          Seq.empty
+        )
+      }
+  }
+
+  /**
+   * For each entity in the entityReferenceMap, check any of the entites that it references
+   * are in the set of soft conflicts. If so, create an EntitySoftConflict for that entity
+   */
+  def unmergedSoftConflicts(entityReferenceMap: Set[RefMapping],
+                            softConflicts: Set[EntityPointer]
+  ): DBIOAction[EntityCopyResponse, NoStream, Effect] = {
+    val unmergedSoftConflicts = entityReferenceMap.flatMap { refMapping =>
+      val conflicts = refMapping.to
+        .intersect(softConflicts)
+        .map(conflict => EntitySoftConflict(conflict.entityType, conflict.entityName, Seq.empty))
+        .toSeq
+      if (conflicts.nonEmpty) {
+        Some(EntitySoftConflict(refMapping.from.entityType, refMapping.from.entityName, conflicts))
+      } else {
+        None
+      }
+    }.toSeq
+    DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
+  }
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
     EntityUtils.validateEntity(entity)
@@ -148,9 +245,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new RawlsConcurrentModificationException(
             s"Detected concurrent modifications to entity ${savedEntityRecord.toPointer}."
           )
-
-        // save all references from this entity to other entities
-        _ <- repository.queries.insertReferences(workspaceId, refs)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
@@ -168,8 +262,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesConflictException(referencingEntities.map(_.toAttributeEntityReference).toSet)
         }
-        // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, pointers.toSet)
         // hard-delete everything we can
         _ <- repository.queries.deleteEntities(workspaceId, pointers)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
@@ -186,8 +278,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
-        // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
         // hard-delete everything we can
         _ <- repository.queries.deleteEntitiesOfType(workspaceId, entityType)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
@@ -209,7 +299,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     repository.dataSource.inTransaction(ReadOnly) { _ =>
       for {
         entityTypeAndKeys <- traceDBIOWithParent("listEntityKeys", parentContext) { _ =>
-          repository.queries.listEntityKeys(workspaceId)
+          // temporary hack to gather performance data: if useCache is true, calculate attributes via the ENTITY_KEYS table.
+          // if useCache is false, calculate attributes via the ENTITY table. We'll run these through perf tests over
+          // a period of time to see if ENTITY_KEYS offers significant benefit over ENTITY.
+          if (useCache)
+            repository.queries.listEntityKeys(workspaceId)
+          else
+            repository.queries.listEntityKeysViaEntity(workspaceId)
         }
         entityTypeAndCounts <- traceDBIOWithParent("countEntitiesGroupedByType", parentContext) { _ =>
           repository.queries.countEntitiesGroupedByType(workspaceId)
@@ -424,7 +520,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     val newName = renameInfo.newName
 
     // Perform the rename in a transaction
-    val renameFuture = repository.dataSource.inTransaction { dataAccess =>
+    val renameFuture = repository.dataSource.inTransaction { _ =>
       for {
         // First check if the old entity type exists
         entityTypeCount <- repository.queries.countEntities(workspaceId, oldName)

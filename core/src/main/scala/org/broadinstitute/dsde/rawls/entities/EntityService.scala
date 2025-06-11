@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   setTraceSpanAttribute,
@@ -380,6 +381,18 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
         _ = authDomainCheck(sourceAD.toSet, destAD.toSet)
         entityProvider <- getProviderWithTracing(destWsCtx, localContext)
+
+        sourceCompactEnabled <- isCompactDataTableSettingEnabled(entityCopyDef.sourceWorkspace)
+        destCompactEnabled <- isCompactDataTableSettingEnabled(entityCopyDef.destinationWorkspace)
+        _ = if (sourceCompactEnabled != destCompactEnabled) {
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              "Only one workspace has the CompactDataTablesSetting enabled. This setting must match on the source and destination workspace in order to copy entities."
+            )
+          )
+        }
+
         entityCopyResponse <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
           entityProvider
             .copyEntities(sourceWsCtx,
@@ -505,8 +518,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
   }
 
   /**
-    * Helper to get the appropriate EntityProvider for the workspace while also adding tracing info
-    */
+   * Helper to get the appropriate EntityProvider for the workspace while also adding tracing info
+   */
   private def getProviderWithTracing(workspaceContext: Workspace,
                                      localContext: RawlsRequestContext
   ): Future[EntityProvider] =
@@ -519,6 +532,23 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                 entityProvider.getClass.getSimpleName
       )
     } yield entityProvider
+
+  /**
+   * Determine if a workspace has the CompactDataTables setting enabled.
+   */
+  private def isCompactDataTableSettingEnabled(workspaceName: WorkspaceName): Future[Boolean] =
+    workspaceSettingServiceConstructor match {
+      case Some(serviceConstructor) =>
+        val workspaceSettingService = serviceConstructor(ctx)
+        workspaceSettingService.getWorkspaceSettingOfType(workspaceName, CompactDataTables) map {
+          case Some(qs: CompactDataTablesSetting) => qs.config.enabled
+          case _                                  => false
+        }
+      case None =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.InternalServerError, "Workspace setting service not available")
+        )
+    }
 
   /**
     * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to
