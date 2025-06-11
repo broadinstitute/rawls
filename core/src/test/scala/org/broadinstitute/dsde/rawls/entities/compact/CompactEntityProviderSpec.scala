@@ -98,8 +98,6 @@ class CompactEntityProviderSpec
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(-1))
-    when(mockQuery.insertReferences(any(), any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -114,8 +112,6 @@ class CompactEntityProviderSpec
 
     // should have called one batch-insert to write the entities
     verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
-    // entities have no references, so it should skip insertReferences
-    verify(mockQuery, never()).insertReferences(any(), any())
   }
 
   it should "issue multiple insert statements when given large batches" in {
@@ -124,8 +120,6 @@ class CompactEntityProviderSpec
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(-1))
-    when(mockQuery.insertReferences(any(), any())).thenReturn(DBIO.successful(-1))
 
     val config = CompactEntityProviderConfig(batchUpsertBatchSize = 25) // pretty small to force batching
 
@@ -149,9 +143,6 @@ class CompactEntityProviderSpec
     // should have called batchCreateEntities multiple times to write the entities
     verify(mockQuery, Mockito.atLeast(2))
       .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
-    // entities have no references, so it should skip insertReferences
-    verify(mockQuery, never()).insertReferences(any(), any())
-
   }
 
   it should "ask to insert references" in {
@@ -160,8 +151,6 @@ class CompactEntityProviderSpec
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(-1))
-    when(mockQuery.insertReferences(any(), any())).thenReturn(DBIO.successful(-1))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -196,14 +185,6 @@ class CompactEntityProviderSpec
 
     // should have called one batch-insert to write the entities
     verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
-    // entities found references, so should ask to upsert those.
-    // given the mock response defined above, we expect references from name2->targetName and name3->targetName
-    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID,
-                                                 Set(
-                                                   RefMapping(ref2, Set(refTarget)),
-                                                   RefMapping(ref3, Set(refTarget))
-                                                 )
-    )
   }
 
   "copyEntities" should "have tests" is pending
@@ -229,8 +210,6 @@ class CompactEntityProviderSpec
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
-    when(mockQuery.insertReferences(any(), any()))
-      .thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -245,7 +224,6 @@ class CompactEntityProviderSpec
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
   }
 
   it should "persist an entity with simple attributes" in {
@@ -272,8 +250,6 @@ class CompactEntityProviderSpec
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
-    when(mockQuery.insertReferences(any(), any()))
-      .thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -288,7 +264,6 @@ class CompactEntityProviderSpec
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, times(1)).insertReferences(defaultWorkspace.workspaceIdAsUUID, Set())
   }
 
   it should "persist an entity with references" in {
@@ -326,8 +301,6 @@ class CompactEntityProviderSpec
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
-    when(mockQuery.insertReferences(any(), any()))
-      .thenReturn(DBIO.successful(2))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -349,22 +322,6 @@ class CompactEntityProviderSpec
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
-
-    verify(mockQuery, times(1)).insertReferences(
-      defaultWorkspace.workspaceIdAsUUID,
-      Set(
-        RefMapping(
-          entityToCreate.toPointer,
-          Set(
-            EntityPointer("referencedType", "referencedName0"),
-            EntityPointer("referencedType", "referencedName1"),
-            EntityPointer("referencedType", "referencedName2")
-          )
-        )
-      )
-    )
-
   }
 
   it should "throw EntityReferenceNotFoundException if this entity's references are missing" in {
@@ -411,8 +368,6 @@ class CompactEntityProviderSpec
                                           entityToCreate.entityType,
                                           entityToCreate.name
     )
-    verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
-    verify(mockQuery, never()).insertReferences(any(), any())
   }
 
   it should "throw RawlsExceptionWithErrorReport if this type & name already exists" in {
@@ -447,8 +402,6 @@ class CompactEntityProviderSpec
 
     verify(mockQuery, never()).existsAll(defaultWorkspace.workspaceIdAsUUID, Set())
     verify(mockQuery, never()).createEntity(defaultWorkspace.workspaceIdAsUUID, entityToCreate)
-    verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
-    verify(mockQuery, never()).insertReferences(any(), any())
   }
 
   private val illegalEntities = Map(
@@ -477,8 +430,6 @@ class CompactEntityProviderSpec
       verify(mockQuery, never()).getEntity(any(), any(), any())
       verify(mockQuery, never()).existsAll(any(), any())
       verify(mockQuery, never()).createEntity(any(), any())
-      verify(mockQuery, never()).deleteAllReferencesFrom(any(), any())
-      verify(mockQuery, never()).insertReferences(any(), any())
     }
   }
 
@@ -521,7 +472,6 @@ class CompactEntityProviderSpec
 
     val mockQuery = mock[CompactEntityQuery]
     when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.deleteEntities(any(), any())).thenReturn(DBIO.successful(0))
     when(
       mockQuery.getEntity(any[UUID],
@@ -546,9 +496,6 @@ class CompactEntityProviderSpec
 
     verify(mockQuery, times(1)).getReferencesTo(defaultWorkspace.workspaceIdAsUUID,
                                                 Seq(entity1.toPointer, entity2.toPointer)
-    )
-    verify(mockQuery, times(1)).deleteAllReferencesFrom(defaultWorkspace.workspaceIdAsUUID,
-                                                        Set(entity1.toPointer, entity2.toPointer)
     )
     verify(mockQuery, times(1)).batchHide(defaultWorkspace.workspaceIdAsUUID, Seq(entity1.toPointer, entity2.toPointer))
   }
@@ -598,7 +545,6 @@ class CompactEntityProviderSpec
 
     val mockQuery = mock[CompactEntityQuery]
     when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toPointer)))
-    when(mockQuery.deleteAllReferencesFrom(any(), any())).thenReturn(DBIO.successful(1))
     when(
       mockQuery.getEntity(any[UUID],
                           ArgumentMatchers.eq(createdEntityRec1.entityType),
@@ -623,9 +569,6 @@ class CompactEntityProviderSpec
     }
     result shouldBe a[DeleteEntitiesConflictException]
 
-    verify(mockQuery, never()).deleteAllReferencesFrom(defaultWorkspace.workspaceIdAsUUID,
-                                                       Set(entity1.toPointer, entity2.toPointer)
-    )
     verify(mockQuery, never()).batchHide(defaultWorkspace.workspaceIdAsUUID, Seq(entity1.toPointer, entity2.toPointer))
   }
 
@@ -636,7 +579,6 @@ class CompactEntityProviderSpec
 
     val mockQuery = mock[CompactEntityQuery]
     when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq()))
-    when(mockQuery.deleteAllReferencesFromType(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.deleteEntitiesOfType(any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
 
@@ -646,7 +588,6 @@ class CompactEntityProviderSpec
     Await.result(provider.deleteEntitiesOfType(entityType, defaultRequestContext), atMost)
 
     verify(mockQuery, times(1)).getReferencesToType(defaultWorkspace.workspaceIdAsUUID, entityType)
-    verify(mockQuery, times(1)).deleteAllReferencesFromType(defaultWorkspace.workspaceIdAsUUID, entityType)
     verify(mockQuery, times(1)).batchHideType(defaultWorkspace.workspaceIdAsUUID, entityType)
   }
 
@@ -669,7 +610,6 @@ class CompactEntityProviderSpec
 
     val mockQuery = mock[CompactEntityQuery]
     when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toPointer)))
-    when(mockQuery.deleteAllReferencesFromType(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
 
     // provider using mocks
@@ -682,7 +622,6 @@ class CompactEntityProviderSpec
     result shouldBe a[DeleteEntitiesOfTypeConflictException]
 
     verify(mockQuery, times(1)).getReferencesToType(defaultWorkspace.workspaceIdAsUUID, entity1.entityType)
-    verify(mockQuery, never()).deleteAllReferencesFromType(defaultWorkspace.workspaceIdAsUUID, entity1.entityType)
     verify(mockQuery, never()).batchHideType(defaultWorkspace.workspaceIdAsUUID, entity1.entityType)
   }
 
@@ -700,7 +639,7 @@ class CompactEntityProviderSpec
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    val actual = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
 
     actual shouldBe Map()
   }
@@ -728,7 +667,7 @@ class CompactEntityProviderSpec
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
 
-    val actual = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    val actual = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
 
     actual shouldBe Map(
       "type1" -> EntityTypeMetadata(1, "type1" + Attributable.entityIdAttributeSuffix, Seq("keyA")),
@@ -1689,7 +1628,7 @@ class CompactEntityProviderSpec
         )
       )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
-      .thenReturn(DBIO.successful((3, 0)))
+      .thenReturn(DBIO.successful(3))
 
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)
@@ -1899,7 +1838,7 @@ class CompactEntityProviderSpec
         )
       )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
-      .thenReturn(DBIO.successful((1, 0)))
+      .thenReturn(DBIO.successful(1))
 
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)

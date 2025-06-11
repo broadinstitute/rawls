@@ -1,8 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.SqlEntityData
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
+  AttributeBoolean,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
@@ -262,22 +265,44 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(q.existsAll(wsid, refs)) shouldBe false
   }
 
-  behavior of "insertReferences, getReferencesFrom, deleteAllReferencesFrom"
+  behavior of "getReferencesFrom"
 
   it should "insert and delete all" in withMinimalTestDatabase { _ =>
-    // the entity doing the referencing: the "source"
-    val from = EntityPointer("fromType", "fromName")
     // entities being referenced: the "targets"
-    val tos: Seq[EntityPointer] = Range(1, 5) map (idx => EntityPointer("toType", s"toName$idx"))
+    val target1 = Entity(s"toName1", "toType", Map())
+    val target2 = Entity(s"toName2", "toType", Map())
+    val target3 = Entity(s"toName3", "toType", Map())
+    val target4 = Entity(s"toName4", "toType", Map())
+    val target5 = Entity(s"toName5", "toType", Map())
 
-    // source should have no rows in ENTITY_REFS table
-    runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
-    // insert rows
-    runAndWait(q.insertReferences(wsid, Set(RefMapping(from, tos.toSet)))) shouldBe tos.size
-    runAndWait(q.getReferencesFrom(wsid, from)) should contain theSameElementsAs tos
-    // delete rows
-    runAndWait(q.deleteAllReferencesFrom(wsid, Set(from))) shouldBe tos.size
-    runAndWait(q.getReferencesFrom(wsid, from)) shouldBe empty
+    val allTargets = Seq(target1, target2, target3, target4, target5)
+
+    // the entity doing the referencing: the "source"
+    val targetRefs = allTargets.map { target =>
+      AttributeEntityReference(target.entityType, target.name)
+    }
+    val sourceEntity = Entity("fromName",
+                              "fromType",
+                              Map(
+                                AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(targetRefs)
+                              )
+    )
+
+    // insert targets
+    allTargets.foreach { target =>
+      insertAndGet(target)
+    }
+
+    // source should have no rows in ENTITY_REFS table b/c we haven't inserted it yet
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity.toPointer)) shouldBe empty
+    // insert the source
+    insertAndGet(sourceEntity)
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity.toPointer)) should contain theSameElementsAs allTargets.map(
+      _.toPointer
+    )
+    // delete the source
+    runAndWait(q.deleteEntities(wsid, Seq(sourceEntity.toPointer)))
+    runAndWait(q.getReferencesFrom(wsid, sourceEntity.toPointer)) shouldBe empty
   }
 
   it should "insert for multiple source entities" in withMinimalTestDatabase { _ =>
@@ -294,115 +319,38 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // sources should have no rows in ENTITY_REFS table
     runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
     runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
-    // insert
-    runAndWait(
-      q.insertReferences(wsid, Set(RefMapping(from1, tos1.toSet), RefMapping(from2, tos2.toSet)))
-    ) shouldBe tos1.size + tos2.size
+
+    // insert targets
+    (tos1 ++ tos2).toSet[EntityPointer].foreach { targetPointer =>
+      insertAndGet(Entity(targetPointer.entityName, targetPointer.entityType, Map()))
+    }
+    // insert from1 with references of tos1
+    val tos1Refs = tos1.map { target =>
+      AttributeEntityReference(target.entityType, target.entityName)
+    }
+    insertAndGet(
+      Entity(from1.entityName,
+             from1.entityType,
+             Map(
+               AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(tos1Refs)
+             )
+      )
+    )
+    // insert from2 with references of tos2
+    val tos2Refs = tos2.map { target =>
+      AttributeEntityReference(target.entityType, target.entityName)
+    }
+    insertAndGet(
+      Entity(from2.entityName,
+             from2.entityType,
+             Map(
+               AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(tos2Refs)
+             )
+      )
+    )
+
     runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs tos1
     runAndWait(q.getReferencesFrom(wsid, from2)) should contain theSameElementsAs tos2
-  }
-
-  it should "delete references for multiple entities" in withMinimalTestDatabase { _ =>
-    // the entities doing the referencing: the "sources"
-    val from1 = EntityPointer("fromType", "fromName1")
-    val from2 = EntityPointer("fromType", "fromName2")
-    val from3 = EntityPointer("fromType", "fromName3")
-    // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
-    val target2 = EntityPointer("targetType", "targetName2")
-    val target3 = EntityPointer("targetType", "targetName3")
-    val target4 = EntityPointer("targetType", "targetName4")
-    val target5 = EntityPointer("targetType", "targetName5")
-    val target6 = EntityPointer("targetType", "targetName6")
-
-    // source should have no rows in ENTITY_REFS table
-    runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from3)) shouldBe empty
-
-    // references to insert
-    val pointers1 = RefMapping(from1, Set(target1, target2))
-    val pointers2 = RefMapping(from2, Set(target2, target3, target4))
-    val pointers3 = RefMapping(from3, Set(target4, target5, target6))
-
-    // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
-    runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs pointers1.to
-    runAndWait(q.getReferencesFrom(wsid, from2)) should contain theSameElementsAs pointers2.to
-    runAndWait(q.getReferencesFrom(wsid, from3)) should contain theSameElementsAs pointers3.to
-    // delete rows
-    runAndWait(
-      q.deleteAllReferencesFrom(wsid, Set(from1, from2, from3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
-    runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from2)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, from3)) shouldBe empty
-  }
-
-  it should "only delete references in the given workspace" in withMinimalTestDatabase { _ =>
-    // the entities doing the referencing: the "sources"
-    val from1 = EntityPointer("fromType", "fromName1")
-    // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
-    val target2 = EntityPointer("targetType", "targetName2")
-
-    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
-
-    // Insert references into different workspaces. Note that both workspaces reuse the "from" entity type/name
-    runAndWait(
-      q.insertReferences(wsid, Set(RefMapping(from1, Set(target1))))
-    )
-    runAndWait(
-      q.insertReferences(wsid2, Set(RefMapping(from1, Set(target2))))
-    )
-    runAndWait(q.getReferencesFrom(wsid, from1)) should contain theSameElementsAs Set(target1)
-    runAndWait(q.getReferencesFrom(wsid2, from1)) should contain theSameElementsAs Set(target2)
-    // delete rows from workspace 1 only
-    runAndWait(q.deleteAllReferencesFrom(wsid, Set(from1))) shouldBe 1
-    runAndWait(q.getReferencesFrom(wsid, from1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid2, from1)) should contain theSameElementsAs Set(target2)
-  }
-
-  behavior of "deleteAllReferencesFromType"
-
-  it should "only delete references for the given type" in withMinimalTestDatabase { _ =>
-    // referencing/source entities
-    val sourceType1 = "source1"
-    val sourceType2 = "source2"
-    val source1 = EntityPointer(sourceType1, "source1") // source1 and source2 have the same type
-    val source2 = EntityPointer(sourceType1, "source2")
-    val source3 = EntityPointer(sourceType2, "source3") // source3 has a different type
-
-    // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
-    val target2 = EntityPointer("targetType", "targetName2")
-    val target3 = EntityPointer("targetType", "targetName3")
-    val target4 = EntityPointer("targetType", "targetName4")
-    val target5 = EntityPointer("targetType", "targetName5")
-    val target6 = EntityPointer("targetType", "targetName6")
-    // source should have no rows in ENTITY_REFS table
-    val pointers1 = RefMapping(source1, Set(target1, target2))
-    val pointers2 = RefMapping(source2, Set(target3, target4, target5))
-    val pointers3 = RefMapping(source3, Set(target1, target3, target6))
-    // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
-    runAndWait(q.getReferencesFrom(wsid, source1)) should contain theSameElementsAs pointers1.to
-    runAndWait(q.getReferencesFrom(wsid, source2)) should contain theSameElementsAs pointers2.to
-    runAndWait(q.getReferencesFrom(wsid, source3)) should contain theSameElementsAs pointers3.to
-    // delete rows
-    runAndWait(
-      q.deleteAllReferencesFromType(
-        wsid,
-        sourceType1
-      )
-    ) shouldBe (pointers1.to.size + pointers2.to.size)
-    runAndWait(q.getReferencesFrom(wsid, source1)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, source2)) shouldBe empty
-    runAndWait(q.getReferencesFrom(wsid, source3)) should contain theSameElementsAs pointers3.to
   }
 
   behavior of "listEntityKeys"
@@ -432,6 +380,40 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     createEntitiesWithKeys(entityType1AttributeNames, entityType2, minimalTestData.workspace2.workspaceIdAsUUID)
 
     val actual = runAndWait(q.listEntityKeys(wsid))
+    actual should contain theSameElementsAs entityType1AttributeNames.map {
+      EntityTypeAndAttributeKey(entityType1, _)
+    } ++ entityType2AttributeNames.map {
+      EntityTypeAndAttributeKey(entityType2, _)
+    }
+  }
+
+  behavior of "listEntityKeysViaEntity"
+
+  it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>
+    // create 2 entity types with different attributes
+    val entityType1AttributeNames =
+      List("red", "green", "blue", "orange", "yellow", "purple").map(AttributeName.withDefaultNS)
+    val entityType1 = "entityType1"
+    createEntitiesWithKeys(entityType1AttributeNames, entityType1, wsid)
+
+    val entityType2AttributeNames =
+      List("circle", "square", "triangle", "rectangle", "oval", "hexagon").map(AttributeName.withDefaultNS)
+    val entityType2 = "entityType2"
+    createEntitiesWithKeys(entityType2AttributeNames, entityType2, wsid)
+
+    // create an entity with no attributes to make sure it does not break anything
+    insertAndGet(
+      Entity(
+        UUID.randomUUID().toString,
+        "noAttributes",
+        Map.empty
+      )
+    )
+
+    // create entities in a different workspace to make sure they are not included
+    createEntitiesWithKeys(entityType1AttributeNames, entityType2, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    val actual = runAndWait(q.listEntityKeysViaEntity(wsid))
     actual should contain theSameElementsAs entityType1AttributeNames.map {
       EntityTypeAndAttributeKey(entityType1, _)
     } ++ entityType2AttributeNames.map {
@@ -1468,9 +1450,25 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers2 = RefMapping(source2, Set(target3, target4, target5))
     val pointers3 = RefMapping(source3, Set(target1, target3, target6))
     // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe (pointers1.to.size + pointers2.to.size + pointers3.to.size)
+    val allTargets: Seq[Entity] = Seq(target1, target2, target3, target4, target5, target6).map { targetPointer =>
+      Entity(targetPointer.entityName, targetPointer.entityType, Map())
+    }
+    insertAndGetAll(allTargets)
+    val allSources: Seq[Entity] = Seq(pointers1, pointers2, pointers3).map { refMapping =>
+      Entity(
+        refMapping.from.entityName,
+        refMapping.from.entityType,
+        Map(
+          AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+            refMapping.to.map { target =>
+              AttributeEntityReference(target.entityType, target.entityName)
+            }.toSeq
+          )
+        )
+      )
+    }
+    insertAndGetAll(allSources)
+
     runAndWait(q.getReferencesFrom(wsid, source1)) should contain theSameElementsAs pointers1.to
     runAndWait(q.getReferencesFrom(wsid, source2)) should contain theSameElementsAs pointers2.to
     runAndWait(q.getReferencesFrom(wsid, source3)) should contain theSameElementsAs pointers3.to
@@ -1484,7 +1482,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // target2 is referenced by source1; target6 is referenced by source3
     runAndWait(q.getReferencesTo(wsid, Seq(target2, target6))) should contain theSameElementsAs Seq(source1, source3)
-
   }
 
   it should "not find entities in other workspaces" in withMinimalTestDatabase { _ =>
@@ -1495,35 +1492,81 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val source2 = EntityPointer("sourceType", "source2")
 
     // referenced/target entities
-    val target1 = EntityPointer("targetType", "targetName1")
+    val target1 = Entity("targetName1", "targetType", Map())
 
-    val pointers1 = RefMapping(source1, Set(target1))
-    val pointers2 = RefMapping(source2, Set(target1))
-    // insert rows for workspace 1
-    runAndWait(q.insertReferences(wsid, Set(pointers1))) shouldBe pointers1.to.size
-    // insert rows for workspace 2
-    runAndWait(q.insertReferences(wsid2, Set(pointers2))) shouldBe pointers2.to.size
+    // insert rows for workspace 1: source1 has a reference to target1, source2 does not
+    insertAndGetAll(
+      Seq(
+        target1,
+        Entity(
+          source1.entityName,
+          source1.entityType,
+          Map(
+            AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+              Seq(AttributeEntityReference("targetType", "targetName1"))
+            )
+          )
+        ),
+        Entity(source2.entityName, source2.entityType, Map())
+      ),
+      wsid
+    )
 
-    runAndWait(q.getReferencesTo(wsid, Seq(target1))) should contain theSameElementsAs Seq(pointers1.from)
-    runAndWait(q.getReferencesTo(wsid2, Seq(target1))) should contain theSameElementsAs Seq(pointers2.from)
+    // insert rows for workspace 2: source2 has a reference to target1, source1 does not
+    insertAndGetAll(
+      Seq(
+        target1,
+        Entity(
+          source1.entityName,
+          source1.entityType,
+          Map(
+          )
+        ),
+        Entity(
+          source2.entityName,
+          source2.entityType,
+          Map(
+            AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+              Seq(AttributeEntityReference("targetType", "targetName1"))
+            )
+          )
+        )
+      ),
+      wsid2
+    )
+
+    runAndWait(q.getReferencesTo(wsid, Seq(target1.toPointer))) should contain theSameElementsAs Seq(source1)
+    runAndWait(q.getReferencesTo(wsid2, Seq(target1.toPointer))) should contain theSameElementsAs Seq(source2)
   }
 
   it should "exclude entities included in the search" in withMinimalTestDatabase { _ =>
     // define entities
-    val entity1 = EntityPointer("entityType", "name1")
-    val entity2 = EntityPointer("entityType", "name2")
-    val entity3 = EntityPointer("entityType", "name3")
-
     // entity2 references entity1; entity3 references both entity1 and entity2
-    val pointers1 = RefMapping(entity2, Set(entity1))
-    val pointers2 = RefMapping(entity3, Set(entity1, entity2))
+    val entity1 = Entity("name1", "entityType", Map())
+    val entity2 =
+      Entity("name2",
+             "entityType",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name)
+             )
+      )
+    val entity3 = Entity(
+      "name3",
+      "entityType",
+      Map(
+        AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name),
+        AttributeName.withDefaultNS("ref2") -> AttributeEntityReference(entity2.entityType, entity2.name)
+      )
+    )
 
-    runAndWait(q.insertReferences(wsid, Set(pointers1, pointers2))) shouldBe pointers1.to.size + pointers2.to.size
+    insertAndGetAll(Seq(entity1, entity2, entity3))
 
     // asking for references to entity1 and entity2 should exclude entity2 because entity2 is in the search criteria,
     //  even though entity2 references entity1
-    val expected = Set(entity3)
-    runAndWait(q.getReferencesTo(wsid, Seq(entity1, entity2))).toSet should contain theSameElementsAs expected
+    val expected = Set(entity3.toPointer)
+    runAndWait(
+      q.getReferencesTo(wsid, Seq(entity1.toPointer, entity2.toPointer))
+    ).toSet should contain theSameElementsAs expected
 
   }
 
@@ -1546,9 +1589,27 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val pointers2 = RefMapping(source2, Set(target2))
     val pointers3 = RefMapping(source3, Set(target1))
 
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2, pointers3))
-    ) shouldBe pointers1.to.size + pointers2.to.size + pointers3.to.size
+    // insert targets
+    insertAndGetAll(
+      Seq(target1, target2, target3).map { targetPointer =>
+        Entity(targetPointer.entityName, targetPointer.entityType, Map())
+      }
+    )
+    // insert sources and their references to the targets
+    val sourcesWithReferences = Seq(pointers1, pointers2, pointers3).map { refMapping =>
+      Entity(
+        refMapping.from.entityName,
+        refMapping.from.entityType,
+        Map(
+          AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(
+            refMapping.to.map { target =>
+              AttributeEntityReference(target.entityType, target.entityName)
+            }.toSeq
+          )
+        )
+      )
+    }
+    insertAndGetAll(sourcesWithReferences)
 
     val expected = Set(source2, source3)
     runAndWait(q.getReferencesToType(wsid, targetType1)) should contain theSameElementsAs expected
@@ -1556,29 +1617,38 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   it should "not return source entities of the same type" in withMinimalTestDatabase { _ =>
     // define entities
-    val entity1 = EntityPointer("entityTypeA", "name1")
-    val entity2 = EntityPointer("entityTypeA", "name2")
-    val entity3 = EntityPointer("entityTypeB", "name3")
-
     // entity2 references entity1; entity3 references both entity1 and entity2
-    val pointers1 = RefMapping(entity2, Set(entity1))
-    val pointers2 = RefMapping(entity3, Set(entity1, entity2))
+    // entity3 has a different entity type
+    val entity1 = Entity("name1", "entityTypeA", Map())
+    val entity2 =
+      Entity("name2",
+             "entityTypeA",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name)
+             )
+      )
+    val entity3 = Entity(
+      "name3",
+      "entityTypeB",
+      Map(
+        AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity1.entityType, entity1.name),
+        AttributeName.withDefaultNS("ref2") -> AttributeEntityReference(entity2.entityType, entity2.name)
+      )
+    )
 
-    // insert rows
-    runAndWait(
-      q.insertReferences(wsid, Set(pointers1, pointers2))
-    ) shouldBe pointers1.to.size + pointers2.to.size
+    insertAndGetAll(Seq(entity1, entity2, entity3))
 
     // asking for references to entity1 should exclude entity2 because entity2 is of the same type,
     //  even though entity2 references entity1
-    runAndWait(q.getReferencesToType(wsid, "entityTypeA")).toSet should contain theSameElementsAs Set(entity3)
+    runAndWait(q.getReferencesToType(wsid, "entityTypeA")).toSet should contain theSameElementsAs Set(entity3.toPointer)
 
   }
 
   private val columnFilterCases = List(
     (AttributeNumber(42), "42"),
     (AttributeString("foo"), "foo"),
-    (AttributeString("fOo"), "foO") // case sensitivity check
+    (AttributeString("fOo"), "foO"), // case sensitivity check
+    (AttributeBoolean(true), "TRUE")
   )
 
   behavior of "countEntitiesWithColumnFilter"
@@ -2220,12 +2290,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
     insertAndGetAll(Seq(sourceEntity1, sourceEntity2))
 
-    val refMappings = Set(
-      RefMapping(sourceEntity1.toPointer, Set(originalEntity.toPointer)),
-      RefMapping(sourceEntity2.toPointer, Set(originalEntity.toPointer))
-    )
-    runAndWait(q.insertReferences(wsid, refMappings))
-
     // Verify references to the original entity before rename
     runAndWait(q.getReferencesTo(wsid, Seq(originalEntity.toPointer))) should contain theSameElementsAs Seq(
       sourceEntity1.toPointer,
@@ -2258,6 +2322,89 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       sourceEntity1.toPointer,
       sourceEntity2.toPointer
     )
+  }
+
+  it should "rename in both $.attrs and $.refs when updating references" in withMinimalTestDatabase { _ =>
+    // Create the original entity
+    val entityType = "testType"
+    val originalEntity = Entity("originalName", entityType, Map())
+    insertAndGet(originalEntity)
+
+    // Create source entities referencing the original entity
+    val sourceEntity1 = Entity(
+      "sourceEntity1",
+      "sourceType",
+      Map(
+        AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(
+          Seq(originalEntity.toReference)
+        )
+      )
+    )
+    val sourceEntity2 = Entity(
+      "sourceEntity2",
+      "sourceType",
+      Map(
+        AttributeName.withDefaultNS("ref") -> originalEntity.toReference
+      )
+    )
+    insertAndGetAll(Seq(sourceEntity1, sourceEntity2))
+
+    // Rename the entity
+    val newName = "newName"
+    runAndWait(q.renameEntity(wsid, entityType, originalEntity.name, newName)) shouldBe 1
+
+    // Verify the entity was renamed
+    val renamedEntity = runAndWait(q.getEntity(wsid, entityType, newName)).get.toEntity
+    renamedEntity.name shouldBe newName
+
+    // verify that "originalName" is now "newName" in $.attrs for sourceEntity2
+    val source2 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity2"))
+    source2 should not be empty
+    source2.get.attributes should not be empty
+    val rawData2 =
+      source2.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    rawData2.attrs(AttributeName.withDefaultNS("ref")) shouldBe AttributeString("newName")
+
+    // N.B. sourceEntity1 has a reference list, so it doesn't get the rename in $.attrs
+    // verify that $.attrs for sourceEntity1 is still `1`
+    val source1 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity1"))
+    source1 should not be empty
+    source1.get.attributes should not be empty
+    val rawData1 =
+      source1.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    rawData1.attrs(AttributeName.withDefaultNS("refList")) shouldBe AttributeNumber(1)
+
+  }
+
+  it should "respect entity type when renaming" in withMinimalTestDatabase { _ =>
+    // Create the original entity
+    val entityType = "testType"
+    val originalEntity = Entity("originalName", entityType, Map())
+    insertAndGet(originalEntity)
+
+    // Create another entity with the same name but a different type
+    val otherEntityType = s"$entityType-other"
+    val otherEntity = Entity(originalEntity.name, otherEntityType, Map())
+    insertAndGet(otherEntity)
+
+    // Rename the entity
+    val newName = "newName"
+    runAndWait(q.renameEntity(wsid, entityType, originalEntity.name, newName)) shouldBe 1
+
+    // Verify the entity was renamed
+    val renamedEntity = runAndWait(q.getEntity(wsid, entityType, newName)).get.toEntity
+    renamedEntity.name shouldBe newName
+
+    // Verify the old name no longer exists
+    runAndWait(q.getEntity(wsid, entityType, originalEntity.name)) shouldBe None
+
+    // Verify the other entity still exists
+    val otherEntityLookup = runAndWait(q.getEntity(wsid, otherEntity.entityType, otherEntity.name)).get.toEntity
+    otherEntityLookup shouldBe otherEntity
+
+    // Verify nothing exists at the other entity's type plus the new name
+    val otherEntityRenamedLookup = runAndWait(q.getEntity(wsid, otherEntity.entityType, newName))
+    otherEntityRenamedLookup shouldBe None
   }
 
   behavior of "renameEntityType"
@@ -2301,14 +2448,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // Insert all entities
     insertAndGetAll(Seq(targetEntity1, targetEntity2, sourceEntity1, sourceEntity2, sourceEntity3))
-
-    val refMappings = Set(
-      RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer, targetEntity2.toPointer)),
-      RefMapping(sourceEntity2.toPointer, Set(targetEntity2.toPointer)),
-      RefMapping(sourceEntity3.toPointer, Set(targetEntity1.toPointer))
-    )
-
-    runAndWait(q.insertReferences(wsid, refMappings))
 
     // Execute renameEntityType and verify the result
     val newTargetType = "newTargetType"
@@ -2417,18 +2556,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Insert all entities
     insertAndGetAll(Seq(targetEntity1, sourceEntity1, sourceEntity2, sourceEntity3))
 
-    // these references does not exist in the attributes but makes the underlying rename query think so
-    runAndWait(
-      q.insertReferences(
-        wsid,
-        Set(
-          RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer)),
-          RefMapping(sourceEntity2.toPointer, Set(targetEntity1.toPointer)),
-          RefMapping(sourceEntity3.toPointer, Set(targetEntity1.toPointer))
-        )
-      )
-    )
-
     // Execute renameEntityType and verify the result
     val newTargetType = "newTargetType"
     runAndWait(q.renameEntityType(wsid, targetType, newTargetType)) shouldBe 1
@@ -2464,14 +2591,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // Insert all entities
     insertAndGetAll(Seq(targetEntity1, sourceEntity1))
-
-    runAndWait(
-      q.insertReferences(wsid,
-                         Set(
-                           RefMapping(sourceEntity1.toPointer, Set(targetEntity1.toPointer))
-                         )
-      )
-    )
 
     // Execute renameEntityType, this time on sourceType which has no references
     val newSourceType = "newSourceType"
@@ -2513,10 +2632,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Insert entities
     insertAndGet(targetEntity)
     insertAndGet(sourceEntity)
-
-    // Insert references - we need 1000 identical references
-    val refMapping = RefMapping(sourceEntity.toPointer, Set(targetEntity.toPointer))
-    runAndWait(q.insertReferences(wsid, Set(refMapping)))
 
     // Execute renameEntityType and verify the result
     val newTargetType = "newLargeRefTargetType"
@@ -2581,59 +2696,50 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   }
 
-  it should "copy entityRefs from source workspace to destination workspace" in withMinimalTestDatabase { _ =>
-    // Define source and destination workspaces
-    val sourceWorkspaceId = minimalTestData.workspace.workspaceIdAsUUID
-    val destinationWorkspaceId = minimalTestData.workspace2.workspaceIdAsUUID
-
-    // Create entities in the source workspace
-    val entity1 =
-      Entity("entityName1", "entityType1", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1")))
-    val entity2 = Entity("entityName2", "entityType1", Map(AttributeName.withDefaultNS("attr2") -> AttributeNumber(42)))
-    val entity3 =
-      Entity("entityName3", "entityType2", Map(AttributeName.withDefaultNS("attr3") -> AttributeString("value3")))
-
-    // Insert entity references between entities
-    val refMapping = RefMapping(entity1.toPointer, Set(entity2.toPointer, entity3.toPointer))
-    runAndWait(q.insertReferences(sourceWorkspaceId, Set(refMapping)))
-
-    // Perform the copy operation
-    val copiedEntityRefsResult =
-      runAndWait(q.copyEntityReferences(sourceWorkspaceId, destinationWorkspaceId, Set(entity1.toPointer)))
-
-    // Verify the result
-    copiedEntityRefsResult shouldBe 2
-
-    // Verify references in the destination workspace
-    val copiedReferences = runAndWait(q.getReferencesFrom(destinationWorkspaceId, entity1.toPointer))
-    copiedReferences should contain theSameElementsAs Seq(entity2.toPointer, entity3.toPointer)
-  }
-
   it should "get recursive entity references" in withMinimalTestDatabase { _ =>
     // Define workspace
     val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
 
-    // Create entities
-    val entity1 = EntityPointer("entityType1", "entityName1")
-    val entity2 = EntityPointer("entityType1", "entityName2")
-    val entity3 = EntityPointer("entityType1", "entityName3")
-    val entity4 = EntityPointer("entityType1", "entityName4")
+    // Define references to form a recursive structure
+    val entity4 = Entity("entityName4", "entityType1", Map())
+    val entity3 =
+      Entity("entityName3",
+             "entityType1",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
+             )
+      )
+    val entity2 =
+      Entity("entityName2",
+             "entityType1",
+             Map(
+               AttributeName.withDefaultNS("ref1") -> AttributeEntityReference(entity4.entityType, entity4.name)
+             )
+      )
+    val entity1 = Entity(
+      "entityName1",
+      "entityType1",
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference(entity2.entityType, entity2.name),
+            AttributeEntityReference(entity3.entityType, entity3.name)
+          )
+        )
+      )
+    )
 
-    // Insert references to form a recursive structure
-    val refMapping1 = RefMapping(entity1, Set(entity2, entity3))
-    val refMapping2 = RefMapping(entity2, Set(entity4))
-    val refMapping3 = RefMapping(entity3, Set(entity4))
-
-    runAndWait(q.insertReferences(workspaceId, Set(refMapping1, refMapping2, refMapping3)))
+    // insert all entities
+    insertAndGetAll(Seq(entity4, entity3, entity2, entity1))
 
     // Perform the recursive query
-    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1)))
+    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1.toPointer)))
 
     // Verify the result
     recursiveReferences should contain theSameElementsAs Set(
-      RefMapping(entity1, Set(entity2, entity3)),
-      RefMapping(entity2, Set(entity4)),
-      RefMapping(entity3, Set(entity4))
+      RefMapping(entity1.toPointer, Set(entity2.toPointer, entity3.toPointer)),
+      RefMapping(entity2.toPointer, Set(entity4.toPointer)),
+      RefMapping(entity3.toPointer, Set(entity4.toPointer))
     )
   }
 
@@ -2642,22 +2748,30 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
 
     // Create entities
-    val entity1 = EntityPointer("entityType1", "entityName1")
-    val entity2 = EntityPointer("entityType1", "entityName2")
+    val entity1 = Entity("entityName1", "entityType1", Map())
+    val entity2 = Entity("entityName2", "entityType1", Map())
+    insertAndGetAll(Seq(entity1, entity2))
 
-    // Insert references to form a recursive structure
-    val refMapping1 = RefMapping(entity1, Set(entity2))
-    val refMapping2 = RefMapping(entity2, Set(entity1))
-
-    runAndWait(q.insertReferences(workspaceId, Set(refMapping1, refMapping2)))
+    // Update the entities to contain a cycle
+    val entity1Update = entity1.copy(attributes =
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity2.entityType, entity2.name)
+      )
+    )
+    val entity2Update = entity2.copy(attributes =
+      Map(
+        AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
+      )
+    )
+    runAndWait(q.batchCreateEntities(workspaceId, Seq(entity1Update, entity2Update), insertOnly = false))
 
     // Perform the recursive query
-    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1)))
+    val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1.toPointer)))
 
     // Verify the result
     recursiveReferences should contain theSameElementsAs Set(
-      RefMapping(entity1, Set(entity2)),
-      RefMapping(entity2, Set(entity1))
+      RefMapping(entity1.toPointer, Set(entity2.toPointer)),
+      RefMapping(entity2.toPointer, Set(entity1.toPointer))
     )
   }
 

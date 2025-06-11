@@ -104,12 +104,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // FIXME: implement this
+  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // TODO CORE-483: implement this
 
   def listWorkflowEntities(dataAccess: DataAccess,
                            workspace: Workspace,
                            entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // FIXME: implement this
+  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // TODO CORE-483: implement this
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
@@ -245,9 +245,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new RawlsConcurrentModificationException(
             s"Detected concurrent modifications to entity ${savedEntityRecord.toPointer}."
           )
-
-        // save all references from this entity to other entities
-        _ <- repository.queries.insertReferences(workspaceId, refs)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
@@ -265,8 +262,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesConflictException(referencingEntities.map(_.toAttributeEntityReference).toSet)
         }
-        // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFrom(workspaceId, pointers.toSet)
         // hard-delete everything we can
         _ <- repository.queries.deleteEntities(workspaceId, pointers)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
@@ -283,8 +278,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         _ = if (referencingEntities.nonEmpty) {
           throw new DeleteEntitiesOfTypeConflictException(referencingEntities.size)
         }
-        // remove all references from these entities
-        _ <- repository.queries.deleteAllReferencesFromType(workspaceId, entityType)
         // hard-delete everything we can
         _ <- repository.queries.deleteEntitiesOfType(workspaceId, entityType)
         // soft-delete (i.e. hide) everything that could not be hard-deleted
@@ -351,7 +344,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     repository.dataSource.inTransaction(ReadOnly) { _ =>
       for {
         entityTypeAndKeys <- traceDBIOWithParent("listEntityKeys", parentContext) { _ =>
-          repository.queries.listEntityKeys(workspaceId)
+          // temporary hack to gather performance data: if useCache is true, calculate attributes via the ENTITY_KEYS table.
+          // if useCache is false, calculate attributes via the ENTITY table. We'll run these through perf tests over
+          // a period of time to see if ENTITY_KEYS offers significant benefit over ENTITY.
+          if (useCache)
+            repository.queries.listEntityKeys(workspaceId)
+          else
+            repository.queries.listEntityKeysViaEntity(workspaceId)
         }
         entityTypeAndCounts <- traceDBIOWithParent("countEntitiesGroupedByType", parentContext) { _ =>
           repository.queries.countEntitiesGroupedByType(workspaceId)
@@ -566,7 +565,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     val newName = renameInfo.newName
 
     // Perform the rename in a transaction
-    val renameFuture = repository.dataSource.inTransaction { dataAccess =>
+    val renameFuture = repository.dataSource.inTransaction { _ =>
       for {
         // First check if the old entity type exists
         entityTypeCount <- repository.queries.countEntities(workspaceId, oldName)

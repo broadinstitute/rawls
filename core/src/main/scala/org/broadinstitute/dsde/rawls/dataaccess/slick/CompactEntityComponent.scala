@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
 import org.broadinstitute.dsde.rawls.model.AttributeFormat.{ENTITY_NAME_KEY, ENTITY_TYPE_KEY}
@@ -12,7 +13,6 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
-  AttributeFormat,
   AttributeName,
   AttributeRename,
   Entity,
@@ -87,6 +87,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   implicit val getRefPointerRecord: GetResult[RefPointerRecord] =
     GetResult(r =>
       RefPointerRecord(
+        r.<<,
+        r.<<,
         r.<<,
         r.<<,
         r.<<,
@@ -259,21 +261,18 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                  destWs: UUID,
                                  entityRefs: Set[EntityPointer] = Set(),
                                  batchSize: Int = driverComponent.batchSize
-  ): ReadWriteAction[(Int, Int)] = {
+  ): ReadWriteAction[Int] = {
 
     def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
       for {
         entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
-        entityRefsCopiedCount <- copyEntityReferences(sourceWs, destWs, chunk)
-      } yield (entitiesCopiedCount, entityRefsCopiedCount)
+      } yield entitiesCopiedCount
 
     val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 
-    allCopies.map { copyActionResults: Iterator[(Int, Int)] =>
-      (copyActionResults.map(_._1).sum, copyActionResults.map(_._2).sum)
-    }
+    allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum }
   }
 
   /**
@@ -312,7 +311,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
       val baseSql = concatSqlActions(
         sql"""with recursive EntityReferences as (
-              select er.workspace_id, er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
+              select er.workspace_id, er.from_entity_id, er.from_entity_type, er.from_name, er.from_attribute_name, er.to_entity_type, er.to_name
               from ENTITY_REFS er
               where er.workspace_id = $workspaceId
               and (""",
@@ -322,7 +321,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       )
       val recursiveSql = sql"""
             union distinct
-            select er.workspace_id, er.from_entity_type, er.from_name, er.to_entity_type, er.to_name
+            select er.workspace_id, er.from_entity_id, er.from_entity_type, er.from_name, er.from_attribute_name, er.to_entity_type, er.to_name
             from EntityReferences er1
             join ENTITY_REFS er
             on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
@@ -331,7 +330,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         """
 
       val finalSql = sql"""
-        select workspace_id, from_entity_type, from_name, to_entity_type, to_name
+        select workspace_id, from_entity_id, from_entity_type, from_name, from_attribute_name, to_entity_type, to_name
         from EntityReferences
       """
 
@@ -380,44 +379,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       sql.asUpdate
     }
 
-  /**
-   * Copies entity references from a source workspace to a destination workspace.
-   *
-   * This method inserts rows into the `ENTITY_REFS` table for the destination workspace
-   * based on the references in the source workspace. It ensures that the `from_entity_type`
-   * and `from_name` match the provided set of `EntityPointer` objects.
-   *
-   * Execution Plan:
-   * - If `refs` is empty, returns 0 without performing any database operations.
-   * - Generates SQL clauses for the `from_entity_type` and `from_name` pairs in `refs`.
-   * - Executes an `INSERT INTO ... SELECT` query to copy references from the source workspace to the destination workspace.
-   *
-   * `query execution plan (for select): Uses idx_to index. Extra: Using where; Using index; Using temporary`
-   */
-  def copyEntityReferences(sourceWorkspaceId: UUID,
-                           destWorkspaceId: UUID,
-                           refs: Set[EntityPointer]
-  ): ReadWriteAction[Int] =
-    if (refs.isEmpty) {
-      DBIO.successful(0)
-    } else {
-      val typeNameClauses = generateTypeNameSql(refs, typeColumn = "from_entity_type", nameColumn = "from_name")
-
-      // build the overall query
-      val query = concatSqlActions(
-        sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name)
-               select $destWorkspaceId, from_entity_type, from_name, to_entity_type, to_name
-               from ENTITY_REFS
-               where workspace_id = $sourceWorkspaceId
-               and ( """,
-        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
-        sql""" );"""
-      )
-
-      // execute
-      query.asUpdate
-    }
-
   /** Given a set of entity type/name pairs, return the count of those entities that exist.
     *
     * `execution plan: uses idx_entity_type_name index. Extra: Using index condition; Using where`
@@ -452,34 +413,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     countExisting(workspaceId, refs).map(count => count == refs.size)
 
   /**
-   * Delete all rows in ENTITY_REFS for the specified entities
-   *
-   * Returns the number of rows deleted
-   *
-   * `execution plan: Uses unq_from_to index. Extra: Using where`
-   */
-  def deleteAllReferencesFrom(workspaceId: UUID, fromRefs: Set[EntityPointer]): ReadWriteAction[Int] = {
-    val typeNameClauses = generateTypeNameSql(fromRefs, typeColumn = "from_entity_type", nameColumn = "from_name")
-
-    val baseSql =
-      sql"""delete from ENTITY_REFS
-        where workspace_id = $workspaceId
-        and ("""
-
-    concatSqlActions(baseSql, reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "), sql")").asUpdate
-  }
-
-  /**
-   * Delete all rows in ENTITY_REFS for all entities of the given type
-   *
-   * Returns the number of rows deleted
-   *
-   * `execution plan: Uses unq_from_to index. Extra: Using where`
-   */
-  def deleteAllReferencesFromType(workspaceId: UUID, fromType: String): ReadWriteAction[Int] =
-    sql"""delete from ENTITY_REFS where workspace_id = $workspaceId and from_entity_type = $fromType""".asUpdate
-
-  /**
     * Delete all rows in ENTITY_REFS representing references from specific attributes in entities of a given type.
     * @param workspaceId the workspace containing references
     * @param fromType the entity type containing reference
@@ -493,69 +426,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   def deleteAllReferencesFromAttributes(workspaceId: UUID,
                                         fromType: String,
                                         fromAttributes: Set[AttributeName]
-  ): ReadWriteAction[Int] =
-    if (fromAttributes.isEmpty) {
-      DBIO.successful(0)
-    } else {
-      val entityTypePath = s"$$.$ENTITY_TYPE_KEY"
-      val entityNamePath = s"$$.$ENTITY_NAME_KEY"
-
-      val readQueries = fromAttributes.map { attributeName =>
-        val attributePath = slickAttributePath(attributeName)
-
-        sql"""SELECT
-                JSON_UNQUOTE(JSON_EXTRACT(value, $entityTypePath)) as entityType,
-                JSON_UNQUOTE(JSON_EXTRACT(value, $entityNamePath)) as entityName
-              FROM ENTITY,
-              JSON_TABLE(
-                CASE
-                  WHEN JSON_TYPE(JSON_EXTRACT(attributes, $attributePath)) = 'ARRAY' THEN JSON_EXTRACT(attributes, $attributePath)
-                  ELSE JSON_ARRAY(JSON_EXTRACT(attributes, $attributePath))
-                END,
-                '$$[*]' COLUMNS(value json PATH '$$')
-              ) AS jt
-              where workspace_id = $workspaceId
-              and entity_type = $fromType
-              and JSON_TYPE(value) = 'OBJECT'
-              and JSON_CONTAINS_PATH(value, 'all', $entityTypePath, $entityNamePath)
-           """
-      }
-
-      val allReads = reduceSqlActionsWithDelim(readQueries.toSeq, sql" union all ")
-
-      concatSqlActions(
-        sql"""delete from ENTITY_REFS
-            where workspace_id = $workspaceId
-            and from_entity_type = $fromType
-            and (to_entity_type, to_name) in (""",
-        allReads,
-        sql")"
-      ).asUpdate
-    }
-
-  /**
-    * Insert references into ENTITY_REFS.
-    *
-    * Returns the number of rows upserted.
-    *
-    * `execution plan: multi-row insert`
-    */
-  def insertReferences(workspaceId: UUID, references: Set[RefMapping]): ReadWriteAction[Int] =
-    // short-circuit
-    if (references.isEmpty) {
-      DBIO.successful(0)
-    } else {
-      val baseSql =
-        sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name) values """
-
-      val valuesSql = references.flatMap { refPointers =>
-        refPointers.to.map { toEntity =>
-          sql"($workspaceId, ${refPointers.from.entityType}, ${refPointers.from.entityName}, ${toEntity.entityType}, ${toEntity.entityName})"
-        }
-      }
-
-      concatSqlActions(baseSql, reduceSqlActionsWithDelim(valuesSql.toSeq)).asUpdate
-    }
+  ): ReadWriteAction[Int] = ???
 
   /**
    * Get all entity attribute keys for a workspace.
@@ -566,6 +437,18 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     sql"""SELECT distinct entity_type, attribute_key
       FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
       where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
+
+  /**
+   * Get all entity attribute keys for a workspace.
+   *
+   * execution plan:
+   *    ENTITY: Using index condition (Using index condition; Using temporary); Using temporary
+   *    t: Table function: json_table; Using temporary
+   */
+  def listEntityKeysViaEntity(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
+    sql"""SELECT distinct entity_type, attribute_key
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
 
   /**
    * Gets the count of entities in a workspace, grouped by entity type.
@@ -581,7 +464,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   /**
    * Soft-deletes the given entities: removes their attributes and sets deleted=1 and deletedDate=now
-   * Does not remove rows from ENTITY_REFS table
    *
    * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
    */
@@ -604,7 +486,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   /**
    * Soft-deletes all entities of the given type: removes their attributes and sets deleted=1 and deletedDate=now
-   * Does not remove rows from ENTITY_REFS table
    *
    * `execution plan: Index range scan; using where, using temporary. Index: idx_entity_type_name.`
    */
@@ -678,7 +559,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
-  // `execution plan: uses idx_to index. Extra: Using where; Using index` (I think this may also use unq_from_to in some cases)
+  //
+  // `execution plan:
+  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
+  //    Table function: json_table; Using temporary; Using where for view.`
   def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
@@ -701,7 +585,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   // Gets entities that have references to any entities of the given type
   // Excludes entities with the same type
-  // `execution plan: Uses unq_from_to index. Extra: Using where`
+  //
+  // `execution plan:
+  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
+  //    Table function: json_table; Using temporary; Using where for view.`
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
     sql"""select from_entity_type, from_name
          from ENTITY_REFS
@@ -777,9 +664,18 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * Returns the number of entities that were renamed.
    *
-   * `execution plan: index range scan on idx_entity_type_name`
+   * execution plans:
+   *    updateEntityNameSql: index range scan on idx_entity_type_name
+   *    updateReferencesInAttributesSql: index range scan on idx_entity_type_name
+   *    updateSortValues: ugly. the two CTEs are materialized and the query does full table scans against those.
+   *      The initial "where workspace_id=?" on the first CTE uses the idx_entity_type_name index, and the following
+   *      full table scans are against only the materialized temp tables with rows matching the workspace id.
    */
   def renameEntity(workspaceId: UUID, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
+    // validation ensures that entityType, oldName, and newName are SQL-safe
+    EntityUtils.validateEntityName(oldName)
+    EntityUtils.validateEntityName(newName)
+    EntityUtils.validateEntityType(entityType)
     // Update the entity name in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
     val updateEntityNameSql = sql"""update ENTITY set name = $newName, record_version = record_version + 1
@@ -788,170 +684,100 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           and name = $oldName
           and deleted = 0"""
 
-    // Update the entity from_name in the ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateFromNameSql =
-      sql"""update ENTITY_REFS
-            set from_name = $newName
+    // Update all embedded references in the $.refs array.
+    // This is done via JSON_REPLACE(CAST(REPLACE(JSON_EXTRACT))). Explaining from the inside out:
+    //   - JSON_EXTRACT(attributes, '$$.refs') gets the refs array
+    //   - REPLACE(...) treats the refs array as a plain string, and replaces all occurrences of
+    //      the old name with the new name
+    //   - CAST(... as JSON) converts the modified string back to a JSON array
+    //   - JSON_REPLACE(...) replaces the original refs array with the modified one
+    // We use a string replace here because it is significantly more performant than calling JSON_REPLACE
+    //  individually for each value that needs to be changed. Since we control the serialization format of the
+    //  refs array, and only perform the string replace inside that array, we avoid any problems with other
+    //  user-supplied values.
+    val oldRef = s""""n": "$oldName", "t": "$entityType""""
+    val newRef = s""""n": "$newName", "t": "$entityType""""
+    val updateReferencesInAttributesSql = sql"""update ENTITY
+            set attributes = JSON_REPLACE(attributes, $slickRefsPath,
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $oldRef, $newRef) as JSON))
             where workspace_id = $workspaceId
-            and from_entity_type = $entityType
-            and from_name = $oldName"""
+            and deleted = 0
+            and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType), $slickRefsPath)""".asUpdate
 
-    // Update the entity to_name in the ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateToNameSql =
-      sql"""update ENTITY_REFS
-            set to_name = $newName
-            where workspace_id = $workspaceId
-            and to_entity_type = $entityType
-            and to_name = $oldName"""
-
-    // Get all paths in attributes that reference the old name
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    val attrRefRegex =
-      s"'\\\\$$\\.${CompactEntitySerialization.ATTRS_KEY}\\.[^.]+\\.${AttributeFormat.ENTITY_NAME_KEY}'"
-
-    val getReferencePathsInAttributesSql =
-      sql"""
-    with entity_attrs as
-      (select e.attributes
-      from ENTITY e
-      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-      where er.workspace_id = $workspaceId
-      and er.to_name = $oldName)
-    select name_path
-    from entity_attrs e,
-    json_table(json_search(e.attributes, 'all', $oldName), '$$[*]' COLUMNS( name_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
-    where name_path REGEXP #$attrRefRegex
-    union
-    select json_unquote(json_search(e.attributes, 'all', $oldName))
-    from entity_attrs e
-    where json_type(json_search(e.attributes, 'all', $oldName)) != 'ARRAY'
-    and json_unquote(json_search(e.attributes, 'all', $oldName)) REGEXP #$attrRefRegex
-    """
-
-    // Update attributes with references to the old name
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    def updateReferencesInAttributesSql(paths: Seq[String]) = {
-      val replaceParamsSqls = paths.map(path => sql"$path, $newName")
-      concatSqlActions(
-        sql"""
-      update ENTITY e
-      join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-      set e.attributes = JSON_REPLACE(e.attributes,
-    """,
-        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
-        sql""") where er.workspace_id = $workspaceId and er.to_name = $oldName"""
-      )
-    }
+    // Update sortable values in the $.attrs object.
+    //  1. search $.refs to find all scalar references to the target type/name
+    //  2. extract the attribute name and isScalar boolean for each of those references
+    //  3. re-filter to those references where isScalar is true and entityType matches; this prevents false positives from JSON_SEARCH
+    //  4. update the specific entity/attribute name combinations
+    val updateSortValues =
+      sql"""with paths as(
+              select id,
+              REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.n', '') as path
+              from ENTITY
+              where workspace_id = $workspaceId
+              and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType, 'z', true), $slickRefsPath)
+            ),
+            attrnames as (
+              select paths.id,
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.z')) as is_scalar,
+                JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
+              from ENTITY e join paths on e.id = paths.id
+              having is_scalar = true and entity_type = $entityType
+            )
+          update ENTITY e
+          join attrnames on e.id = attrnames.id
+          set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName) where e.id = attrnames.id;
+         """.asUpdate
 
     // Execute all updates
     for {
-      paths <- getReferencePathsInAttributesSql.as[String]
-      _ <-
-        if (paths.isEmpty) {
-          DBIO.successful(0)
-        } else {
-          DBIO.seq(
-            updateReferencesInAttributesSql(paths).asUpdate,
-            updateToNameSql.asUpdate
-          )
-        }
-      _ <- updateFromNameSql.asUpdate
+      _ <- updateSortValues
+      _ <- updateReferencesInAttributesSql
       entityRowsUpdated <- updateEntityNameSql.asUpdate
     } yield entityRowsUpdated
   }
 
   /**
-   * Rename an entity type, updating both the ENTITY table and entity references in ENTITY_REFS.
-   *
-   * Returns the number of entities that were renamed.
-   *
-   * `execution plan: multiple statements that update both ENTITY and ENTITY_REFS tables`
-   */
+    * Rename an entity type, updating both the ENTITY table and embedded references in entity attributes.
+    *
+    * Returns the number of entities that were renamed.
+    *
+    * execution plan:
+    *     updateEntityTypeSql: index range scan on idx_entity_type_name
+    *     updateReferencesInAttributesSql: index range scan on idx_entity_type_name
+    */
   def renameEntityType(workspaceId: UUID, oldType: String, newType: String): ReadWriteAction[Int] = {
+    // validation ensures that oldType and newType are SQL-safe
+    EntityUtils.validateEntityType(oldType)
+    EntityUtils.validateEntityType(newType)
     // Update the entity type in the ENTITY table
     // explain plan: index range scan on idx_entity_type_name
     val updateEntityTypeSql =
       sql"""update ENTITY set entity_type = $newType, record_version = record_version + 1
             where workspace_id = $workspaceId and entity_type = $oldType and deleted = 0"""
 
-    // Update entity references in the attributes JSON column
-    // This requires a custom function that can do complex JSON updates which MySQL doesn't provide natively
-    // The best approach would be to add a custom MySQL function for JSON path replacement
-    // For now, we'll do this in application code when accessing entities
-
-    // Update from_entity_type in ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateFromReferencesSql =
-      sql"""update ENTITY_REFS
-            set from_entity_type = $newType
+    // Update all embedded references in the $.refs array.
+    // This is done via JSON_REPLACE(CAST(REPLACE(JSON_EXTRACT))). Explaining from the inside out:
+    //   - JSON_EXTRACT(attributes, '$$.refs') gets the refs array
+    //   - REPLACE(...) treats the refs array as a plain string, and replaces all occurrences of
+    //      the old type with the new type
+    //   - CAST(... as JSON) converts the modified string back to a JSON array
+    //   - JSON_REPLACE(...) replaces the original refs array with the modified one
+    // We use a string replace here because it is significantly more performant than calling JSON_REPLACE
+    //  individually for each value that needs to be changed. Since we control the serialization format of the
+    //  refs array, and only perform the string replace inside that array, we avoid any problems with other
+    //  user-supplied values.
+    val updateReferencesInAttributesSql = sql"""update ENTITY
+            set attributes = JSON_REPLACE(attributes, $slickRefsPath,
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), '"t": "#$oldType"', '"t": "#$newType"') as JSON))
             where workspace_id = $workspaceId
-            and from_entity_type = $oldType"""
-
-    // Update to_entity_type in ENTITY_REFS table
-    // explain plan: index range scan on unq_from_to
-    val updateToReferencesSql =
-      sql"""update ENTITY_REFS
-            set to_entity_type = $newType
-            where workspace_id = $workspaceId
-            and to_entity_type = $oldType"""
-
-    // Get all paths in attributes that reference the old type
-    // This is a bit tricky because the attributes column is JSON and we need to search for the old type
-    // in all possible paths. We use JSON_SEARCH to find the paths and JSON_TABLE to extract them.
-    // We also need to handle the case where the reference is singular or not in an array.
-    // Also exclude values in the json that match the old type but are not entity references.
-    // Uses ENTITY_REFS table to find the attributes that reference the old type so must be run before
-    // the ENTITY_REFS table is updated.
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    val attrRefRegex = """'\\$\\.attrs\\.[^.]+\\.entityType'"""
-    val getReferencePathsInAttributesSql =
-      sql"""
-        with entity_attrs as
-          (select e.attributes
-          from ENTITY e
-          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-          where er.workspace_id = $workspaceId
-          and er.to_entity_type = $oldType)
-        select type_path
-        from entity_attrs e,
-        json_table(json_search(e.attributes, 'all', $oldType), '$$[*]' COLUMNS( type_path VARCHAR(100) PATH '$$' ERROR ON ERROR )) jt
-        where type_path REGEXP #$attrRefRegex
-        union
-        select json_unquote(json_search(e.attributes, 'all', $oldType))
-        from entity_attrs e
-        where json_type(json_search(e.attributes, 'all', $oldType)) != 'ARRAY'
-        and json_unquote(json_search(e.attributes, 'all', $oldType)) REGEXP #$attrRefRegex
-        """
-
-    // explain plan: non-unique index scan on idx_entity_type_name and idx_to
-    def updateReferencesInAttributesSql(paths: Seq[String]) = {
-      val replaceParamsSqls = paths.map(path => sql"$path, $newType")
-      concatSqlActions(
-        sql"""
-          update ENTITY e
-          join ENTITY_REFS er on e.workspace_id = er.workspace_id and e.entity_type = er.from_entity_type and e.name = er.from_name
-          set e.attributes = JSON_REPLACE(e.attributes,
-        """,
-        reduceSqlActionsWithDelim(replaceParamsSqls.toSeq, sql","),
-        sql""") where er.workspace_id = $workspaceId and er.to_entity_type = $oldType"""
-      )
-    }
+            and deleted = 0
+            and JSON_CONTAINS(attributes, JSON_OBJECT('t', $oldType), $slickRefsPath)""".asUpdate
 
     // Execute all updates in same transaction
     for {
-      paths <- getReferencePathsInAttributesSql.as[String]
-      _ <-
-        if (paths.isEmpty) {
-          DBIO.successful(0)
-        } else {
-          DBIO.seq(
-            updateReferencesInAttributesSql(paths).asUpdate,
-            updateToReferencesSql.asUpdate
-          )
-        }
-      _ <- updateFromReferencesSql.asUpdate
+      _ <- updateReferencesInAttributesSql
       entityRowsUpdated <- updateEntityTypeSql.asUpdate
     } yield entityRowsUpdated
   }
@@ -959,6 +785,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Renames a single attribute across all entities of the given type and workspace.
     * This method assumes the old and new attribute names have already been validated!
+    *
+    * TODO CORE-542: also update in $.refs
     *
     * `Using where. Index used: idx_entity_type_name`
     */
@@ -1147,6 +975,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * Example sql produced:
    * JSON_OBJECT(
    *   'v', e.attributes -> '$.v',
+   *   'refs', e.attributes -> '$.refs',
    *   'attrs', JSON_OBJECT(
    *     ?, e.attributes -> ?,
    *     ?, e.attributes -> ?
@@ -1161,6 +990,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         concatSqlActions(
           sql"""JSON_OBJECT(
                '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
+               '#${CompactEntitySerialization.REFS_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.REFS_KEY}',
                '#${CompactEntitySerialization.ATTRS_KEY}', JSON_OBJECT(""",
           reduceSqlActionsWithDelim(fieldSqls.toSeq, sql","),
           sql"))"
