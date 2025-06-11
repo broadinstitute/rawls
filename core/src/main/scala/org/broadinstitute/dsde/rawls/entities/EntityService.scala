@@ -9,7 +9,7 @@ import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
+import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
@@ -527,10 +527,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
       entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
         entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
       }
-      _ = setTraceSpanAttribute(localContext,
-                                AttributeKey.stringKey("providerType"),
-                                entityProvider.getClass.getSimpleName
-      )
+      providerName = entityProvider match {
+        case audit: AuditLoggingEntityProvider =>
+          s"${audit.delegate.getClass.getSimpleName} via AuditLoggingEntityProvider"
+        case x => x.getClass.getSimpleName
+      }
+      _ = setTraceSpanAttribute(localContext, AttributeKey.stringKey("providerType"), providerName)
     } yield entityProvider
 
   /**
