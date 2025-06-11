@@ -830,29 +830,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   /**
-    * Determine if a reference-containing attribute exists in any entity of the given type and workspace.
-    *
-    * `execution plan: subquery Using index condition; Using where. Index used: idx_entity_type_name`
-    */
-  def anyAttributeHasReference(workspaceId: UUID,
-                               entityType: String,
-                               attributeNames: Set[AttributeName]
-  ): ReadAction[Boolean] = {
-    // SQL to pass the supplied attribute names as bind parameters
-    val attributeParameters =
-      reduceSqlActionsWithDelim(attributeNames.map(attr => sql"${AttributeName.toDelimitedName(attr)}").toSeq, sql", ")
-
-    concatSqlActions(
-      sql"""select exists (select 1 from ENTITY_REFS
-            where workspace_id = $workspaceId
-            and from_entity_type = $entityType
-            and from_attribute_name in (""",
-      attributeParameters,
-      sql"))"
-    ).as[Boolean].head
-  }
-
-  /**
     * Removed the specified attributes from all entities of the given type and workspace.
     *
     * Note this does NOT also update ENTITY_REFS; see ??? to do that.
