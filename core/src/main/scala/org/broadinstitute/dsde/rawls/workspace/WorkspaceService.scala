@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
+import bio.terra.policy.model.TpsPaoGetResult
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
@@ -335,6 +336,10 @@ class WorkspaceService(
             getBucketOptions(WorkspaceName(workspace.namespace, workspace.name), userProject)
           )
       }
+
+      policies <- options.anyPresentFuture("policies") {
+        policyService.getPao(UUID.fromString(workspaceId), ctx)
+      }
     } yield WorkspaceResponse(
       options.anyPresent("accessLevel")(accessLevel),
       canShare,
@@ -350,9 +355,23 @@ class WorkspaceService(
       bucketDetails,
       owners,
       wsmContext.azureCloudContext,
-      Some(wsmContext.policies)
+      policies.flatten.map(convertPolicies)
     )
   }
+
+  private def convertPolicies(pao: TpsPaoGetResult): List[WorkspacePolicy] =
+    pao.getEffectiveAttributes.getInputs.asScala
+      .map(input =>
+        WorkspacePolicy(
+          input.getName,
+          input.getNamespace,
+          Option(
+            input.getAdditionalData.asScala.toList
+              .map(data => Map.apply(data.getKey -> data.getValue))
+          ).getOrElse(List.empty)
+        )
+      )
+      .toList
 
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
     val options = processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
