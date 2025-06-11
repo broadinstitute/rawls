@@ -874,7 +874,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                               CAST(
                                               REGEXP_REPLACE(
                                                 REGEXP_REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $regex, ''),
-                                                ',[:space:]+\\]',
+                                                ',[:space:]*\\]',
                                                 ']'
                                                )
                                                as JSON))"""
