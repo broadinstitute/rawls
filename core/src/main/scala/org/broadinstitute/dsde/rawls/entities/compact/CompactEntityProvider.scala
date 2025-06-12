@@ -306,7 +306,35 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def deleteEntityAttributes(entityType: String,
                                       attributeNames: Set[AttributeName],
                                       parentContext: RawlsRequestContext
-  ): Future[Unit] = ???
+  ): Future[Unit] =
+    if (attributeNames.isEmpty) {
+      Future.failed(
+        new AttributeException(
+          message = "The supplied set of attributes to remove cannot be empty.",
+          code = StatusCodes.BadRequest
+        )
+      )
+    } else {
+      repository.dataSource.inTransaction { _ =>
+        for {
+          // Verify if any of the attributes exist in the entityType. Short-circuit w/BadRequest if not.
+          anyAttrExists <-
+            repository.queries.anyAttributeExists(workspaceId, entityType, attributeNames)
+          _ = if (!anyAttrExists) {
+            throw new AttributeException(
+              message = "Could not find any of the given attribute names.",
+              code = StatusCodes.BadRequest
+            )
+          }
+          // Remove the attributes from entities
+          _ <- repository.queries.deleteAttributes(
+            workspaceId,
+            entityType,
+            attributeNames
+          )
+        } yield ()
+      }
+    }
 
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext
