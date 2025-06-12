@@ -4187,6 +4187,14 @@ class WorkspaceServiceSpec
       val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
       val targetBilling = testData.testProject1
 
+      when(
+        services.leonardoService.updateResourceLabelsOrRevert(workspace.workspaceIdAsUUID,
+                                                              workspace.namespace,
+                                                              targetBilling.projectName.value,
+                                                              services.workspaceService.ctx
+        )(executionContext)
+      ).thenAnswer(_ => Future.successful())
+
       val updatedWorkspace =
         Await
           .result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
@@ -4414,4 +4422,61 @@ class WorkspaceServiceSpec
 
   }
 
+  it should "revert workspace billing update if update fails in Leonardo" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+    val workspace = Await.result(services.workspaceRepository.getWorkspace(workspaceName), Duration.Inf).get
+    val targetBilling = testData.testProject1
+
+    doReturn(Future.failed(new Exception("Fake error from Leonardo")), null)
+      .when(services.leonardoService)
+      .updateResourceLabelsOrRevert(
+        workspace.workspaceIdAsUUID,
+        workspace.namespace,
+        targetBilling.projectName.value,
+        services.workspaceService.ctx
+      )(executionContext)
+
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.updateWorkspaceBilling(workspace, targetBilling), Duration.Inf)
+    }
+    err.errorReport.message should include("Billing update failed in Leonardo")
+    err.errorReport.statusCode.get shouldBe StatusCodes.InternalServerError
+
+    verify(services.leonardoService).updateResourceLabelsOrRevert(
+      workspace.workspaceIdAsUUID,
+      workspace.namespace,
+      targetBilling.projectName.value,
+      services.workspaceService.ctx
+    )
+
+    // Verify GCP and Sam reverted
+    val oldBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             workspace.namespace,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
+    val newBillingProjectOwnerPolicyEmail = Await.result(
+      services.samDAO
+        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                             targetBilling.projectName.value,
+                             SamBillingProjectPolicyNames.owner,
+                             services.workspaceService.ctx
+        )
+        .map(_.email),
+      Duration.Inf
+    )
+    verifyGCPBillingUpdate(workspace,
+                           newBillingProjectOwnerPolicyEmail,
+                           oldBillingProjectOwnerPolicyEmail,
+                           workspace.currentBillingAccountOnGoogleProject,
+                           services
+    )
+    verifySamUpdate(newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail, services)
+
+  }
 }

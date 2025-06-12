@@ -166,82 +166,76 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
       }
     }
 
-  def updateRuntimeLabels(workspaceId: UUID, workspaceNamespace: String, ctx: RawlsRequestContext): Unit = {
-    logger.info(s"Upserting workspace namespace label $workspaceNamespace for workspaceId=$workspaceId runtimes")
-    val updateRequest = new UpdateRuntimeRequest()
-    updateRequest.setLabelsToUpsert(Map("saturnWorkspaceNamespace" -> workspaceNamespace))
-    val runtimes = leonardoDAO.listRuntimesByWorkspace(ctx.userInfo.accessToken.token, workspaceId)
-    runtimes.foreach { runtime =>
-      leonardoDAO.updateRuntimeConfig(ctx.userInfo.accessToken.token,
-                                      runtime.getGoogleProject,
-                                      runtime.getRuntimeName,
-                                      updateRequest
-      )
-    }
-  }
-
-  def updateDiskLabels(workspaceId: UUID,
-                       oldWorkspaceNamespace: String,
-                       newWorkspaceNamespace: String,
-                       ctx: RawlsRequestContext
-  ): Unit = {
-    logger.info(s"Upserting workspace namespace label $newWorkspaceNamespace for [workspaceId=${workspaceId}] disks")
-    val label = Map("labels" -> Map("saturnWorkspaceNamespace" -> newWorkspaceNamespace))
-    val updateRequest = UpdateDiskRequest.fromJson(label.toJson.compactPrint)
-
-    val disks = leonardoDAO.listDisksByWorkspaceNamespace(ctx.userInfo.accessToken.token, oldWorkspaceNamespace)
-    disks.foreach { disk =>
-      leonardoDAO.updateDiskConfig(ctx.userInfo.accessToken.token,
-                                   disk.getCloudContext.getCloudResource,
-                                   disk.getName,
-                                   updateRequest
-      )
-    }
-  }
-
-//   def updateAppLabels(workspace: Workspace, ctx: RawlsRequestContext): Unit = {
-//    logger.info(s"Upserting workspace namespace label for [workspaceId=${workspace.workspaceIdAsUUID}]")
-//    val updateRequest = new UpdateAppRequest()
-//    updateRequest.setLabelsToUpsert(Map("saturnWorkspaceNamespace" -> workspace.namespace))
-//    val apps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
-//    apps.foreach { app =>
-//      leonardoDAO.updateAppConfig(ctx.userInfo.accessToken.token,
-//        app.getCloudContext.getCloudResource,
-//        app.getAppName,
-//        updateRequest
-//      )
-//    }
-
-  def updateResourceLabelsOrRevert(workspaceId: UUID,
-                                   oldWorkspaceNamespace: String,
-                                   newWorkspaceNamespace: String,
-                                   ctx: RawlsRequestContext
-  )(implicit
+  def updateRuntimeLabels(workspaceId: UUID, workspaceNamespace: String, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Unit] =
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          updateRuntimeLabels(workspaceId, newWorkspaceNamespace, ctx)
-          updateDiskLabels(workspaceId, oldWorkspaceNamespace, newWorkspaceNamespace, ctx)
-          // updateAppLabels(workspaceId, ctx) // Uncomment when app workspaceNamespace label updates are possible
-        }
-      }.recoverWith { case t: ApiException =>
-        logger.warn(
-          s"Unexpected failure updating resource labels for workspaceId=$workspaceId. Received ${t.getCode}: [${t.getResponseBody}]"
-        )
-        try {
-          // If we fail to update the labels, revert the changes
-          updateRuntimeLabels(workspaceId, oldWorkspaceNamespace, ctx)
-          updateDiskLabels(workspaceId, newWorkspaceNamespace, oldWorkspaceNamespace, ctx)
-        } catch {
-          case revertException: Exception =>
-            logger.warn(
-              s"Failed to revert workspace namespace label updates for workspaceId=$workspaceId. Error: ${revertException.getMessage}"
+          logger.info(s"Upserting workspace namespace label $workspaceNamespace for workspaceId=$workspaceId runtimes")
+          val updateRequest = new UpdateRuntimeRequest()
+          updateRequest.setLabelsToUpsert(Map("saturnWorkspaceNamespace" -> workspaceNamespace))
+          val runtimes = leonardoDAO.listRuntimesByWorkspace(ctx.userInfo.accessToken.token, workspaceId)
+          runtimes.foreach { runtime =>
+            leonardoDAO.updateRuntimeConfig(ctx.userInfo.accessToken.token,
+                                            runtime.getGoogleProject,
+                                            runtime.getRuntimeName,
+                                            updateRequest
             )
+          }
         }
-        Future.failed(t)
       }
+    }
+
+  def updateDiskLabels(workspaceId: UUID,
+                       oldWorkspaceNamespace: String,
+                       newWorkspaceNamespace: String,
+                       ctx: RawlsRequestContext
+  )(implicit ec: ExecutionContext): Future[Unit] =
+    retry(when500OrProcessingException) { () =>
+      Future {
+        blocking {
+          logger.info(
+            s"Upserting workspace namespace label $newWorkspaceNamespace for [workspaceId=${workspaceId}] disks"
+          )
+          val label =
+            s"""
+               |{
+               |    "labels": {"saturnWorkspaceNamespace": $newWorkspaceNamespace}
+               |}
+    """.stripMargin
+          val updateRequest = UpdateDiskRequest.fromJson(label)
+          val disks = leonardoDAO.listDisksByWorkspaceNamespace(ctx.userInfo.accessToken.token, oldWorkspaceNamespace)
+          disks.foreach { disk =>
+            leonardoDAO.updateDiskConfig(ctx.userInfo.accessToken.token,
+                                         disk.getCloudContext.getCloudResource,
+                                         disk.getName,
+                                         updateRequest
+            )
+          }
+        }
+      }
+    }
+
+  def updateResourceLabelsOrRevert(workspaceId: UUID,
+                                   oldWorkspaceNamespace: String,
+                                   newWorkspaceNamespace: String,
+                                   ctx: RawlsRequestContext
+  )(implicit ec: ExecutionContext): Future[Unit] =
+    retry(when500OrProcessingException) { () =>
+      updateRuntimeLabels(workspaceId, newWorkspaceNamespace, ctx)
+        .flatMap(_ => updateDiskLabels(workspaceId, oldWorkspaceNamespace, newWorkspaceNamespace, ctx))
+        .recoverWith { case t: ApiException =>
+          logger.warn(
+            s"Unexpected failure updating resource labels for workspaceId=$workspaceId. Received ${t.getCode}: [${t.getResponseBody}]"
+          )
+          // Attempt to revert both, but always fail with the original error
+          val revertRuntimes = updateRuntimeLabels(workspaceId, oldWorkspaceNamespace, ctx)
+            .recover { case e => logger.warn(s"Failed to revert runtime labels: ${e.getMessage}") }
+          val revertDisks = updateDiskLabels(workspaceId, newWorkspaceNamespace, oldWorkspaceNamespace, ctx)
+            .recover { case e => logger.warn(s"Failed to revert disk labels: ${e.getMessage}") }
+          Future.sequence(Seq(revertRuntimes, revertDisks)).flatMap(_ => Future.failed(t))
+        }
     }
 
 }

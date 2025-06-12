@@ -4,7 +4,15 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{AppAccessScope, AppType, CreateAppRequest}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{
+  AppAccessScope,
+  AppType,
+  CreateAppRequest,
+  ListPersistentDiskResponse,
+  ListRuntimeResponse,
+  UpdateDiskRequest,
+  UpdateRuntimeRequest
+}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpecLike
 
@@ -108,6 +116,47 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
       .verify(leonardoDAO)
       .deleteAzureRuntimes(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId), ArgumentMatchers.eq(true))
 
+  }
+
+  "HttpLeonardoDAO.listRuntimesByWorkspace" should "call the correct API with workspaceId" in {
+    val workspaceId = UUID.randomUUID()
+    val dao = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+    Mockito.doReturn(Seq.empty[ListRuntimeResponse]).when(dao).listRuntimesByWorkspace(token, workspaceId)
+    dao.listRuntimesByWorkspace(token, workspaceId)
+    Mockito.verify(dao).listRuntimesByWorkspace(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId))
+  }
+
+  "HttpLeonardoDAO.updateRuntimeConfig" should "call the correct API with arguments" in {
+    val googleProject = "terra-12345"
+    val name = "runtime"
+    val req = new UpdateRuntimeRequest()
+    val dao = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+    Mockito.doNothing().when(dao).updateRuntimeConfig(token, googleProject, name, req)
+    dao.updateRuntimeConfig(token, googleProject, name, req)
+    Mockito.verify(dao).updateRuntimeConfig(token, googleProject, name, req)
+  }
+
+  "HttpLeonardoDAO.listDisksByWorkspaceNamespace" should "call the correct API with workspaceNamespace" in {
+    val workspaceNamespace = "namespace"
+    val dao = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+    Mockito
+      .doReturn(Seq.empty[ListPersistentDiskResponse])
+      .when(dao)
+      .listDisksByWorkspaceNamespace(token, workspaceNamespace)
+    dao.listDisksByWorkspaceNamespace(token, workspaceNamespace)
+    Mockito
+      .verify(dao)
+      .listDisksByWorkspaceNamespace(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceNamespace))
+  }
+
+  "HttpLeonardoDAO.updateDiskConfig" should "call the correct API with arguments" in {
+    val googleProject = "terra-12345"
+    val name = "disk"
+    val req = new UpdateDiskRequest()
+    val dao = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+    Mockito.doNothing().when(dao).updateDiskConfig(token, googleProject, name, req)
+    dao.updateDiskConfig(token, googleProject, name, req)
+    Mockito.verify(dao).updateDiskConfig(token, googleProject, name, req)
   }
 
 }
