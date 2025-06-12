@@ -381,7 +381,8 @@ class WorkspaceService(
     def processDetails(workspace: AggregatedWorkspace,
                        samResource: SamUserResource,
                        accessLevel: WorkspaceAccessLevel,
-                       stats: Option[WorkspaceSubmissionStats]
+                       stats: Option[WorkspaceSubmissionStats],
+                       workspacePolicies: List[WorkspacePolicy]
     ): WorkspaceListResponse = {
       val workspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(
@@ -416,7 +417,7 @@ class WorkspaceService(
         workspaceDetails,
         stats,
         samResource.public.roles.nonEmpty || samResource.public.actions.nonEmpty,
-        Some(workspace.policies)
+        Option(workspacePolicies)
       )
     }
 
@@ -430,6 +431,9 @@ class WorkspaceService(
           Try(UUID.fromString(resource.resourceId)).isSuccess
       )
       accessLevelWorkspaceUUIDs = accessLevelWorkspaceResources.map(resource => UUID.fromString(resource.resourceId))
+      policiesByWorkspaceId <- options.anyPresentFuture("policies") {
+        batchListPolicies(accessLevelWorkspaceUUIDs, ctx)
+      }
       submissionSummaryStats <- options.anyPresentFuture("workspaceSubmissionStats") {
         workspaceRepository.listSubmissionSummaryStats(accessLevelWorkspaceUUIDs)
       }
@@ -452,11 +456,26 @@ class WorkspaceService(
         val stats = submissionSummaryStats.flatMap {
           _.get(wsmContext.baseWorkspace.workspaceIdAsUUID)
         }
-        processDetails(wsmContext, workspaceResource, accessLevel, stats)
+        val workspacePolicies =
+          policiesByWorkspaceId.getOrElse(Map.empty).getOrElse(workspace.workspaceIdAsUUID, List.empty)
+        processDetails(wsmContext, workspaceResource, accessLevel, stats, workspacePolicies)
       }
 
     } yield deepFilterJsValue(responseWorkspaces.toJson, options.options)
   }
+
+  private def batchListPolicies(workspaceIds: Seq[UUID], ctx: RawlsRequestContext) =
+    workspaceIds
+      .grouped(1000)
+      .toList
+      .traverse { batch =>
+        policyService.listPaos(batch, ctx).map { policies =>
+          policies.map { policy =>
+            policy.getObjectId -> convertPolicies(policy)
+          }.toMap
+        }
+      }
+      .map(_.reduce(_ ++ _))
 
   def getGCPWorkspacesByBillingProjects(
     workspaceIds: List[String]

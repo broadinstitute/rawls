@@ -66,6 +66,9 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
         None
     }
 
+  def listPaos(objectIds: Seq[UUID], ctx: RawlsRequestContext): Future[Seq[TpsPaoGetResult]] =
+    tpsDAO.listPaos(objectIds, ctx)
+
   /**
     * Retrieves the snapshot PAO for the given snapshotId. If it does not exist, it creates a new one with no policies.
     */

@@ -15,6 +15,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec: ExecutionContext) extends TpsDAO {
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
@@ -71,4 +72,10 @@ class HttpTpsDAO(tpsUrl: String, rawlsSaCreds: RawlsCredential)(implicit val ec:
         getTpsApi(ctx).linkPao(request, objectId)
       }
     }
+
+  def listPaos(objectIds: Seq[UUID], ctx: RawlsRequestContext): Future[Seq[TpsPaoGetResult]] = Future {
+    blocking {
+      getTpsApi(ctx).listPaos(objectIds.asJava).asScala.toSeq
+    }
+  }
 }

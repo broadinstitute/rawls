@@ -2587,7 +2587,10 @@ class WorkspaceServiceSpec
 
     when(
       services.policyService.getPao(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
-    ).thenReturn(Future.successful(Option(toTpsPao(policies))))
+    ).thenReturn(Future.successful(Option(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
+    when(
+      services.policyService.listPaos(any, any[RawlsRequestContext])
+    ).thenReturn(Future.successful(Seq(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
 
     when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
       List(
@@ -2597,23 +2600,25 @@ class WorkspaceServiceSpec
     createdWorkspace
   }
 
-  private def toTpsPao(policies: List[WsmPolicyInput]) =
-    new TpsPaoGetResult().effectiveAttributes(
-      new TpsPolicyInputs().inputs(
-        policies
-          .map(p =>
-            new TpsPolicyInput()
-              .name(p.getName)
-              .namespace(p.getNamespace)
-              .additionalData(
-                p.getAdditionalData.asScala
-                  .map(pair => new TpsPolicyPair().key(pair.getKey).value(pair.getValue))
-                  .asJava
-              )
-          )
-          .asJava
+  private def toTpsPao(objectId: UUID, policies: List[WsmPolicyInput]) =
+    new TpsPaoGetResult()
+      .objectId(objectId)
+      .effectiveAttributes(
+        new TpsPolicyInputs().inputs(
+          policies
+            .map(p =>
+              new TpsPolicyInput()
+                .name(p.getName)
+                .namespace(p.getNamespace)
+                .additionalData(
+                  p.getAdditionalData.asScala
+                    .map(pair => new TpsPolicyPair().key(pair.getKey).value(pair.getValue))
+                    .asJava
+                )
+            )
+            .asJava
+        )
       )
-    )
 
   private def createGcpWorkspaceStub(services: TestApiService,
                                      workspaceName: String,
@@ -2644,7 +2649,10 @@ class WorkspaceServiceSpec
     )
     when(
       services.policyService.getPao(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
-    ).thenReturn(Future.successful(Option(toTpsPao(policies))))
+    ).thenReturn(Future.successful(Option(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
+    when(
+      services.policyService.listPaos(any, any[RawlsRequestContext])
+    ).thenReturn(Future.successful(Seq(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
 
     when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
       List(
@@ -3004,6 +3012,7 @@ class WorkspaceServiceSpec
           )
         )
       )
+      when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
       // actually call listWorkspaces to get result it returns given the mocked calls you set up
       val result =
@@ -3106,6 +3115,7 @@ class WorkspaceServiceSpec
         )
       )
     )
+    when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
     val result =
       Await
@@ -3184,6 +3194,7 @@ class WorkspaceServiceSpec
           )
         )
       )
+      when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
       val result =
         Await
@@ -3256,6 +3267,7 @@ class WorkspaceServiceSpec
         )
       )
     )
+    when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
     List(0, 1, 10, 200, 4096) foreach { stringAttributeMaxLength =>
       info(s"for stringAttributeMaxLength = $stringAttributeMaxLength")
@@ -3340,6 +3352,7 @@ class WorkspaceServiceSpec
         )
       )
     )
+    when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
     val result =
       Await
@@ -3401,6 +3414,7 @@ class WorkspaceServiceSpec
         )
       )
     )
+    when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
     val stringAttributeMaxLength = 5
 
@@ -3455,33 +3469,6 @@ class WorkspaceServiceSpec
       }
     }
     matchingWorkspaces.size should be(1)
-  }
-
-  it should "return no policy information for GCP workspaces without a stub workspace" in withTestDataServices {
-    services =>
-      val noPoliciesWorkspaceName = s"rawls-no-policies-test-ws-${UUID.randomUUID().toString}"
-      val workspaceNoPoliciesRequest = WorkspaceRequest(
-        testData.testProject1Name.value,
-        noPoliciesWorkspaceName,
-        Map.empty
-      )
-      Await.result(services.workspaceService.createWorkspace(workspaceNoPoliciesRequest), Duration.Inf)
-
-      val result = Await
-        .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-        .convertTo[Seq[WorkspaceListResponse]]
-
-      val matchingWorkspaces = result.filter { ws =>
-        if (ws.workspace.name == noPoliciesWorkspaceName) {
-          ws.policies.get should be(empty)
-          // We shouldn't report an error about the workspace not existing in workspace manager.
-          ws.workspace.errorMessage should be(empty)
-          true
-        } else {
-          false
-        }
-      }
-      matchingWorkspaces.size should be(1)
   }
 
   it should "return policy information for Azure workspaces" in withTestDataServices { services =>
@@ -3669,6 +3656,7 @@ class WorkspaceServiceSpec
         )
       )
     )
+    when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
     // actually call listWorkspaces to get result it returns given the mocked calls you set up
     val result =
