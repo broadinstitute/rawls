@@ -158,7 +158,7 @@ trait CompactEntityMigration {
             group by entity_id, attr_name)
           select
             entity_id,
-            JSON_OBJECT($VERSION_KEY, $CURRENT_VERSION, $ATTRS_KEY, JSON_OBJECTAGG(attr_name, attr_value))
+            JSON_OBJECT($VERSION_KEY, $CURRENT_VERSION, $ATTRS_KEY, JSON_OBJECTAGG(attr_name, attr_value), $REFS_KEY, JSON_ARRAY())
           from CTE
           group by entity_id;""".asUpdate
 
