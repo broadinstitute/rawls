@@ -464,18 +464,24 @@ class WorkspaceService(
     } yield deepFilterJsValue(responseWorkspaces.toJson, options.options)
   }
 
-  private def batchListPolicies(workspaceIds: Seq[UUID], ctx: RawlsRequestContext) =
-    workspaceIds
-      .grouped(1000)
-      .toList
-      .traverse { batch =>
-        policyService.listPaos(batch, ctx).map { policies =>
-          policies.map { policy =>
-            policy.getObjectId -> convertPolicies(policy)
-          }.toMap
+  private def batchListPolicies(workspaceIds: Seq[UUID],
+                                ctx: RawlsRequestContext
+  ): Future[Map[UUID, List[WorkspacePolicy]]] =
+    if (workspaceIds.isEmpty) {
+      Future.successful(Map.empty)
+    } else {
+      workspaceIds
+        .grouped(1000)
+        .toList
+        .traverse { batch =>
+          policyService.listPaos(batch, ctx).map { policies =>
+            policies.map { policy =>
+              policy.getObjectId -> convertPolicies(policy)
+            }.toMap
+          }
         }
-      }
-      .map(_.reduce(_ ++ _))
+        .map(_.reduce(_ ++ _))
+    }
 
   def getGCPWorkspacesByBillingProjects(
     workspaceIds: List[String]
