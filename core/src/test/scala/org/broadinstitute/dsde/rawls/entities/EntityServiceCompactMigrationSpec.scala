@@ -141,8 +141,7 @@ class EntityServiceCompactMigrationSpec
 
   behavior of "Compact Entity Migration"
   testWorkspaces.foreach { case (workspace, expectedCount) =>
-    // TODO CORE-543: re-enable tests
-    it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" ignore withTestDataServices {
+    it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" in withTestDataServices {
       apiService =>
         // entity data is already loaded into legacy tables via withTestDataServices
 
@@ -192,8 +191,7 @@ class EntityServiceCompactMigrationSpec
     }
   }
 
-  // TODO CORE-543: re-enable test
-  it should s"migrate to compact entities with various attribute data types" ignore withTestDataServices { apiService =>
+  it should s"migrate to compact entities with various attribute data types" in withTestDataServices { apiService =>
     val workspace = testData.workspace // has some entities we can use to test references
 
     // various attribute types to ensure migration works for all of them

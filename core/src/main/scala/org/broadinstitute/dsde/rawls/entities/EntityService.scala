@@ -619,14 +619,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
               })
               numEntitiesUpdated = updateCounts.sum
 
-              // populate the ENTITY_REFS table for this workspace
-              _ <- traceDBIOWithParent("migrationAddReferences", s) { _ =>
-                dataAccess.compactEntityQuery.migrationAddReferences(workspaceId, shardId)
-              }
-              _ = logger.info(
-                s"Quicksilver migration $workspaceId: populated ENTITY_REFS (${stopwatch.formatTime()}) ..."
-              )
-
               /** *** don't delete legacy data; we'll do that en masse after everything is migrated
               *  // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
               *  _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
@@ -746,8 +738,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
       }
 
       // update ENTITY from the contents of the temp table
-      numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTable", "updated ENTITY from temp table") {
-        dataAccess.compactEntityQuery.migrationUpdateEntityTable(workspaceId)
+      numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTableAttributes", "updated ENTITY $.attrs from temp table") {
+        dataAccess.compactEntityQuery.migrationUpdateEntityTableAttributes(workspaceId)
+      }
+
+      _ <- logAndTrace("migrationUpdateEntityTableReferences", "updated ENTITY $.refs from temp table") {
+        dataAccess.compactEntityQuery.migrationUpdateEntityTableReferences(workspaceId)
       }
 
     } yield numEntitiesUpdated) andFinally

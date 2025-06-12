@@ -44,6 +44,7 @@ trait CompactEntityMigration {
             attr_name varchar(240) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
             list_index int,
             attr_value json,
+            ref_value json,
             KEY KEY_LIST_INDEX (list_index),
             KEY KEY_ATTR_INDEX (entity_id, attr_name)
           );""".asUpdate
@@ -53,6 +54,7 @@ trait CompactEntityMigration {
     sql"""create temporary table QS_ENTITY_TEMP(
             entity_id bigint unsigned NOT NULL,
             attributes json,
+            refs json,
             KEY KEY_ENT_ID (entity_id)
           );""".asUpdate
 
@@ -75,23 +77,51 @@ trait CompactEntityMigration {
                                           startEntityId: Long,
                                           endEntityId: Long
   ): ReadWriteAction[Int] =
-    sql"""insert into QS_ATTR_TEMP(entity_id, attr_name, list_index, attr_value)
+    sql"""insert into QS_ATTR_TEMP(entity_id, attr_name, list_index, attr_value, ref_value)
           select
             e.id,
             CASE
               WHEN ea.namespace = ${AttributeName.defaultNamespace} then ea.name
               ELSE CONCAT(ea.namespace, ${AttributeName.delimiter.toString}, ea.name)
             END as attr_name,
-            ea.list_index,
+            CASE
+                -- in the attrs object, reference arrays become a single scalar value containing the array length
+                -- so we need to nullify their list_index values
+                WHEN value_entity_ref is not null and ea.list_index is not null THEN null
+                ELSE ea.list_index
+            END as list_index,
             CASE
                 WHEN value_string is not null THEN CAST(JSON_QUOTE(value_string) as JSON)
                 WHEN value_boolean is not null THEN CAST(value_boolean=1 as JSON)
                 WHEN list_length = 0 THEN JSON_ARRAY()
                 WHEN value_number is not null THEN CAST(value_number as JSON)
-                WHEN VALUE_JSON is not null THEN VALUE_JSON
-                WHEN value_entity_ref is not null THEN JSON_OBJECT(${AttributeFormat.ENTITY_TYPE_KEY}, ref.entity_type, ${AttributeFormat.ENTITY_NAME_KEY}, ref.name)
+                WHEN VALUE_JSON is not null THEN CAST(VALUE_JSON as JSON)
+                -- use sortable value for references, not the object itself
+                WHEN value_entity_ref is not null THEN
+                  CASE
+                    WHEN ea.list_length is null THEN CAST(ref.name as JSON)
+                    ELSE CAST(ea.list_length as JSON)
+                  END
                 ELSE null
-            END as attr_value
+            END as attr_value,
+            CASE
+              WHEN value_entity_ref is not null THEN
+                JSON_OBJECT(
+                    'a',
+                    CASE
+                      WHEN ea.namespace = ${AttributeName.defaultNamespace} THEN ea.name
+                      ELSE CONCAT(ea.namespace, ${AttributeName.delimiter.toString}, ea.name)
+                    END,
+                    'n', ref.name,
+                    't', ref.entity_type,
+                    'z',
+                    CASE
+                      WHEN ea.list_length is null THEN TRUE
+                      ELSE null
+                    END
+                )
+              ELSE null
+            END as ref_value
           from ENTITY e
               join ENTITY_ATTRIBUTE_#$shardId ea on e.id = ea.owner_id
               left outer join ENTITY ref on ea.value_entity_ref = ref.id
@@ -129,13 +159,29 @@ trait CompactEntityMigration {
           group by entity_id;""".asUpdate
 
   /**
-    * Update the ENTITY table with the compact entities stored in QS_ENTITY_TEMP.
+    * Update the ENTITY table with the compact entity attributes stored in QS_ENTITY_TEMP.
     */
-  def migrationUpdateEntityTable(workspaceId: UUID): ReadWriteAction[Int] =
+  def migrationUpdateEntityTableAttributes(workspaceId: UUID): ReadWriteAction[Int] =
     sql"""update ENTITY e
               join QS_ENTITY_TEMP tmp
               on e.id = tmp.entity_id
               set e.attributes = tmp.attributes
+              where e.workspace_id = $workspaceId
+              and deleted = 0;""".asUpdate
+
+  /**
+   * Update the ENTITY table with the compact entity references stored in QS_ATTR_TEMP.
+   */
+  def migrationUpdateEntityTableReferences(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""with CTE as (
+            select entity_id, JSON_ARRAYAGG(ref_value) as refs
+            from QS_ATTR_TEMP
+            where ref_value is not null
+            group by entity_id)
+          update ENTITY e
+              join CTE tmp
+              on e.id = tmp.entity_id
+              set e.attributes = JSON_SET(e.attributes, $slickRefsPath, tmp.refs)
               where e.workspace_id = $workspaceId
               and deleted = 0;""".asUpdate
 
@@ -146,23 +192,6 @@ trait CompactEntityMigration {
   /** Drop the temp table */
   def migrationDropEntityTempTable: ReadWriteAction[Int] =
     sql"""drop temporary table QS_ENTITY_TEMP;""".asUpdate
-
-  /** Insert references for the entities we just updated
-    * Copying directly from ENTITY_ATTRIBUTE_* can easily generate duplicate references, so we use
-    * `on duplicate key ...` with a noop update to avoid that.
-    * */
-  def migrationAddReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
-    sql"""insert into ENTITY_REFS(workspace_id, from_entity_type, from_name, to_entity_type, to_name)
-         select e.workspace_id,
-          e.entity_type, e.name,
-          r.entity_type, r.name
-         from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea, ENTITY r
-         where ea.owner_id = e.id
-         and e.workspace_id = $workspaceId
-         and e.deleted = 0
-         and ea.value_entity_ref is not null
-         and ea.value_entity_ref = r.id
-         on duplicate key update workspace_id = e.workspace_id;""".asUpdate
 
   /** Delete the all_attribute_values text from a compact ENTITY.
       * Currently unused, but leaving here in case we change our mind.
