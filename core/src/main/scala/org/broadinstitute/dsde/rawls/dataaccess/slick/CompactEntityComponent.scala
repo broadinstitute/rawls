@@ -677,19 +677,15 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         1 as level
       FROM ENTITY e
       JOIN JSON_TABLE(
-        CASE
-WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"})) = 'ARRAY'
-            THEN JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"})
-          WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"})) = 'OBJECT'
-            THEN JSON_ARRAY(JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"}))
-          ELSE NULL
-        END,
+        JSON_EXTRACT(e.attributes, '$$.refs'),
         '$$[*]' COLUMNS (
-          entityType VARCHAR(255) PATH '$$.entityType',
-          entityName VARCHAR(255) PATH '$$.entityName'
+          attributeName VARCHAR(255) PATH '$$.a',
+          entityType VARCHAR(255) PATH '$$.t',
+          entityName VARCHAR(255) PATH '$$.n'
         )
       ) refs
       WHERE e.name = $arrayEntityId AND e.entity_type = $arrayEntityType AND e.workspace_id = $workspaceId
+      AND refs.attributeName = ${relationChain.head}
       """
 
     // Recursively join through each relation in the chain except the last
@@ -713,19 +709,15 @@ WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.${relationChain.head}"}))
       FROM ENTITY e
 JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.root_entity_name AND h.level = $prevLevel
       JOIN JSON_TABLE(
-          CASE
-              WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"})) = 'ARRAY'
-                THEN JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"})
-              WHEN JSON_TYPE(JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"})) = 'OBJECT'
-                THEN JSON_ARRAY(JSON_EXTRACT(e.attributes, ${s"$$.attrs.$rel"}))
-              ELSE NULL
-        END,
+        JSON_EXTRACT(e.attributes, '$$.refs'),
         '$$[*]' COLUMNS (
-          entityType VARCHAR(255) PATH '$$.entityType',
-          entityName VARCHAR(255) PATH '$$.entityName'
+          attributeName VARCHAR(255) PATH '$$.a',
+          entityType VARCHAR(255) PATH '$$.t',
+          entityName VARCHAR(255) PATH '$$.n'
         )
       ) refs
       WHERE e.workspace_id = $workspaceId
+      AND refs.attributeName = $rel
 """
         }
     } else Seq.empty
@@ -749,18 +741,18 @@ JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.roo
       NULL AS root_entity_name,
       $lastLevel as level
     FROM ENTITY e
-    JOIN entity_hierarchy h
-ON (
-          JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$$.attrs.', $lastRelation, '.entityName'))) = e.name
-          AND JSON_UNQUOTE(JSON_EXTRACT(h.attributes, CONCAT('$$.attrs.', $lastRelation, '.entityType'))) = e.entity_type
-        )
-      OR (
-          JSON_CONTAINS(
-            JSON_EXTRACT(h.attributes, CONCAT('$$.attrs.', $lastRelation)),
-            JSON_OBJECT('entityName', e.name, 'entityType', e.entity_type)
-          )
+    JOIN entity_hierarchy h ON h.level = ${relationChain.length}
+    JOIN JSON_TABLE(
+      JSON_EXTRACT(h.attributes, '$$.refs'),
+      '$$[*]' COLUMNS (
+        attributeName VARCHAR(255) PATH '$$.a',
+        entityType VARCHAR(255) PATH '$$.t',
+        entityName VARCHAR(255) PATH '$$.n'
       )
-    WHERE h.level = ${relationChain.length} AND e.workspace_id = $workspaceId
+    ) refs ON refs.attributeName = $lastRelation
+           AND refs.entityType = e.entity_type
+           AND refs.entityName = e.name
+    WHERE e.workspace_id = $workspaceId
     """
 
     val cte =
