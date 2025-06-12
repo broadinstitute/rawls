@@ -360,7 +360,9 @@ class WorkspaceService(
   }
 
   private def convertPolicies(pao: TpsPaoGetResult): List[WorkspacePolicy] =
-    pao.getEffectiveAttributes.getInputs.asScala
+    Option(pao.getEffectiveAttributes)
+      .map(_.getInputs.asScala)
+      .getOrElse(List.empty)
       .map(input =>
         WorkspacePolicy(
           input.getName,

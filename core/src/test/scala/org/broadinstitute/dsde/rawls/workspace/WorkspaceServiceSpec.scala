@@ -4,7 +4,7 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import bio.terra.policy.model.TpsPaoGetResult
+import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{
@@ -2585,6 +2585,10 @@ class WorkspaceServiceSpec
       workspaceDescription
     )
 
+    when(
+      services.policyService.getPao(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
+    ).thenReturn(Future.successful(Option(toTpsPao(policies))))
+
     when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
       List(
         workspaceDescription
@@ -2592,6 +2596,24 @@ class WorkspaceServiceSpec
     )
     createdWorkspace
   }
+
+  private def toTpsPao(policies: List[WsmPolicyInput]) =
+    new TpsPaoGetResult().effectiveAttributes(
+      new TpsPolicyInputs().inputs(
+        policies
+          .map(p =>
+            new TpsPolicyInput()
+              .name(p.getName)
+              .namespace(p.getNamespace)
+              .additionalData(
+                p.getAdditionalData.asScala
+                  .map(pair => new TpsPolicyPair().key(pair.getKey).value(pair.getValue))
+                  .asJava
+              )
+          )
+          .asJava
+      )
+    )
 
   private def createGcpWorkspaceStub(services: TestApiService,
                                      workspaceName: String,
@@ -2620,6 +2642,10 @@ class WorkspaceServiceSpec
     ).thenReturn(
       workspaceDescription
     )
+    when(
+      services.policyService.getPao(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
+    ).thenReturn(Future.successful(Option(toTpsPao(policies))))
+
     when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
       List(
         workspaceDescription
