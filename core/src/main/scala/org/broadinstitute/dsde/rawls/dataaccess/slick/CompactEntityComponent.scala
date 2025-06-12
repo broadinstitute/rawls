@@ -1,9 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import akka.http.scaladsl.model.StatusCodes
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -25,7 +27,7 @@ import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import spray.json._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
 
 trait CompactEntityComponent extends LazyLogging {
@@ -801,12 +803,130 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
     */
   def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
-    sql"""select exists (select 1 from ENTITY_KEYS
+    anyAttributeExists(workspaceId, entityType, Set(attributeName))
+
+  /**
+    * Determine if an attribute exists in any entity of the given type and workspace.
+    *
+    * `execution plan: subquery Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    */
+  def anyAttributeExists(workspaceId: UUID,
+                         entityType: String,
+                         attributeNames: Set[AttributeName]
+  ): ReadAction[Boolean] = {
+    val containsClauses = attributeNames.map { attributeName =>
+      sql"""JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)}))"""
+    }
+    val clause = reduceSqlActionsWithDelim(containsClauses.toSeq, sql" or ")
+
+    val baseSql = sql"""select exists (select 1 from ENTITY_KEYS
          where workspace_id = $workspaceId
           and entity_type = $entityType
-          and JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)})))"""
+          and ("""
+
+    concatSqlActions(baseSql, clause, sql"))")
       .as[Boolean]
       .head
+  }
+
+  /**
+    * Remove the specified attributes from all entities of the given type and workspace.
+    *
+    * `execution plan: index range scan on idx_entity_type_name (with lots of JSON and string manipulation)`
+    */
+  def deleteAttributes(workspaceId: UUID,
+                       entityType: String,
+                       attributeNames: Set[AttributeName]
+  ): ReadWriteAction[Int] =
+
+    if (attributeNames.isEmpty) {
+      DBIO.failed(
+        new AttributeException(
+          message = "The supplied set of attributes to remove cannot be empty.",
+          code = StatusCodes.BadRequest
+        )
+      )
+    } else {
+      // Map all attributes-to-be-removed into a single regex. In pseudocode, this regex looks for:
+      //     {"a": "attr1 OR attr2 OR attr3", ... },
+      // with the final comma being optional.
+      // This should hit on any instance of any element of `attributeNames` inside the $.refs array.
+      val allAttrNames = attributeNames.map(x => AttributeName.toDelimitedName(x).replace(":", "\\:")).mkString("|")
+      val regex = s"""\\{\\"a\\": \\"(?:$allAttrNames)\\",[^}]+\\},?"""
+
+      // Remove all elements in the $.refs array for the attributes we want to delete.
+      // This is done via JSON_REPLACE(CAST(REGEXP_REPLACE(REGEXP_REPLACE(JSON_EXTRACT)))). Explaining from the inside out:
+      //   - JSON_EXTRACT(attributes, '$$.refs') gets the refs array
+      //   - REGEXP_REPLACE(...) treats the refs array as a plain string, and deletes all elements matching our regex
+      //   - REGEXP_REPLACE(...) handles the case where we have removed the last object in the $.refs array
+      //                           and therefore need to remove the trailing comma
+      //   - CAST(... as JSON) converts the modified string back to a JSON array
+      //   - JSON_REPLACE(...) replaces the original refs array with the modified one
+      // We use a string replace here because it is significantly more performant than calling JSON_REMOVE
+      //  individually for each value that needs to be changed. Since we control the serialization format of the
+      //  refs array, and only perform the string replace inside that array, we avoid any problems with other
+      //  user-supplied values.
+      //
+      // All of this will be wrapped by JSON_REMOVE later - see the `removeSql` variable. That wrapping JSON_REMOVE
+      //  will handle removing the attributes from the `attrs` object.
+      val replaceRefsSql = sql"""JSON_REPLACE(attributes,
+                                              $slickRefsPath,
+                                              CAST(
+                                              REGEXP_REPLACE(
+                                                REGEXP_REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $regex, ''),
+                                                ',[:space:]*\\]',
+                                                ']'
+                                               )
+                                               as JSON))"""
+
+      // SQL to pass the supplied attribute names as bind parameters; used by JSON_REMOVE and JSON_CONTAINS_PATH
+      val attributeParameters =
+        reduceSqlActionsWithDelim(attributeNames.map(attr => sql"${slickAttributePath(attr)}").toSeq, sql", ")
+
+      // JSON_REMOVE to update the attributes json and delete the specified attributes
+      val removeSql = concatSqlActions(
+        sql"JSON_REMOVE(",
+        replaceRefsSql,
+        sql", ",
+        attributeParameters,
+        sql")"
+      )
+
+      // Build a where clause that targets only those entities which actually contain the attributes to be removed;
+      // this way, we don't issue needless updates to entities that don't have the attributes.
+      val hasAttributesClause = concatSqlActions(
+        sql"JSON_CONTAINS_PATH(attributes, 'one', ",
+        attributeParameters,
+        sql")"
+      )
+
+      val startSql = sql"update ENTITY set record_version = record_version + 1, attributes = "
+
+      val whereSql = sql" where workspace_id = $workspaceId and entity_type = $entityType and deleted = 0 and "
+
+      concatSqlActions(startSql, removeSql, whereSql, hasAttributesClause).asUpdate
+      /* The final query looks like:
+
+          update ENTITY set record_version = record_version + 1,
+            attributes = JSON_REMOVE(
+                          JSON_REPLACE(attributes,
+                                       '$.refs',
+                                        CAST(
+                                          REPLACE(
+                                            REGEXP_REPLACE(
+                                              JSON_EXTRACT(attributes,'$.refs'),
+                                              '\{"a": "(?:attrToRemove1|attrToRemove2)",[^}]+\},?',
+                                              ''),
+                                            ', ]',
+                                            ']'
+                                        as JSON)),
+                         '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
+          where workspace_id = ?
+            and entity_type = ?
+            and deleted = 0
+            and JSON_CONTAINS_PATH(attributes, 'one', '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
+       */
+    }
 
   // ====================================================================================================
   //  entity query helpers
