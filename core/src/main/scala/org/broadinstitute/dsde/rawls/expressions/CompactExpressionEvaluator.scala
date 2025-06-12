@@ -221,7 +221,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                 relevantResults,
                 parsedTree,
                 Some(rootEntityNames),
-                None
+                Some(input)
               )
               convertToSubmissionValidationValues(resultMap, input)
             }

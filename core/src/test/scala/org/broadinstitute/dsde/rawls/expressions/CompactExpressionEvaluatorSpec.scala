@@ -538,12 +538,8 @@ class CompactExpressionEvaluatorSpec
 
     val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
-    // org.scalatest.exceptions.TestFailedException: "{"w1.aint_array":[[1,2]]}" was not equal to "{"w1.aint_array":[[[10,11,12],[1,2]]]}"
     wdlInputs shouldBe """{"w1.aint_array":[[10,11,12],[1,2]]}"""
   }
-
-  // TODO needs to put samples into an array first
-//  org.scalatest.exceptions.TestFailedException: "..."sample1","samples":[101]}}" was not equal to "..."sample1","samples":[[101]]}}"
 
   // Expression: """{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah}"""
   it should "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
@@ -593,9 +589,6 @@ class CompactExpressionEvaluatorSpec
     wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101]}}"""
   }
 
-  // TODO org.scalatest.exceptions.TestFailedException:
-  // "....obj":{"foo":{"bar":[101},"id":123,"sample":"sample1","samples":101]}}" was not equal to
-  // "....obj":{"foo":{"bar":[[101]},"id":123,"sample":"sample1","samples":[101]]}}"
   // Expression: """{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah,"foo":{"bar":this.samples.blah}}"""
   it should "correctly unpack nested wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
     when(
@@ -694,20 +687,18 @@ class CompactExpressionEvaluatorSpec
     wdlInputs shouldBe """{"wdlStructWf.obj":{"id":101,"sample":"sample1","samples":[1,2]}}"""
   }
 
-  // org.scalatest.exceptions.TestFailedException:
-  // "{"w1.aint_array":[[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]]}" was not equal to "{"w1.aint_array":[[[0,1,2],[3,4,5]]]}"
-  // TODO correctly nest
   it should "unpack AttributeValueRawJson into optional WDL-arrays" in withConfigData {
     when(
-      mockQueries.getEntity(
+      mockQueries.queryRelatedRecordsWithArray(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleSet2.name)
+        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
+        any()
       )
     )
       .thenReturn(
         DBIO.successful(
-          Some(sampleSet2AsCER)
+          Map(sampleSet2.name -> Seq(toCompactEntityRecord(sampleSet2)))
         )
       )
     val context =
@@ -760,18 +751,24 @@ class CompactExpressionEvaluatorSpec
 
   it should "unpack AttributeValueRawJson into lists-of WDL-arrays" in withConfigData {
     when(
-      mockQueries.getEntity(any(),
-                            org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
-                            org.mockito.ArgumentMatchers.eq(sampleSet2.name)
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
+        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
+        org.mockito.ArgumentMatchers.eq(List("samples"))
       )
     )
       .thenReturn(
         DBIO.successful(
-          Some(toCompactEntityRecord(sampleSet2))
+          Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
         )
       )
     val context =
-      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
+      ExpressionEvaluationContext(Some(sampleSet2.entityType),
+                                  Some(sampleSet2.name),
+                                  Some("this.samples"),
+                                  Some(sampleSet2.entityType)
+      )
     val result = evalInputs(context, configRawJsonTripleArray, tripleArrayWdl)
 
     val methodProps = result
@@ -818,17 +815,18 @@ class CompactExpressionEvaluatorSpec
     wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]},"id":101,"sample":"sample1","samples":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}}"""
   }
 
-  // TODO fix
   it should "cast attribute numbers into strings for string inputs" in withConfigData {
     when(
-      mockQueries.getEntity(any(),
-                            org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
-                            org.mockito.ArgumentMatchers.eq(sampleGood.name)
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+        org.mockito.ArgumentMatchers.eq(sampleGood.name),
+        any()
       )
     )
       .thenReturn(
         DBIO.successful(
-          Some(toCompactEntityRecord(sampleGood))
+          Map(sampleGood.name -> Seq(sampleGoodAsCER))
         )
       )
     val context =
@@ -836,7 +834,7 @@ class CompactExpressionEvaluatorSpec
     val result = evalInputs(context, configStringArgFromNumberAttribute, stringWdl)
     result
       .find(_.entityName == sampleGood.name)
-      .exists(_.inputResolutions.exists(v => v.inputName == intArgNameWithWfName && v.error.isDefined)) shouldBe true
+      .exists(_.inputResolutions.exists(v => v.inputName == stringArgNameWithWfName)) shouldBe true
 
     result should contain(
       SubmissionValidationEntityInputs(

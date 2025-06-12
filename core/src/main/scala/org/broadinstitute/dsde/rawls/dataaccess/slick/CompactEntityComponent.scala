@@ -5,11 +5,8 @@ import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-<<<<<<< core -462 - expressions
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
-=======
 import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
->>>>>>> develop
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
