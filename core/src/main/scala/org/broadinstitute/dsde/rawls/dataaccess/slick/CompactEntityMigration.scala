@@ -99,27 +99,31 @@ trait CompactEntityMigration {
                 -- use sortable value for references, not the object itself
                 WHEN value_entity_ref is not null THEN
                   CASE
-                    WHEN ea.list_length is null THEN CAST(ref.name as JSON)
+                    WHEN ea.list_length is null THEN CAST(JSON_QUOTE(ref.name) as JSON)
                     ELSE CAST(ea.list_length as JSON)
                   END
                 ELSE null
             END as attr_value,
             CASE
               WHEN value_entity_ref is not null THEN
-                JSON_OBJECT(
-                    'a',
-                    CASE
-                      WHEN ea.namespace = ${AttributeName.defaultNamespace} THEN ea.name
-                      ELSE CONCAT(ea.namespace, ${AttributeName.delimiter.toString}, ea.name)
-                    END,
-                    'n', ref.name,
-                    't', ref.entity_type,
-                    'z',
-                    CASE
-                      WHEN ea.list_length is null THEN TRUE
-                      ELSE null
-                    END
-                )
+                CASE
+                  WHEN ea.list_length is null THEN
+                    JSON_OBJECT(
+                      'a',
+                      CASE
+                        WHEN ea.namespace = ${AttributeName.defaultNamespace} THEN ea.name
+                        ELSE CONCAT(ea.namespace, ${AttributeName.delimiter.toString}, ea.name)
+                      END,
+                      'n', ref.name, 't', ref.entity_type, 'z', TRUE)
+                  ELSE
+                    JSON_OBJECT(
+                      'a',
+                      CASE
+                        WHEN ea.namespace = ${AttributeName.defaultNamespace} THEN ea.name
+                        ELSE CONCAT(ea.namespace, ${AttributeName.delimiter.toString}, ea.name)
+                      END,
+                      'n', ref.name, 't', ref.entity_type)
+                END
               ELSE null
             END as ref_value
           from ENTITY e
