@@ -41,7 +41,7 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
           .name(TpsPolicies.GroupConstraint.name)
           .additionalData(authDomainGroups.toList.asJava)
         req.setAttributes(new TpsPolicyInputs().inputs(List(protectedDataPolicy, groupConstraintPolicy).asJava))
-      case (None, Some(enhancedBucketLogging)) if enhancedBucketLogging =>
+      case (_, Some(true)) =>
         req.setAttributes(new TpsPolicyInputs().inputs(List(protectedDataPolicy).asJava))
       case _ =>
     }

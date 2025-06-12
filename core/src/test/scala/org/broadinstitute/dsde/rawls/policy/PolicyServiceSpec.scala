@@ -96,6 +96,34 @@ class PolicyServiceSpec extends AnyFlatSpec {
     verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
   }
 
+  it should "set protected-data policy if auth domain is present but empty and enhanced bucket logging is enabled" in {
+    val workspaceId = UUID.randomUUID()
+    val workspaceRequest =
+      baseWorkspaceRequest.copy(authorizationDomain = Option(Set.empty), enhancedBucketLogging = Some(true))
+
+    val tpsDAO = mock[TpsDAO](RETURNS_SMART_NULLS)
+    when(tpsDAO.createPao(any(), any())).thenReturn(Future.unit)
+    val policyService = new PolicyService(tpsDAO)
+
+    val expectedPaoRequest = new TpsPaoCreateRequest()
+      .objectType(TpsObjectType.WORKSPACE)
+      .objectId(workspaceId)
+      .component(TpsComponent.RAWLS)
+      .attributes(
+        new TpsPolicyInputs().inputs(
+          List(
+            new TpsPolicyInput().namespace(TERRA_POLICY_NAMESPACE).name(TpsPolicies.ProtectedData.name)
+          ).asJava
+        )
+      )
+
+    Await.result(policyService.createWorkspacePao(workspaceId, workspaceRequest, mock[RawlsRequestContext]),
+                 Duration.Inf
+    )
+
+    verify(tpsDAO).createPao(mockitoEq(expectedPaoRequest), any())
+  }
+
   it should "not set any policies if auth domain is not present and enhanced bucket logging is not enabled" in {
     val workspaceId = UUID.randomUUID()
     val workspaceRequest = baseWorkspaceRequest.copy(authorizationDomain = None, enhancedBucketLogging = Some(false))
