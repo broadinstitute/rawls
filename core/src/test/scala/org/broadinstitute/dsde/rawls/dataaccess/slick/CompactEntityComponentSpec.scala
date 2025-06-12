@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
   RelationContext
 }
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.SqlEntityData
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.{SqlEntityData, SqlEntityReference}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -28,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceFieldSpecs
 }
 import org.mockito.Mockito
+import org.scalatest.Inspectors.forEvery
 import slick.dbio.Effect.Read
 import slick.jdbc.GetResult
 import slick.sql.SqlStreamingAction
@@ -801,6 +802,308 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     check(attr4, wsid2, "entityType2")
   }
 
+  behavior of "anyAttributeExists"
+
+  it should "find attributes" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+
+    val entity1 = Entity("entityName1",
+                         "entityType",
+                         Map(
+                           attr1 -> AttributeNumber(1)
+                         )
+    )
+    val entity2 = Entity("entityName2",
+                         "entityType",
+                         Map(
+                           attr2 -> AttributeNumber(1)
+                         )
+    )
+    val entity3 = Entity("entityName3",
+                         "entityType",
+                         Map(
+                           attr3 -> AttributeNumber(1)
+                         )
+    )
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    Seq(attr1, attr2, attr3) foreach { attributeName =>
+      withClue(s"attribute $attributeName should exist") {
+        val attrsToFind =
+          Set(AttributeName.withDefaultNS("nonexistent"),
+              attributeName,
+              AttributeName.withDefaultNS("anotherNonexistent")
+          )
+        val actual = runAndWait(q.anyAttributeExists(wsid, "entityType", attrsToFind))
+        actual shouldBe true
+      }
+    }
+
+    // some attributes that don't exist
+    Seq(AttributeName.fromDelimitedName("import:foo"),
+        AttributeName.withDefaultNS("bar"),
+        AttributeName.withDefaultNS("boo")
+    ) foreach { attributeName =>
+      withClue(s"attribute $attributeName should not exist") {
+        val attrsToFind =
+          Set(AttributeName.withDefaultNS("nonexistent"),
+              attributeName,
+              AttributeName.withDefaultNS("anotherNonexistent")
+          )
+        val actual = runAndWait(q.anyAttributeExists(wsid, "entityType", attrsToFind))
+        actual shouldBe false
+      }
+    }
+  }
+
+  it should "respect the workspace and entity type" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("one")
+    val attr2 = AttributeName.withDefaultNS("two")
+    val attr3 = AttributeName.withDefaultNS("three")
+    val attr4 = AttributeName.withDefaultNS("four")
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    insertAndGet(Entity("entityName", "entityType1", Map(attr1 -> AttributeNumber(1))), wsid)
+    insertAndGet(Entity("entityName", "entityType2", Map(attr2 -> AttributeNumber(2))), wsid)
+    insertAndGet(Entity("entityName", "entityType1", Map(attr3 -> AttributeNumber(3))), wsid2)
+    insertAndGet(Entity("entityName", "entityType2", Map(attr4 -> AttributeNumber(4))), wsid2)
+
+    // helper function to check if the attribute exists in the given workspace and entity type
+    def check(attributeName: AttributeName, expectedWorkspaceId: UUID, expectedEntityType: String): Unit =
+      Seq(wsid, wsid2) foreach { workspaceId =>
+        Seq("entityType1", "entityType2") foreach { entityType =>
+          withClue(
+            s"attribute $attributeName should only exist in workspace $expectedWorkspaceId and entity type $expectedEntityType;" +
+              s" error while checking $workspaceId and $entityType"
+          ) {
+            val attrsToFind =
+              Set(AttributeName.withDefaultNS("nonexistent"),
+                  attributeName,
+                  AttributeName.withDefaultNS("anotherNonexistent")
+              )
+            val actual = runAndWait(q.anyAttributeExists(workspaceId, entityType, attrsToFind))
+            val expected = workspaceId == expectedWorkspaceId && entityType == expectedEntityType
+            actual shouldBe expected
+          }
+        }
+      }
+
+    check(attr1, wsid, "entityType1")
+    check(attr2, wsid, "entityType2")
+    check(attr3, wsid2, "entityType1")
+    check(attr4, wsid2, "entityType2")
+  }
+
+  behavior of "deleteEntityAttributes"
+
+  it should "delete the requested attributes" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("decoy")
+
+    val entity1 = Entity(
+      "entityName1",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeString("not a reference"),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+    val entity2 = Entity(
+      "entityName2",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeEntityReference("entityType", "entityName1"),
+        attr3 -> AttributeString("not a reference"),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+    val entity3 = Entity(
+      "entityName3",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("entityType", "entityName1"),
+            AttributeEntityReference("entityType", "entityName2")
+          )
+        ),
+        attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    )
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // delete attr2 and attr3
+    val actual = runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr2, attr3)))
+    actual shouldBe 3
+
+    // verify each entity
+    forEvery(Seq(entity1, entity2, entity3)) { entity =>
+      val ent = runAndWait(q.getEntity(wsid, entity.entityType, entity.name))
+      ent shouldBe defined
+      ent.get.toEntity.attributes shouldBe Map(attr1 -> AttributeNumber(1),
+                                               attr4 -> AttributeString("entityType and entityName are important words")
+      )
+    }
+  }
+
+  it should "respect the workspace and entity type" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("decoy")
+
+    val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
+
+    val attrsMap = Map(
+      attr1 -> AttributeNumber(1),
+      attr2 -> AttributeString("not a reference"),
+      attr3 -> AttributeString("not a reference"),
+      attr4 -> AttributeString("entityType and entityName are important words")
+    )
+
+    insertAndGet(Entity("entityName1", "entityType1", attrsMap), wsid)
+    insertAndGet(Entity("entityName1", "entityType2", attrsMap), wsid)
+    insertAndGet(Entity("entityName1", "entityType1", attrsMap), wsid2)
+    insertAndGet(Entity("entityName1", "entityType2", attrsMap), wsid2)
+
+    // delete only workspace1, entityType1
+    runAndWait(q.deleteAttributes(wsid, "entityType1", Set(attr2, attr3)))
+
+    // verify each entity
+    runAndWait(
+      q.getEntity(wsid, "entityType1", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr4
+    )
+    runAndWait(
+      q.getEntity(wsid, "entityType2", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr2,
+      attr3,
+      attr4
+    )
+    runAndWait(
+      q.getEntity(wsid2, "entityType1", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr2,
+      attr3,
+      attr4
+    )
+    runAndWait(
+      q.getEntity(wsid2, "entityType2", "entityName1")
+    ).get.toEntity.attributes.keys should contain theSameElementsAs Set(
+      attr1,
+      attr2,
+      attr3,
+      attr4
+    )
+  }
+
+  it should "update both $.attrs and $.refs in the entity" in withMinimalTestDatabase { _ =>
+    val attr1 = AttributeName.withDefaultNS("foo")
+    val attr2 = AttributeName.fromDelimitedName("import:bar")
+    val attr3 = AttributeName.fromDelimitedName("library:baz")
+    val attr4 = AttributeName.withDefaultNS("qux")
+
+    // insert some reference targets
+    val targets = (1 to 5).map { idx =>
+      Entity(s"target$idx", "targetType", Map())
+    }
+    insertAndGetAll(targets)
+
+    val entity1 = Entity(
+      "entityName1",
+      "entityType",
+      Map(
+        attr1 -> AttributeNumber(1),
+        attr2 -> AttributeString("not a reference"),
+        attr3 -> AttributeEntityReference("targetType", "target1"),
+        attr4 -> AttributeEntityReferenceList(
+          Seq(
+            // note the "random" order of target3, target2, target 4 here
+            AttributeEntityReference("targetType", "target3"),
+            AttributeEntityReference("targetType", "target2"),
+            AttributeEntityReference("targetType", "target4")
+          )
+        )
+      )
+    )
+
+    insertAndGet(entity1)
+
+    val expectedInitialRefs = Seq(
+      SqlEntityReference(a = "library:baz", n = "target1", t = "targetType", z = Some(true)),
+      SqlEntityReference(a = "qux", n = "target3", t = "targetType", z = None),
+      SqlEntityReference(a = "qux", n = "target2", t = "targetType", z = None),
+      SqlEntityReference(a = "qux", n = "target4", t = "targetType", z = None)
+    )
+
+    val initialActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    initialActual should not be empty
+    initialActual.get.attributes should not be empty
+    val initialActualData = initialActual.get.attributes.get.parseJson
+      .convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    initialActualData.attrs.keys should contain theSameElementsAs Seq(attr1, attr2, attr3, attr4)
+    initialActualData.refs should contain theSameElementsAs expectedInitialRefs
+    // verify order for attr "qux" in refs
+    initialActualData.refs.filter(_.a == "qux") should contain theSameElementsInOrderAs expectedInitialRefs.filter(
+      _.a == "qux"
+    )
+
+    // delete attribute attr1 "foo"
+    runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr1)))
+
+    val nextActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    nextActual should not be empty
+    nextActual.get.attributes should not be empty
+    val nextActualData =
+      nextActual.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    nextActualData.attrs.keys should contain theSameElementsAs Seq(attr2, attr3, attr4)
+    nextActualData.refs should contain theSameElementsAs expectedInitialRefs
+    // verify order for attr "qux" in refs
+    nextActualData.refs.filter(_.a == "qux") should contain theSameElementsInOrderAs expectedInitialRefs.filter(
+      _.a == "qux"
+    )
+
+    // delete attribute attr3 "library:baz"
+    runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr3)))
+
+    val moreActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    moreActual should not be empty
+    moreActual.get.attributes should not be empty
+    val moreActualData =
+      moreActual.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    moreActualData.attrs.keys should contain theSameElementsAs Seq(attr2, attr4)
+    // refs should now only contain "qux"
+    moreActualData.refs should contain theSameElementsInOrderAs expectedInitialRefs.filter(_.a == "qux")
+
+    // delete attribute attr4 "qux"
+    runAndWait(q.deleteAttributes(wsid, "entityType", Set(attr4)))
+
+    val lastActual = runAndWait(q.getEntity(wsid, entity1.entityType, entity1.name))
+    lastActual should not be empty
+    lastActual.get.attributes should not be empty
+    val lastActualData =
+      lastActual.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    lastActualData.attrs.keys should contain theSameElementsAs Seq(attr2)
+    // refs should now be empty
+    lastActualData.refs shouldBe empty
+  }
+
   behavior of "renameAttribute"
 
   it should "change the attribute name" in withMinimalTestDatabase { _ =>
@@ -1062,8 +1365,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "deleteEntities"
 
   it should "delete the specified entities in the given workspace" in withMinimalTestDatabase { _ =>
-    import driver.api._ // for bespoke SQL queries
-
     val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
 
     val entityType1 = "entityType1"
@@ -1186,8 +1487,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "deleteEntitiesOfType"
 
   it should "delete entities of the given type in the given workspace" in withMinimalTestDatabase { _ =>
-    import driver.api._ // for bespoke SQL queries
-
     val wsid2 = minimalTestData.workspace2.workspaceIdAsUUID
 
     val entityType1 = "entityType1"
@@ -2388,7 +2687,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     runAndWait(entityKeysQuery2).size shouldBe 2
   }
 
-  it should "not change non refereces that match the old name" in withMinimalTestDatabase { _ =>
+  it should "not change non references that match the old name" in withMinimalTestDatabase { _ =>
     // Create target entities
     val targetType = "targetType"
     val targetEntity1 = Entity("targetEntity1", targetType, Map())
@@ -2491,7 +2790,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Create a source entity with a list of 1000 references to the target entity
     val sourceType = "largeRefSourceType"
     val refList = AttributeEntityReferenceList(
-      (1 to 10000).map(_ => targetEntity.toReference).toSeq
+      (1 to 10000).map(_ => targetEntity.toReference)
     )
     val sourceEntity = Entity("sourceWithLargeRefList",
                               sourceType,
