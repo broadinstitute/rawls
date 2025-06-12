@@ -190,7 +190,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
 
       // Execute all query plans
       val queryFutures: Seq[Future[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
-        executeQueryPlan(workspaceId, entityType, entityName, rootEntityType, plan)
+        executeQueryPlan(workspaceId, entityType, entityName, rootEntityType, plan, entityLookups)
       }
 
       Future.sequence(queryFutures).flatMap { allQueryResults =>
@@ -327,7 +327,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                        entityType: String,
                        entityName: String,
                        rootEntityType: String,
-                       plan: QueryPlan
+                       plan: QueryPlan,
+                       entityLookups: Seq[ExpressionLookup] = Seq.empty
   )(implicit
     executionContext: ExecutionContext
   ): Future[Seq[ExpressionAndResult]] =
@@ -336,6 +337,21 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         repository.queries.queryRelatedRecordsWithArray(workspaceId, entityType, entityName, plan.relationChain)
       }
       .map { entityRecords =>
+        // Validate entity types if we have entityLookups
+        if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
+          val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
+          if (actualEntityTypes.nonEmpty && !actualEntityTypes.contains(rootEntityType)) {
+            val actualTypesStr = actualEntityTypes.mkString(", ")
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"The expression in your SubmissionRequest matched only entities of the wrong type. " +
+                  s"(Expected type $rootEntityType, but got $actualTypesStr.)"
+              )
+            )
+          }
+        }
+
         // For each expression in this query plan, create an ExpressionAndResult
         plan.expressionMappings.toSeq.flatMap { case (expression, attributeNames) =>
           attributeNames.map { attrName =>

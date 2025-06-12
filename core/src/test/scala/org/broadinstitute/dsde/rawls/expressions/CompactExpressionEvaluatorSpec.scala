@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeNumber,
   AttributeString,
+  AttributeValueEmptyList,
   AttributeValueList,
   AttributeValueRawJson,
   Entity,
@@ -218,11 +219,7 @@ class CompactExpressionEvaluatorSpec
       )
 
     val expressionEvaluationContext =
-      ExpressionEvaluationContext(Some(sampleSet.entityType),
-                                  Some(sampleSet.name),
-                                  Some("this.samples"),
-                                  Some(sampleSet.entityType)
-      )
+      ExpressionEvaluationContext(Some(sampleSet.entityType), Some(sampleSet.name), None, Some(sampleSet.entityType))
     val result = evalInputs(expressionEvaluationContext, configSampleSet, arrayWdl)
     result should contain(
       SubmissionValidationEntityInputs(
@@ -234,11 +231,7 @@ class CompactExpressionEvaluatorSpec
     )
 
     val expressionEvaluationContext2 =
-      ExpressionEvaluationContext(Some(sampleSet2.entityType),
-                                  Some(sampleSet2.name),
-                                  Some("this.samples"),
-                                  Some(sampleSet.entityType)
-      )
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet.entityType))
     val result2 = evalInputs(expressionEvaluationContext2, configSampleSet, arrayWdl)
     result2 should contain(
       SubmissionValidationEntityInputs(
@@ -253,11 +246,7 @@ class CompactExpressionEvaluatorSpec
     )
 
     val expressionEvaluationContext3 =
-      ExpressionEvaluationContext(Some(sampleSet4.entityType),
-                                  Some(sampleSet4.name),
-                                  Some("this.samples"),
-                                  Some(sampleSet.entityType)
-      )
+      ExpressionEvaluationContext(Some(sampleSet4.entityType), Some(sampleSet4.name), None, Some(sampleSet.entityType))
     val result3 = evalInputs(expressionEvaluationContext3, configSampleSet, arrayWdl)
     // attribute reference with 1 element array should resolve as AttributeValueList
     result3 should contain(
@@ -346,38 +335,38 @@ class CompactExpressionEvaluatorSpec
     ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("Missing rootEntityType")
   }
 
-  // TODO: legacy submissions fail here, but maybe we should let it pass?
-  //   - root entity type:set, no entity expression, input expression: this.samples.something - SVV with error Expected single value for workflow input, but evaluated result set had multiple values
-  // - root entity type: set, entity expression: this.samples, input expression: this.samples.something - "The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample_set.)
   it should "error on root entity type/expression evaluation mismatch" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
+      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER),
-              sampleMissingValueAsCER.name -> Seq(sampleMissingValueAsCER)
-          )
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
         )
       )
 
+    // root entity type:set, no entity expression, input expression: this.samples.something
+    // SVV with error Expected single value for workflow input, but evaluated result set had multiple values
     val expressionEvaluationContext =
-      ExpressionEvaluationContext(Some(sampleSet.entityType), Some(sampleSet.name), None, Some(sampleSet.entityType))
-    val gatherInputsResult =
-      methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl).get
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
 
-    val future = compactExpressionEvaluator
-      .evaluateExpressions(workspace.workspaceIdAsUUID, expressionEvaluationContext, gatherInputsResult)
+    val result = evalInputs(expressionEvaluationContext, configSampleSetSingleInput, stringWdl)
 
-    val ex = future.failed.futureValue
-    ex shouldBe a[RawlsExceptionWithErrorReport]
-    ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("Expected single value")
+    val errorResult = result
+      .find(_.entityName == sampleSet2.name)
+      .flatMap(_.inputResolutions.find(v => v.inputName == stringArgNameWithWfName && v.error.isDefined))
 
+    errorResult shouldBe defined
+    val errorMessage = errorResult.get.error.get
+    errorMessage should include("Expected single value")
+
+    // root entity type: set, entity expression: this.samples, input expression: this.samples.something
+    // "The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample_set.)
     val expressionEvaluationContext2 =
-      ExpressionEvaluationContext(Some(sampleSet.entityType),
-                                  Some(sampleSet.name),
+      ExpressionEvaluationContext(Some(sampleSet2.entityType),
+                                  Some(sampleSet2.name),
                                   Some("this.samples"),
-                                  Some(sampleSet.entityType)
+                                  Some(sampleSet2.entityType)
       )
     val gatherInputsResult2 =
       methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl).get
@@ -419,64 +408,60 @@ class CompactExpressionEvaluatorSpec
 
   }
 
-  // TODO why is this an empty list instead of an error
-//  it should "resolve empty lists into AttributeEmptyLists" in withConfigData {
-//    when(
-//      mockQueries.getEntity(any(),
-//                            org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
-//                            org.mockito.ArgumentMatchers.eq(sampleSet2.name)
-//      )
-//    )
-//      .thenReturn(
-//        DBIO.successful(
-//          Some(sampleSet2AsCER)
-//        )
-//      )
-//    val context =
-//      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
-//    val result = evalInputs(context, configEmptyArray, arrayWdl)
-//    result should contain(
-//      SubmissionValidationEntityInputs(
-//        sampleSet2.name,
-//        Set(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName))
-//      )
-//    )
-//
-////    runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
-////      Map(
-////        sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName))
-////      )
-//  }
+  it should "resolve empty lists into AttributeEmptyLists" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(),
+                                               org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
+                                               org.mockito.ArgumentMatchers.eq(sampleSet2.name),
+                                               any()
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleSet2.name -> Seq(sampleSet2AsCER))
+        )
+      )
+    val context =
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
+    val result = evalInputs(context, configEmptyArray, arrayWdl)
+    result should contain(
+      SubmissionValidationEntityInputs(
+        sampleSet2.name,
+        Set(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName))
+      )
+    )
+  }
 
-//  it should "resolve empty lists into empty Array in nested WDL Struct" in withConfigData {
-//    when(
-//      mockQueries.getEntity(any(),
-//                            org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
-//                            org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name)
-//      )
-//    )
-//      .thenReturn(
-//        DBIO.successful(
-//          Some(sampleForWdlStructAsCER)
-//        )
-//      )
-//    val context =
-//      ExpressionEvaluationContext(Some(sampleForWdlStruct.entityType),
-//                                  Some(sampleForWdlStruct.name),
-//                                  None,
-//                                  Some(sampleForWdlStruct.entityType)
-//      )
-//    val result = evalInputs(context, configNestedWdlStructWithEmptyList, wdlStructInputWdlWithNestedStruct)
-//
-//    val methodProps = result
-//      .find(_.entityName == sampleForWdlStruct.name)
-//      .map(_.inputResolutions.map { svv =>
-//        svv.inputName -> svv.value.get
-//      })
-//      .getOrElse(Seq.empty)
-//    val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-//    wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[]},"id":101,"sample":"sample1","samples":[]}}"""
-//  }
+  it should "resolve empty lists into empty Array in nested WDL Struct" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithArray(any(),
+                                               org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
+                                               org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
+                                               any()
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleForWdlStruct.name -> Seq(sampleForWdlStructAsCER))
+        )
+      )
+    val context =
+      ExpressionEvaluationContext(Some(sampleForWdlStruct.entityType),
+                                  Some(sampleForWdlStruct.name),
+                                  None,
+                                  Some(sampleForWdlStruct.entityType)
+      )
+    val result = evalInputs(context, configNestedWdlStructWithEmptyList, wdlStructInputWdlWithNestedStruct)
+
+    val methodProps = result
+      .find(_.entityName == sampleForWdlStruct.name)
+      .map(_.inputResolutions.map { svv =>
+        svv.inputName -> svv.value.get
+      })
+      .getOrElse(Seq.empty)
+    val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+    wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[]},"id":101,"sample":"sample1","samples":[]}}"""
+  }
 
   it should "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
     when(
@@ -522,11 +507,7 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val context =
-      ExpressionEvaluationContext(Some(sampleSet2.entityType),
-                                  Some(sampleSet2.name),
-                                  Some("this.samples"),
-                                  Some(sampleSet2.entityType)
-      )
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
     val result = evalInputs(context, configArrayWithAttrRef, doubleArrayWdl)
 
     val methodProps = result
@@ -621,7 +602,7 @@ class CompactExpressionEvaluatorSpec
     val context =
       ExpressionEvaluationContext(Some(sampleForWdlStruct2.entityType),
                                   Some(sampleForWdlStruct2.name),
-                                  Some("this.samples"),
+                                  None,
                                   Some(sampleForWdlStruct2.entityType)
       )
     val result = evalInputs(context, configNestedWdlStruct, wdlStructInputWdlWithNestedStruct)
@@ -670,7 +651,7 @@ class CompactExpressionEvaluatorSpec
     val context =
       ExpressionEvaluationContext(Some(sampleForWdlStruct.entityType),
                                   Some(sampleForWdlStruct.name),
-                                  Some("this.samples"),
+                                  None,
                                   Some(sampleForWdlStruct.entityType)
       )
     val result = evalInputs(context, configWdlStruct, wdlStructInputWdl)
@@ -764,11 +745,7 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val context =
-      ExpressionEvaluationContext(Some(sampleSet2.entityType),
-                                  Some(sampleSet2.name),
-                                  Some("this.samples"),
-                                  Some(sampleSet2.entityType)
-      )
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
     val result = evalInputs(context, configRawJsonTripleArray, tripleArrayWdl)
 
     val methodProps = result
@@ -777,6 +754,7 @@ class CompactExpressionEvaluatorSpec
         svv.inputName -> svv.value.get
       })
       .getOrElse(Seq.empty)
+    println(result)
 
     val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
@@ -862,11 +840,7 @@ class CompactExpressionEvaluatorSpec
       )
 
     val context =
-      ExpressionEvaluationContext(Some(sampleSet2.entityType),
-                                  Some(sampleSet2.name),
-                                  Some("this.samples"),
-                                  Some(sampleSet2.entityType)
-      )
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
     val result = evalInputs(context, configStringArgFromNumberAttributeViaSampleSet, arrayStringWdl)
 
     result should contain(
