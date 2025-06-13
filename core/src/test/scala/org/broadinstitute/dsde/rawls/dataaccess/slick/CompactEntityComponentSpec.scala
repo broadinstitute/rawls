@@ -895,6 +895,67 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
   }
 
+  it should "update both $.attrs and $.refs" in withMinimalTestDatabase { _ =>
+    import scala.language.postfixOps
+    // Create the original entity with an attribute
+    val entityType = "testType"
+    val originalAttributeName = AttributeName.withDefaultNS("originalAttr")
+    val newAttributeName = AttributeName.withDefaultNS("newAttr")
+    val originalEntity = Entity(
+      "entityName",
+      entityType,
+      Map(
+        originalAttributeName -> AttributeString("attributeValue")
+      )
+    )
+    insertAndGet(originalEntity)
+
+    // Create source entities referencing the original attribute
+    val sourceEntity1 = Entity(
+      "sourceEntity1",
+      "sourceType",
+      Map(
+        AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(
+          Seq(originalEntity.toReference)
+        )
+      )
+    )
+    val sourceEntity2 = Entity(
+      "sourceEntity2",
+      "sourceType",
+      Map(
+        originalAttributeName -> AttributeString("attributeValue")
+      )
+    )
+    insertAndGetAll(Seq(sourceEntity1, sourceEntity2))
+
+    // Rename the attribute
+    runAndWait(q.renameAttribute(wsid, entityType, originalAttributeName, AttributeRename(newAttributeName))) shouldBe 1
+
+    // Verify the attribute was renamed in the original entity
+    val updatedEntity = runAndWait(q.getEntity(wsid, entityType, originalEntity.name)).get.toEntity
+    updatedEntity.attributes should contain key newAttributeName
+    updatedEntity.attributes.contains(originalAttributeName) shouldBe false
+
+    // Verify the attribute was NOT updated in sourceEntity2 (different entity type)
+    val source2 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity2"))
+    source2 should not be empty
+    source2.get.attributes should not be empty
+    val rawData2 =
+      source2.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    rawData2.attrs.keys should contain(originalAttributeName)
+    rawData2.attrs.keys should not contain newAttributeName
+
+    // Verify that sourceEntity1 remains unchanged in $.attrs
+    val source1 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity1"))
+    source1 should not be empty
+    source1.get.attributes should not be empty
+    val rawData1 =
+      source1.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+    rawData1.attrs.keys should not contain newAttributeName
+    rawData1.attrs.keys should contain(AttributeName.withDefaultNS("refList"))
+  }
+
   /**
    * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
    */
