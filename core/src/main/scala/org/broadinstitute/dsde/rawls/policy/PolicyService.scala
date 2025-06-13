@@ -41,7 +41,7 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
           .name(TpsPolicies.GroupConstraint.name)
           .additionalData(authDomainGroups.toList.asJava)
         req.setAttributes(new TpsPolicyInputs().inputs(List(protectedDataPolicy, groupConstraintPolicy).asJava))
-      case (None, Some(enhancedBucketLogging)) if enhancedBucketLogging =>
+      case (_, Some(true)) =>
         req.setAttributes(new TpsPolicyInputs().inputs(List(protectedDataPolicy).asJava))
       case _ =>
     }
@@ -65,6 +65,9 @@ class PolicyService(tpsDAO: TpsDAO)(implicit val ec: ExecutionContext) extends L
       case ex: ApiException if ex.getCode == 404 =>
         None
     }
+
+  def listPaos(objectIds: Seq[UUID], ctx: RawlsRequestContext): Future[Seq[TpsPaoGetResult]] =
+    tpsDAO.listPaos(objectIds, ctx)
 
   /**
     * Retrieves the snapshot PAO for the given snapshotId. If it does not exist, it creates a new one with no policies.

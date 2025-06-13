@@ -191,6 +191,7 @@ trait ApiServiceSpec
       .thenReturn(Future.successful(new TpsPaoGetResult().effectiveAttributes(new TpsPolicyInputs())))
     when(policyService.linkSnapshotPaoToWorkspacePao(any(), any(), any(), any())).thenReturn(Future.unit)
     when(policyService.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
+    when(policyService.listPaos(any, any)).thenReturn(Future.successful(List.empty[TpsPaoGetResult]))
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
