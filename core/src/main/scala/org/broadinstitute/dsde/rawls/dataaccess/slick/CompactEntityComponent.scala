@@ -785,27 +785,33 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   ): ReadWriteAction[Int] = {
     val newAttributeName = renameRequest.newAttributeName
 
-    // Convert AttributeName to delimited string, preserving namespace (e.g., "import:bar")
     val oldAttrDelimited = AttributeName.toDelimitedName(oldAttributeName)
     val newAttrDelimited = AttributeName.toDelimitedName(newAttributeName)
 
-    // Use helpers to get correct JSON paths
     val oldAttrPath = slickAttributePath(oldAttributeName)
     val newAttrPath = slickAttributePath(newAttributeName)
 
-    // 1. Rename key in $.attrs using JSON_SET + JSON_REMOVE (fixes test issues)
+    // rename is implemented as JSON_REMOVE(JSON_SET(JSON_EXTRACT))
+    // JSON_EXTRACT gets the value of the old attribute
+    // JSON_SET creates the new attribute with that value
+    // JSON_REMOVE deletes the old attribute
     val updateAttrsKeySql =
-      sql"""update ENTITY
-         set attributes = JSON_SET(attributes, $newAttrPath,
-                                   JSON_EXTRACT(attributes, $oldAttrPath)),
-             attributes = JSON_REMOVE(attributes, $oldAttrPath),
-             record_version = record_version + 1
-         where workspace_id = $workspaceId
-           and entity_type = $entityType
-           and deleted = 0
-           and JSON_CONTAINS_PATH(attributes, 'one', $oldAttrPath)""".asUpdate
+    sql"""update ENTITY
+          set record_version = record_version + 1,
+          attributes = JSON_REMOVE(
+                         JSON_SET(
+                           attributes,
+                           $newAttrPath,
+                           JSON_EXTRACT(attributes, $oldAttrPath)),
+                         $oldAttrPath
+                       )
+          where workspace_id = $workspaceId
+          and entity_type = $entityType
+          and deleted = 0
+          and JSON_CONTAINS_PATH(attributes, 'one', $oldAttrPath)
+       """.asUpdate
 
-    // 2. Rename embedded references in $.refs
+    // Renames references in $.refs using JSON_REPLACE + REPLACE
     val oldRef = s""""a": "$oldAttrDelimited", "t": "$entityType""""
     val newRef = s""""a": "$newAttrDelimited", "t": "$entityType""""
     val updateReferencesInAttributesSql =
@@ -818,11 +824,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                JSON_OBJECT('a', $oldAttrDelimited, 't', $entityType),
                $slickRefsPath)""".asUpdate
 
-    // 3. Update scalar references (used for sort keys)
+    // Updates scalar references (used for sort keys)
     val updateSortValues =
       sql"""with paths as (
             select id,
-                   REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldAttrDelimited, null, '$$.refs')), '.a', '') as path
+                   REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldAttrDelimited, null, $slickRefsPath)), '.a', '') as path
             from ENTITY
             where workspace_id = $workspaceId
               and JSON_CONTAINS(attributes,
@@ -842,12 +848,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         set e.attributes = JSON_REPLACE(e.attributes, CONCAT($slickAttrsPath, '.', attrnames.attr), $newAttrDelimited)
         where e.id = attrnames.id""".asUpdate
 
-    // Execute all updates and return count of updated ENTITY rows (not refs or sort keys)
+    // Execute all updates and return the number of rows updated
     for {
       _ <- updateSortValues
       _ <- updateReferencesInAttributesSql
-      updatedEntities <- updateAttrsKeySql
-    } yield updatedEntities
+      entityRowsUpdated <- updateAttrsKeySql
+    } yield entityRowsUpdated
   }
 
   /**
