@@ -774,9 +774,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * execution plans:
    * - updateAttrsKeySql: index range scan on idx_entity_type_name
-   * - updateReferencesInAttributesSql: index range scan on idx_entity_type_name
-   * - updateSortValues: complex query with CTEs, uses idx_entity_type_name for initial filtering
+   * - updateRefsSql: index range scan on idx_entity_type_name
    */
+
   def renameAttribute(
     workspaceId: UUID,
     entityType: String,
@@ -796,62 +796,44 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     // JSON_SET creates the new attribute with that value
     // JSON_REMOVE deletes the old attribute
     val updateAttrsKeySql =
-    sql"""update ENTITY
-          set record_version = record_version + 1,
-          attributes = JSON_REMOVE(
-                         JSON_SET(
-                           attributes,
-                           $newAttrPath,
-                           JSON_EXTRACT(attributes, $oldAttrPath)),
-                         $oldAttrPath
-                       )
-          where workspace_id = $workspaceId
-          and entity_type = $entityType
-          and deleted = 0
-          and JSON_CONTAINS_PATH(attributes, 'one', $oldAttrPath)
-       """.asUpdate
+      sql"""update ENTITY
+        set record_version = record_version + 1,
+        attributes = JSON_REMOVE(
+                       JSON_SET(
+                         attributes,
+                         $newAttrPath,
+                         JSON_EXTRACT(attributes, $oldAttrPath)),
+                       $oldAttrPath
+                     )
+        where workspace_id = $workspaceId
+        and entity_type = $entityType
+        and deleted = 0
+        and JSON_CONTAINS_PATH(attributes, 'one', $oldAttrPath)
+     """.asUpdate
 
     // Renames references in $.refs using JSON_REPLACE + REPLACE
-    val oldRef = s""""a": "$oldAttrDelimited", "t": "$entityType""""
-    val newRef = s""""a": "$newAttrDelimited", "t": "$entityType""""
-    val updateReferencesInAttributesSql =
-      sql"""update ENTITY
-         set attributes = JSON_REPLACE(attributes, $slickRefsPath,
-              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $oldRef, $newRef) as JSON))
-         where workspace_id = $workspaceId
-           and deleted = 0
-           and JSON_CONTAINS(attributes,
-               JSON_OBJECT('a', $oldAttrDelimited, 't', $entityType),
-               $slickRefsPath)""".asUpdate
+    val searchPattern = s""""a":"$oldAttrDelimited""""
+    val replacePattern = s""""a":"$newAttrDelimited""""
 
-    // Updates scalar references (used for sort keys)
-    val updateSortValues =
-      sql"""with paths as (
-            select id,
-                   REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldAttrDelimited, null, $slickRefsPath)), '.a', '') as path
-            from ENTITY
-            where workspace_id = $workspaceId
-              and JSON_CONTAINS(attributes,
-                JSON_OBJECT('a', $oldAttrDelimited, 't', $entityType, 'z', true),
-                $slickRefsPath)
-          ),
-          attrnames as (
-            select paths.id,
-                   JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
-                   JSON_EXTRACT(attributes, CONCAT(paths.path, '.z')) as is_scalar,
-                   JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
-            from ENTITY e join paths on e.id = paths.id
-            having is_scalar = true and entity_type = $entityType
+    val updateRefsSql = sql"""update ENTITY
+        set attributes = JSON_SET(
+          attributes,
+          $slickRefsPath,
+          CAST(
+            REPLACE(
+              JSON_EXTRACT(attributes, $slickRefsPath),
+              $searchPattern,
+              $replacePattern
+            ) AS JSON
           )
-        update ENTITY e
-        join attrnames on e.id = attrnames.id
-        set e.attributes = JSON_REPLACE(e.attributes, CONCAT($slickAttrsPath, '.', attrnames.attr), $newAttrDelimited)
-        where e.id = attrnames.id""".asUpdate
+        )
+        where workspace_id = $workspaceId
+        and deleted = 0
+        and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldAttrDelimited), $slickRefsPath)""".asUpdate
 
-    // Execute all updates and return the number of rows updated
+    // Execute all updates
     for {
-      _ <- updateSortValues
-      _ <- updateReferencesInAttributesSql
+      _ <- updateRefsSql
       entityRowsUpdated <- updateAttrsKeySql
     } yield entityRowsUpdated
   }
