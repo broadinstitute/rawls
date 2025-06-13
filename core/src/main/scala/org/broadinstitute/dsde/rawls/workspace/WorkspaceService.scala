@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
+import bio.terra.policy.model.TpsPaoGetResult
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
@@ -335,6 +336,10 @@ class WorkspaceService(
             getBucketOptions(WorkspaceName(workspace.namespace, workspace.name), userProject)
           )
       }
+
+      policies <- options.anyPresentFuture("policies") {
+        policyService.getPao(UUID.fromString(workspaceId), ctx)
+      }
     } yield WorkspaceResponse(
       options.anyPresent("accessLevel")(accessLevel),
       canShare,
@@ -350,9 +355,25 @@ class WorkspaceService(
       bucketDetails,
       owners,
       wsmContext.azureCloudContext,
-      Some(wsmContext.policies)
+      policies.flatten.map(convertPolicies)
     )
   }
+
+  private def convertPolicies(pao: TpsPaoGetResult): List[WorkspacePolicy] =
+    Option(pao.getEffectiveAttributes)
+      .map(_.getInputs.asScala)
+      .getOrElse(List.empty)
+      .map(input =>
+        WorkspacePolicy(
+          input.getName,
+          input.getNamespace,
+          Option(input.getAdditionalData)
+            .map(_.asScala.toList)
+            .getOrElse(List.empty)
+            .map(data => Map.apply(data.getKey -> data.getValue))
+        )
+      )
+      .toList
 
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
     val options = processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
@@ -360,7 +381,8 @@ class WorkspaceService(
     def processDetails(workspace: AggregatedWorkspace,
                        samResource: SamUserResource,
                        accessLevel: WorkspaceAccessLevel,
-                       stats: Option[WorkspaceSubmissionStats]
+                       stats: Option[WorkspaceSubmissionStats],
+                       workspacePolicies: List[WorkspacePolicy]
     ): WorkspaceListResponse = {
       val workspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(
@@ -395,7 +417,7 @@ class WorkspaceService(
         workspaceDetails,
         stats,
         samResource.public.roles.nonEmpty || samResource.public.actions.nonEmpty,
-        Some(workspace.policies)
+        Option(workspacePolicies)
       )
     }
 
@@ -409,6 +431,9 @@ class WorkspaceService(
           Try(UUID.fromString(resource.resourceId)).isSuccess
       )
       accessLevelWorkspaceUUIDs = accessLevelWorkspaceResources.map(resource => UUID.fromString(resource.resourceId))
+      policiesByWorkspaceId <- options.anyPresentFuture("policies") {
+        batchListPolicies(accessLevelWorkspaceUUIDs, ctx)
+      }
       submissionSummaryStats <- options.anyPresentFuture("workspaceSubmissionStats") {
         workspaceRepository.listSubmissionSummaryStats(accessLevelWorkspaceUUIDs)
       }
@@ -431,11 +456,32 @@ class WorkspaceService(
         val stats = submissionSummaryStats.flatMap {
           _.get(wsmContext.baseWorkspace.workspaceIdAsUUID)
         }
-        processDetails(wsmContext, workspaceResource, accessLevel, stats)
+        val workspacePolicies =
+          policiesByWorkspaceId.getOrElse(Map.empty).getOrElse(workspace.workspaceIdAsUUID, List.empty)
+        processDetails(wsmContext, workspaceResource, accessLevel, stats, workspacePolicies)
       }
 
     } yield deepFilterJsValue(responseWorkspaces.toJson, options.options)
   }
+
+  private def batchListPolicies(workspaceIds: Seq[UUID],
+                                ctx: RawlsRequestContext
+  ): Future[Map[UUID, List[WorkspacePolicy]]] =
+    if (workspaceIds.isEmpty) {
+      Future.successful(Map.empty)
+    } else {
+      workspaceIds
+        .grouped(1000)
+        .toList
+        .traverse { batch =>
+          policyService.listPaos(batch, ctx).map { policies =>
+            policies.map { policy =>
+              policy.getObjectId -> convertPolicies(policy)
+            }.toMap
+          }
+        }
+        .map(_.reduce(_ ++ _))
+    }
 
   def getGCPWorkspacesByBillingProjects(
     workspaceIds: List[String]

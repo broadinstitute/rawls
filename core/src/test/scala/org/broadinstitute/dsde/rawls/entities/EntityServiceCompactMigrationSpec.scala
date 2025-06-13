@@ -6,6 +6,7 @@ import akka.stream.scaladsl.Sink
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
@@ -23,6 +24,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.{
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   Attribute,
   AttributeBoolean,
@@ -141,8 +143,7 @@ class EntityServiceCompactMigrationSpec
 
   behavior of "Compact Entity Migration"
   testWorkspaces.foreach { case (workspace, expectedCount) =>
-    // TODO CORE-543: re-enable tests
-    it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" ignore withTestDataServices {
+    it should s"migrate to compact entities for workspace ${workspace.toWorkspaceName}" in withTestDataServices {
       apiService =>
         // entity data is already loaded into legacy tables via withTestDataServices
 
@@ -192,8 +193,7 @@ class EntityServiceCompactMigrationSpec
     }
   }
 
-  // TODO CORE-543: re-enable test
-  it should s"migrate to compact entities with various attribute data types" ignore withTestDataServices { apiService =>
+  it should s"migrate to compact entities with various attribute data types" in withTestDataServices { apiService =>
     val workspace = testData.workspace // has some entities we can use to test references
 
     // various attribute types to ensure migration works for all of them
@@ -262,6 +262,96 @@ class EntityServiceCompactMigrationSpec
     )
 
     // save the entity with the various attributes
+    val savedEntity = Await.result(localProvider.createEntity(entity, defaultRequestContext), atMost)
+    savedEntity shouldBe entity
+
+    // perform migration - this keeps legacy attributes and adds Quicksilver attributes
+    val entitiesUpdated =
+      Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+
+    entitiesUpdated shouldBe 19 // 18 from the test data, plus the one we just created
+
+    val compactEntity =
+      Await.result(compactProvider.getEntity(entity.entityType, entity.name, defaultRequestContext), atMost)
+
+    val localEntity =
+      Await.result(localProvider.getEntity(entity.entityType, entity.name, defaultRequestContext), atMost)
+
+    forEvery(localEntity.attributes.keys) { attributeName =>
+      withClue(s"for attribute $attributeName") {
+        // check that the attributes match
+        compactEntity.attributes.get(attributeName) shouldBe localEntity.attributes.get(attributeName)
+      }
+    }
+
+  }
+
+  it should s"maintain reference array ordering" in withTestDataServices { apiService =>
+    val workspace = testData.workspace // has some entities we can use to test references
+
+    val targetEntityType = "targetEntityType"
+    val targetEntityNames = Seq("targetName1", "targetName2", "targetName3", "targetName4", "targetName5")
+    val targetEntities = targetEntityNames.map { name =>
+      Entity(name, targetEntityType, Map.empty)
+    }
+    val targetReferences = targetEntities.map(_.toReference)
+
+    // Build an attribute map for our source entity with lots of entity reference lists
+    // with randomized naming. The randomization here is used to ensure that nothing implicitly relies
+    // on ordering of attribute names, entity names, or entity types.
+    //
+    // Randomization means there is a chance of false positives, but over time also gives us more breadth of test cases
+    val numAttrsToTest = 100
+    val minReferencesPerList = 5
+    val maxReferencesPerList = 50
+    val chanceOfScalarAttribute = 0.1 // 10% chance of a scalar attribute, otherwise an entity reference list
+    val randomGenerator = RandomStringUtils.insecure() // we don't care about crypto-level security here
+    val attrs: AttributeMap = (Range.inclusive(1, numAttrsToTest) map { _ =>
+      val attrName = AttributeName.fromDelimitedName(
+        s"${randomGenerator.nextAlphabetic(4, 8)}:${randomGenerator.nextAlphanumeric(8, 20)}"
+      ) // random attribute name
+      val isScalar = scala.util.Random.nextDouble() < chanceOfScalarAttribute
+      val attrValue = if (isScalar) {
+        // scalar attribute
+        targetReferences(scala.util.Random.nextInt(targetReferences.length))
+      } else {
+        val refs = Range(0, scala.util.Random.between(minReferencesPerList, maxReferencesPerList)).map { _ =>
+          targetReferences(scala.util.Random.nextInt(targetReferences.length))
+        }
+        AttributeEntityReferenceList(refs)
+      }
+      attrName -> attrValue
+    }).toMap
+
+    val entity = Entity("lotsaDataTypes", "willThisWork", attrs)
+
+    val defaultRequestContext =
+      RawlsRequestContext(
+        UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
+      )
+
+    val requestArguments = EntityRequestArguments(workspace, defaultRequestContext)
+
+    // get providers
+    val localProvider =
+      new LocalEntityProvider(requestArguments,
+                              slickDataSource,
+                              true,
+                              java.time.Duration.ofSeconds(60),
+                              workbenchMetricBaseName
+      )
+
+    val compactProvider = new CompactEntityProvider(requestArguments,
+                                                    new CompactEntityRepository(slickDataSource),
+                                                    CompactEntityProviderConfig()
+    )
+
+    // save target entities to use as references
+    targetEntities.foreach { target =>
+      Await.result(localProvider.createEntity(target, defaultRequestContext), atMost)
+    }
+
+    // save the entity with the randomized references
     val savedEntity = Await.result(localProvider.createEntity(entity, defaultRequestContext), atMost)
     savedEntity shouldBe entity
 
