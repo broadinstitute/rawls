@@ -714,6 +714,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName) where e.id = attrnames.id;
          """.asUpdate
 
+    // Update non-sortable scalar attributes in the $.attrs object.
     val updateNonSortScalarAttrs =
       sql"""with paths as (
           select id,
@@ -790,6 +791,18 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     } yield entityRowsUpdated
   }
 
+  /**
+   * Renames a single attribute across all entities of the given type in a workspace.
+   * This handles both attribute name changes in the entity's attributes JSON structure and
+   * also updates any references to this attribute in other entities.
+   *
+   * @return Number of entities that were updated
+   *
+   * execution plans:
+   * - updateAttrsKeySql: index range scan on idx_entity_type_name
+   * - updateReferencesInAttributesSql: index range scan on idx_entity_type_name
+   * - updateSortValues: complex query with CTEs, uses idx_entity_type_name for initial filtering
+   */
   def renameAttribute(
     workspaceId: UUID,
     entityType: String,
@@ -860,60 +873,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       _ <- updateReferencesInAttributesSql
       updatedEntities <- updateAttrsKeySql
     } yield updatedEntities
-  }
-
-  /**
-   * Renames a single attribute across all entities of the given type in a workspace.
-   * This handles both attribute name changes in the entity's attributes JSON structure and
-   * also updates any references to this attribute in other entities.
-   *
-   * @return Number of entities that were updated
-   *
-   * execution plans:
-   * - updateAttrSql: index range scan on idx_entity_type_name
-   * - updateReferencesInAttributesSql: index range scan on idx_entity_type_name
-   */
-  def renameAttribute1(workspaceId: UUID,
-                       entityType: String,
-                       oldAttributeName: AttributeName,
-                       renameRequest: AttributeRename
-  ): ReadWriteAction[Int] = {
-    val oldName = AttributeName.toDelimitedName(oldAttributeName)
-    val newName = AttributeName.toDelimitedName(renameRequest.newAttributeName)
-
-    // rename is implemented as JSON_REMOVE(JSON_SET(JSON_EXTRACT))
-    // JSON_EXTRACT gets the value of the old attribute
-    // JSON_SET creates the new attribute with that value
-    // JSON_REMOVE deletes the old attribute
-    val updateAttrSql = sql"""update ENTITY
-          set record_version = record_version + 1,
-          attributes = JSON_REMOVE(
-                         JSON_SET(
-                           attributes,
-                           ${slickAttributePath(newName)},
-                           JSON_EXTRACT(attributes, ${slickAttributePath(oldName)})),
-                         ${slickAttributePath(oldName)}
-                       )
-          where workspace_id = $workspaceId
-          and entity_type = $entityType
-          and deleted = 0
-          and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldName)})
-       """.asUpdate
-
-    // Update references in the $.refs array.
-    val oldRef = s""""a": "$oldName"""""
-    val newRef = s""""a": "$newName"""""
-    val updateReferencesInAttributesSql = sql"""update ENTITY
-            set attributes = JSON_REPLACE(attributes, $slickRefsPath,
-              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $oldRef, $newRef) as JSON))
-            where workspace_id = $workspaceId
-            and deleted = 0
-            and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldName), $slickRefsPath)""".asUpdate
-
-    for {
-      _ <- updateReferencesInAttributesSql
-      attrsUpdated <- updateAttrSql
-    } yield attrsUpdated
   }
 
   /**
