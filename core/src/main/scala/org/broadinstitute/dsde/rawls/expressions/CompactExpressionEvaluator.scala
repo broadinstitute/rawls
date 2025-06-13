@@ -160,8 +160,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         case None             => Seq.empty
         case Some(expression) => parseLookups(expression)
       }
-      // TODO verify result of entity expression parsing against root entity type, e.g. root entity type set, but entity expression this.samples : The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample_set.)
-      // TODO verify result of input expression parsing for cardinality - e.g. root entity: set, no entity expression, input expression: this.samples.something: SVV with error Expected single value for workflow input, but evaluated result set had multiple values
 
       // Parse all input expressions and collect their lookups and parsed trees
       val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>

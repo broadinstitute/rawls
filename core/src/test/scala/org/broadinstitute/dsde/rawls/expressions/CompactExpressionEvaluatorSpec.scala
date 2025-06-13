@@ -85,7 +85,6 @@ class CompactExpressionEvaluatorSpec
       .futureValue // blocks and returns result or throws
   }
 
-  // TODO add tests for complex expressions
   // Note: this is also essentially a test for CompactEvaluateVisitor
   "parseLookups" should "generate correct lookups" in {
     val straightForwardTests =
@@ -144,6 +143,19 @@ class CompactExpressionEvaluatorSpec
       result(0).relations(0).getText shouldBe getText
       result(0).attributeName shouldBe attributeName
     }
+
+    // TODO expand assertions
+    val chainedResult: Seq[ExpressionLookup] = compactExpressionEvaluator.parseLookups("this.samples.participant.id")
+    chainedResult.size shouldBe 1
+
+    val complexResult: Seq[ExpressionLookup] =
+      compactExpressionEvaluator.parseLookups("{\"id\": this.bar, \"this.samples\": this.samples.blah}")
+    complexResult.size shouldBe 2
+
+    val complexResult2: Seq[ExpressionLookup] =
+      compactExpressionEvaluator.parseLookups("{\"foo\": this.foo, \"bar\": this.bar}")
+    complexResult2.size shouldBe 2
+
   }
 
   // Test cases are taken from LocalEntityProviderSpec
