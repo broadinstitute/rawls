@@ -16,4 +16,6 @@ trait TpsDAO {
   def deletePao(objectId: UUID, ctx: RawlsRequestContext): Future[Unit]
 
   def linkPao(request: TpsPaoSourceRequest, objectId: UUID, ctx: RawlsRequestContext): Future[TpsPaoUpdateResult]
+
+  def listPaos(objectIds: Seq[UUID], ctx: RawlsRequestContext): Future[Seq[TpsPaoGetResult]]
 }
