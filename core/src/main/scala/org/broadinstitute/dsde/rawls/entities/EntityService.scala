@@ -738,7 +738,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
       }
 
       // update ENTITY from the contents of the temp table
-      numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTableAttributes", "updated ENTITY $.attrs from temp table") {
+      numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTableAttributes",
+                                        "updated ENTITY $.attrs from temp table"
+      ) {
         dataAccess.compactEntityQuery.migrationUpdateEntityTableAttributes(workspaceId)
       }
 
