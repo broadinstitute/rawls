@@ -773,77 +773,61 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * @return Number of entities that were updated
    *
    * execution plans:
-   * - updateSortValues (complex CTE query):
-   *    - First CTE (paths): Uses idx_entity_type_name index for workspace_id filtering
-   *    - Second CTE (attrnames): Performs join between paths and ENTITY table
-   *    - Final update: Uses join with materialized CTE results to perform targeted updates
-   *    - Overall: Efficient for handling complex JSON path operations with minimal scanning
-   *
-   * - updateReferencesInAttributesSql:
-   *    - Uses idx_entity_type_name index for workspace_id and entity_type conditions
-   *    - JSON_CONTAINS provides further filtering before any updates occur
-   *    - Performs a bulk update with string replacement within JSON structure
-   *    - Avoids full table scans by leveraging appropriate indexes
+   * - updateAttrSql: index range scan on idx_entity_type_name
+   * - updateReferencesInAttributesSql: index range scan on idx_entity_type_name
    */
   def renameAttribute(workspaceId: UUID,
                       entityType: String,
                       oldAttributeName: AttributeName,
                       renameRequest: AttributeRename
-  ): ReadWriteAction[Int] = {
-
-    // Validate attribute names
+                     ): ReadWriteAction[Int] = {
     val oldName = AttributeName.toDelimitedName(oldAttributeName)
     val newName = AttributeName.toDelimitedName(renameRequest.newAttributeName)
 
-    // String representations for the old and new attribute references
-    // They are used in the REPLACE function for modifying the JSON structure
-    val oldRef = s""""a": "$oldAttributeName", "t": "$entityType""""
-    val newRef = s""""a": "$newName", "t": "$entityType""""
-
-    // Updates references in the attributes.refs array
-    // This finds all entities that reference the old attribute name and updates them
-    val updateReferencesInAttributesSql = sql"""update ENTITY
-          set attributes = JSON_REPLACE(attributes, $slickRefsPath,
-            CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $oldRef, $newRef) as JSON)),
-          record_version = record_version + 1
+    // rename is implemented as JSON_REMOVE(JSON_SET(JSON_EXTRACT))
+    // JSON_EXTRACT gets the value of the old attribute
+    // JSON_SET creates the new attribute with that value
+    // JSON_REMOVE deletes the old attribute
+    val updateAttrSql = sql"""update ENTITY
+          set record_version = record_version + 1,
+          attributes = JSON_REMOVE(
+                         JSON_SET(
+                           attributes,
+                           ${slickAttributePath(newName)},
+                           JSON_EXTRACT(attributes, ${slickAttributePath(oldName)})),
+                         ${slickAttributePath(oldName)}
+                       )
           where workspace_id = $workspaceId
           and entity_type = $entityType
           and deleted = 0
-          and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldName, 't', $entityType), $slickRefsPath)"""
+          and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldName)})
+       """.asUpdate
 
-    // Updates sortable values in the attributes.attrs object
-    val updateSortValues =
-      sql"""with paths as(
-        -- Find entities containing references of the old attribute name
-        select id,
-        REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.n', '') as path
-        from ENTITY
-        where workspace_id = $workspaceId
-        and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldName, 't', $entityType, 'z', true), $slickRefsPath)
-      ),
-      attrnames as (
-        -- Extract metadata about the references (attribute name, is_scalar flag, entity_type)
-        select paths.id,
-          JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
-          JSON_EXTRACT(attributes, CONCAT(paths.path, '.z')) as is_scalar,
-          JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
-        from ENTITY e join paths on e.id = paths.id
-        -- Filter to only include scalar attributes of the target entity type
-        having is_scalar = true and entity_type = $entityType
-      )
-    -- Update the specific JSON paths in the attributes column
-    update ENTITY e
-    join attrnames on e.id = attrnames.id
-    set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName), e.record_version = e.record_version + 1
-    where e.id = attrnames.id;
-   """.asUpdate
+    val oldRef = s""""n": "$oldName", "t": "$entityType""""
+    val newRef = s""""n": "$newName", "t": "$entityType""""
 
-    // Execute all updates in sequence within the same transaction
-    // First update sortable values, then update references
+    // Update references in the $.refs array.
+    val updateReferencesInAttributesSql =
+      sql"""update ENTITY
+            set attributes = JSON_REPLACE(attributes,
+                                         $slickRefsPath,
+                                         CAST(
+                                           REPLACE(
+                                             JSON_EXTRACT(attributes, $slickRefsPath),
+                                             $oldRef,
+                                             $newRef
+                                           ) as JSON
+                                         )
+                                        ),
+            record_version = record_version + 1
+            where workspace_id = $workspaceId
+            and deleted = 0
+            and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldName, 't', $entityType), $slickRefsPath)""".asUpdate
+
     for {
-      _ <- updateSortValues
-      entityRowsUpdated <- updateReferencesInAttributesSql.asUpdate
-    } yield entityRowsUpdated
+      attrsUpdated <- updateAttrSql
+      refsUpdated <- updateReferencesInAttributesSql
+    } yield attrsUpdated + refsUpdated
   }
 
   /**
