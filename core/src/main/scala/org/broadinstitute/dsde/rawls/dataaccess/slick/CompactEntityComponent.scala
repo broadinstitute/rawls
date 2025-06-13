@@ -825,7 +825,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
          set attributes = JSON_SET(attributes, $newAttrPath,
                                    JSON_EXTRACT(attributes, $oldAttrPath)),
              attributes = JSON_REMOVE(attributes, $oldAttrPath),
-             record_version = record_version + 1,
+             record_version = record_version + 1
          where workspace_id = $workspaceId
            and entity_type = $entityType
            and deleted = 0
