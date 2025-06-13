@@ -151,8 +151,15 @@ class WorkspaceAdminService(
                                                       ctx: RawlsRequestContext
   ): Future[Unit] =
     for {
-      // Get all child resources
-      children <- samDAO.listResourceChildren(resourceTypeName, resourceId, ctx)
+      // Get all child resources, handle 403 errors by treating them as empty lists
+      // not having permission to list children is not an error, it means children are not allowed
+      children <- samDAO
+        .listResourceChildren(resourceTypeName, resourceId, ctx)
+        .recover {
+          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.Forbidden) =>
+            logger.info(s"Received 403 when listing children of $resourceTypeName/$resourceId, treating as empty list")
+            Seq.empty
+        }
 
       // Recursively delete each child resource
       _ <- Future.traverse(children) { child =>

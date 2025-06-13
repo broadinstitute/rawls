@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamAdminDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -481,5 +482,72 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
       Await.result(service.getWorkspaceId(workspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
+  }
+
+  it should "handle 403 Forbidden errors when listing resource children" in {
+    val resourceTypeName = SamResourceTypeNames.workspace
+    val resourceId = UUID.randomUUID().toString
+    val childResource = SamFullyQualifiedResourceId("child-id", "child-type")
+
+    val samDAO = mock[SamDAO]
+
+    // Mock a 403 Forbidden error for the parent resource's children
+    when(
+      samDAO.listResourceChildren(
+        ArgumentMatchers.eq(resourceTypeName),
+        ArgumentMatchers.eq(resourceId),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(
+      Future.failed(
+        new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "Forbidden"))
+      )
+    )
+
+    // Mock successful listing for the child resource (this should never be called)
+    when(
+      samDAO.listResourceChildren(
+        ArgumentMatchers.eq(SamResourceTypeName(childResource.resourceTypeName)),
+        ArgumentMatchers.eq(childResource.resourceId),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(List.empty))
+
+    // Mock deleteResource to return success
+    when(
+      samDAO.deleteResource(
+        ArgumentMatchers.any(),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(()))
+
+    val service = workspaceAdminServiceConstructor(samDAO = samDAO)
+
+    // Call the method under test - should not throw an exception
+    Await.result(service.recursivelyDeleteSamResource(resourceTypeName, resourceId, defaultRequestContext),
+                 Duration.Inf
+    )
+
+    // Verify that listResourceChildren was called for the parent resource
+    verify(samDAO).listResourceChildren(
+      ArgumentMatchers.eq(resourceTypeName),
+      ArgumentMatchers.eq(resourceId),
+      ArgumentMatchers.any()
+    )
+
+    // Verify that no other listResourceChildren calls were made
+    verify(samDAO, times(1)).listResourceChildren(
+      ArgumentMatchers.any(),
+      ArgumentMatchers.any(),
+      ArgumentMatchers.any()
+    )
+
+    // Verify that deleteResource was called only for the parent resource
+    verify(samDAO, times(1)).deleteResource(
+      ArgumentMatchers.eq(resourceTypeName),
+      ArgumentMatchers.eq(resourceId),
+      ArgumentMatchers.any()
+    )
   }
 }
