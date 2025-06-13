@@ -6,7 +6,6 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -696,10 +695,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     val updateSortValues =
       sql"""with paths as(
               select id,
-              REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.a', '') as path
+              REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.n', '') as path
               from ENTITY
               where workspace_id = $workspaceId
-              and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldName, 't', $entityType, 'z', true), $slickRefsPath)
+              and JSON_CONTAINS(attributes, JSON_OBJECT('n', $oldName, 't', $entityType, 'z', true), $slickRefsPath)
             ),
             attrnames as (
               select paths.id,
@@ -714,34 +713,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName) where e.id = attrnames.id;
          """.asUpdate
 
-    // Update non-sortable scalar attributes in the $.attrs object.
-    val updateNonSortScalarAttrs =
-      sql"""with paths as (
-          select id,
-                 REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.n', '') as path
-          from ENTITY
-          where workspace_id = $workspaceId
-            and JSON_CONTAINS(attributes,
-              JSON_OBJECT('n', $oldName, 't', $entityType),
-              $slickRefsPath)
-        ),
-        attrnames as (
-          select paths.id,
-                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
-                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.z')) as is_scalar,
-                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
-          from ENTITY e join paths on e.id = paths.id
-          having is_scalar = true and entity_type = $entityType
-        )
-      update ENTITY e
-      join attrnames on e.id = attrnames.id
-      set e.attributes = JSON_REPLACE(e.attributes, CONCAT($slickAttrsPath, '.', attrnames.attr), $newName)
-      where e.id = attrnames.id""".asUpdate
-
     // Execute all updates
     for {
       _ <- updateSortValues
-      _ <- updateNonSortScalarAttrs
       _ <- updateReferencesInAttributesSql
       entityRowsUpdated <- updateEntityNameSql.asUpdate
     } yield entityRowsUpdated
@@ -812,8 +786,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     val newAttributeName = renameRequest.newAttributeName
 
     // Convert AttributeName to delimited string, preserving namespace (e.g., "import:bar")
-    val oldAttrDelimited = toDelimitedName(oldAttributeName)
-    val newAttrDelimited = toDelimitedName(newAttributeName)
+    val oldAttrDelimited = AttributeName.toDelimitedName(oldAttributeName)
+    val newAttrDelimited = AttributeName.toDelimitedName(newAttributeName)
 
     // Use helpers to get correct JSON paths
     val oldAttrPath = slickAttributePath(oldAttributeName)
