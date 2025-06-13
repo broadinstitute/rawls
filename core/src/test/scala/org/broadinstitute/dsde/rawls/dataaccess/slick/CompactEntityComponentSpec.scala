@@ -1,10 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{
-  AttributeNameContext,
-  RelationContext
-}
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.{SqlEntityData, SqlEntityReference}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
@@ -27,7 +22,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SortDirections,
   WorkspaceFieldSpecs
 }
-import org.mockito.Mockito
 import org.scalatest.Inspectors.forEvery
 import slick.dbio.Effect.Read
 import slick.jdbc.GetResult

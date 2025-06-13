@@ -15,7 +15,7 @@ object CompactEvaluateVisitor {
     expression: String, // the original expression or literal
     relations: List[RelationContext],
     attributeName: Option[String], // None for literals
-    values: Seq[AttributeValue] // the result of evaluating this lookup (from DB or literal)
+    values: Seq[AttributeValue] // the result of evaluating this lookup (from DB or literal) //TODO is this ever used
   )
 }
 

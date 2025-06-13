@@ -1,7 +1,7 @@
 # Submissions and Expression Evaluation in Rawls
 
 This document describes the architecture for submission requests with focus on evaluating expressions in Rawls, 
-specifically as implemented in the [`CompactExpressionEvaluator`](../core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala), which is used by the `CompactEntityProvider`.  
+specifically as implemented in the [`CompactExpressionEvaluator`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala), which is used by the `CompactEntityProvider`.  
 Legacy expression parsing done through the `LocalEntityProvider` is not discussed.
 
 
@@ -54,9 +54,9 @@ For example, if the expression `"this.samples.bam"` is evaluated against a sampl
 
 ### Expression Evaluation Methods
 
-[`evaluateExpression`](../core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L66) evaluates a single expression and returns only the attributes, no `SubmissionValidationEntityInputs`. It doesn't distinguish an entity expression from an input expression. This can be used from the API for expression verification, but is not otherwise used in Terra.
+[`evaluateExpression`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L66) evaluates a single expression and returns only the attributes, no `SubmissionValidationEntityInputs`. It doesn't distinguish an entity expression from an input expression. This can be used from the API for expression verification, but is not otherwise used in Terra.
 
-[`evaluateExpressions`](../core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L122) is used in submission processing. It evaluates both the entity expression and all the input expressions from the method config.
+[`evaluateExpressions`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L122) is used in submission processing. It evaluates both the entity expression and all the input expressions from the method config.
 
 ### ANTLR Expression Parsing
 
@@ -103,7 +103,7 @@ Each ExpressionLookup corresponds to a single attribute and includes the relatio
 ### Entity Type and Expression Combinations
 
 The given entity type and entity expression would be defined in a `SubmissionRequest`.  Root entity type and input expression
-are pulled from the method config.  End result specifies the shape of the `SubmissionValidationEntityInputs` that `evaluateExpressions` would return.
+are pulled from the method config.  End result specifies the shape of the `SubmissionValidationValue`s that `evaluateExpressions` would return.
 
 The following examples assume an entity model where:
 - **Sample_set** entities have a `samples` attribute (referencing Sample entities) and a `file` attribute
@@ -127,7 +127,7 @@ A single submission request can have many inputs, but these typically refer to o
 
 1. **Planning**: ExpressionLookups are grouped by their relation chains to minimize database queries. Multiple expressions requiring the same relation level share a single query (e.g., `this.sample.id` and `this.sample.name` both use `["sample"]` relation chain).
 
-2. **Execution**: Each QueryPlan executes `queryRelatedRecordsWithArray` to retrieve entity data in batch operations, handling entity type transitions and complex traversals efficiently.
+2. **Execution**: Each QueryPlan executes [`queryRelatedRecordsWithArray`](core/src/main/scala/org/broadinstitute/dsde/rawls/dataaccess/slick/CompactEntityComponent.scala#L659) to retrieve entity data in batch operations, handling entity type transitions and complex traversals efficiently.
 
 3. **Assembly**: Query results are transformed into `ExpressionAndResult` tuples, then processed by:
    - `constructFinalInputValues`: Takes the expression results and ANTLR parse tree to reconstruct the original input structure, returning `Map[EntityName, Try[Iterable[AttributeValue]]]`

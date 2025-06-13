@@ -44,12 +44,12 @@ class CompactExpressionEvaluatorSpec
     with TestDriverComponent
     with MethodConfigTestSupport {
 
-  // TODO this is just for debugging, remove or reduce
+  // TODO this is just for debugging, remove or reduce timeout
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = 300.seconds, interval = 100.millis)
 
-  val compactEntityRepository = mock[CompactEntityRepository]
-  val mockQueries = mock[CompactEntityQuery]
+  val compactEntityRepository: CompactEntityRepository = mock[CompactEntityRepository]
+  val mockQueries: CompactEntityQuery = mock[CompactEntityQuery]
   when(compactEntityRepository.queries).thenReturn(mockQueries)
   when(compactEntityRepository.dataSource).thenReturn(slickDataSource)
 
@@ -62,16 +62,16 @@ class CompactExpressionEvaluatorSpec
     entity.entityType,
     workspace.workspaceIdAsUUID,
     1L,
-    false,
+    deleted = false,
     Option(CompactEntitySerialization.toSql(entity.attributes).compactPrint)
   )
 
-  val sampleGoodAsCER = toCompactEntityRecord(sampleGood)
-  val sampleGood2AsCER = toCompactEntityRecord(sampleGood2)
-  val sampleMissingValueAsCER = toCompactEntityRecord(sampleMissingValue)
-  val sampleWithSingleElementArrayAsCER = toCompactEntityRecord(sampleWithSingleElementArray)
-  val sampleSet2AsCER = toCompactEntityRecord(sampleSet2)
-  val sampleForWdlStructAsCER = toCompactEntityRecord(sampleForWdlStruct)
+  val sampleGoodAsCER: CompactEntityRecord = toCompactEntityRecord(sampleGood)
+  val sampleGood2AsCER: CompactEntityRecord = toCompactEntityRecord(sampleGood2)
+  val sampleMissingValueAsCER: CompactEntityRecord = toCompactEntityRecord(sampleMissingValue)
+  val sampleWithSingleElementArrayAsCER: CompactEntityRecord = toCompactEntityRecord(sampleWithSingleElementArray)
+  val sampleSet2AsCER: CompactEntityRecord = toCompactEntityRecord(sampleSet2)
+  val sampleForWdlStructAsCER: CompactEntityRecord = toCompactEntityRecord(sampleForWdlStruct)
 
   def evalInputs(
     context: ExpressionEvaluationContext,
@@ -139,22 +139,34 @@ class CompactExpressionEvaluatorSpec
     forAll(relationTests) { (input, getText, attributeName) =>
       val result: Seq[ExpressionLookup] = compactExpressionEvaluator.parseLookups(input)
       result.size shouldBe 1
-      result(0).relations.size shouldBe 1
-      result(0).relations(0).getText shouldBe getText
-      result(0).attributeName shouldBe attributeName
+      result.head.relations.size shouldBe 1
+      result.head.relations.head.getText shouldBe getText
+      result.head.attributeName shouldBe attributeName
     }
 
-    // TODO expand assertions
     val chainedResult: Seq[ExpressionLookup] = compactExpressionEvaluator.parseLookups("this.samples.participant.id")
     chainedResult.size shouldBe 1
+    chainedResult.head.relations.size shouldBe 2
+    chainedResult.head.relations.head.attributeName().getText shouldBe "samples"
+    chainedResult.head.relations(1).attributeName().getText shouldBe "participant"
+    chainedResult.head.attributeName shouldBe Some("id")
 
     val complexResult: Seq[ExpressionLookup] =
       compactExpressionEvaluator.parseLookups("{\"id\": this.bar, \"this.samples\": this.samples.blah}")
     complexResult.size shouldBe 2
+    complexResult.head.relations shouldBe empty
+    complexResult.head.attributeName shouldBe Some("bar")
+    complexResult(1).relations.size shouldBe 1
+    complexResult(1).relations.head.attributeName().getText shouldBe "samples"
+    complexResult(1).attributeName shouldBe Some("blah")
 
     val complexResult2: Seq[ExpressionLookup] =
       compactExpressionEvaluator.parseLookups("{\"foo\": this.foo, \"bar\": this.bar}")
     complexResult2.size shouldBe 2
+    complexResult2.head.relations shouldBe empty
+    complexResult2.head.attributeName shouldBe Some("foo")
+    complexResult2(1).relations.size shouldBe 0
+    complexResult2(1).attributeName shouldBe Some("bar")
 
   }
 
@@ -920,7 +932,6 @@ class CompactExpressionEvaluatorSpec
     result should contain theSameElementsAs Seq(AttributeNumber(1), AttributeNumber(2))
   }
 
-  // TODO is this an empty Seq or an error?
   it should "return an empty Seq if no attributes are found" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithArray(
@@ -977,7 +988,6 @@ class CompactExpressionEvaluatorSpec
   }
 
   it should "return values from a mixed expression" in withConfigData {
-    // TODO figure out what relations are passed in and refine both this and the actual call to the query
     when(
       mockQueries.queryRelatedRecordsWithArray(
         any(),
@@ -1041,11 +1051,11 @@ class CompactExpressionEvaluatorSpec
       )
     )
     result.size shouldBe 3
-    result should contain theSameElementsAs (Seq(
+    result should contain theSameElementsAs Seq(
       QueryPlan(List(), Map(plainExpression -> Set("foo"), complexExpression -> Set("bar"))),
       QueryPlan(List("samples"), Map(relationExpression -> Set("type"), complexExpression -> Set("blah"))),
       QueryPlan(List("samples", "participants"), Map(chainedExpression -> Set("id")))
-    ))
+    )
 
   }
 
@@ -1068,9 +1078,9 @@ class CompactExpressionEvaluatorSpec
       .futureValue
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
-    result should contain theSameElementsAs (Seq(
+    result should contain theSameElementsAs Seq(
       (expression, Map("sampleset1" -> Success(Seq(AttributeNumber(1), AttributeNumber(2)))))
-    ))
+    )
 
   }
 
@@ -1093,7 +1103,7 @@ class CompactExpressionEvaluatorSpec
       .futureValue
     result.size shouldBe 2
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
-    result should contain theSameElementsAs (Seq(
+    result should contain theSameElementsAs Seq(
       (expression2, Map("sampleset1" -> Success(Seq(AttributeNumber(1), AttributeNumber(2))))),
       (expression1,
        Map(
@@ -1102,7 +1112,7 @@ class CompactExpressionEvaluatorSpec
          )
        )
       )
-    ))
+    )
   }
 
   it should "create separate results if entity type does not match root entity type" in withConfigData {
@@ -1122,11 +1132,11 @@ class CompactExpressionEvaluatorSpec
       .futureValue
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
-    result should contain theSameElementsAs (Seq(
+    result should contain theSameElementsAs Seq(
       (expression,
        Map(sampleGood.name -> Success(Seq(AttributeNumber(1))), sampleGood2.name -> Success(Seq(AttributeNumber(2))))
       )
-    ))
+    )
   }
 
 }

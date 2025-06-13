@@ -5,7 +5,6 @@ import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
 
 import java.sql.Timestamp
@@ -27,7 +26,6 @@ import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import spray.json._
-import org.broadinstitute.dsde.rawls.model.{AttributeNull, AttributeValue, WorkspaceJsonSupport}
 
 import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
