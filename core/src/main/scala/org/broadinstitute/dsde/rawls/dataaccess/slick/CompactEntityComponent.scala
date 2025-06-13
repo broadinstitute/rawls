@@ -6,6 +6,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -713,9 +714,33 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           set e.attributes = JSON_REPLACE(e.attributes, CONCAT('$$.attrs.', attrnames.attr), $newName) where e.id = attrnames.id;
          """.asUpdate
 
+    val updateNonSortScalarAttrs =
+      sql"""with paths as (
+          select id,
+                 REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldName, null, '$$.refs')), '.n', '') as path
+          from ENTITY
+          where workspace_id = $workspaceId
+            and JSON_CONTAINS(attributes,
+              JSON_OBJECT('n', $oldName, 't', $entityType),
+              $slickRefsPath)
+        ),
+        attrnames as (
+          select paths.id,
+                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
+                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.z')) as is_scalar,
+                 JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
+          from ENTITY e join paths on e.id = paths.id
+          having is_scalar = true and entity_type = $entityType
+        )
+      update ENTITY e
+      join attrnames on e.id = attrnames.id
+      set e.attributes = JSON_REPLACE(e.attributes, CONCAT($slickAttrsPath, '.', attrnames.attr), $newName)
+      where e.id = attrnames.id""".asUpdate
+
     // Execute all updates
     for {
       _ <- updateSortValues
+      _ <- updateNonSortScalarAttrs
       _ <- updateReferencesInAttributesSql
       entityRowsUpdated <- updateEntityNameSql.asUpdate
     } yield entityRowsUpdated
@@ -765,6 +790,78 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     } yield entityRowsUpdated
   }
 
+  def renameAttribute(
+    workspaceId: UUID,
+    entityType: String,
+    oldAttributeName: AttributeName,
+    renameRequest: AttributeRename
+  ): ReadWriteAction[Int] = {
+    val newAttributeName = renameRequest.newAttributeName
+
+    // Convert AttributeName to delimited string, preserving namespace (e.g., "import:bar")
+    val oldAttrDelimited = toDelimitedName(oldAttributeName)
+    val newAttrDelimited = toDelimitedName(newAttributeName)
+
+    // Use helpers to get correct JSON paths
+    val oldAttrPath = slickAttributePath(oldAttributeName)
+    val newAttrPath = slickAttributePath(newAttributeName)
+
+    // 1. Rename key in $.attrs using JSON_SET + JSON_REMOVE (fixes test issues)
+    val updateAttrsKeySql =
+      sql"""update ENTITY
+         set attributes = JSON_SET(attributes, $newAttrPath,
+                                   JSON_EXTRACT(attributes, $oldAttrPath)),
+             attributes = JSON_REMOVE(attributes, $oldAttrPath)
+         where workspace_id = $workspaceId
+           and entity_type = $entityType
+           and deleted = 0
+           and JSON_CONTAINS_PATH(attributes, 'one', $oldAttrPath)""".asUpdate
+
+    // 2. Rename embedded references in $.refs
+    val oldRef = s""""a": "$oldAttrDelimited", "t": "$entityType""""
+    val newRef = s""""a": "$newAttrDelimited", "t": "$entityType""""
+    val updateReferencesInAttributesSql =
+      sql"""update ENTITY
+         set attributes = JSON_REPLACE(attributes, $slickRefsPath,
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $oldRef, $newRef) as JSON))
+         where workspace_id = $workspaceId
+           and deleted = 0
+           and JSON_CONTAINS(attributes,
+               JSON_OBJECT('a', $oldAttrDelimited, 't', $entityType),
+               $slickRefsPath)""".asUpdate
+
+    // 3. Update scalar references (used for sort keys)
+    val updateSortValues =
+      sql"""with paths as (
+            select id,
+                   REPLACE(JSON_UNQUOTE(JSON_SEARCH(attributes, 'all', $oldAttrDelimited, null, '$$.refs')), '.a', '') as path
+            from ENTITY
+            where workspace_id = $workspaceId
+              and JSON_CONTAINS(attributes,
+                JSON_OBJECT('a', $oldAttrDelimited, 't', $entityType, 'z', true),
+                $slickRefsPath)
+          ),
+          attrnames as (
+            select paths.id,
+                   JSON_EXTRACT(attributes, CONCAT(paths.path, '.a')) as attr,
+                   JSON_EXTRACT(attributes, CONCAT(paths.path, '.z')) as is_scalar,
+                   JSON_EXTRACT(attributes, CONCAT(paths.path, '.t')) as entity_type
+            from ENTITY e join paths on e.id = paths.id
+            having is_scalar = true and entity_type = $entityType
+          )
+        update ENTITY e
+        join attrnames on e.id = attrnames.id
+        set e.attributes = JSON_REPLACE(e.attributes, CONCAT($slickAttrsPath, '.', attrnames.attr), $newAttrDelimited)
+        where e.id = attrnames.id""".asUpdate
+
+    // Execute all updates and return count of updated ENTITY rows (not refs or sort keys)
+    for {
+      _ <- updateSortValues
+      _ <- updateReferencesInAttributesSql
+      updatedEntities <- updateAttrsKeySql
+    } yield updatedEntities
+  }
+
   /**
    * Renames a single attribute across all entities of the given type in a workspace.
    * This handles both attribute name changes in the entity's attributes JSON structure and
@@ -776,11 +873,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * - updateAttrSql: index range scan on idx_entity_type_name
    * - updateReferencesInAttributesSql: index range scan on idx_entity_type_name
    */
-  def renameAttribute(workspaceId: UUID,
-                      entityType: String,
-                      oldAttributeName: AttributeName,
-                      renameRequest: AttributeRename
-                     ): ReadWriteAction[Int] = {
+  def renameAttribute1(workspaceId: UUID,
+                       entityType: String,
+                       oldAttributeName: AttributeName,
+                       renameRequest: AttributeRename
+  ): ReadWriteAction[Int] = {
     val oldName = AttributeName.toDelimitedName(oldAttributeName)
     val newName = AttributeName.toDelimitedName(renameRequest.newAttributeName)
 
@@ -803,31 +900,20 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldName)})
        """.asUpdate
 
-    val oldRef = s""""n": "$oldName", "t": "$entityType""""
-    val newRef = s""""n": "$newName", "t": "$entityType""""
-
     // Update references in the $.refs array.
-    val updateReferencesInAttributesSql =
-      sql"""update ENTITY
-            set attributes = JSON_REPLACE(attributes,
-                                         $slickRefsPath,
-                                         CAST(
-                                           REPLACE(
-                                             JSON_EXTRACT(attributes, $slickRefsPath),
-                                             $oldRef,
-                                             $newRef
-                                           ) as JSON
-                                         )
-                                        ),
-            record_version = record_version + 1
+    val oldRef = s""""a": "$oldName"""""
+    val newRef = s""""a": "$newName"""""
+    val updateReferencesInAttributesSql = sql"""update ENTITY
+            set attributes = JSON_REPLACE(attributes, $slickRefsPath,
+              CAST(REPLACE(JSON_EXTRACT(attributes, $slickRefsPath), $oldRef, $newRef) as JSON))
             where workspace_id = $workspaceId
             and deleted = 0
-            and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldName, 't', $entityType), $slickRefsPath)""".asUpdate
+            and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldName), $slickRefsPath)""".asUpdate
 
     for {
+      _ <- updateReferencesInAttributesSql
       attrsUpdated <- updateAttrSql
-      refsUpdated <- updateReferencesInAttributesSql
-    } yield attrsUpdated + refsUpdated
+    } yield attrsUpdated
   }
 
   /**
