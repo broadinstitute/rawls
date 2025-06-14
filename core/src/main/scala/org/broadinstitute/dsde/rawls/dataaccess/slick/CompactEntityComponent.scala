@@ -785,6 +785,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   ): ReadWriteAction[Int] = {
     val newAttributeName = renameRequest.newAttributeName
 
+    // Validation ensures that entityType, oldName, and newName are SQL-safe
+    EntityUtils.validateEntityName(oldAttributeName.name)
+    EntityUtils.validateEntityName(newAttributeName.name)
+    EntityUtils.validateEntityType(entityType)
+
     val oldAttrDelimited = AttributeName.toDelimitedName(oldAttributeName)
     val newAttrDelimited = AttributeName.toDelimitedName(newAttributeName)
 
@@ -812,8 +817,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
      """.asUpdate
 
     // Renames references in $.refs using JSON_REPLACE + REPLACE
-    val searchPattern = s""""a":"$oldAttrDelimited""""
-    val replacePattern = s""""a":"$newAttrDelimited""""
+    val searchPattern = s""""a": "$oldAttrDelimited""""
+    val replacePattern = s""""a": "$newAttrDelimited""""
 
     val updateRefsSql = sql"""update ENTITY
         set attributes = JSON_SET(
