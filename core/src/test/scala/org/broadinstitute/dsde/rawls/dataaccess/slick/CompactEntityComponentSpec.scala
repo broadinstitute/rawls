@@ -954,6 +954,33 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       source1.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
     rawData1.attrs.keys should not contain newAttributeName
     rawData1.attrs.keys should contain(AttributeName.withDefaultNS("refList"))
+
+    // Validate the raw JSON string to ensure proper spacing in the pattern matching
+    val rawJson = source1.get.attributes.get
+
+    // Validate that refs follow the proper JSON format with no spaces after colons
+    val refs = rawData1.refs
+    refs should not be empty
+
+    // Check each reference in the raw JSON string
+    refs.foreach { ref =>
+      // The attribute name should be formatted without spaces after colons: "a":"attrName"
+      rawJson should include(s""""a": "${ref.a}"""")
+      // There should not be a version with a space after the colon
+      rawJson should not include s""""a":"${ref.a}""""
+
+      // Same check for entityName
+      rawJson should include(s""""n": "${ref.n}"""")
+      rawJson should not include s""""n":"${ref.n}""""
+
+      // Same check for entityType
+      rawJson should include(s""""t": "${ref.t}"""")
+      rawJson should not include s""""t":"${ref.t}""""
+    }
+
+    // Additionally, verify the old attribute name is not present
+    rawJson should not include s""""a": "${toDelimitedName(originalAttributeName)}""""
+    rawJson should not include s""""a":"${toDelimitedName(originalAttributeName)}""""
   }
 
   /**
