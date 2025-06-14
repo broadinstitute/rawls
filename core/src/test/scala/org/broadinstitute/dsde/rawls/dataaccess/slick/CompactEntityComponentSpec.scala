@@ -964,9 +964,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // Check each reference in the raw JSON string
     refs.foreach { ref =>
-      // The attribute name should be formatted without spaces after colons: "a":"attrName"
+      // The attribute name should be formatted with spaces after colons: "a": "attrName"
       rawJson should include(s""""a": "${ref.a}"""")
-      // There should not be a version with a space after the colon
+      // There should not be a version without a space after the colon
       rawJson should not include s""""a":"${ref.a}""""
 
       // Same check for entityName

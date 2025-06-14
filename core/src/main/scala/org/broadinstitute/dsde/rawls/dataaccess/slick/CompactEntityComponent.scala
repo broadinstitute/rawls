@@ -776,7 +776,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * - updateAttrsKeySql: index range scan on idx_entity_type_name
    * - updateRefsSql: index range scan on idx_entity_type_name
    */
-
   def renameAttribute(
     workspaceId: UUID,
     entityType: String,
