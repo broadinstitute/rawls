@@ -766,36 +766,81 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   /**
-    * Renames a single attribute across all entities of the given type and workspace.
-    * This method assumes the old and new attribute names have already been validated!
-    *
-    * TODO CORE-542: also update in $.refs
-    *
-    * `Using where. Index used: idx_entity_type_name`
-    */
-  def renameAttribute(workspaceId: UUID,
-                      entityType: String,
-                      oldAttributeName: AttributeName,
-                      renameRequest: AttributeRename
-  ): ReadWriteAction[Int] =
+   * Renames a single attribute across all entities of the given type in a workspace.
+   * This handles both attribute name changes in the entity's attributes JSON structure and
+   * also updates any references to this attribute in other entities.
+   *
+   * @return Number of entities that were updated
+   *
+   * execution plans:
+   * - updateAttrsKeySql: index range scan on idx_entity_type_name
+   * - updateRefsSql: index range scan on idx_entity_type_name
+   */
+  def renameAttribute(
+    workspaceId: UUID,
+    entityType: String,
+    oldAttributeName: AttributeName,
+    renameRequest: AttributeRename
+  ): ReadWriteAction[Int] = {
+    val newAttributeName = renameRequest.newAttributeName
+
+    // Validation ensures that entityType, oldName, and newName are SQL-safe
+    EntityUtils.validateEntityName(oldAttributeName.name)
+    EntityUtils.validateEntityName(newAttributeName.name)
+    EntityUtils.validateEntityType(entityType)
+
+    val oldAttrDelimited = AttributeName.toDelimitedName(oldAttributeName)
+    val newAttrDelimited = AttributeName.toDelimitedName(newAttributeName)
+
+    val oldAttrPath = slickAttributePath(oldAttributeName)
+    val newAttrPath = slickAttributePath(newAttributeName)
+
     // rename is implemented as JSON_REMOVE(JSON_SET(JSON_EXTRACT))
     // JSON_EXTRACT gets the value of the old attribute
     // JSON_SET creates the new attribute with that value
     // JSON_REMOVE deletes the old attribute
-    sql"""update ENTITY
-          set record_version = record_version + 1,
-          attributes = JSON_REMOVE(
-                         JSON_SET(
-                           attributes,
-                           ${slickAttributePath(renameRequest.newAttributeName)},
-                           JSON_EXTRACT(attributes, ${slickAttributePath(oldAttributeName)})),
-                         ${slickAttributePath(oldAttributeName)}
-                       )
-          where workspace_id = $workspaceId
-          and entity_type = $entityType
-          and deleted = 0
-          and JSON_CONTAINS_PATH(attributes, 'one', ${slickAttributePath(oldAttributeName)})
-       """.asUpdate
+    val updateAttrsKeySql =
+      sql"""update ENTITY
+        set record_version = record_version + 1,
+        attributes = JSON_REMOVE(
+                       JSON_SET(
+                         attributes,
+                         $newAttrPath,
+                         JSON_EXTRACT(attributes, $oldAttrPath)),
+                       $oldAttrPath
+                     )
+        where workspace_id = $workspaceId
+        and entity_type = $entityType
+        and deleted = 0
+        and JSON_CONTAINS_PATH(attributes, 'one', $oldAttrPath)
+     """.asUpdate
+
+    // Renames references in $.refs using JSON_REPLACE + REPLACE
+    val searchPattern = s""""a": "$oldAttrDelimited""""
+    val replacePattern = s""""a": "$newAttrDelimited""""
+
+    val updateRefsSql = sql"""update ENTITY
+        set attributes = JSON_SET(
+          attributes,
+          $slickRefsPath,
+          CAST(
+            REPLACE(
+              JSON_EXTRACT(attributes, $slickRefsPath),
+              $searchPattern,
+              $replacePattern
+            ) AS JSON
+          )
+        )
+        where workspace_id = $workspaceId
+        and deleted = 0
+        and JSON_CONTAINS(attributes, JSON_OBJECT('a', $oldAttrDelimited), $slickRefsPath)""".asUpdate
+
+    // Execute all updates
+    for {
+      _ <- updateRefsSql
+      entityRowsUpdated <- updateAttrsKeySql
+    } yield entityRowsUpdated
+  }
 
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
