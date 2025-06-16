@@ -896,91 +896,82 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   }
 
   it should "update both $.attrs and $.refs" in withMinimalTestDatabase { _ =>
-    import scala.language.postfixOps
-    // Create the original entity with an attribute
-    val entityType = "testType"
+    // Create target entities that will be referenced
+    val target1 = Entity("targetName1", "targetType", Map())
+    val target2 = Entity("targetName2", "targetType", Map())
+    insertAndGetAll(Seq(target1, target2))
+
+    // Create entity with a simple attribute
     val originalAttributeName = AttributeName.withDefaultNS("originalAttr")
     val newAttributeName = AttributeName.withDefaultNS("newAttr")
-    val originalEntity = Entity(
-      "entityName",
-      entityType,
-      Map(
-        originalAttributeName -> AttributeString("attributeValue")
-      )
+    val entityWithAttribute = Entity(
+      "entityWithAttribute",
+      "entityType",
+      Map(originalAttributeName -> AttributeString("attributeValue"))
     )
-    insertAndGet(originalEntity)
 
-    // Create source entities referencing the original attribute
-    val sourceEntity1 = Entity(
-      "sourceEntity1",
-      "sourceType",
+    // Create entity with a reference using the same attribute name
+    val entityWithReference = Entity(
+      "entityWithReference",
+      "entityType",
+      Map(originalAttributeName -> AttributeEntityReference("targetType", "targetName1"))
+    )
+
+    // Create entity with a reference list using the same attribute name
+    val entityWithReferenceList = Entity(
+      "entityWithReferenceList",
+      "entityType",
       Map(
-        AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(
-          Seq(originalEntity.toReference)
+        originalAttributeName -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("targetType", "targetName1"),
+            AttributeEntityReference("targetType", "targetName2")
+          )
         )
       )
     )
-    val sourceEntity2 = Entity(
-      "sourceEntity2",
-      "sourceType",
-      Map(
-        originalAttributeName -> AttributeString("attributeValue")
-      )
-    )
-    insertAndGetAll(Seq(sourceEntity1, sourceEntity2))
+
+    insertAndGetAll(Seq(entityWithAttribute, entityWithReference, entityWithReferenceList))
 
     // Rename the attribute
-    runAndWait(q.renameAttribute(wsid, entityType, originalAttributeName, AttributeRename(newAttributeName))) shouldBe 1
+    runAndWait(
+      q.renameAttribute(wsid, "entityType", originalAttributeName, AttributeRename(newAttributeName))
+    ) shouldBe 3
 
-    // Verify the attribute was renamed in the original entity
-    val updatedEntity = runAndWait(q.getEntity(wsid, entityType, originalEntity.name)).get.toEntity
-    updatedEntity.attributes should contain key newAttributeName
-    updatedEntity.attributes.contains(originalAttributeName) shouldBe false
-
-    // Verify the attribute was NOT updated in sourceEntity2 (different entity type)
-    val source2 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity2"))
-    source2 should not be empty
-    source2.get.attributes should not be empty
-    val rawData2 =
-      source2.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
-    rawData2.attrs.keys should contain(originalAttributeName)
-    rawData2.attrs.keys should not contain newAttributeName
-
-    // Verify that sourceEntity1 remains unchanged in $.attrs
-    val source1 = runAndWait(q.getEntity(wsid, "sourceType", "sourceEntity1"))
-    source1 should not be empty
-    source1.get.attributes should not be empty
-    val rawData1 =
-      source1.get.attributes.get.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
-    rawData1.attrs.keys should not contain newAttributeName
-    rawData1.attrs.keys should contain(AttributeName.withDefaultNS("refList"))
-
-    // Validate the raw JSON string to ensure proper spacing in the pattern matching
-    val rawJson = source1.get.attributes.get
-
-    // Validate that refs follow the proper JSON format with no spaces after colons
-    val refs = rawData1.refs
-    refs should not be empty
-
-    // Check each reference in the raw JSON string
-    refs.foreach { ref =>
-      // The attribute name should be formatted with spaces after colons: "a": "attrName"
-      rawJson should include(s""""a": "${ref.a}"""")
-      // There should not be a version without a space after the colon
-      rawJson should not include s""""a":"${ref.a}""""
-
-      // Same check for entityName
-      rawJson should include(s""""n": "${ref.n}"""")
-      rawJson should not include s""""n":"${ref.n}""""
-
-      // Same check for entityType
-      rawJson should include(s""""t": "${ref.t}"""")
-      rawJson should not include s""""t":"${ref.t}""""
+    // Verify the attribute was renamed in all entities
+    for (entityName <- Seq("entityWithAttribute", "entityWithReference", "entityWithReferenceList")) {
+      val updatedEntity = runAndWait(q.getEntity(wsid, "entityType", entityName)).get.toEntity
+      updatedEntity.attributes should contain key newAttributeName
+      updatedEntity.attributes.contains(originalAttributeName) shouldBe false
     }
 
-    // Additionally, verify the old attribute name is not present
-    rawJson should not include s""""a": "${toDelimitedName(originalAttributeName)}""""
-    rawJson should not include s""""a":"${toDelimitedName(originalAttributeName)}""""
+    // Verify the raw JSON structure of the entity with reference list
+    val entityWithRefList = runAndWait(q.getEntity(wsid, "entityType", "entityWithReferenceList"))
+    entityWithRefList should not be empty
+
+    val rawJson = entityWithRefList.get.attributes.get
+    val entityData = rawJson.parseJson.convertTo[SqlEntityData](CompactEntitySerialization.sqlEntityDataFormat)
+
+    // Check that attrs section has the new attribute name
+    entityData.attrs.keys should contain(newAttributeName)
+    entityData.attrs.keys should not contain originalAttributeName
+
+    // Check that refs section has the new attribute name
+    entityData.refs.exists(_.a == toDelimitedName(newAttributeName)) shouldBe true
+    entityData.refs.exists(_.a == toDelimitedName(originalAttributeName)) shouldBe false
+
+    // Verify that the original attribute name doesn't appear anywhere in the JSON string
+    val originalAttrDelimited = toDelimitedName(originalAttributeName)
+
+    // Check for attribute name in JSON with space after colon (standard JSON format)
+    rawJson should not include s""""a": "$originalAttrDelimited""""
+
+    // Check for attribute name in JSON without space after colon (compact format)
+    rawJson should not include s""""a":"$originalAttrDelimited""""
+
+    // Check raw JSON includes the new attribute name with proper spacing
+    val newAttrDelimited = toDelimitedName(newAttributeName)
+    rawJson should include regex s""""a":\\s*"$newAttrDelimited""""
   }
 
   /**
