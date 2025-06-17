@@ -44,17 +44,6 @@ trait EntityProvider {
                           parentContext: RawlsRequestContext
   ): Future[Int]
 
-  def saveWorkflowOutputEntities(
-    dataAccess: DataAccess,
-    workspace: Workspace,
-    updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]]
-
-  def listWorkflowEntities(dataAccess: DataAccess,
-                           workspace: Workspace,
-                           entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]]
-
   def copyEntities(sourceWorkspaceContext: Workspace,
                    destWorkspaceContext: Workspace,
                    entityType: String,
@@ -115,6 +104,11 @@ trait EntityProvider {
 
   def listEntities(entityType: String): Source[Entity, NotUsed]
 
+  def listWorkflowEntities(dataAccess: DataAccess,
+                           workspace: Workspace,
+                           entityIds: Seq[Long]
+                          ): ReadAction[Map[Long, Entity]]
+
   def queryEntities(entityType: String,
                     query: EntityQuery,
                     parentContext: RawlsRequestContext
@@ -138,6 +132,12 @@ trait EntityProvider {
   ): Future[Int]
 
   def renameEntityType(oldName: String, renameInfo: EntityTypeRename, parentContext: RawlsRequestContext): Future[Int]
+
+  def saveWorkflowOutputEntities(
+                                  dataAccess: DataAccess,
+                                  workspace: Workspace,
+                                  updatedEntities: Seq[Entity]
+                                ): ReadWriteAction[Int]
 
   def updateEntity(entityType: String,
                    entityName: String,
