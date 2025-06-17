@@ -26,10 +26,11 @@ import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, GcpBucketRequesterPays}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -92,7 +93,8 @@ object WorkspaceService {
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
-                  policyService: PolicyService
+                  policyService: PolicyService,
+                  workspaceSettingService: WorkspaceSettingService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -124,6 +126,7 @@ object WorkspaceService {
       new BillingRepository(dataSource),
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
       new WorkspaceSettingRepository(dataSource),
+      workspaceSettingService,
       policyService
     )
 
@@ -174,6 +177,7 @@ class WorkspaceService(
   val billingRepository: BillingRepository,
   val submissionsRepository: SubmissionsRepository,
   val workspaceSettingsRepository: WorkspaceSettingRepository,
+  val workspaceSettingService: WorkspaceSettingService,
   policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
@@ -979,6 +983,7 @@ class WorkspaceService(
         StatusCodes.BadRequest,
         """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
       )
+
     val workspaceAttributeNames =
       destWorkspaceRequest.attributes.keys
 
@@ -1036,10 +1041,33 @@ class WorkspaceService(
               )
             }
 
-            (clonedEntityCount, clonedAttrCount) <- dataAccess.entityQuery.copyEntitiesToNewWorkspace(
-              sourceWorkspaceContext.workspaceIdAsUUID,
-              destWorkspaceContext.workspaceIdAsUUID
-            )
+            // If source workspace has compact data tables enabled, enable it on the destination workspace as well
+            compactDataTablesEnabled <- workspaceSettingsRepository
+              .getWorkspaceSettingOfType(sourceWorkspaceContext.workspaceIdAsUUID, CompactDataTables)
+              .map {
+                case Some(qs: CompactDataTablesSetting) => qs.config.enabled
+                case _                                  => false
+              }
+            _ = if (compactDataTablesEnabled) {
+              workspaceSettingService.setWorkspaceSettings(
+                destWorkspaceContext.toWorkspaceName,
+                List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+              )
+            }
+            val (clonedEntityCount, clonedAttrCount) =
+              if (compactDataTablesEnabled) {
+                (dataAccess.compactEntityQuery.copyEntitiesToNewWorkspace(
+                   sourceWorkspaceContext.workspaceIdAsUUID,
+                   destWorkspaceContext.workspaceIdAsUUID
+                 ),
+                 0
+                )
+              } else {
+                dataAccess.entityQuery.copyEntitiesToNewWorkspace(
+                  sourceWorkspaceContext.workspaceIdAsUUID,
+                  destWorkspaceContext.workspaceIdAsUUID
+                )
+              }
 
             _ = clonedWorkspaceEntityHistogram += clonedEntityCount
             _ = clonedWorkspaceAttributeHistogram += clonedAttrCount
