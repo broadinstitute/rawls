@@ -105,7 +105,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
+  def batchWriteEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -134,7 +134,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity), insertOnly = true)
+    batchWriteEntities(workspaceId, Seq(entity), insertOnly = true)
 
   /**
     * Read a single entity from the db

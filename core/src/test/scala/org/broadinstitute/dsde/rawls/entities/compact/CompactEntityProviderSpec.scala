@@ -94,7 +94,7 @@ class CompactEntityProviderSpec
 
   it should "issue one insert statement for multiple entities" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
@@ -111,12 +111,12 @@ class CompactEntityProviderSpec
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    verify(mockQuery, times(1)).batchWriteEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
   }
 
   it should "issue multiple insert statements when given large batches" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
@@ -142,12 +142,12 @@ class CompactEntityProviderSpec
 
     // should have called batchCreateEntities multiple times to write the entities
     verify(mockQuery, Mockito.atLeast(2))
-      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+      .batchWriteEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
   }
 
   it should "ask to insert references" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
@@ -184,7 +184,7 @@ class CompactEntityProviderSpec
     val ref3 = EntityPointer("typeB", "name3")
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    verify(mockQuery, times(1)).batchWriteEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
   }
 
   "copyEntities" should "have tests" is pending

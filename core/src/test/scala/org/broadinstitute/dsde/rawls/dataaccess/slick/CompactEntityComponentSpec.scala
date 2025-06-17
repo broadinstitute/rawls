@@ -81,7 +81,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // should throw a primary key violation error
     intercept[SQLIntegrityConstraintViolationException](
-      runAndWait(q.batchCreateEntities(wsid, entities, insertOnly = true))
+      runAndWait(q.batchWriteEntities(wsid, entities, insertOnly = true))
     )
 
     // entity 2 should still exist
@@ -2202,8 +2202,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
     // insert the entities
-    runAndWait(q.batchCreateEntities(wsid, ws1Entities, insertOnly = true)) shouldBe ws1Entities.size
-    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, insertOnly = true)) shouldBe ws2Entities.size
+    runAndWait(q.batchWriteEntities(wsid, ws1Entities, insertOnly = true)) shouldBe ws1Entities.size
+    runAndWait(q.batchWriteEntities(ws2id, ws2Entities, insertOnly = true)) shouldBe ws2Entities.size
 
     // validate listed entities of entityType "testEntityType" in the first workspace
     runAndWait(q.listEntities(wsid, testEntityType)).map(_.toEntity) should contain theSameElementsAs Seq(entity1,
@@ -2711,7 +2711,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
       )
     )
-    runAndWait(q.batchCreateEntities(workspaceId, Seq(entity1Update, entity2Update), insertOnly = false))
+    runAndWait(q.batchWriteEntities(workspaceId, Seq(entity1Update, entity2Update), insertOnly = false))
 
     // Perform the recursive query
     val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1.toPointer)))
@@ -2756,7 +2756,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
 
     // insert the entities
-    runAndWait(q.batchCreateEntities(workspaceId, entities, insertOnly = true)) shouldBe entities.size
+    runAndWait(q.batchWriteEntities(workspaceId, entities, insertOnly = true)) shouldBe entities.size
     // retrieve the entities; retrieved value includes its id
     entities.map { entity =>
       val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
