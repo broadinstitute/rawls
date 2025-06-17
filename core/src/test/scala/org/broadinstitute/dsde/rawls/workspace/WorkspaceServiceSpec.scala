@@ -16,6 +16,8 @@ import bio.terra.workspace.model.{
   WsmPolicyInputs,
   WsmPolicyPair
 }
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -61,6 +63,7 @@ import org.broadinstitute.dsde.rawls.{
   TestExecutionContext
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
@@ -300,6 +303,16 @@ class WorkspaceServiceSpec
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = { ctx =>
+      new WorkspaceSettingService(
+        ctx,
+        workspaceSettingRepository,
+        workspaceRepository,
+        new MockGoogleServicesDAO("groupsPrefix"),
+        samDAO,
+        mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
+      )(executionContext, global)
+    }
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -324,7 +337,8 @@ class WorkspaceServiceSpec
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(

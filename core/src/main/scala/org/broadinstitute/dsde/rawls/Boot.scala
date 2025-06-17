@@ -403,6 +403,19 @@ object Boot extends IOApp with LazyLogging {
           samDAO
         )
 
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
+
+      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+
+      val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
+        new WorkspaceSettingService(_,
+                                    workspaceSettingRepository,
+                                    workspaceRepository,
+                                    gcsDAO,
+                                    samDAO,
+                                    appDependencies.googleStorageService
+        )(implicitly, IORuntime.global)
+
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         shardedExecutionServiceCluster,
@@ -431,7 +444,8 @@ object Boot extends IOApp with LazyLogging {
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
         fastPassServiceConstructor,
-        policyService
+        policyService,
+        workspaceSettingServiceConstructor
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
@@ -452,18 +466,6 @@ object Boot extends IOApp with LazyLogging {
           new WorkspaceRepository(slickDataSource),
           workbenchMetricBaseName = metricsPrefix
         )
-
-      val workspaceRepository = new WorkspaceRepository(slickDataSource)
-
-      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-      val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-        new WorkspaceSettingService(_,
-                                    workspaceSettingRepository,
-                                    workspaceRepository,
-                                    gcsDAO,
-                                    samDAO,
-                                    appDependencies.googleStorageService
-        )(implicitly, IORuntime.global)
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
         slickDataSource,

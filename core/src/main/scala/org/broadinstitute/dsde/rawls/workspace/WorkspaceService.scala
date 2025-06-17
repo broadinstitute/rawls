@@ -26,10 +26,11 @@ import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, GcpBucketRequesterPays}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -92,7 +93,8 @@ object WorkspaceService {
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
-                  policyService: PolicyService
+                  policyService: PolicyService,
+                  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -124,7 +126,8 @@ object WorkspaceService {
       new BillingRepository(dataSource),
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
       new WorkspaceSettingRepository(dataSource),
-      policyService
+      policyService,
+      (context: RawlsRequestContext) => workspaceSettingServiceConstructor(context)
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -174,7 +177,8 @@ class WorkspaceService(
   val billingRepository: BillingRepository,
   val submissionsRepository: SubmissionsRepository,
   val workspaceSettingsRepository: WorkspaceSettingRepository,
-  policyService: PolicyService
+  policyService: PolicyService,
+  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with UserWiths
@@ -979,6 +983,7 @@ class WorkspaceService(
         StatusCodes.BadRequest,
         """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
       )
+
     val workspaceAttributeNames =
       destWorkspaceRequest.attributes.keys
 
@@ -997,6 +1002,13 @@ class WorkspaceService(
         case Some(_) => None
         case None    => Option(sourceWorkspace.bucketName)
       }
+
+      compactDataTablesEnabled <- workspaceSettingsRepository
+        .getWorkspaceSettingOfType(sourceWorkspace.workspaceIdAsUUID, CompactDataTables)
+        .map {
+          case Some(CompactDataTablesSetting(config)) => config.enabled
+          case _                                      => false
+        }
 
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
         Set(AttributeTempTableType.Workspace)
@@ -1036,11 +1048,30 @@ class WorkspaceService(
               )
             }
 
-            (clonedEntityCount, clonedAttrCount) <- dataAccess.entityQuery.copyEntitiesToNewWorkspace(
-              sourceWorkspaceContext.workspaceIdAsUUID,
-              destWorkspaceContext.workspaceIdAsUUID
-            )
-
+            _ =
+              if (compactDataTablesEnabled) {
+                workspaceSettingServiceConstructor(ctx).setWorkspaceSettings(
+                  destWorkspaceContext.toWorkspaceName,
+                  List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+                )
+              } else {
+                Future.successful(())
+              }
+            entityCopyResult =
+              if (compactDataTablesEnabled) {
+                (dataAccess.compactEntityQuery.copyEntitiesToNewWorkspace(
+                   sourceWorkspaceContext.workspaceIdAsUUID,
+                   destWorkspaceContext.workspaceIdAsUUID
+                 ),
+                 0
+                )
+              } else {
+                dataAccess.entityQuery.copyEntitiesToNewWorkspace(
+                  sourceWorkspaceContext.workspaceIdAsUUID,
+                  destWorkspaceContext.workspaceIdAsUUID
+                )
+              }
+            (clonedEntityCount: Int, clonedAttrCount: Int) = entityCopyResult
             _ = clonedWorkspaceEntityHistogram += clonedEntityCount
             _ = clonedWorkspaceAttributeHistogram += clonedAttrCount
 
