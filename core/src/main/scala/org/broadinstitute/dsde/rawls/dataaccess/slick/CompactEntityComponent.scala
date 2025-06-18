@@ -492,7 +492,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   def deleteEntities(workspaceId: UUID, entities: Seq[EntityPointer]): ReadWriteAction[Int] = {
     // join all the clauses with "or": `(entity_type = ? and name in (?)) or `(entity_type = ? and name in (?))`
     val criteriaSql: SQLActionBuilder = reduceSqlActionsWithDelim(generateTypeNameSql(entities.toSet).toSeq, sql" or ")
-    val whereClause = concatSqlActions(sql" (", criteriaSql, sql")")
+    val whereClause = concatSqlActions(sql"(", criteriaSql, sql")")
     val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
     finalSql.asUpdate
   }
@@ -506,7 +506,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * execution plan: index range scan; using where. Index: idx_entity_type_name
     */
   def deleteEntitiesOfType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] = {
-    val whereClause = sql" entity_type = $entityType"
+    val whereClause = sql"entity_type = $entityType"
     val finalSql = deleteEntitiesImpl(workspaceId, whereClause)
     finalSql.asUpdate
   }
@@ -517,10 +517,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // do have foreign keys pointing to them.
   private def deleteEntitiesImpl(workspaceId: UUID, whereClause: SQLActionBuilder): SQLActionBuilder =
     concatSqlActions(
-      sql"""delete ignore
-              from ENTITY
+      sql"""delete ignore from ENTITY
               where workspace_id = $workspaceId
-              and deleted = 1
+              and deleted = 0
               and """,
       whereClause
     )
