@@ -99,7 +99,7 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] = {
+  ): ReadWriteAction[Int] = {
     logAudit("saveWorkflowOutputEntities")
     delegate.saveWorkflowOutputEntities(dataAccess, workspace, updatedEntities)
   }

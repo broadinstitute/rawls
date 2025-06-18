@@ -401,7 +401,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def listWorkflowEntities(dataAccess: DataAccess,
                                     workspace: Workspace,
                                     entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = repository.queries.getEntitiesByIds(workspace.workspaceIdAsUUID, entityIds)
+  ): ReadAction[Map[Long, Entity]] =
+    repository.queries.getEntitiesByIds(workspace.workspaceIdAsUUID, entityIds).map { records =>
+      records.map { rec =>
+        rec.id -> rec.toEntity
+      }.toMap
+    }
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
