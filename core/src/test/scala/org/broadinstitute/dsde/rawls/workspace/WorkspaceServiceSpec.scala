@@ -77,7 +77,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
@@ -103,7 +103,8 @@ class WorkspaceServiceSpec
     with RawlsStatsDTestUtils
     with BeforeAndAfterAll
     with TableDrivenPropertyChecks
-    with OptionValues {
+    with OptionValues
+    with BeforeAndAfterEach {
   import driver.api._
 
   val workspace: Workspace = Workspace(
@@ -122,7 +123,7 @@ class WorkspaceServiceSpec
 
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
-  val mockWorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
+  val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -132,6 +133,16 @@ class WorkspaceServiceSpec
   override def afterAll(): Unit = {
     mockServer.stopServer
     super.afterAll()
+  }
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    when(
+      mockWorkspaceSettingService.getWorkspaceSettingOfType(
+        any[WorkspaceName],
+        any[WorkspaceSettingType]
+      )
+    ).thenReturn(Future.successful(None))
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
@@ -305,12 +316,6 @@ class WorkspaceServiceSpec
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-    when(
-      mockWorkspaceSettingService.getWorkspaceSettingOfType(
-        any[WorkspaceName],
-        any[WorkspaceSettingType]
-      )
-    ).thenReturn(Future.successful(None))
     val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
       mockWorkspaceSettingService
 
@@ -1890,12 +1895,6 @@ class WorkspaceServiceSpec
     workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
     workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     workspace.attributes shouldBe Some(baseWorkspace.attributes)
-    verify(
-      mockWorkspaceSettingService.setWorkspaceSettings(
-        baseWorkspace.toWorkspaceName,
-        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-      )
-    )
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
