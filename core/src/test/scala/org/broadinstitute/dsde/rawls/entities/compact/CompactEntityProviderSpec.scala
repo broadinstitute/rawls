@@ -1163,6 +1163,39 @@ class CompactEntityProviderSpec
     actual.code shouldBe StatusCodes.NotFound
   }
 
+  behavior of "saveWorkflowOutputEntities"
+
+  it should "pass the workspace and requested entities to the downstream query" in {
+    val mockQueries = mock[CompactEntityQuery]
+    when(mockQueries.batchWriteEntities(any(), any(), any()))
+      .thenReturn(DBIO.successful(2))
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    val entitiesToUpdate = Seq(
+      Entity("name1", "type", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name2", "type", Map(AttributeName.withDefaultNS("baz") -> AttributeNumber(42)))
+    )
+
+    val actual = runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, entitiesToUpdate), atMost)
+
+    verify(mockQueries, times(1)).batchWriteEntities(defaultWorkspace.workspaceIdAsUUID, entitiesToUpdate, insertOnly = false)
+  }
+
+  it should "bypass the database when asked to save nothing" in {
+    val mockQueries = mock[CompactEntityQuery]
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    val actual = runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, Seq.empty[Entity]), atMost)
+
+    actual shouldBe 0
+
+    verify(mockQueries, never()).batchWriteEntities(any(), any(), any())
+  }
+
   // ====================================================================================================
   // tests for CompactEntityProvider helper methods
   // ====================================================================================================
