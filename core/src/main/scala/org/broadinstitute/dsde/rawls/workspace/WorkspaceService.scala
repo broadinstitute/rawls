@@ -1057,23 +1057,27 @@ class WorkspaceService(
               } else {
                 Future.successful(())
               }
-            entityCopyResult =
+            _ =
               if (compactDataTablesEnabled) {
-                (dataAccess.compactEntityQuery.copyEntitiesToNewWorkspace(
-                   sourceWorkspaceContext.workspaceIdAsUUID,
-                   destWorkspaceContext.workspaceIdAsUUID
-                 ),
-                 0
-                )
+                dataAccess.compactEntityQuery
+                  .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
+                                              destWorkspaceContext.workspaceIdAsUUID
+                  )
+                  .map { case clonedEntityCount =>
+                    clonedWorkspaceEntityHistogram += clonedEntityCount
+                    clonedWorkspaceAttributeHistogram += 0
+                  }
               } else {
-                dataAccess.entityQuery.copyEntitiesToNewWorkspace(
-                  sourceWorkspaceContext.workspaceIdAsUUID,
-                  destWorkspaceContext.workspaceIdAsUUID
-                )
+                dataAccess.entityQuery
+                  .copyEntitiesToNewWorkspace(
+                    sourceWorkspaceContext.workspaceIdAsUUID,
+                    destWorkspaceContext.workspaceIdAsUUID
+                  )
+                  .map { case (clonedEntityCount, clonedAttrCount) =>
+                    clonedWorkspaceEntityHistogram += clonedEntityCount
+                    clonedWorkspaceAttributeHistogram += clonedAttrCount
+                  }
               }
-            (clonedEntityCount: Int, clonedAttrCount: Int) = entityCopyResult
-            _ = clonedWorkspaceEntityHistogram += clonedEntityCount
-            _ = clonedWorkspaceAttributeHistogram += clonedAttrCount
 
             methodConfigShorts <- dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext)
             _ <- DBIO.sequence(methodConfigShorts.map { methodConfigShort =>
