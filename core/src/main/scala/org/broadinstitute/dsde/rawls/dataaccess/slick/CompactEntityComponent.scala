@@ -485,10 +485,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   /**
-    * Hard-delete all of the specified entities that do not have any foreign keys pointed at them.
+    * Hard-delete all the specified entities that do not have any foreign keys pointed at them.
     *
-    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
-    *   and requires a temporary table for the big union.
+    * execution plan: index range scan; using where. Index: idx_entity_type_name
     */
   def deleteEntities(workspaceId: UUID, entities: Seq[EntityPointer]): ReadWriteAction[Int] = {
     // join all the clauses with "or": `(entity_type = ? and name in (?)) or `(entity_type = ? and name in (?))`
@@ -504,8 +503,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * Note this does not have a "where deleted=0" clause. Thus, it will also hard-delete any entities
     * that were previously soft-deleted but which no longer have anything pointing at them (this is unlikely)
     *
-    * execution plan: admittedly a mess, but no full table scans. Uses indexes and wheres. Lots of joins and unions
-    *   and requires a temporary table for the big union.
+    * execution plan: index range scan; using where. Index: idx_entity_type_name
     */
   def deleteEntitiesOfType(workspaceId: UUID, entityType: String): ReadWriteAction[Int] = {
     val whereClause = sql" entity_type = $entityType"
