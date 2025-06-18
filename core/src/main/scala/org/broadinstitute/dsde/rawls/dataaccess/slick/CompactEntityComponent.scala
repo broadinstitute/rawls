@@ -517,7 +517,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // The `ignore` keyword in the delete statement means this will delete all rows which do NOT
   // have foreign keys pointing to them. It will skip over, and leave in place, any rows which
   // do have foreign keys pointing to them.
-  private def deleteEntitiesImpl(workspaceId: UUID, whereClause: SQLActionBuilder): SQLActionBuilder = {
+  private def deleteEntitiesImpl(workspaceId: UUID, whereClause: SQLActionBuilder): SQLActionBuilder =
     concatSqlActions(
       sql"""delete ignore
               from ENTITY
@@ -526,7 +526,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
               and """,
       whereClause
     )
-  }
 
   // Gets any entities that have references to the entities in the given list
   // Excludes entities that are in the list
