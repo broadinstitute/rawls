@@ -7,7 +7,15 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WorkspaceStageModel, WsmPolicyInput, WsmPolicyInputs, WsmPolicyPair}
+import bio.terra.workspace.model.{
+  AzureContext,
+  GcpContext,
+  WorkspaceDescription,
+  WorkspaceStageModel,
+  WsmPolicyInput,
+  WsmPolicyInputs,
+  WsmPolicyPair
+}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits.catsSyntaxOptionId
@@ -49,7 +57,12 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  RawlsTestUtils,
+  TestExecutionContext
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -292,11 +305,14 @@ class WorkspaceServiceSpec
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
     val mockWorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
-    when(mockWorkspaceSettingService.getWorkspaceSettingOfType(
-      any[WorkspaceName],
-      any[WorkspaceSettingType]
-    )).thenReturn(Future.successful(None))
-    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ => mockWorkspaceSettingService
+    when(
+      mockWorkspaceSettingService.getWorkspaceSettingOfType(
+        any[WorkspaceName],
+        any[WorkspaceSettingType]
+      )
+    ).thenReturn(Future.successful(None))
+    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mockWorkspaceSettingService
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,

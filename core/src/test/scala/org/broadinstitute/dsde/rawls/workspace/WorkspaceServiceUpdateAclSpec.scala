@@ -105,7 +105,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
     workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
     policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS),
-    workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ => mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
+    workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,

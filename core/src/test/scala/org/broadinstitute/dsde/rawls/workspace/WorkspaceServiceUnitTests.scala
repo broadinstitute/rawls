@@ -122,7 +122,7 @@ class WorkspaceServiceUnitTests
     workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
     policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS),
     workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
-      mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
+      mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
