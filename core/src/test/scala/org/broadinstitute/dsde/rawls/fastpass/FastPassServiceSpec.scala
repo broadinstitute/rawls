@@ -36,7 +36,8 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceService,
-  WorkspaceSettingRepository
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
 }
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
@@ -295,6 +296,9 @@ class FastPassServiceSpec
 
     val fastPassServiceConstructor = (_: RawlsRequestContext, _: SlickDataSource) => mockFastPassService
 
+    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -318,7 +322,8 @@ class FastPassServiceSpec
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor
     ) _
 
     def cleanupSupervisor =

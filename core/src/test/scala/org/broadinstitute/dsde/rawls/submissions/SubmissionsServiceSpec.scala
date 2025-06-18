@@ -32,14 +32,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceRepository,
-  WorkspaceService,
-  WorkspaceSettingRepository
-}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -268,7 +261,8 @@ class SubmissionsServiceSpec
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-
+    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -292,7 +286,8 @@ class SubmissionsServiceSpec
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(

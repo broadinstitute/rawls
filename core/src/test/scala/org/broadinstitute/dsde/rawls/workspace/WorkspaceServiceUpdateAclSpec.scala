@@ -104,7 +104,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
     submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
     workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
-    policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS)
+    policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS),
+    workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ => mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -134,7 +135,8 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       billingRepository,
       submissionsRepository,
       workspaceSettingRepository,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor
     )(scala.concurrent.ExecutionContext.global)
 
   // Return mocks with reasonable defaults for basic usage. Override mocked behavior as needed.

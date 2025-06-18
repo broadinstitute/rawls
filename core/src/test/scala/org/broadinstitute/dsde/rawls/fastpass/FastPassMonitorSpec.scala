@@ -4,7 +4,6 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.TpsPaoGetResult
-import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
@@ -35,7 +34,8 @@ import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceService,
-  WorkspaceSettingRepository
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -266,6 +266,9 @@ class FastPassMonitorSpec
 
     val fastPassServiceConstructor = (_: RawlsRequestContext, _: SlickDataSource) => mockFastPassService
 
+    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -289,7 +292,8 @@ class FastPassMonitorSpec
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor
     ) _
 
     def cleanupSupervisor =
