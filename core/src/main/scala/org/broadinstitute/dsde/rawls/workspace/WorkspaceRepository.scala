@@ -210,4 +210,24 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
       access.workspaceQuery.updateBilling(workspaceId, namespace, newBilling)
     }
 
+  /**
+   * Delete an MC workspace and all its dependencies from the database
+   * @param workspace The MC workspace to delete
+   * @return Future[Boolean] indicating whether the deletion was successful
+   */
+  def deleteMcWorkspaceDbEntries(workspace: Workspace)(implicit ex: ExecutionContext): Future[Boolean] =
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Delete components of the workspace
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspace.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspace)
+
+        // Delete workspace settings
+        _ <- dataAccess.workspaceFeatureFlagQuery.deleteAllForWorkspace(workspace.workspaceIdAsUUID)
+
+        // Delete the workspace itself
+        deleted <- dataAccess.workspaceQuery.delete(workspace.toWorkspaceName)
+      } yield deleted
+    }
 }
