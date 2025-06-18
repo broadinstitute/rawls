@@ -16,8 +16,6 @@ import bio.terra.workspace.model.{
   WsmPolicyInputs,
   WsmPolicyPair
 }
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -47,8 +45,10 @@ import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSetting
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -64,7 +64,6 @@ import org.broadinstitute.dsde.rawls.{
   TestExecutionContext
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
@@ -123,6 +122,8 @@ class WorkspaceServiceSpec
 
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
+  val mockWorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     mockServer.startServer()
@@ -148,7 +149,7 @@ class WorkspaceServiceSpec
     lazy val methodConfigurationService: MethodConfigurationService = methodConfigurationServiceConstructor(ctx1)
     lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
-    val slickDataSource: SlickDataSource = dataSource
+    val slickDataSource: SlickDataSource = Mockito.spy(dataSource)
 
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
@@ -304,7 +305,6 @@ class WorkspaceServiceSpec
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-    val mockWorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
     when(
       mockWorkspaceSettingService.getWorkspaceSettingOfType(
         any[WorkspaceName],
@@ -1862,6 +1862,40 @@ class WorkspaceServiceSpec
     workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
     workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     workspace.attributes shouldBe Some(baseWorkspace.attributes)
+  }
+
+  "cloneWorkspace" should "create a V2 Workspace using compact data tables" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    when(
+      mockWorkspaceSettingService.getWorkspaceSettingOfType(
+        baseWorkspace.toWorkspaceName,
+        CompactDataTables
+      )
+    ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProject.value should not be empty
+    workspace.googleProjectNumber should not be empty
+    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
+    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    workspace.attributes shouldBe Some(baseWorkspace.attributes)
+    verify(
+      mockWorkspaceSettingService.setWorkspaceSettings(
+        baseWorkspace.toWorkspaceName,
+        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+      )
+    )
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
