@@ -179,7 +179,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
   /** Given a set of entity ids, return the CompactEntityRecord for those ids.
    *
-   * `TODO: execution plan`
+   * execution plan: index range scan on primary key. Might also use idx_entity_type_name
+   *    depending on the query planner's whims
    */
   def getEntitiesByIds(workspaceId: UUID, ids: Seq[Long]): ReadAction[Seq[CompactEntityRecord]] =
     // short-circuit
