@@ -194,6 +194,75 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual.map(_.toAttributeEntityReference) should contain theSameElementsAs expected
   }
 
+  behavior of "getEntitiesByIds"
+
+  it should "return nothing if asked for nothing" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(q.getEntitiesByIds(wsid, Seq.empty))
+    actual shouldBe empty
+  }
+
+  it should "return existent entities" in withMinimalTestDatabase { dataSource =>
+    import driver.api._ // for Slick queries in this test
+
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // use the high-level Slick query object to get the actual rows saved to the database
+    val slickQuery: ReadAction[Seq[CompactEntityRecord]] = dataSource.dataAccess.compactEntitySlickQuery
+      .filter(e => e.workspaceId === wsid && e.entityType === entity1.entityType)
+      .result
+
+    val records: Seq[CompactEntityRecord] = runAndWait(slickQuery)
+
+    val ids = records.map(_.id)
+
+    val actual = runAndWait(q.getEntitiesByIds(wsid, ids))
+
+    actual should contain theSameElementsAs records
+  }
+
+  it should "return what it found even if not all entities exist" in withMinimalTestDatabase { dataSource =>
+    import driver.api._ // for Slick queries in this test
+
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // use the high-level Slick query object to get the actual rows saved to the database
+    val slickQuery: ReadAction[Seq[CompactEntityRecord]] = dataSource.dataAccess.compactEntitySlickQuery
+      .filter(e => e.workspaceId === wsid && e.entityType === entity1.entityType)
+      .result
+
+    val records: Seq[CompactEntityRecord] = runAndWait(slickQuery)
+
+    // and another query to find the max id currently in ENTITY
+    val maxEntityId = runAndWait(sql"select max(id) from ENTITY".as[Long].head)
+
+    // define which entity we are asking for (entity2)
+    val selectedRecords = records.filter(_.name == entity2.name)
+
+    // request 1 of the ids that exists, and more that do not
+    val ids = selectedRecords.map(_.id) ++ Seq(
+      maxEntityId + 1,
+      maxEntityId + 2
+    )
+
+    val actual = runAndWait(q.getEntitiesByIds(wsid, ids))
+
+    actual should contain theSameElementsAs selectedRecords
+  }
+
   behavior of "ENTITY_KEYS population triggers"
   // the ENTITY_KEYS table is populated by triggers on the ENTITY table.
   // these tests verify the behavior of those triggers.

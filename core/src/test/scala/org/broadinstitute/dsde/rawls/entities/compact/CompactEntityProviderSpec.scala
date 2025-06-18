@@ -740,6 +740,40 @@ class CompactEntityProviderSpec
     actual shouldBe a[EntityNotFoundException]
   }
 
+  behavior of "listWorkflowEntities"
+
+  it should "pass the workspace and requested entity ids to the downstream query" in {
+    val mockQueries = mock[CompactEntityQuery]
+
+    val requestedIds = Seq(111L, 222L, 333L)
+
+    when(mockQueries.getEntitiesByIds(any(), any()))
+      .thenReturn(
+        DBIO.successful(Seq())
+      )
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    runAndWait(provider.listWorkflowEntities(mockDataAccess, defaultWorkspace, requestedIds), atMost)
+
+    verify(mockQueries, times(1)).getEntitiesByIds(defaultWorkspace.workspaceIdAsUUID, requestedIds)
+  }
+
+  it should "bypass the database when asked to save nothing" in {
+    val mockQueries = mock[CompactEntityQuery]
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    val actual =
+      runAndWait(provider.listWorkflowEntities(mockDataAccess, defaultWorkspace, Seq.empty[Long]), atMost)
+
+    actual shouldBe empty
+
+    verify(mockQueries, never()).getEntitiesByIds(any(), any())
+  }
+
   "queryEntities" should "have tests" is pending
   "queryEntitiesSource" should "have tests" is pending
 
@@ -1178,9 +1212,12 @@ class CompactEntityProviderSpec
       Entity("name2", "type", Map(AttributeName.withDefaultNS("baz") -> AttributeNumber(42)))
     )
 
-    val actual = runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, entitiesToUpdate), atMost)
+    runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, entitiesToUpdate), atMost)
 
-    verify(mockQueries, times(1)).batchWriteEntities(defaultWorkspace.workspaceIdAsUUID, entitiesToUpdate, insertOnly = false)
+    verify(mockQueries, times(1)).batchWriteEntities(defaultWorkspace.workspaceIdAsUUID,
+                                                     entitiesToUpdate,
+                                                     insertOnly = false
+    )
   }
 
   it should "bypass the database when asked to save nothing" in {
@@ -1189,7 +1226,8 @@ class CompactEntityProviderSpec
 
     val mockDataAccess = mock[DataAccess]
 
-    val actual = runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, Seq.empty[Entity]), atMost)
+    val actual =
+      runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, Seq.empty[Entity]), atMost)
 
     actual shouldBe 0
 

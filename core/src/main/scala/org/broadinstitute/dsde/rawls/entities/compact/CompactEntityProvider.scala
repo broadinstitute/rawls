@@ -402,10 +402,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                     workspace: Workspace,
                                     entityIds: Seq[Long]
   ): ReadAction[Map[Long, Entity]] =
-    repository.queries.getEntitiesByIds(workspace.workspaceIdAsUUID, entityIds).map { records =>
-      records.map { rec =>
-        rec.id -> rec.toEntity
-      }.toMap
+    if (entityIds.isEmpty)
+      DBIO.successful(Map.empty)
+    else {
+      // get the entities from the database
+      repository.queries.getEntitiesByIds(workspace.workspaceIdAsUUID, entityIds).map { records =>
+        records.map { rec =>
+          rec.id -> rec.toEntity
+        }.toMap
+      }
     }
 
   override def queryEntities(entityType: String,
