@@ -632,7 +632,8 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   ): ReadWriteAction[Int] =
     dataAccess.entityQuery
       .save(workspace, updatedEntities)
-      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt)).map(_.size)
+      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
+      .map(_.size)
 
   override def listWorkflowEntities(dataAccess: DataAccess,
                                     workspace: Workspace,

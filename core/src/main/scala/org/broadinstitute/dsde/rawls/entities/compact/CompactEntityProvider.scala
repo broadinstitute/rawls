@@ -399,9 +399,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   }
 
   override def listWorkflowEntities(dataAccess: DataAccess,
-                           workspace: Workspace,
-                           entityIds: Seq[Long]
-                          ): ReadAction[Map[Long, Entity]] = repository.queries.getEntitiesByIds(workspace.workspaceIdAsUUID, entityIds)
+                                    workspace: Workspace,
+                                    entityIds: Seq[Long]
+  ): ReadAction[Map[Long, Entity]] = repository.queries.getEntitiesByIds(workspace.workspaceIdAsUUID, entityIds)
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
@@ -588,17 +588,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     renameFuture
   }
 
-
   override def saveWorkflowOutputEntities(
-                                  dataAccess: DataAccess,
-                                  workspace: Workspace,
-                                  updatedEntities: Seq[Entity]
-                                ): ReadWriteAction[Int] = {
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Int] =
     if (updatedEntities.isEmpty)
       DBIO.successful(0)
     else
       repository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, updatedEntities, insertOnly = false)
-  }
 
   override def updateEntity(entityType: String,
                             entityName: String,

@@ -195,8 +195,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                where workspace_id = $workspaceId
                and deleted = 0
                and id in ( """,
-              inClause,
-              sql""" );"""
+        inClause,
+        sql""" );"""
       )
 
       // execute

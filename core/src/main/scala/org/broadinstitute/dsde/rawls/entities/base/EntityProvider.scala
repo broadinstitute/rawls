@@ -107,7 +107,7 @@ trait EntityProvider {
   def listWorkflowEntities(dataAccess: DataAccess,
                            workspace: Workspace,
                            entityIds: Seq[Long]
-                          ): ReadAction[Map[Long, Entity]]
+  ): ReadAction[Map[Long, Entity]]
 
   def queryEntities(entityType: String,
                     query: EntityQuery,
@@ -134,10 +134,10 @@ trait EntityProvider {
   def renameEntityType(oldName: String, renameInfo: EntityTypeRename, parentContext: RawlsRequestContext): Future[Int]
 
   def saveWorkflowOutputEntities(
-                                  dataAccess: DataAccess,
-                                  workspace: Workspace,
-                                  updatedEntities: Seq[Entity]
-                                ): ReadWriteAction[Int]
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Int]
 
   def updateEntity(entityType: String,
                    entityName: String,
