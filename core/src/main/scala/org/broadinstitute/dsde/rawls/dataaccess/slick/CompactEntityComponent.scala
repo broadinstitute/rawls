@@ -262,10 +262,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                  batchSize: Int = driverComponent.batchSize
   ): ReadWriteAction[Int] = {
 
-    def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
+    def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) = {
+      logger.info(s"Copying entities in batch $chunk")
       for {
         entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
       } yield entitiesCopiedCount
+    }
 
     val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
 
@@ -360,23 +362,24 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * `query execution plan (for select): index range scan on idx_entity_type_name.`
    */
-  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
-    if (refs.isEmpty) {
-      DBIO.successful(0)
-    } else {
-      val typeNameClauses = generateTypeNameSql(refs)
-      val sql = concatSqlActions(
-        sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
+  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] = {
+    logger.info(s"copying entities in DB")
+    val baseSQL = concatSqlActions(
+      sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
              select name, entity_type, $destWorkspaceId, record_version, 0, attributes
              from ENTITY e
              where e.workspace_id = $sourceWorkspaceId
-             and deleted = 0
-             and ( """,
-        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
-        sql""" );"""
-      )
-      sql.asUpdate
+             and deleted = 0"""
+    )
+    if (refs.nonEmpty) {
+      val typeNameClauses = generateTypeNameSql(refs)
+      val entityTypeNameTuples = reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or ")
+      concatSqlActions(baseSQL, sql" and (", entityTypeNameTuples, sql")").asUpdate
+    } else {
+      logger.info(s"copying ALL entities")
+      baseSQL.asUpdate
     }
+  }
 
   /** Given a set of entity type/name pairs, return the count of those entities that exist.
     *

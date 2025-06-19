@@ -1048,26 +1048,22 @@ class WorkspaceService(
               )
             }
 
-            _ =
+            _ <-
               if (compactDataTablesEnabled) {
-                workspaceSettingServiceConstructor(ctx).setWorkspaceSettings(
-                  destWorkspaceContext.toWorkspaceName,
-                  List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-                )
-              } else {
-                Future.successful(())
-              }
-            _ =
-              if (compactDataTablesEnabled) {
+                logger.info("copying compact data tables to new workspace")
                 dataAccess.compactEntityQuery
                   .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                                               destWorkspaceContext.workspaceIdAsUUID
                   )
                   .map { case clonedEntityCount =>
+                    logger.info(
+                      s"Copied ${clonedEntityCount} compact data entities to new workspace ${destWorkspaceContext.workspaceId}"
+                    )
                     clonedWorkspaceEntityHistogram += clonedEntityCount
                     clonedWorkspaceAttributeHistogram += 0
                   }
               } else {
+                logger.info("copying legacy data tables to new workspace")
                 dataAccess.entityQuery
                   .copyEntitiesToNewWorkspace(
                     sourceWorkspaceContext.workspaceIdAsUUID,
@@ -1127,6 +1123,18 @@ class WorkspaceService(
           }
         }
       )
+
+      _ <-
+        if (compactDataTablesEnabled) {
+          logger.info("enabling compact data tables on new workspace")
+          workspaceSettingServiceConstructor(ctx).setWorkspaceSettings(
+            destWorkspaceContext.toWorkspaceName,
+            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+          )
+        } else {
+          Future.successful()
+        }
+
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
       // we also don't want to block returning a response on this call because it's already a slow endpoint
