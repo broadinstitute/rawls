@@ -30,7 +30,7 @@ import org.scalatest.matchers.should.Matchers.{be, convertToAnyShouldWrapper}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
@@ -157,7 +157,12 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName)).thenReturn(Future.successful(Option(workspaceWithMcType)))
-    when(workspaceRepository.deleteWorkspace(workspaceName)).thenReturn(Future.successful(true))
+    when(
+      workspaceRepository.deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+        ArgumentMatchers.any[ExecutionContext]
+      )
+    )
+      .thenReturn(Future.successful(true))
 
     val gcsDAO = mock[GoogleServicesDAO]
     when(gcsDAO.isAdmin(ArgumentMatchers.any())).thenReturn(Future.successful(true))
@@ -208,7 +213,9 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     )
 
     // Verify deletion steps
-    verify(workspaceRepository).deleteWorkspace(workspaceName)
+    verify(workspaceRepository).deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+      ArgumentMatchers.any[ExecutionContext]
+    )
     verify(samDAO).deleteResource(
       ArgumentMatchers.eq(SamResourceTypeNames.workspace),
       ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
@@ -279,7 +286,12 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName)).thenReturn(Future.successful(Option(workspaceWithMcType)))
-    when(workspaceRepository.deleteWorkspace(workspaceName)).thenReturn(Future.successful(true))
+    when(
+      workspaceRepository.deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+        ArgumentMatchers.any[ExecutionContext]
+      )
+    )
+      .thenReturn(Future.successful(true))
 
     val gcsDAO = mock[GoogleServicesDAO]
     when(gcsDAO.isAdmin(ArgumentMatchers.any())).thenReturn(Future.successful(true))
@@ -368,7 +380,9 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     )
 
     // Verify deleteWorkspace in the repository was called and completed
-    verify(workspaceRepository).deleteWorkspace(workspaceName)
+    verify(workspaceRepository).deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+      ArgumentMatchers.any[ExecutionContext]
+    )
   }
 
   "recursivelyDeleteSamResource" should "delete a resource and its children recursively" in {

@@ -139,7 +139,7 @@ class WorkspaceAdminService(
           }
 
         _ <- recursivelyDeleteSamResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
-        _ <- workspaceRepository.deleteWorkspace(workspaceName)
+        _ <- workspaceRepository.deleteMcWorkspaceDbEntries(workspace)
       } yield ()
     }
 
