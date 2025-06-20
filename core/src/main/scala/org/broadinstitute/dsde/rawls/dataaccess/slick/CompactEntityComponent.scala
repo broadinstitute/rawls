@@ -536,6 +536,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // `execution plan:
   //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
   //    Table function: json_table; Using temporary; Using where for view.`
+  // TODO CORE-544: evaluate optimizing this away from using ENTITY_REFS
   def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
@@ -560,15 +561,14 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // Excludes entities with the same type
   //
   // `execution plan:
-  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
-  //    Table function: json_table; Using temporary; Using where for view.`
+  //    Using index condition (idx_entity_type_name); Using where`
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
-    sql"""select from_entity_type, from_name
-         from ENTITY_REFS
-         where workspace_id = $workspaceId
-         and to_entity_type = $entityType
-         and from_entity_type != $entityType
-       """.as[EntityPointer]
+    sql"""select entity_type, name
+          from ENTITY
+          where workspace_id = $workspaceId
+          and entity_type != $entityType
+          and deleted = 0
+          and JSON_CONTAINS(attributes, JSON_OBJECT('t', $entityType), $slickRefsPath);""".as[EntityPointer]
 
   /*
    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
@@ -1070,7 +1070,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // ====================================================================================================
 
   /** look up the types&names of all entities referenced by the given entity */
-  // TODO CORE-544: optimize this away from using ENTITY_REFS; only used in tests
+  // N.B. MySQL effectively pushes this query's where clause down into the ENTITY_REFS view,
+  // so the query is efficient.
   @VisibleForTesting
   def getReferencesFrom(workspaceId: UUID, from: EntityPointer): ReadAction[Seq[EntityPointer]] =
     sql"""select to_entity_type, to_name
