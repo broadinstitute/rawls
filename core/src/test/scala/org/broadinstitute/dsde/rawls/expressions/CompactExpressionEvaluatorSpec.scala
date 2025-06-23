@@ -672,16 +672,15 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
-        org.mockito.ArgumentMatchers.eq(List())
+        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct.name -> toCompactEntityRecord(sampleForWdlStruct))
+          Some(toCompactEntityRecord(sampleForWdlStruct))
         )
       )
     val context =
@@ -706,16 +705,15 @@ class CompactExpressionEvaluatorSpec
 
   it should "unpack AttributeValueRawJson into optional WDL-arrays" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-        any()
+        org.mockito.ArgumentMatchers.eq(sampleSet2.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleSet2.name -> toCompactEntityRecord(sampleSet2))
+          Some(toCompactEntityRecord(sampleSet2))
         )
       )
     val context =
@@ -790,7 +788,6 @@ class CompactExpressionEvaluatorSpec
         svv.inputName -> svv.value.get
       })
       .getOrElse(Seq.empty)
-    println(result)
 
     val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
@@ -807,6 +804,20 @@ class CompactExpressionEvaluatorSpec
       .thenReturn(
         DBIO.successful(
           Some(toCompactEntityRecord(sampleForWdlStruct))
+        )
+      )
+
+    when(
+      mockQueries.queryRelatedRecordsWithArray(
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
+        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
+        org.mockito.ArgumentMatchers.eq(List("samples"))
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGood.name -> sampleGoodAsCER, sampleGood2.name -> sampleGood2AsCER)
         )
       )
     val context =
@@ -831,16 +842,15 @@ class CompactExpressionEvaluatorSpec
 
   it should "cast attribute numbers into strings for string inputs" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleGood.name),
-        any()
+        org.mockito.ArgumentMatchers.eq(sampleGood.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGood.name -> sampleGoodAsCER)
+          Some(sampleGoodAsCER)
         )
       )
     val context =
@@ -945,15 +955,14 @@ class CompactExpressionEvaluatorSpec
 
   it should "return an empty Seq if no attributes are found" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleGood.name),
-        any()
+        org.mockito.ArgumentMatchers.eq(sampleGood.name)
       )
     ).thenReturn(
       DBIO.successful(
-        Map(sampleGood.name -> sampleGoodAsCER)
+        Some(sampleGoodAsCER)
       )
     )
 
