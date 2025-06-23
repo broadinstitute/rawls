@@ -332,7 +332,17 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
   ): Future[Seq[ExpressionAndResult]] =
     repository.dataSource
       .inTransaction { _ =>
-        repository.queries.queryRelatedRecordsWithArray(workspaceId, entityType, entityName, plan.relationChain)
+        if (plan.relationChain.isEmpty) {
+          repository.queries.getEntity(workspaceId, entityType, entityName).map {
+            case Some(entity) => Map(entity.name -> entity)
+            case None =>
+              throw new RawlsExceptionWithErrorReport(
+                ErrorReport(StatusCodes.NotFound, s"Entity of type $entityType with name $entityName not found.")
+              )
+          }
+        } else {
+          repository.queries.queryRelatedRecordsWithArray(workspaceId, entityType, entityName, plan.relationChain)
+        }
       }
       .map { entityRecords =>
         // Validate entity types if we have entityLookups

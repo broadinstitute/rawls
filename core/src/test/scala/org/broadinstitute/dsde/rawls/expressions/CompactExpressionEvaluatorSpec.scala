@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -1133,6 +1133,30 @@ class CompactExpressionEvaluatorSpec
        Map(sampleGood.name -> Success(Seq(AttributeNumber(1))), sampleGood2.name -> Success(Seq(AttributeNumber(2))))
       )
     )
+  }
+
+  it should "call getEntity if there's no relation chain" in withConfigData {
+    val expression = "this.blah"
+    val queryPlan = QueryPlan(List(), Map(expression -> Set("blah")))
+
+    when(
+      mockQueries.getEntity(any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Some(sampleGoodAsCER)
+        )
+      )
+    val result = compactExpressionEvaluator
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", "sample1", "sample", queryPlan)
+      .futureValue
+    verify(mockQueries, never()).queryRelatedRecordsWithArray(any(), any(), any(), any())
+    result.size shouldBe 1
+    //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
+    result should contain theSameElementsAs Seq(
+      (expression, Map("sample1" -> Success(Seq(AttributeNumber(1)))))
+    )
+
   }
 
 }
