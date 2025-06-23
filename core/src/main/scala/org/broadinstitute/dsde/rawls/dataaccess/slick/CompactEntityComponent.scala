@@ -534,23 +534,28 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // Excludes entities that are in the list
   //
   // `execution plan:
-  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
-  //    Table function: json_table; Using temporary; Using where for view.`
-  // TODO CORE-544: evaluate optimizing this away from using ENTITY_REFS
+  //    Using index condition (idx_entity_type_name); Using where
+  //    Table function: json_table; Using temporary; Using where`
   def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
       sql" or "
     )
     val fromNameClause = reduceSqlActionsWithDelim(
-      generateTypeNameSql(refs.toSet, typeColumn = "from_entity_type", nameColumn = "from_name").toSeq,
+      generateTypeNameSql(refs.toSet).toSeq,
       sql" or "
     )
 
     val baseSql =
-      sql"""select from_entity_type, from_name
-            from ENTITY_REFS
-        where workspace_id = $workspaceId
+      sql"""select e.entity_type, e.name
+            from ENTITY e, JSON_TABLE(
+                e.attributes,
+                '$$.refs[*]' COLUMNS (
+					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+		            to_name varchar(254) PATH '$$.n'
+                 )) jt
+        where e.workspace_id = $workspaceId
+        and e.deleted = 0
         and ("""
 
     concatSqlActions(baseSql, toNameClause, sql") and NOT (", fromNameClause, sql")")
