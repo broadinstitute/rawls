@@ -63,6 +63,11 @@ trait EntityProvider {
                    parentContext: RawlsRequestContext
   ): Future[EntityCopyResponse]
 
+  def clone(sourceWorkspaceContext: Workspace,
+            destWorkspaceContext: Workspace,
+            parentContext: RawlsRequestContext
+  ): Future[(Int, Int)]
+
   def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity]
 
   def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int]
