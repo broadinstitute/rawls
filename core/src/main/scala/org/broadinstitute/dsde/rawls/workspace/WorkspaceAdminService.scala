@@ -126,16 +126,20 @@ class WorkspaceAdminService(
         }
 
         // Add the current caller to the workspace owner policy to ensure they have sufficient permissions
-        _ <- samDAO.admin.addUserToPolicy(
-          SamResourceTypeNames.workspace,
-          workspace.workspaceId,
-          SamWorkspacePolicyNames.owner,
-          ctx.userInfo.userEmail.value,
-          ctx
-        )
+        _ <- samDAO.admin
+          .addUserToPolicy(
+            SamResourceTypeNames.workspace,
+            workspace.workspaceId,
+            SamWorkspacePolicyNames.owner,
+            ctx.userInfo.userEmail.value,
+            ctx
+          )
+          .recover {
+            case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.NotFound) => ()
+          }
 
         _ <- recursivelyDeleteSamResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
-        _ <- workspaceRepository.deleteWorkspace(workspaceName)
+        _ <- workspaceRepository.deleteMcWorkspaceDbEntries(workspace)
       } yield ()
     }
 
@@ -151,8 +155,19 @@ class WorkspaceAdminService(
                                                       ctx: RawlsRequestContext
   ): Future[Unit] =
     for {
-      // Get all child resources
-      children <- samDAO.listResourceChildren(resourceTypeName, resourceId, ctx)
+      // Get all child resources, handle 403 and 404 errors by treating them as empty lists
+      // not having permission to list children is not an error, it means children are not allowed
+      // and can't have children if you don't exist QED
+      children <- samDAO
+        .listResourceChildren(resourceTypeName, resourceId, ctx)
+        .recover {
+          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.Forbidden) =>
+            logger.info(s"Received 403 when listing children of $resourceTypeName/$resourceId, treating as empty list")
+            Seq.empty
+          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.info(s"Received 404 when listing children of $resourceTypeName/$resourceId, treating as empty list")
+            Seq.empty
+        }
 
       // Recursively delete each child resource
       _ <- Future.traverse(children) { child =>
@@ -160,7 +175,10 @@ class WorkspaceAdminService(
       }
 
       // Delete the resource itself
-      _ <- samDAO.deleteResource(resourceTypeName, resourceId, ctx)
+      _ <- samDAO.deleteResource(resourceTypeName, resourceId, ctx).recover {
+        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+          logger.info(s"Received 404 when deleting $resourceTypeName/$resourceId, treating as no-op")
+      }
       _ = logger.info(s"Successfully deleted SAM resource $resourceTypeName/$resourceId")
     } yield ()
 
