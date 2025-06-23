@@ -20,6 +20,8 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
@@ -94,7 +96,8 @@ object WorkspaceService {
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
                   policyService: PolicyService,
-                  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService
+                  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+                  entityService: EntityService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -127,7 +130,8 @@ object WorkspaceService {
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
       new WorkspaceSettingRepository(dataSource),
       policyService,
-      (context: RawlsRequestContext) => workspaceSettingServiceConstructor(context)
+      (context: RawlsRequestContext) => workspaceSettingServiceConstructor(context),
+      entityService
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -178,7 +182,8 @@ class WorkspaceService(
   val submissionsRepository: SubmissionsRepository,
   val workspaceSettingsRepository: WorkspaceSettingRepository,
   policyService: PolicyService,
-  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService
+  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+  entityService: EntityService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with UserWiths
@@ -1003,12 +1008,7 @@ class WorkspaceService(
         case None    => Option(sourceWorkspace.bucketName)
       }
 
-      compactDataTablesEnabled <- workspaceSettingsRepository
-        .getWorkspaceSettingOfType(sourceWorkspace.workspaceIdAsUUID, CompactDataTables)
-        .map {
-          case Some(CompactDataTablesSetting(config)) => config.enabled
-          case _                                      => false
-        }
+      compactDataTablesEnabled <- entityService.isCompactDataTableSettingEnabled(sourceWorkspace.toWorkspaceName)
 
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
         Set(AttributeTempTableType.Workspace)
@@ -1048,32 +1048,15 @@ class WorkspaceService(
               )
             }
 
-            _ <-
-              if (compactDataTablesEnabled) {
-                logger.info("copying compact data tables to new workspace")
-                dataAccess.compactEntityQuery
-                  .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-                                              destWorkspaceContext.workspaceIdAsUUID
-                  )
-                  .map { case clonedEntityCount =>
-                    logger.info(
-                      s"Copied ${clonedEntityCount} compact data entities to new workspace ${destWorkspaceContext.workspaceId}"
-                    )
-                    clonedWorkspaceEntityHistogram += clonedEntityCount
-                    clonedWorkspaceAttributeHistogram += 0
-                  }
-              } else {
-                logger.info("copying legacy data tables to new workspace")
-                dataAccess.entityQuery
-                  .copyEntitiesToNewWorkspace(
-                    sourceWorkspaceContext.workspaceIdAsUUID,
-                    destWorkspaceContext.workspaceIdAsUUID
-                  )
-                  .map { case (clonedEntityCount, clonedAttrCount) =>
-                    clonedWorkspaceEntityHistogram += clonedEntityCount
-                    clonedWorkspaceAttributeHistogram += clonedAttrCount
-                  }
-              }
+            entityProvider <- DBIO.from(entityService.getProviderWithTracing(sourceWorkspaceContext, ctx))
+            _ <- traceDBIOWithParent("clone entities", ctx) { s =>
+              DBIO
+                .from(entityProvider.clone(sourceWorkspaceContext, destWorkspaceContext, s))
+                .map { case (clonedEntityCount, clonedAttrCount) =>
+                  clonedWorkspaceEntityHistogram += clonedEntityCount
+                  clonedWorkspaceAttributeHistogram += clonedAttrCount
+                }
+            }
 
             methodConfigShorts <- dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext)
             _ <- DBIO.sequence(methodConfigShorts.map { methodConfigShort =>

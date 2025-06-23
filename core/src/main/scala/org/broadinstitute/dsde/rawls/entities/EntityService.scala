@@ -520,9 +520,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   /**
    * Helper to get the appropriate EntityProvider for the workspace while also adding tracing info
    */
-  private def getProviderWithTracing(workspaceContext: Workspace,
-                                     localContext: RawlsRequestContext
-  ): Future[EntityProvider] =
+  def getProviderWithTracing(workspaceContext: Workspace, localContext: RawlsRequestContext): Future[EntityProvider] =
     for {
       entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
         entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))
@@ -538,7 +536,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   /**
    * Determine if a workspace has the CompactDataTables setting enabled.
    */
-  private def isCompactDataTableSettingEnabled(workspaceName: WorkspaceName): Future[Boolean] =
+  def isCompactDataTableSettingEnabled(workspaceName: WorkspaceName): Future[Boolean] =
     workspaceSettingServiceConstructor match {
       case Some(serviceConstructor) =>
         val workspaceSettingService = serviceConstructor(ctx)
