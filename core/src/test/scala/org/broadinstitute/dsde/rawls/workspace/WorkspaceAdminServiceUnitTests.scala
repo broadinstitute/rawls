@@ -30,7 +30,7 @@ import org.scalatest.matchers.should.Matchers.{be, convertToAnyShouldWrapper}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
@@ -157,7 +157,12 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceName)).thenReturn(Future.successful(Option(workspaceWithMcType)))
-    when(workspaceRepository.deleteWorkspace(workspaceName)).thenReturn(Future.successful(true))
+    when(
+      workspaceRepository.deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+        ArgumentMatchers.any[ExecutionContext]
+      )
+    )
+      .thenReturn(Future.successful(true))
 
     val gcsDAO = mock[GoogleServicesDAO]
     when(gcsDAO.isAdmin(ArgumentMatchers.any())).thenReturn(Future.successful(true))
@@ -208,7 +213,9 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     )
 
     // Verify deletion steps
-    verify(workspaceRepository).deleteWorkspace(workspaceName)
+    verify(workspaceRepository).deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+      ArgumentMatchers.any[ExecutionContext]
+    )
     verify(samDAO).deleteResource(
       ArgumentMatchers.eq(SamResourceTypeNames.workspace),
       ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
@@ -270,6 +277,112 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     }
 
     exception.errorReport.statusCode shouldEqual Some(StatusCodes.Forbidden)
+  }
+
+  it should "continue deleting the workspace when Sam API calls throw 404 errors" in {
+    val workspaceName = WorkspaceName("test-namespace", "test-name")
+    val workspaceWithMcType = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
+    val userEmail = defaultRequestContext.userInfo.userEmail.value
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName)).thenReturn(Future.successful(Option(workspaceWithMcType)))
+    when(
+      workspaceRepository.deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+        ArgumentMatchers.any[ExecutionContext]
+      )
+    )
+      .thenReturn(Future.successful(true))
+
+    val gcsDAO = mock[GoogleServicesDAO]
+    when(gcsDAO.isAdmin(ArgumentMatchers.any())).thenReturn(Future.successful(true))
+
+    // Mock addUserToPolicy to throw a 404 error
+    val samAdminDAO = mock[SamAdminDAO]
+    when(
+      samAdminDAO.addUserToPolicy(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
+        ArgumentMatchers.eq(SamWorkspacePolicyNames.owner),
+        ArgumentMatchers.eq(userEmail),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(
+      Future.failed(
+        new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound, "Resource not found when adding user to policy")
+        )
+      )
+    )
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.admin).thenReturn(samAdminDAO)
+
+    // Mock listResourceChildren to throw a 404 error
+    when(
+      samDAO.listResourceChildren(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(
+      Future.failed(
+        new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound, "Resource not found when listing children")
+        )
+      )
+    )
+
+    // Mock deleteResource to throw a 404 error
+    when(
+      samDAO.deleteResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(
+      Future.failed(
+        new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound, "Resource not found when deleting")
+        )
+      )
+    )
+
+    val service = workspaceAdminServiceConstructor(
+      samDAO = samDAO,
+      workspaceRepository = workspaceRepository,
+      gcsDAO = gcsDAO
+    )
+
+    // The operation should complete successfully despite the 404 errors
+    Await.result(service.adminDeleteMcWorkspace(workspaceName), Duration.Inf)
+
+    // Verify addUserToPolicy was called
+    verify(samAdminDAO).addUserToPolicy(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
+      ArgumentMatchers.eq(SamWorkspacePolicyNames.owner),
+      ArgumentMatchers.eq(userEmail),
+      ArgumentMatchers.any()
+    )
+
+    // Verify listResourceChildren was called
+    verify(samDAO).listResourceChildren(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
+      ArgumentMatchers.any()
+    )
+
+    // Verify deleteResource was called
+    verify(samDAO).deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(workspaceWithMcType.workspaceId),
+      ArgumentMatchers.any()
+    )
+
+    // Verify deleteWorkspace in the repository was called and completed
+    verify(workspaceRepository).deleteMcWorkspaceDbEntries(ArgumentMatchers.eq(workspaceWithMcType))(
+      ArgumentMatchers.any[ExecutionContext]
+    )
   }
 
   "recursivelyDeleteSamResource" should "delete a resource and its children recursively" in {
