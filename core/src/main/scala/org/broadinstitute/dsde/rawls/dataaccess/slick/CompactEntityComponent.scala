@@ -332,35 +332,41 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         .sequence(batches.map(batch => recursiveGetEntityReferences(workspaceId, batch)))
         .map(_.flatten.toSet)
     } else {
-      val entityTypeNameClauses =
-        generateTypeNameSql(entities, typeColumn = "from_entity_type", nameColumn = "from_name")
+      val entityTypeNameClauses = reduceSqlActionsWithDelim(generateTypeNameSql(entities).toSeq, sql" or ")
 
-      val baseSql = concatSqlActions(
+      val query = concatSqlActions(
         sql"""with recursive EntityReferences as (
-              select er.workspace_id, er.from_entity_id, er.from_entity_type, er.from_name, er.from_attribute_name, er.to_entity_type, er.to_name
-              from ENTITY_REFS er
-              where er.workspace_id = $workspaceId
-              and (""",
-        reduceSqlActionsWithDelim(entityTypeNameClauses.toSeq, sql" or "),
+                select workspace_id, id as from_entity_id, entity_type as from_entity_type, name as from_name,
+             	  jt.from_attribute_name, jt.to_entity_type, jt.to_name
+             	from ENTITY, JSON_TABLE(
+                             attributes,
+                             '$$.refs[*]' COLUMNS (
+                                 from_attribute_name varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+             					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+             		            to_name varchar(254) PATH '$$.n'
+                              )) jt
+             	where workspace_id = $workspaceId
+             	and (""",
+        entityTypeNameClauses,
         sql""")
-           """
+             			union distinct
+             	select e.workspace_id, e.id as from_entity_id, e.entity_type as from_entity_type, e.name as from_name,
+             	  jt.from_attribute_name, jt.to_entity_type, jt.to_name
+             	from EntityReferences er1, ENTITY e, JSON_TABLE(
+                             e.attributes,
+                             '$$.refs[*]' COLUMNS (
+                                 from_attribute_name varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+             					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+             		            to_name varchar(254) PATH '$$.n'
+                              )) jt
+             	where er1.to_entity_type = e.entity_type and er1.to_name = e.name
+             	and e.workspace_id = $workspaceId
+             )
+             select workspace_id, from_entity_id, from_entity_type, from_name, from_attribute_name, to_entity_type, to_name
+                     from EntityReferences;"""
       )
-      val recursiveSql = sql"""
-            union distinct
-            select er.workspace_id, er.from_entity_id, er.from_entity_type, er.from_name, er.from_attribute_name, er.to_entity_type, er.to_name
-            from EntityReferences er1
-            join ENTITY_REFS er
-            on er1.to_entity_type = er.from_entity_type and er1.to_name = er.from_name
-            where er.workspace_id = $workspaceId
-            )
-        """
 
-      val finalSql = sql"""
-        select workspace_id, from_entity_id, from_entity_type, from_name, from_attribute_name, to_entity_type, to_name
-        from EntityReferences
-      """
-
-      concatSqlActions(baseSql, recursiveSql, finalSql).as[RefPointerRecord].map { rows =>
+      query.as[RefPointerRecord].map { rows =>
         rows
           .groupMap(row => EntityPointer(row.fromEntityType, row.fromName))(row =>
             EntityPointer(row.toEntityType, row.toName)
@@ -555,22 +561,28 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // Excludes entities that are in the list
   //
   // `execution plan:
-  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
-  //    Table function: json_table; Using temporary; Using where for view.`
+  //    Using index condition (idx_entity_type_name); Using where
+  //    Table function: json_table; Using temporary; Using where`
   def getReferencesTo(workspaceId: UUID, refs: Seq[EntityPointer]): ReadAction[Seq[EntityPointer]] = {
     val toNameClause = reduceSqlActionsWithDelim(
       generateTypeNameSql(refs.toSet, typeColumn = "to_entity_type", nameColumn = "to_name").toSeq,
       sql" or "
     )
     val fromNameClause = reduceSqlActionsWithDelim(
-      generateTypeNameSql(refs.toSet, typeColumn = "from_entity_type", nameColumn = "from_name").toSeq,
+      generateTypeNameSql(refs.toSet).toSeq,
       sql" or "
     )
 
     val baseSql =
-      sql"""select from_entity_type, from_name
-            from ENTITY_REFS
-        where workspace_id = $workspaceId
+      sql"""select e.entity_type, e.name
+            from ENTITY e, JSON_TABLE(
+                e.attributes,
+                '$$.refs[*]' COLUMNS (
+					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+		            to_name varchar(254) PATH '$$.n'
+                 )) jt
+        where e.workspace_id = $workspaceId
+        and e.deleted = 0
         and ("""
 
     concatSqlActions(baseSql, toNameClause, sql") and NOT (", fromNameClause, sql")")
@@ -581,15 +593,14 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // Excludes entities with the same type
   //
   // `execution plan:
-  //    Using index condition (idx_entity_type_name); Using where; Using temporary on ENTITY
-  //    Table function: json_table; Using temporary; Using where for view.`
+  //    Using index condition (idx_entity_type_name); Using where`
   def getReferencesToType(workspaceId: UUID, entityType: String): ReadAction[Seq[EntityPointer]] =
-    sql"""select from_entity_type, from_name
-         from ENTITY_REFS
-         where workspace_id = $workspaceId
-         and to_entity_type = $entityType
-         and from_entity_type != $entityType
-       """.as[EntityPointer]
+    sql"""select entity_type, name
+          from ENTITY
+          where workspace_id = $workspaceId
+          and entity_type != $entityType
+          and deleted = 0
+          and JSON_CONTAINS(attributes, JSON_OBJECT('t', $entityType), $slickRefsPath);""".as[EntityPointer]
 
   /*
    * Helper: generate `(entity_type = ? and name in (?, ?, ?))` sql clauses for a set of
@@ -1091,6 +1102,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   // ====================================================================================================
 
   /** look up the types&names of all entities referenced by the given entity */
+  // N.B. MySQL effectively pushes this query's where clause down into the ENTITY_REFS view,
+  // so the query is efficient.
   @VisibleForTesting
   def getReferencesFrom(workspaceId: UUID, from: EntityPointer): ReadAction[Seq[EntityPointer]] =
     sql"""select to_entity_type, to_name
