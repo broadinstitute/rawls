@@ -681,6 +681,164 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
     result.get(sample1.name) should equal(Some(insertedSampleWS1))
   }
+
+  // TODO double check these tests are testing what they should
+  it should "be case-sensitive on entity type" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // We'll need this later for comparison
+    val insertedSample = insertAndGet(sample)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        wsid,
+        "Sample_set",
+        "set1",
+        List("samples")
+      )
+    )
+    result.get(sample.name) shouldBe None
+  }
+
+  it should "be case-sensitive on attribute names" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val sample = Entity(
+      "s1",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p1"))
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "s1"))
+    )
+
+    insertAndGetAll(Seq(sample, set, participant))
+
+    val result1 = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "Samples",
+          "participant"
+        )
+      )
+    )
+    result1.get(participant.name) shouldBe None
+
+    val result2 = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "Samples",
+          "Participant"
+        )
+      )
+    )
+    result2.get(participant.name) shouldBe None
+
+    val result3 = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "samples",
+          "Participant"
+        )
+      )
+    )
+    result3.get(participant.name) shouldBe None
+  }
+
+  it should "be case-insensitive on entity name" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // We'll need this later for comparison
+    val insertedSample = insertAndGet(sample)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        wsid,
+        "sample_set",
+        "Set1",
+        List("samples")
+      )
+    )
+    result.get(sample.name) shouldBe Some(insertedSample)
+  }
+
+  it should "handle non-default namespaces in attribute names" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // We'll need this later for comparison
+    val insertedSample = insertAndGet(sample)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName("set_namespace", "samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithArray(
+        wsid,
+        "sample_set",
+        "set1",
+        List("set_namespace:samples")
+      )
+    )
+    result.get(sample.name) shouldBe Some(insertedSample)
+  }
+
   behavior of "listEntityKeysViaEntity"
 
   it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>

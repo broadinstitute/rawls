@@ -668,7 +668,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         )
       ) refs
       WHERE e.name = $arrayEntityId AND e.entity_type = $arrayEntityType AND e.workspace_id = $workspaceId
-      AND refs.attributeName = ${relationChain.head}
+      AND BINARY refs.attributeName = ${relationChain.head}
       """
 
     // Recursively join through each relation in the chain except the last
@@ -700,7 +700,7 @@ JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.roo
         )
       ) refs
       WHERE e.workspace_id = $workspaceId
-      AND refs.attributeName = $rel
+      AND BINARY refs.attributeName = $rel
 """
         }
     } else Seq.empty
@@ -732,7 +732,7 @@ JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.roo
         entityType VARCHAR(255) PATH '$$.t',
         entityName VARCHAR(255) PATH '$$.n'
       )
-    ) refs ON refs.attributeName = $lastRelation
+    ) refs ON BINARY refs.attributeName = $lastRelation
            AND refs.entityType = e.entity_type
            AND refs.entityName = e.name
     WHERE e.workspace_id = $workspaceId

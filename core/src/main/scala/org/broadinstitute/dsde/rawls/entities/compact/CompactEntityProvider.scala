@@ -387,7 +387,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                    gatherInputsResult
     )
 
-  // TODO not sure if a new validator needs to be written
+  // TODO Verify that LocalEntityExpressionValidator works for Compact Entities then rename
   override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {

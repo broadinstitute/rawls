@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
   EntityLookupContext,
   RelationContext
 }
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeValue
 
 import scala.jdk.CollectionConverters._
@@ -32,7 +33,7 @@ class CompactEvaluateVisitor extends TerraExpressionBaseVisitor[Seq[ExpressionLo
       ExpressionLookup(
         expression = ctx.getText,
         relations = ctx.relation().asScala.toList,
-        attributeName = Some(ctx.attributeName().name().getText),
+        attributeName = Some(toDelimitedName(AntlrTerraExpressionParser.toAttributeName(ctx.attributeName()))),
         values = Seq.empty
       )
     )

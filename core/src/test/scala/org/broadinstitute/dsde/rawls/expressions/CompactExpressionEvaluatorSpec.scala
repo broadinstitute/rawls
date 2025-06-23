@@ -25,7 +25,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito
-import org.mockito.Mockito.{never, verify, when}
+import org.mockito.Mockito.{never, reset, verify, when}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -40,6 +41,7 @@ class CompactExpressionEvaluatorSpec
     extends AnyFlatSpec
     with Matchers
     with ScalaFutures
+    with BeforeAndAfterEach
     with TableDrivenPropertyChecks
     with TestDriverComponent
     with MethodConfigTestSupport {
@@ -54,6 +56,11 @@ class CompactExpressionEvaluatorSpec
   when(compactEntityRepository.dataSource).thenReturn(slickDataSource)
 
   val compactExpressionEvaluator = new CompactExpressionEvaluator(compactEntityRepository)
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    reset(mockQueries) // Reset the mock before each test
+  }
 
   // I didn't put this method on the Entity itself because that doesn't have workspace id or id or anything
   def toCompactEntityRecord(entity: Entity): CompactEntityRecord = CompactEntityRecord(
@@ -116,6 +123,17 @@ class CompactExpressionEvaluatorSpec
               values = Seq.empty
             )
           )
+        ),
+        (
+          "this.pfb:projects",
+          List(
+            ExpressionLookup(
+              expression = "this.pfb:projects",
+              relations = List(),
+              attributeName = Some("pfb:projects"),
+              values = Seq.empty
+            )
+          )
         )
       )
 
@@ -131,6 +149,11 @@ class CompactExpressionEvaluatorSpec
           "[[10,11,12],this.samples.blah]",
           "samples.",
           Some("blah")
+        ),
+        (
+          "this.pfb:projects.id",
+          "pfb:projects.",
+          Some("id")
         )
 
 //        ("workspace.sample1ref.type", "sample1ref.", "type") // TODO do i need to implement workspace entities?
@@ -175,15 +198,14 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve method config inputs for a single entity" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
-                                               org.mockito.ArgumentMatchers.eq(sampleGood.name),
-                                               any()
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> sampleGoodAsCER)
+          Some(sampleGoodAsCER)
         )
       )
 
@@ -317,15 +339,14 @@ class CompactExpressionEvaluatorSpec
 
   it should "return error on missing values" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               org.mockito.ArgumentMatchers.eq(sampleMissingValue.entityType),
-                                               org.mockito.ArgumentMatchers.eq(sampleMissingValue.name),
-                                               any()
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleMissingValue.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleMissingValue.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleMissingValue.name -> sampleMissingValueAsCER)
+          Some(sampleMissingValueAsCER)
         )
       )
 
@@ -430,15 +451,14 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve empty lists into AttributeEmptyLists" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
-                                               org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                               any()
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleSet2.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleSet2.name -> sampleSet2AsCER)
+          Some(sampleSet2AsCER)
         )
       )
     val context =
@@ -454,15 +474,14 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve empty lists into empty Array in nested WDL Struct" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
-                                               org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
-                                               any()
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct.name -> sampleForWdlStructAsCER)
+          Some(sampleForWdlStructAsCER)
         )
       )
     val context =
@@ -485,15 +504,14 @@ class CompactExpressionEvaluatorSpec
 
   it should "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
-                                               org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
-                                               org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                               any()
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleSet2.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleSet2.name -> sampleSet2AsCER)
+          Some(sampleSet2AsCER)
         )
       )
 
@@ -559,16 +577,15 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name),
-        org.mockito.ArgumentMatchers.eq(List())
+        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct2.name -> toCompactEntityRecord(sampleForWdlStruct2))
+          Some(toCompactEntityRecord(sampleForWdlStruct2))
         )
       )
     val context =
@@ -607,16 +624,15 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name),
-        org.mockito.ArgumentMatchers.eq(List())
+        org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name)
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct2.name -> toCompactEntityRecord(sampleForWdlStruct2))
+          Some(toCompactEntityRecord(sampleForWdlStruct2))
         )
       )
     val context =
@@ -880,15 +896,14 @@ class CompactExpressionEvaluatorSpec
 
   it should "return attribute values for a simple attribute" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
-        org.mockito.ArgumentMatchers.eq(sampleGood.name),
-        any()
+        org.mockito.ArgumentMatchers.eq(sampleGood.name)
       )
     ).thenReturn(
       DBIO.successful(
-        Map(sampleGood.name -> sampleGoodAsCER)
+        Some(sampleGoodAsCER)
       )
     )
 
@@ -960,15 +975,14 @@ class CompactExpressionEvaluatorSpec
     val entityWithListCER = toCompactEntityRecord(entityWithList)
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.getEntity(
         any(),
         org.mockito.ArgumentMatchers.eq(entityWithList.entityType),
-        org.mockito.ArgumentMatchers.eq(entityWithList.name),
-        any()
+        org.mockito.ArgumentMatchers.eq(entityWithList.name)
       )
     ).thenReturn(
       DBIO.successful(
-        Map(entityWithList.name -> entityWithListCER)
+        Some(entityWithListCER)
       )
     )
 

@@ -33,6 +33,7 @@ case class QueryPlan(
 
 class CompactExpressionEvaluator(repository: CompactEntityRepository) extends ExpressionEvaluationSupport {
 
+  // TODO: if the end result is a reference attribute, we get blank.  i think that should be an error
   /**
    * Evaluates a single expression against a specific entity and returns the resulting attribute values.
    *
@@ -332,7 +333,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
   ): Future[Seq[ExpressionAndResult]] =
     repository.dataSource
       .inTransaction { _ =>
-        if (plan.relationChain.isEmpty) {
+        if (plan.relationChain.isEmpty && entityLookups.isEmpty) {
           repository.queries.getEntity(workspaceId, entityType, entityName).map {
             case Some(entity) => Map(entity.name -> entity)
             case None =>
