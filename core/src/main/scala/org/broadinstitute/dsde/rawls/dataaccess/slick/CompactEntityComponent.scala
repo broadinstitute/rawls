@@ -635,16 +635,15 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * @param arrayEntityType  The type of the root entity to start the query from.
    * @param arrayEntityId    The name of the root entity to start the query from.
    * @param relationChain   A chain of strings representing the relation columns between entities
-   * @return                 A `ReadAction` that resolves to a map where the keys are entity names and the values
-   *                         are sequences of `CompactEntityRecord` objects representing the related entities.
-   *                         The result includes all entities found by traversing the specified relationships.
+   * @return                 A `ReadAction` that resolves to a map of entity name to `CompactEntityRecord`
+   *                         that includes all entities found by traversing the specified relationships.
    */
   def queryRelatedRecordsWithArray(
     workspaceId: UUID,
     arrayEntityType: String,
     arrayEntityId: String,
     relationChain: Seq[String]
-  ): ReadAction[Map[String, Seq[CompactEntityRecord]]] = {
+  ): ReadAction[Map[String, CompactEntityRecord]] = {
     // The base join finds the starting entity and gets its relevant relation attributes to find the next entities to query for
     val baseJoin =
       sql"""
@@ -751,7 +750,7 @@ JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.roo
       )
 
     cte.as[CompactEntityRecord].map { results =>
-      results.groupBy(_.name).map { case (entityName, entities) => entityName -> entities }
+      results.groupBy(_.name).view.mapValues(_.head).toMap
     }
   }
 

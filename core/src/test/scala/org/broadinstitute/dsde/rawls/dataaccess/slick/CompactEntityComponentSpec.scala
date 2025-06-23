@@ -417,7 +417,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    result.get(sample.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSample)
+    result.get(sample.name) shouldBe Some(insertedSample)
   }
 
   it should "get the records for a list of references" in withMinimalTestDatabase { _ =>
@@ -462,9 +462,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    // TODO this returns multiple of each entity.  is there a case where that makes sense or should the method reduce it to one each?
-    result.get(sample1.name).toSeq.flatten should contain(insertedSample1)
-    result.get(sample2.name).toSeq.flatten should contain(insertedSample2)
+    result.get(sample1.name) shouldBe Some(insertedSample1)
+    result.get(sample2.name) shouldBe Some(insertedSample2)
   }
 
   it should "get the record for a chain of references" in withMinimalTestDatabase { _ =>
@@ -503,7 +502,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(participant.name).toSeq.flatten should contain(insertedParticipant)
+    result.get(participant.name) shouldBe Some(insertedParticipant)
   }
 
   it should "get the records for a chain of references with an array" in withMinimalTestDatabase { _ =>
@@ -559,8 +558,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(participant1.name).toSeq.flatten should contain(insertedParticipant1)
-    result.get(participant2.name).toSeq.flatten should contain(insertedParticipant2)
+    result.get(participant1.name) shouldBe Some(insertedParticipant1)
+    result.get(participant2.name) shouldBe Some(insertedParticipant2)
   }
 
   it should "get the records for a chain of references with multiple arrays" in withMinimalTestDatabase { _ =>
@@ -638,10 +637,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(participant1.name).toSeq.flatten should contain(insertedParticipant1)
-    result.get(participant2.name).toSeq.flatten should contain(insertedParticipant2)
-    result.get(participant3.name).toSeq.flatten should contain(insertedParticipant3)
-    result.get(participant4.name).toSeq.flatten should contain(insertedParticipant4)
+    result.get(participant1.name) should equal(Some(insertedParticipant1))
+    result.get(participant2.name) should equal(Some(insertedParticipant2))
+    result.get(participant3.name) should equal(Some(insertedParticipant3))
+    result.get(participant4.name) should equal(Some(insertedParticipant4))
   }
 
   it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
@@ -680,7 +679,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    result.get(sample1.name).toSeq.flatten should contain theSameElementsAs Seq(insertedSampleWS1)
+    result.get(sample1.name) should equal(Some(insertedSampleWS1))
   }
   behavior of "listEntityKeysViaEntity"
 

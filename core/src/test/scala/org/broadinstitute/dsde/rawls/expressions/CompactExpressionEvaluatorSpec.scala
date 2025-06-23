@@ -183,7 +183,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER))
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER)
         )
       )
 
@@ -218,9 +218,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER),
-              sampleMissingValueAsCER.name -> Seq(sampleMissingValueAsCER)
-          )
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleMissingValueAsCER.name -> sampleMissingValueAsCER)
         )
       )
 
@@ -229,7 +227,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleGood2AsCER.name -> sampleGood2AsCER)
         )
       )
 
@@ -238,7 +236,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleWithSingleElementArrayAsCER.name -> Seq(sampleWithSingleElementArrayAsCER))
+          Map(sampleWithSingleElementArrayAsCER.name -> sampleWithSingleElementArrayAsCER)
         )
       )
 
@@ -290,7 +288,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleGood2AsCER.name -> sampleGood2AsCER)
         )
       )
 
@@ -327,7 +325,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleMissingValue.name -> Seq(sampleMissingValueAsCER))
+          Map(sampleMissingValue.name -> sampleMissingValueAsCER)
         )
       )
 
@@ -365,7 +363,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleGood2AsCER.name -> sampleGood2AsCER)
         )
       )
 
@@ -412,9 +410,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER),
-              sampleMissingValueAsCER.name -> Seq(sampleMissingValueAsCER)
-          )
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleMissingValueAsCER.name -> sampleMissingValueAsCER)
         )
       )
 
@@ -442,7 +438,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleSet2.name -> Seq(sampleSet2AsCER))
+          Map(sampleSet2.name -> sampleSet2AsCER)
         )
       )
     val context =
@@ -466,7 +462,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct.name -> Seq(sampleForWdlStructAsCER))
+          Map(sampleForWdlStruct.name -> sampleForWdlStructAsCER)
         )
       )
     val context =
@@ -497,7 +493,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleSet2.name -> Seq(sampleSet2AsCER))
+          Map(sampleSet2.name -> sampleSet2AsCER)
         )
       )
 
@@ -527,7 +523,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
+          Map(sampleGood.name -> sampleGoodAsCER, sampleGood2.name -> sampleGood2AsCER)
         )
       )
     val context =
@@ -558,7 +554,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleWithSingleElementArray.name -> Seq(sampleWithSingleElementArrayAsCER))
+          Map(sampleWithSingleElementArray.name -> sampleWithSingleElementArrayAsCER)
         )
       )
 
@@ -572,7 +568,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct2.name -> Seq(toCompactEntityRecord(sampleForWdlStruct2)))
+          Map(sampleForWdlStruct2.name -> toCompactEntityRecord(sampleForWdlStruct2))
         )
       )
     val context =
@@ -606,7 +602,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleWithSingleElementArray.name -> Seq(sampleWithSingleElementArrayAsCER))
+          Map(sampleWithSingleElementArray.name -> sampleWithSingleElementArrayAsCER)
         )
       )
 
@@ -620,7 +616,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct2.name -> Seq(toCompactEntityRecord(sampleForWdlStruct2)))
+          Map(sampleForWdlStruct2.name -> toCompactEntityRecord(sampleForWdlStruct2))
         )
       )
     val context =
@@ -655,7 +651,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
+          Map(sampleGood.name -> sampleGoodAsCER, sampleGood2.name -> sampleGood2AsCER)
         )
       )
 
@@ -669,7 +665,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleForWdlStruct.name -> Seq(toCompactEntityRecord(sampleForWdlStruct)))
+          Map(sampleForWdlStruct.name -> toCompactEntityRecord(sampleForWdlStruct))
         )
       )
     val context =
@@ -703,7 +699,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleSet2.name -> Seq(toCompactEntityRecord(sampleSet2)))
+          Map(sampleSet2.name -> toCompactEntityRecord(sampleSet2))
         )
       )
     val context =
@@ -765,7 +761,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
+          Map(sampleGood.name -> sampleGoodAsCER, sampleGood2.name -> sampleGood2AsCER)
         )
       )
     val context =
@@ -828,7 +824,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGood.name -> Seq(sampleGoodAsCER))
+          Map(sampleGood.name -> sampleGoodAsCER)
         )
       )
     val context =
@@ -859,7 +855,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
+          Map(sampleGood.name -> sampleGoodAsCER, sampleGood2.name -> sampleGood2AsCER)
         )
       )
 
@@ -892,7 +888,7 @@ class CompactExpressionEvaluatorSpec
       )
     ).thenReturn(
       DBIO.successful(
-        Map(sampleGood.name -> Seq(sampleGoodAsCER))
+        Map(sampleGood.name -> sampleGoodAsCER)
       )
     )
 
@@ -917,7 +913,7 @@ class CompactExpressionEvaluatorSpec
       )
     ).thenReturn(
       DBIO.successful(
-        Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
+        Map(sampleGood.name -> sampleGoodAsCER, sampleGood2.name -> sampleGood2AsCER)
       )
     )
 
@@ -942,7 +938,7 @@ class CompactExpressionEvaluatorSpec
       )
     ).thenReturn(
       DBIO.successful(
-        Map(sampleGood.name -> Seq(sampleGoodAsCER))
+        Map(sampleGood.name -> sampleGoodAsCER)
       )
     )
 
@@ -972,7 +968,7 @@ class CompactExpressionEvaluatorSpec
       )
     ).thenReturn(
       DBIO.successful(
-        Map(entityWithList.name -> Seq(entityWithListCER))
+        Map(entityWithList.name -> entityWithListCER)
       )
     )
 
@@ -997,7 +993,7 @@ class CompactExpressionEvaluatorSpec
       )
     ).thenReturn(
       DBIO.successful(
-        Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleMissingValue.name -> Seq(sampleMissingValueAsCER))
+        Map(sampleGood.name -> sampleGoodAsCER, sampleMissingValue.name -> sampleMissingValueAsCER)
       )
     )
 
@@ -1070,7 +1066,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleGood2AsCER.name -> sampleGood2AsCER)
         )
       )
     val result = compactExpressionEvaluator
@@ -1095,7 +1091,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleGood2AsCER.name -> sampleGood2AsCER)
         )
       )
     val result = compactExpressionEvaluator
@@ -1124,7 +1120,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+          Map(sampleGoodAsCER.name -> sampleGoodAsCER, sampleGood2AsCER.name -> sampleGood2AsCER)
         )
       )
     val result = compactExpressionEvaluator

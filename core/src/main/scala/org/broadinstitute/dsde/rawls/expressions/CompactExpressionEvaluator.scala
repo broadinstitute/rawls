@@ -337,7 +337,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       .map { entityRecords =>
         // Validate entity types if we have entityLookups
         if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
-          val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
+          val actualEntityTypes = entityRecords.values.map(_.entityType).toSet
           if (actualEntityTypes.nonEmpty && !actualEntityTypes.contains(rootEntityType)) {
             val actualTypesStr = actualEntityTypes.mkString(", ")
             throw new RawlsExceptionWithErrorReport(
@@ -358,7 +358,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             if (entityType == rootEntityType) {
               // Entity type is the root entity type: aggregate all attributes and map to the original entity name
               val attrs: Seq[AttributeValue] =
-                entityRecords.values.flatten.toSeq.flatMap(_.toEntity.attributes.get(attributeName)).flatMap {
+                entityRecords.values.toSeq.flatMap(_.toEntity.attributes.get(attributeName)).flatMap {
                   case avl: AttributeValueList => avl.list
                   case av: AttributeValue      => Seq(av)
                   case _                       => Seq.empty
@@ -366,11 +366,12 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               (expression, Map(entityName -> Success(attrs)))
             } else {
               // Entity type is not root entity type, e.g. we're dealing with a set: map to actual entity names from the query results
-              val entityToAttributeValues = entityRecords.map { case (actualEntityName, records) =>
-                val attrs: Seq[AttributeValue] = records.flatMap(_.toEntity.attributes.get(attributeName)).flatMap {
-                  case avl: AttributeValueList => avl.list
-                  case av: AttributeValue      => Seq(av)
-                  case _                       => Seq.empty
+              val entityToAttributeValues = entityRecords.map { case (actualEntityName, record) =>
+                val attrs: Seq[AttributeValue] = record.toEntity.attributes
+                  .get(attributeName) match {
+                  case Some(avl: AttributeValueList) => avl.list
+                  case Some(av: AttributeValue)      => Seq(av)
+                  case _                             => Seq.empty
                 }
                 actualEntityName -> Success(attrs)
               }
