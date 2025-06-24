@@ -177,6 +177,14 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       query.as[CompactEntityRecord]
     }
 
+  def getAllEntities(workspaceId: UUID): ReadAction[Seq[CompactEntityRecord]] = {
+    val query = concatSqlActions(sql"""select id, name, entity_type, workspace_id, record_version, 0, attributes
+                                   from ENTITY e
+                                   where e.workspace_id = $workspaceId
+                                   and deleted = 0""")
+    query.as[CompactEntityRecord]
+  }
+
   /** Given a set of entity type/name pairs, return the CompactEntityVersionRecord for those pairs.
     *
     * `execution plan: index range scan on idx_entity_type_name`
@@ -273,7 +281,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       Iterator(entityRefs)
     }
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
-
+    logger.info("copied entities")
     allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum }
   }
 

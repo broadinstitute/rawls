@@ -133,7 +133,7 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
                      destWorkspaceContext: Workspace,
                      parentContext: RawlsRequestContext
   ): Future[(Int, Int)] = {
-    logAudit("cloneWorkspaceEntities")
+    logAudit("clone")
     delegate.clone(sourceWorkspaceContext, destWorkspaceContext, parentContext)
   }
 
