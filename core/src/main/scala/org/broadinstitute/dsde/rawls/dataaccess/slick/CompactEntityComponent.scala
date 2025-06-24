@@ -262,15 +262,16 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                  batchSize: Int = driverComponent.batchSize
   ): ReadWriteAction[Int] = {
 
-    def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) = {
-      logger.info(s"Copying entities in batch $chunk")
+    def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
       for {
         entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
       } yield entitiesCopiedCount
+
+    val chunks: Iterator[Set[EntityPointer]] = if (entityRefs.size > batchSize) {
+      entityRefs.grouped(batchSize)
+    } else {
+      Iterator(entityRefs)
     }
-
-    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
-
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 
     allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum }
@@ -362,8 +363,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * `query execution plan (for select): index range scan on idx_entity_type_name.`
    */
-  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] = {
-    logger.info(s"copying entities in DB")
+  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): WriteAction[Int] = {
     val baseSQL = concatSqlActions(
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
              select name, entity_type, $destWorkspaceId, record_version, 0, attributes
@@ -374,10 +374,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     if (refs.nonEmpty) {
       val typeNameClauses = generateTypeNameSql(refs)
       val entityTypeNameTuples = reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or ")
-      concatSqlActions(baseSQL, sql" and (", entityTypeNameTuples, sql")").asUpdate
+      concatSqlActions(baseSQL, sql" and (", entityTypeNameTuples, sql")").as[Int].head
     } else {
-      logger.info(s"copying ALL entities")
-      baseSQL.asUpdate
+      baseSQL.as[Int].head
     }
   }
 
