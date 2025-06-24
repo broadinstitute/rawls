@@ -269,6 +269,8 @@ class FastPassMonitorSpec
     val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
       mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
 
+    val entityServiceConstructor: RawlsRequestContext => EntityService = _ => mock[EntityService](RETURNS_SMART_NULLS)
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -293,7 +295,8 @@ class FastPassMonitorSpec
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService,
-      workspaceSettingServiceConstructor
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     def cleanupSupervisor =

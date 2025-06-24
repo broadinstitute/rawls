@@ -129,6 +129,14 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     )
   }
 
+  override def clone(sourceWorkspaceContext: Workspace,
+                     destWorkspaceContext: Workspace,
+                     parentContext: RawlsRequestContext
+  ): Future[(Int, Int)] = {
+    logAudit("cloneWorkspaceEntities")
+    delegate.clone(sourceWorkspaceContext, destWorkspaceContext, parentContext)
+  }
+
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
     logAudit("createEntity")
     delegate.createEntity(entity, parentContext)

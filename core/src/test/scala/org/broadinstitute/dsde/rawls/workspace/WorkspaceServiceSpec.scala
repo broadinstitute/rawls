@@ -343,7 +343,8 @@ class WorkspaceServiceSpec
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService,
-      workspaceSettingServiceConstructor
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(

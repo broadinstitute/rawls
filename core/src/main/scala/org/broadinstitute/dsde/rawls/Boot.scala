@@ -416,6 +416,15 @@ object Boot extends IOApp with LazyLogging {
                                     appDependencies.googleStorageService
         )(implicitly, IORuntime.global)
 
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix,
+        entityManager,
+        appConfigManager.conf.getInt("entities.pageSizeLimit"),
+        Option(workspaceSettingServiceConstructor)
+      )
+
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         shardedExecutionServiceCluster,
@@ -445,7 +454,8 @@ object Boot extends IOApp with LazyLogging {
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
         fastPassServiceConstructor,
         policyService,
-        workspaceSettingServiceConstructor
+        workspaceSettingServiceConstructor,
+        entityServiceConstructor
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
@@ -466,15 +476,6 @@ object Boot extends IOApp with LazyLogging {
           new WorkspaceRepository(slickDataSource),
           workbenchMetricBaseName = metricsPrefix
         )
-
-      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
-        slickDataSource,
-        samDAO,
-        workbenchMetricBaseName = metricsPrefix,
-        entityManager,
-        appConfigManager.conf.getInt("entities.pageSizeLimit"),
-        Option(workspaceSettingServiceConstructor)
-      )
 
       val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
         slickDataSource,

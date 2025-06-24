@@ -97,7 +97,7 @@ object WorkspaceService {
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
                   policyService: PolicyService,
                   workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
-                  entityService: EntityService
+                  entityServiceConstructor: RawlsRequestContext => EntityService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -131,7 +131,7 @@ object WorkspaceService {
       new WorkspaceSettingRepository(dataSource),
       policyService,
       (context: RawlsRequestContext) => workspaceSettingServiceConstructor(context),
-      entityService
+      (context: RawlsRequestContext) => entityServiceConstructor(context)
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -183,7 +183,7 @@ class WorkspaceService(
   val workspaceSettingsRepository: WorkspaceSettingRepository,
   policyService: PolicyService,
   workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
-  entityService: EntityService
+  entityServiceConstructor: RawlsRequestContext => EntityService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with UserWiths
@@ -1008,7 +1008,9 @@ class WorkspaceService(
         case None    => Option(sourceWorkspace.bucketName)
       }
 
-      compactDataTablesEnabled <- entityService.isCompactDataTableSettingEnabled(sourceWorkspace.toWorkspaceName)
+      compactDataTablesEnabled <- entityServiceConstructor(ctx).isCompactDataTableSettingEnabled(
+        sourceWorkspace.toWorkspaceName
+      )
 
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
         Set(AttributeTempTableType.Workspace)
@@ -1048,7 +1050,9 @@ class WorkspaceService(
               )
             }
 
-            entityProvider <- DBIO.from(entityService.getProviderWithTracing(sourceWorkspaceContext, ctx))
+            entityProvider <- DBIO.from(
+              entityServiceConstructor(ctx).getProviderWithTracing(sourceWorkspaceContext, ctx)
+            )
             _ <- traceDBIOWithParent("clone entities", ctx) { s =>
               DBIO
                 .from(entityProvider.clone(sourceWorkspaceContext, destWorkspaceContext, s))

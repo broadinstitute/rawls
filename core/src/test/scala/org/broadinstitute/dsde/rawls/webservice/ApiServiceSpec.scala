@@ -375,7 +375,8 @@ trait ApiServiceSpec
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService,
-      workspaceSettingServiceConstructor
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
