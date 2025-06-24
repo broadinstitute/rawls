@@ -115,7 +115,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
         snapshotValidator.validateSnapshotPlatform()
 
         // prevent disallowed access across workspace or dataset protection boundaries
-        snapshotValidator.validateProtectedStatus()
+        snapshotValidator.validateProtectedStatus(workspaceServiceConstructor(ctx))
 
         val wsmPolicyInputs = workspaceAuthDomain.toList match {
           case Nil => None
