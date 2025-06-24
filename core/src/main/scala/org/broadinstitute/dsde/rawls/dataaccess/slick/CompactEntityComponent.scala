@@ -649,121 +649,186 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * @return                 A `ReadAction` that resolves to a map of entity name to `CompactEntityRecord`
    *                         that includes all entities found by traversing the specified relationships.
    */
+//  def queryRelatedRecordsWithArray(
+//    workspaceId: UUID,
+//    arrayEntityType: String,
+//    arrayEntityId: String,
+//    relationChain: Seq[String]
+//  ): ReadAction[Map[String, CompactEntityRecord]] = {
+//    // The base join finds the starting entity and gets its relevant relation attributes to find the next entities to query for
+//    val baseJoin =
+//      sql"""
+//      SELECT
+//        e.id,
+//        e.name,
+//        e.entity_type,
+//        e.workspace_id,
+//        e.record_version,
+//        e.deleted,
+//        e.attributes,
+//        refs.entityType AS root_entity_type,
+//        refs.entityName AS root_entity_name,
+//        1 as level
+//      FROM ENTITY e
+//      JOIN JSON_TABLE(
+//        JSON_EXTRACT(e.attributes, '$$.refs'),
+//        '$$[*]' COLUMNS (
+//          attributeName VARCHAR(255) PATH '$$.a',
+//          entityType VARCHAR(255) PATH '$$.t',
+//          entityName VARCHAR(255) PATH '$$.n'
+//        )
+//      ) refs
+//      WHERE e.name = $arrayEntityId AND e.entity_type = $arrayEntityType AND e.workspace_id = $workspaceId
+//      AND BINARY refs.attributeName = ${relationChain.head}
+//      """
+//
+//    // Recursively join through each relation in the chain except the last
+//    val recursiveJoins = if (relationChain.length > 1) {
+//      relationChain.tail.zipWithIndex
+//        .map { case (rel, idx) =>
+//          val prevLevel = idx + 1
+//          val nextLevel = prevLevel + 1
+//          sql"""
+//      SELECT
+//        e.id,
+//        e.name,
+//        e.entity_type,
+//        e.workspace_id,
+//        e.record_version,
+//        e.deleted,
+//        e.attributes,
+//        refs.entityType AS root_entity_type,
+//        refs.entityName AS root_entity_name,
+//        $nextLevel as level
+//      FROM ENTITY e
+//JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.root_entity_name AND h.level = $prevLevel
+//      JOIN JSON_TABLE(
+//        JSON_EXTRACT(e.attributes, '$$.refs'),
+//        '$$[*]' COLUMNS (
+//          attributeName VARCHAR(255) PATH '$$.a',
+//          entityType VARCHAR(255) PATH '$$.t',
+//          entityName VARCHAR(255) PATH '$$.n'
+//        )
+//      ) refs
+//      WHERE e.workspace_id = $workspaceId
+//      AND BINARY refs.attributeName = $rel
+//"""
+//        }
+//    } else Seq.empty
+//
+//    // The last join should find the final entities that will be returned by the method
+//    // TODO is adding a DISTINCT the correct way to make sure i only get one of each record or is there a different join i could do?
+//    // Or should I just clean it up at the end when I map the entities?
+//    val lastRelation = relationChain.last
+//    val lastLevel = relationChain.length
+//    val lastJoin =
+//      sql"""
+//    SELECT DISTINCT
+//      e.id,
+//      e.name,
+//      e.entity_type,
+//      e.workspace_id,
+//      e.record_version,
+//      e.deleted,
+//      e.attributes,
+//      NULL AS root_entity_type,
+//      NULL AS root_entity_name,
+//      $lastLevel as level
+//    FROM ENTITY e
+//    JOIN entity_hierarchy h ON h.level = ${relationChain.length}
+//    JOIN JSON_TABLE(
+//      JSON_EXTRACT(h.attributes, '$$.refs'),
+//      '$$[*]' COLUMNS (
+//        attributeName VARCHAR(255) PATH '$$.a',
+//        entityType VARCHAR(255) PATH '$$.t',
+//        entityName VARCHAR(255) PATH '$$.n'
+//      )
+//    ) refs ON BINARY refs.attributeName = $lastRelation
+//           AND refs.entityType = e.entity_type
+//           AND refs.entityName = e.name
+//    WHERE e.workspace_id = $workspaceId
+//    """
+//
+//    val cte =
+//      concatSqlActions(
+//        sql"WITH RECURSIVE entity_hierarchy AS (",
+//        baseJoin,
+//        if (recursiveJoins.nonEmpty) {
+//          recursiveJoins.foldLeft(sql"")((acc, join) => concatSqlActions(acc, sql" UNION ALL ", join))
+//        } else sql"",
+//        sql") ",
+//        lastJoin
+//      )
+//
+//    cte.as[CompactEntityRecord].map { results =>
+//      results.groupBy(_.name).view.mapValues(_.head).toMap
+//    }
+//  }
   def queryRelatedRecordsWithArray(
     workspaceId: UUID,
     arrayEntityType: String,
     arrayEntityId: String,
     relationChain: Seq[String]
-  ): ReadAction[Map[String, CompactEntityRecord]] = {
-    // The base join finds the starting entity and gets its relevant relation attributes to find the next entities to query for
-    val baseJoin =
-      sql"""
-      SELECT
-        e.id,
-        e.name,
-        e.entity_type,
-        e.workspace_id,
-        e.record_version,
-        e.deleted,
-        e.attributes,
-        refs.entityType AS root_entity_type,
-        refs.entityName AS root_entity_name,
-        1 as level
-      FROM ENTITY e
-      JOIN JSON_TABLE(
-        JSON_EXTRACT(e.attributes, '$$.refs'),
-        '$$[*]' COLUMNS (
-          attributeName VARCHAR(255) PATH '$$.a',
-          entityType VARCHAR(255) PATH '$$.t',
-          entityName VARCHAR(255) PATH '$$.n'
-        )
-      ) refs
-      WHERE e.name = $arrayEntityId AND e.entity_type = $arrayEntityType AND e.workspace_id = $workspaceId
-      AND BINARY refs.attributeName = ${relationChain.head}
+  ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
+    if (relationChain.isEmpty) {
+      DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
+    } else {
+      // Build the SQL with explicit joins for each relation in the chain
+      // Start with the base entity
+      val sqlBuilder = sql"""
+        SELECT DISTINCT
+          e1.name as rootEntityName,
+          e#${relationChain.length}.id,
+          e#${relationChain.length}.name,
+          e#${relationChain.length}.entity_type,
+          e#${relationChain.length}.workspace_id,
+          e#${relationChain.length}.record_version,
+          e#${relationChain.length}.deleted,
+          e#${relationChain.length}.attributes
+        FROM ENTITY e0
       """
 
-    // Recursively join through each relation in the chain except the last
-    val recursiveJoins = if (relationChain.length > 1) {
-      relationChain.tail.zipWithIndex
-        .map { case (rel, idx) =>
-          val prevLevel = idx + 1
-          val nextLevel = prevLevel + 1
+      // Add joins for each relation in the chain
+      val joinsSql = relationChain.zipWithIndex.foldLeft(sqlBuilder) { case (sql, (relation, idx)) =>
+        val nextIdx = idx + 1
+        concatSqlActions(
+          sql,
           sql"""
-      SELECT
-        e.id,
-        e.name,
-        e.entity_type,
-        e.workspace_id,
-        e.record_version,
-        e.deleted,
-        e.attributes,
-        refs.entityType AS root_entity_type,
-        refs.entityName AS root_entity_name,
-        $nextLevel as level
-      FROM ENTITY e
-JOIN entity_hierarchy h ON e.entity_type = h.root_entity_type AND e.name = h.root_entity_name AND h.level = $prevLevel
-      JOIN JSON_TABLE(
-        JSON_EXTRACT(e.attributes, '$$.refs'),
-        '$$[*]' COLUMNS (
-          attributeName VARCHAR(255) PATH '$$.a',
-          entityType VARCHAR(255) PATH '$$.t',
-          entityName VARCHAR(255) PATH '$$.n'
+          JOIN JSON_TABLE(
+            JSON_EXTRACT(e#$idx.attributes, '$$.refs'),
+            '$$[*]' COLUMNS (
+              attributeName#$idx VARCHAR(255) PATH '$$.a',
+              entityType#$idx VARCHAR(255) PATH '$$.t',
+              entityName#$idx VARCHAR(255) PATH '$$.n'
+            )
+          ) jt#$idx ON BINARY jt#$idx.attributeName#$idx = $relation
+          JOIN ENTITY e#$nextIdx ON e#$nextIdx.entity_type = jt#$idx.entityType#$idx
+            AND e#$nextIdx.name = jt#$idx.entityName#$idx
+            AND e#$nextIdx.workspace_id = $workspaceId
+            AND e#$nextIdx.deleted = 0
+          """
         )
-      ) refs
-      WHERE e.workspace_id = $workspaceId
-      AND BINARY refs.attributeName = $rel
-"""
-        }
-    } else Seq.empty
+      }
 
-    // The last join should find the final entities that will be returned by the method
-    // TODO is adding a DISTINCT the correct way to make sure i only get one of each record or is there a different join i could do?
-    // Or should I just clean it up at the end when I map the entities?
-    val lastRelation = relationChain.last
-    val lastLevel = relationChain.length
-    val lastJoin =
-      sql"""
-    SELECT DISTINCT
-      e.id,
-      e.name,
-      e.entity_type,
-      e.workspace_id,
-      e.record_version,
-      e.deleted,
-      e.attributes,
-      NULL AS root_entity_type,
-      NULL AS root_entity_name,
-      $lastLevel as level
-    FROM ENTITY e
-    JOIN entity_hierarchy h ON h.level = ${relationChain.length}
-    JOIN JSON_TABLE(
-      JSON_EXTRACT(h.attributes, '$$.refs'),
-      '$$[*]' COLUMNS (
-        attributeName VARCHAR(255) PATH '$$.a',
-        entityType VARCHAR(255) PATH '$$.t',
-        entityName VARCHAR(255) PATH '$$.n'
-      )
-    ) refs ON BINARY refs.attributeName = $lastRelation
-           AND refs.entityType = e.entity_type
-           AND refs.entityName = e.name
-    WHERE e.workspace_id = $workspaceId
-    """
-
-    val cte =
-      concatSqlActions(
-        sql"WITH RECURSIVE entity_hierarchy AS (",
-        baseJoin,
-        if (recursiveJoins.nonEmpty) {
-          recursiveJoins.foldLeft(sql"")((acc, join) => concatSqlActions(acc, sql" UNION ALL ", join))
-        } else sql"",
-        sql") ",
-        lastJoin
+      // Add the WHERE clause for the starting entity
+      val finalSql = concatSqlActions(
+        joinsSql,
+        sql"""
+        WHERE e0.workspace_id = $workspaceId
+          AND e0.entity_type = $arrayEntityType
+          AND e0.name = $arrayEntityId
+          AND e0.deleted = 0
+        """
       )
 
-    cte.as[CompactEntityRecord].map { results =>
-      results.groupBy(_.name).view.mapValues(_.head).toMap
+      case class RootNameAndEntity(rootEntityName: String, entity: CompactEntityRecord)
+      implicit val getRootNameAndEntity: GetResult[RootNameAndEntity] =
+        GetResult(r => RootNameAndEntity(r.<<, CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)))
+
+      finalSql.as[RootNameAndEntity].map { results =>
+        results.groupMap(_.rootEntityName)(_.entity)
+      }
     }
-  }
 
   /**
    * Renames an entity in the ENTITY table.

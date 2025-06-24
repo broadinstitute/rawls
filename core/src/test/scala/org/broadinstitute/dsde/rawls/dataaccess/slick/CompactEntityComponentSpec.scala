@@ -417,7 +417,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    result.get(sample.name) shouldBe Some(insertedSample)
+    // TODO why is the list in an option?
+    result.get(sample.name).get should contain(insertedSample)
   }
 
   it should "get the records for a list of references" in withMinimalTestDatabase { _ =>
@@ -462,8 +463,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(sample1.name) shouldBe Some(insertedSample1)
-    result.get(sample2.name) shouldBe Some(insertedSample2)
+    result.get(sample1.name).get should contain(insertedSample1)
+    result.get(sample2.name).get should contain(insertedSample2)
   }
 
   it should "get the record for a chain of references" in withMinimalTestDatabase { _ =>
@@ -502,7 +503,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(participant.name) shouldBe Some(insertedParticipant)
+    result.get(sample.name).get should contain(insertedParticipant)
   }
 
   it should "get the records for a chain of references with an array" in withMinimalTestDatabase { _ =>
@@ -558,8 +559,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(participant1.name) shouldBe Some(insertedParticipant1)
-    result.get(participant2.name) shouldBe Some(insertedParticipant2)
+    result.get(sample1.name).get should contain(insertedParticipant1)
+    result.get(sample2.name).get should contain(insertedParticipant2)
   }
 
   it should "get the records for a chain of references with multiple arrays" in withMinimalTestDatabase { _ =>
@@ -637,10 +638,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(participant1.name) should equal(Some(insertedParticipant1))
-    result.get(participant2.name) should equal(Some(insertedParticipant2))
-    result.get(participant3.name) should equal(Some(insertedParticipant3))
-    result.get(participant4.name) should equal(Some(insertedParticipant4))
+    result.get(sample1.name).get should contain theSameElementsAs Seq(insertedParticipant1, insertedParticipant3)
+    result.get(sample2.name).get should contain theSameElementsAs Seq(insertedParticipant2, insertedParticipant4)
+//    result.get(participant3.name) should equal(Some(insertedParticipant3))
+//    result.get(participant4.name) should equal(Some(insertedParticipant4))
   }
 
   it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
@@ -679,7 +680,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    result.get(sample1.name) should equal(Some(insertedSampleWS1))
+    result.get(sample1.name).get should contain(insertedSampleWS1)
   }
 
   // TODO double check these tests are testing what they should
@@ -805,7 +806,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    result.get(sample.name) shouldBe Some(insertedSample)
+    result.get(sample.name).get should contain(insertedSample)
   }
 
   it should "handle non-default namespaces in attribute names" in withMinimalTestDatabase { _ =>
@@ -836,7 +837,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("set_namespace:samples")
       )
     )
-    result.get(sample.name) shouldBe Some(insertedSample)
+    result.get(sample.name).get should contain(insertedSample)
   }
 
   behavior of "listEntityKeysViaEntity"
