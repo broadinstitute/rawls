@@ -334,7 +334,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           // If useCache is true, calculate attributes via the ENTITY table. This allows us to gather real-world
           // empirical performance data; requests from Terra UI have useCache=true.
           //
-          // if useCache is false, calculate attributes via the ENTITY_KEYS view. These requests will be rare
+          // if useCache is false, calculate attributes via the ENTITY_KEYS table. These requests will be rare
           // in the wild, but our automated perf tests will generate them.
           if (useCache)
             repository.queries.listEntityKeysViaEntity(workspaceId)
