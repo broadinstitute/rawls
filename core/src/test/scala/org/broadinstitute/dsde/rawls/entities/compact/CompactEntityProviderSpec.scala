@@ -631,7 +631,7 @@ class CompactEntityProviderSpec
 
   it should "return empty map when no entities exist" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.listEntityKeys(any[UUID]))
+    when(mockQuery.listEntityKeysViaEntity(any[UUID]))
       .thenReturn(DBIO.successful(Seq.empty))
     when(mockQuery.countEntitiesGroupedByType(any[UUID]))
       .thenReturn(DBIO.successful(Seq.empty))
@@ -647,7 +647,7 @@ class CompactEntityProviderSpec
   it should "return map with entity type and count when entities exist" in {
     val mockQuery = mock[CompactEntityQuery]
     // type1 and type2 have keys, type3 has no keys
-    when(mockQuery.listEntityKeys(any[UUID]))
+    when(mockQuery.listEntityKeysViaEntity(any[UUID]))
       .thenReturn(
         DBIO.successful(
           Seq(
