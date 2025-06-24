@@ -771,6 +771,16 @@ trait MethodConfigTestSupport {
     dummyMethod
   )
 
+  val configStaticInput = MethodConfiguration(
+    "config_namespace",
+    "configStaticInput",
+    None,
+    None,
+    Map(stringArgNameWithWfName -> AttributeString("\"plain value\"")),
+    Map.empty,
+    dummyMethod
+  )
+
   class ConfigData extends TestData {
     override def save() =
       DBIO.seq(

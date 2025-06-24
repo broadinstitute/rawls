@@ -362,7 +362,6 @@ class CompactExpressionEvaluatorSpec
       .exists(_.inputResolutions.exists(v => v.inputName == intArgNameWithWfName && v.error.isDefined)) shouldBe true
   }
 
-  // TODO maybe also test error on missing entitytype and name?
   it should "error on missing input definitions" in withConfigData {
     // We don't use evalInputs here in order to catch and inspect the exception
     val expressionEvaluationContext =
@@ -376,6 +375,27 @@ class CompactExpressionEvaluatorSpec
     val ex = future.failed.futureValue
     ex shouldBe a[RawlsExceptionWithErrorReport]
     ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("Missing rootEntityType")
+
+    val context2 = ExpressionEvaluationContext(None, Some(sampleGood.name), None, Some(sampleGood.entityType))
+    val future2 = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID, context2, gatherInputsResult)
+
+    val ex2 = future2.failed.futureValue
+    ex2 shouldBe a[RawlsExceptionWithErrorReport]
+    ex2.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("Missing entityType")
+
+  }
+
+  it should "not error for static value inputs with no entity input" in withConfigData {
+    val context =
+      ExpressionEvaluationContext(None, None, None, None)
+    val result = evalInputs(context, configStaticInput, stringWdl)
+    result should contain(
+      SubmissionValidationEntityInputs(
+        "",
+        Set(SubmissionValidationValue(Some(AttributeString("plain value")), None, stringArgNameWithWfName))
+      )
+    )
   }
 
   it should "error on root entity type/expression evaluation mismatch" in withConfigData {
