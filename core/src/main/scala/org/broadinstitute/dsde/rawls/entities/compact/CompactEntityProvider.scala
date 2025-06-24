@@ -101,17 +101,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     dbResults
   }
 
-  def saveWorkflowOutputEntities(
-    dataAccess: DataAccess,
-    workspace: Workspace,
-    updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] = DBIO.successful(Seq()) // TODO CORE-483: implement this
-
-  def listWorkflowEntities(dataAccess: DataAccess,
-                           workspace: Workspace,
-                           entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = DBIO.successful(Map()) // TODO CORE-483: implement this
-
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
                             entityType: String,
@@ -409,6 +398,21 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       .map(_.toEntity)
   }
 
+  override def listWorkflowEntities(dataAccess: DataAccess,
+                                    workspace: Workspace,
+                                    entityIds: Seq[Long]
+  ): ReadAction[Map[Long, Entity]] =
+    if (entityIds.isEmpty)
+      DBIO.successful(Map.empty)
+    else {
+      // get the entities from the database
+      repository.queries.getEntitiesByIds(workspace.workspaceIdAsUUID, entityIds).map { records =>
+        records.map { rec =>
+          rec.id -> rec.toEntity
+        }.toMap
+      }
+    }
+
   override def queryEntities(entityType: String,
                              query: EntityQuery,
                              parentContext: RawlsRequestContext
@@ -593,6 +597,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     // Return the future
     renameFuture
   }
+
+  override def saveWorkflowOutputEntities(
+    dataAccess: DataAccess,
+    workspace: Workspace,
+    updatedEntities: Seq[Entity]
+  ): ReadWriteAction[Int] =
+    if (updatedEntities.isEmpty)
+      DBIO.successful(0)
+    else
+      repository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, updatedEntities, insertOnly = false)
 
   override def updateEntity(entityType: String,
                             entityName: String,

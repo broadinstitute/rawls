@@ -211,7 +211,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     for {
       // Batch insert to ENTITY table. Save the whole batch first to handle cases where an entity in this batch
       // has a reference to another entity in the same batch.
-      entitiesCreated <- repository.queries.batchCreateEntities(workspaceId, batch, insertOnly = false)
+      entitiesWritten <- repository.queries.batchWriteEntities(workspaceId, batch, insertOnly = false)
 
       // Find all requested references within this batch
       allReferences: Set[RefMapping] = findAllReferences(batch)
@@ -227,6 +227,6 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       _ = if (!allExist)
         throw new EntityReferenceNotFoundException("Some entity references do not exist")
 
-    } yield entitiesCreated
+    } yield entitiesWritten
 
 }

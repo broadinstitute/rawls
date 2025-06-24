@@ -456,7 +456,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Traversable[Entity]] =
+  ): ReadWriteAction[Int] =
     for {
       provider <- DBIO.from(getProviderWithTracing(workspace, ctx))
       res <- provider.saveWorkflowOutputEntities(dataAccess, workspace, updatedEntities)
