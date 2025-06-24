@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.fastpass
 
-import akka.actor.PoisonPill
+import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.TpsPaoGetResult
@@ -16,7 +16,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -41,7 +42,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
+import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.{toProjectExpr, toProjectPolicy}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
@@ -89,6 +90,8 @@ class FastPassServiceSpec
   val mockServer = RemoteServicesMockServer()
 
   val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
+  var entityManager: EntityManager = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -255,12 +258,14 @@ class FastPassServiceSpec
       new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
-    val entityManager = EntityManager.defaultEntityManager(
-      dataSource,
-      new WorkspaceSettingRepository(dataSource),
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
-      workbenchMetricBaseName
+    entityManager = Mockito.spy(
+      EntityManager.defaultEntityManager(
+        dataSource,
+        new WorkspaceSettingRepository(dataSource),
+        testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
+        workbenchMetricBaseName
+      )
     )
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
@@ -299,7 +304,17 @@ class FastPassServiceSpec
     val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
       mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
 
-    val entityServiceConstructor: RawlsRequestContext => EntityService = _ => mock[EntityService](RETURNS_SMART_NULLS)
+    val entityService = Mockito.spy(
+      new EntityService(ctx1,
+                        slickDataSource,
+                        samDAO,
+                        entityManager,
+                        workbenchMetricBaseName,
+                        10000,
+                        Some(workspaceSettingServiceConstructor)
+      )(executionContext, ActorSystem("mockEntityService"))
+    )
+    val entityServiceConstructor: RawlsRequestContext => EntityService = _ => entityService
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -427,6 +442,16 @@ class FastPassServiceSpec
     )
 
     parentWorkspaceFastPassGrantsBefore should be(empty)
+
+    doReturn(Future.successful(false))
+      .when(services.entityService)
+      .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
+
+    val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
+    when(mockedProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    doReturn(Future.successful(mockedProvider))
+      .when(entityManager)
+      .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
 
     val childWorkspace =
       Await
@@ -1102,6 +1127,17 @@ class FastPassServiceSpec
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    doReturn(Future.successful(false))
+      .when(services.entityService)
+      .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
+
+    val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
+    when(mockedProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    doReturn(Future.successful(mockedProvider))
+      .when(entityManager)
+      .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
+
     Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
                                                                       parentWorkspace.toWorkspaceName,
                                                                       workspaceRequest

@@ -34,7 +34,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPassService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
@@ -124,6 +126,12 @@ class WorkspaceServiceSpec
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
   val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
+
+  val mockLocalProvider: LocalEntityProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
+
+  val mockCompactEntityProvider: CompactEntityProvider = mock[CompactEntityProvider](RETURNS_SMART_NULLS)
+
+  var entityManager: EntityManager = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -274,16 +282,6 @@ class WorkspaceServiceSpec
       new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
-    val entityManager = EntityManager.defaultEntityManager(
-      dataSource,
-      new WorkspaceSettingRepository(dataSource),
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
-      workbenchMetricBaseName
-    )
-
-    val entityServiceConstructor =
-      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000) _
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
@@ -318,6 +316,29 @@ class WorkspaceServiceSpec
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
     val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
       mockWorkspaceSettingService
+
+    entityManager = Mockito.spy(
+      EntityManager.defaultEntityManager(
+        dataSource,
+        new WorkspaceSettingRepository(dataSource),
+        testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
+        workbenchMetricBaseName
+      )
+    )
+    when(mockLocalProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    doReturn(Future.successful(mockLocalProvider))
+      .when(entityManager)
+      .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
+
+    val entityServiceConstructor =
+      EntityService.constructor(slickDataSource,
+                                samDAO,
+                                workbenchMetricBaseName = "test",
+                                entityManager,
+                                1000,
+                                Some(workspaceSettingServiceConstructor)
+      ) _
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -1879,7 +1900,15 @@ class WorkspaceServiceSpec
         CompactDataTables
       )
     ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+
+    when(mockWorkspaceSettingService.setWorkspaceSettings(any[WorkspaceName], any[List[WorkspaceSetting]]))
+      .thenReturn(Future.successful(mock[WorkspaceSettingResponse]))
+
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    when(mockCompactEntityProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    doReturn(Future.successful(mockCompactEntityProvider))
+      .when(entityManager)
+      .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
 
     val workspace =
       Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
@@ -1896,6 +1925,11 @@ class WorkspaceServiceSpec
     workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
     workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     workspace.attributes shouldBe Some(baseWorkspace.attributes)
+    val destWorkspaceName = WorkspaceName(testData.testProject1Name.value, newWorkspaceName)
+    verify(mockWorkspaceSettingService).setWorkspaceSettings(
+      destWorkspaceName,
+      List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+    )
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
