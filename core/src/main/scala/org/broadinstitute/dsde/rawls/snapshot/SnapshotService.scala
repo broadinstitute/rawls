@@ -224,8 +224,8 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
 
       // if any snapshots contain protected data, the workspace must be protected
       _ = if (
-        snapshotPaos.exists(PolicyUtilities.containsPolicy(_, TpsPolicies.ProtectedData)) && !rawlsWorkspace.bucketName
-          .startsWith("fc-secure")
+        snapshotPaos.exists(PolicyUtilities.containsPolicy(_, TpsPolicies.ProtectedData)) && !PolicyUtilities
+          .containsPolicy(workspacePao, TpsPolicies.ProtectedData)
       ) {
         throw new ProtectedDataException("Unable to add protected snapshot to unprotected workspace.")
       }
