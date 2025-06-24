@@ -331,13 +331,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     repository.dataSource.inTransaction(ReadOnly) { _ =>
       for {
         entityTypeAndKeys <- traceDBIOWithParent("listEntityKeys", parentContext) { _ =>
-          // temporary hack to gather performance data: if useCache is true, calculate attributes via the ENTITY_KEYS table.
-          // if useCache is false, calculate attributes via the ENTITY table. We'll run these through perf tests over
-          // a period of time to see if ENTITY_KEYS offers significant benefit over ENTITY.
+          // If useCache is true, calculate attributes via the ENTITY table. This allows us to gather real-world
+          // empirical performance data; requests from Terra UI have useCache=true.
+          //
+          // if useCache is false, calculate attributes via the ENTITY_KEYS table. These requests will be rare
+          // in the wild, but our automated perf tests will generate them.
           if (useCache)
-            repository.queries.listEntityKeys(workspaceId)
-          else
             repository.queries.listEntityKeysViaEntity(workspaceId)
+          else
+            repository.queries.listEntityKeys(workspaceId)
         }
         entityTypeAndCounts <- traceDBIOWithParent("countEntitiesGroupedByType", parentContext) { _ =>
           repository.queries.countEntitiesGroupedByType(workspaceId)
