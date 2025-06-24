@@ -1182,4 +1182,40 @@ class CompactExpressionEvaluatorSpec
 
   }
 
+  it should "handle namespaced attributes in executeQueryPlan" in withConfigData {
+    // Use real entity data with namespaced attributes
+    val entityWithNamespacedAttr = toCompactEntityRecord(
+      Entity(
+        name = "sample1",
+        entityType = "sample",
+        attributes = Map(
+          AttributeName("pfb", "project") -> AttributeString("project1")
+        )
+      )
+    )
+
+    val expression = "this.pfb:project"
+    val queryPlan = QueryPlan(List(), Map(expression -> Set("pfb:project")))
+
+    when(
+      mockQueries.getEntity(any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Some(entityWithNamespacedAttr)
+        )
+      )
+    val result =
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", "sample1", "sample", queryPlan)
+        .futureValue
+
+    result.size shouldBe 1
+
+    result should contain theSameElementsAs Seq(
+      (expression, Map("sample1" -> Success(Seq(AttributeString("project1")))))
+    )
+
+  }
+
 }

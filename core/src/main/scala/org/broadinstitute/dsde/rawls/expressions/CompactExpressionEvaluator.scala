@@ -205,15 +205,18 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
           combinedExpressionAndResults.flatMap(_._2.keys).distinct
         }
 
+        // Pre-compute a map from expression -> ExpressionAndResult for O(1) lookup
+        val expressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+          combinedExpressionAndResults.groupBy(_._1)
+
         // Process each input separately using the combined query results
         val inputFutures: Seq[Future[Seq[(ExpressionEvaluationSupport.EntityName, SubmissionValidationValue)]]] =
           inputExpressionData.map { case (input, parsedTree, inputLookups) =>
 
-            // Filter ExpressionAndResults relevant to this input
-            val relevantResults = combinedExpressionAndResults.filter { case (expression, _) =>
-              inputLookups.exists(_.expression == expression)
+            // Lookup ExpressionAndResults relevant to this input
+            val relevantResults = inputLookups.flatMap { lookup =>
+              expressionToResultMap.getOrElse(lookup.expression, Seq.empty)
             }
-
             Future.successful {
               // Use InputExpressionReassembler to get the final result for this input
               val resultMap = InputExpressionReassembler.constructFinalInputValues(
