@@ -236,7 +236,11 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve method config inputs for a set entity" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq("daSampleSet"),
+                                                       any()
+      )
     )
       .thenReturn(
         DBIO.successful(
@@ -245,7 +249,11 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet2"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq("daSampleSet2"),
+                                                       any()
+      )
     )
       .thenReturn(
         DBIO.successful(
@@ -254,7 +262,11 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet4"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq("daSampleSet4"),
+                                                       any()
+      )
     )
       .thenReturn(
         DBIO.successful(
@@ -306,7 +318,11 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve method config inputs for a set entity with root entity single type" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq(sampleSet2.name),
+                                                       any()
+      )
     )
       .thenReturn(
         DBIO.successful(
@@ -400,7 +416,11 @@ class CompactExpressionEvaluatorSpec
 
   it should "error on root entity type/expression evaluation mismatch" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq(sampleSet2.name),
+                                                       any()
+      )
     )
       .thenReturn(
         DBIO.successful(
@@ -447,7 +467,11 @@ class CompactExpressionEvaluatorSpec
 
   it should "error on root entity type/input entity mismatch" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq("daSampleSet"),
+                                                       any()
+      )
     )
       .thenReturn(
         DBIO.successful(
@@ -554,9 +578,9 @@ class CompactExpressionEvaluatorSpec
   it should "unpack array input expression with attribute reference into WDL-arrays" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
-                                               org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
-                                               org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                               any()
+                                                       org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
+                                                       org.mockito.ArgumentMatchers.eq(sampleSet2.name),
+                                                       any()
       )
     )
       .thenReturn(

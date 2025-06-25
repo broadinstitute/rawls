@@ -676,10 +676,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *                         that includes all entities found by traversing the specified relationships.
    */
   def queryRelatedRecordsWithRelationChain(
-                                    workspaceId: UUID,
-                                    startingEntityType: String,
-                                    startingEntityName: String,
-                                    relationChain: Seq[String]
+    workspaceId: UUID,
+    startingEntityType: String,
+    startingEntityName: String,
+    relationChain: Seq[String]
   ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
     if (relationChain.isEmpty) {
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
