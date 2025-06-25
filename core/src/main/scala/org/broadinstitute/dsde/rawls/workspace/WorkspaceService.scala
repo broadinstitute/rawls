@@ -1053,8 +1053,8 @@ class WorkspaceService(
               entityServiceConstructor(ctx).getProviderWithTracing(sourceWorkspaceContext, ctx)
             )
             _ <- traceDBIOWithParent("clone entities", ctx) { s =>
-              DBIO
-                .from(entityProvider.clone(sourceWorkspaceContext, destWorkspaceContext, s))
+              entityProvider
+                .clone(sourceWorkspaceContext, destWorkspaceContext, s)
                 .map { case (clonedEntityCount, clonedAttrCount) =>
                   clonedWorkspaceEntityHistogram += clonedEntityCount
                   clonedWorkspaceAttributeHistogram += clonedAttrCount

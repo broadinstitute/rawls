@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.base
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -66,7 +66,7 @@ trait EntityProvider {
   def clone(sourceWorkspaceContext: Workspace,
             destWorkspaceContext: Workspace,
             parentContext: RawlsRequestContext
-  ): Future[(Int, Int)]
+  ): WriteAction[(Int, Int)]
 
   def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity]
 

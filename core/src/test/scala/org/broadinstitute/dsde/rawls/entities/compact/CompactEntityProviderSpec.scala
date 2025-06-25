@@ -1628,7 +1628,7 @@ class CompactEntityProviderSpec
         )
       )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
-      .thenReturn(DBIO.successful(3))
+      .thenReturn(DBIO.successful((3, 0)))
 
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)
@@ -1838,7 +1838,7 @@ class CompactEntityProviderSpec
         )
       )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
-      .thenReturn(DBIO.successful(1))
+      .thenReturn(DBIO.successful((1, 0)))
 
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)

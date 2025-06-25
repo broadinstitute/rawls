@@ -326,7 +326,7 @@ class WorkspaceServiceSpec
         workbenchMetricBaseName
       )
     )
-    when(mockLocalProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    when(mockLocalProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
     doReturn(Future.successful(mockLocalProvider))
       .when(entityManager)
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
@@ -1905,7 +1905,7 @@ class WorkspaceServiceSpec
       .thenReturn(Future.successful(mock[WorkspaceSettingResponse]))
 
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(mockCompactEntityProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    when(mockCompactEntityProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
     doReturn(Future.successful(mockCompactEntityProvider))
       .when(entityManager)
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])

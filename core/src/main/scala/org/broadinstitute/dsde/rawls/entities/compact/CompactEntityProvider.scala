@@ -167,20 +167,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   override def clone(sourceWorkspaceContext: Workspace,
                      destWorkspaceContext: Workspace,
                      parentContext: RawlsRequestContext
-  ): Future[(Int, Int)] = {
-    val copiedEntities = repository.dataSource.inTransaction { _ =>
-      for {
-        allEntityRefs <- repository.queries.getAllEntities(sourceWorkspaceContext.workspaceIdAsUUID)
-        entityPointers = allEntityRefs.map(e => EntityPointer(e.entityType, e.name)).toSet
-        copiedCount <- repository.queries
-          .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-            destWorkspaceContext.workspaceIdAsUUID,
-            entityPointers)
-          .map(count => (count, 0))
-      } yield copiedCount
-    }
-    copiedEntities
-  }
+  ): WriteAction[(Int, Int)] =
+    repository.queries.copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
+                                                  destWorkspaceContext.workspaceIdAsUUID
+    )
 
   /**
    * Copy all entities from sourceWorkspaceId to destWorkspaceId, excluding any entities that

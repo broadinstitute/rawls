@@ -662,16 +662,9 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def clone(sourceWorkspaceContext: Workspace,
                      destWorkspaceContext: Workspace,
                      parentContext: RawlsRequestContext
-  ): Future[(Int, Int)] =
-    traceFutureWithParent("cloneEntities", parentContext)(_ =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery
-          .copyEntitiesToNewWorkspace(
-            sourceWorkspaceContext.workspaceIdAsUUID,
-            destWorkspaceContext.workspaceIdAsUUID
-          )
-      }
-    )
+  ): WriteAction[(Int, Int)] =
+    dataSource.dataAccess.entityQuery
+      .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID)
 
   override def renameAttribute(entityType: EntityName,
                                oldAttributeName: AttributeName,

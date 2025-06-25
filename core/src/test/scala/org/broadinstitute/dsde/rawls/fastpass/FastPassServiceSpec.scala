@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent, WriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
@@ -448,7 +448,7 @@ class FastPassServiceSpec
       .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
 
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
-    when(mockedProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
     doReturn(Future.successful(mockedProvider))
       .when(entityManager)
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
@@ -1133,7 +1133,7 @@ class FastPassServiceSpec
       .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
 
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
-    when(mockedProvider.clone(any(), any(), any())).thenReturn(Future.successful((1, 0)))
+    when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
     doReturn(Future.successful(mockedProvider))
       .when(entityManager)
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
