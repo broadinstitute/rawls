@@ -751,13 +751,17 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val workspace = protectedWorkspaceTestData.protectedWorkspace
 
+      val workspaceService = mock[WorkspaceService]
+      when(workspaceService.isBucketSecure(any[Workspace]))
+        .thenReturn(true)
+
       val snapshotService = SnapshotService.constructor(
         new WorkspaceRepository(slickDataSource),
         mockSamDAO,
         mockWorkspaceManagerDAO,
         "fake-terra-data-repo-dev",
         mockDataRepoDAO,
-        defaultWorkspaceServiceConstructor,
+        _ => workspaceService,
         defaultPolicyService
       )(testContext)
 

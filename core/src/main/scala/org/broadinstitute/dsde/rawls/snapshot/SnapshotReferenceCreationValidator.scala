@@ -4,6 +4,7 @@ import bio.terra.datarepo.model.{CloudPlatform => SnapshotCloudPlatform}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceCloudPlatform}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 
 object SnapshotReferenceCreationValidator {
   def constructor(workspaceContext: Workspace, snapshot: WrappedSnapshot): SnapshotReferenceCreationValidator =
@@ -22,8 +23,8 @@ class SnapshotReferenceCreationValidator(val workspaceContext: Workspace, val sn
   // Ideally this would rely on Terra Policy Service, but until TPS is enabled for GCP
   // We'll have to use this workaround for identifying protected status.
   @throws(classOf[ProtectedDataException])
-  def validateProtectedStatus(): Unit =
-    if (!isWorkspaceProtected && snapshot.isProtected) {
+  def validateProtectedStatus(workspaceService: WorkspaceService): Unit =
+    if (!isWorkspaceProtected(workspaceService) && snapshot.isProtected) {
       throw new ProtectedDataException("Unable to add protected snapshot to unprotected workspace.")
     }
 
@@ -54,6 +55,6 @@ class SnapshotReferenceCreationValidator(val workspaceContext: Workspace, val sn
       throw new UnsupportedPlatformException("Snapshots by reference are not supported for Azure datasets.")
     }
 
-  // TODO: get this information from a more authoritative source rather than relying on the hardcoded bucket prefix
-  private def isWorkspaceProtected: Boolean = workspaceContext.bucketName.startsWith("fc-secure")
+  private def isWorkspaceProtected(workspaceService: WorkspaceService): Boolean =
+    workspaceService.isBucketSecure(workspaceContext)
 }

@@ -105,7 +105,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     *
     * `execution plan: multiple-row insert`
     */
-  def batchCreateEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
+  def batchWriteEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
     val baseSql =
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
@@ -134,7 +134,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     * `execution plan: single-row insert`
     */
   def createEntity(workspaceId: UUID, entity: Entity): ReadWriteAction[Int] =
-    batchCreateEntities(workspaceId, Seq(entity), insertOnly = true)
+    batchWriteEntities(workspaceId, Seq(entity), insertOnly = true)
 
   /**
     * Read a single entity from the db
@@ -170,6 +170,33 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                and deleted = 0
                and ( """,
         reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
+        sql""" );"""
+      )
+
+      // execute
+      query.as[CompactEntityRecord]
+    }
+
+  /** Given a set of entity ids, return the CompactEntityRecord for those ids.
+   *
+   * execution plan: index range scan on primary key. Might also use idx_entity_type_name
+   *    depending on the query planner's whims
+   */
+  def getEntitiesByIds(workspaceId: UUID, ids: Seq[Long]): ReadAction[Seq[CompactEntityRecord]] =
+    // short-circuit
+    if (ids.isEmpty) {
+      DBIO.successful(Seq())
+    } else {
+      val inClause = reduceSqlActionsWithDelim(ids.map(id => sql"$id"), sql", ")
+
+      // build the overall query
+      val query = concatSqlActions(
+        sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
+               from ENTITY
+               where workspace_id = $workspaceId
+               and deleted = 0
+               and id in ( """,
+        inClause,
         sql""" );"""
       )
 
