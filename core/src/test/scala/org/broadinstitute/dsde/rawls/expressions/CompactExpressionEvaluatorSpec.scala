@@ -353,6 +353,65 @@ class CompactExpressionEvaluatorSpec
     )
   }
 
+  it should "resolve method config inputs that refer to the entity name" in withConfigData {
+    when(
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.name)
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Some(sampleGoodAsCER)
+        )
+      )
+
+    val context =
+      ExpressionEvaluationContext(Some(sampleGood.entityType), Some(sampleGood.name), None, Some(sampleGood.entityType))
+    val result = evalInputs(context, configEntityName, stringWdl)
+    result should contain(
+      SubmissionValidationEntityInputs(
+        sampleGood.name,
+        Set(SubmissionValidationValue(Some(AttributeString(sampleGood.name)), None, stringArgNameWithWfName))
+      )
+    )
+
+    when(
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq(sampleSet2.name),
+                                                       any()
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
+        )
+      )
+
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(sampleSet2.entityType),
+                                  Some(sampleSet2.name),
+                                  Some("this.samples"),
+                                  Some(sampleGood.entityType)
+      )
+    val result2 = evalInputs(expressionEvaluationContext, configEntityName, stringWdl)
+    result2 should contain theSameElementsAs Seq(
+      SubmissionValidationEntityInputs(
+        sampleGood.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeString(sampleGood.name)), None, stringArgNameWithWfName)
+        )
+      ),
+      SubmissionValidationEntityInputs(
+        sampleGood2.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeString(sampleGood2.name)), None, stringArgNameWithWfName)
+        )
+      )
+    )
+  }
+
   it should "return error on missing values" in withConfigData {
     when(
       mockQueries.getEntity(any(),
@@ -1137,12 +1196,12 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", "sampleset", queryPlan)
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
       .futureValue
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
-      (expression, Map("sampleset1" -> Success(Seq(AttributeNumber(1), AttributeNumber(2)))))
+      (expression, Map("daSampleSet" -> Success(Seq(AttributeNumber(1), AttributeNumber(2)))))
     )
 
   }
@@ -1162,15 +1221,15 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", "sampleset", queryPlan)
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
       .futureValue
     result.size shouldBe 2
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
-      (expression2, Map("sampleset1" -> Success(Seq(AttributeNumber(1), AttributeNumber(2))))),
+      (expression2, Map("daSampleSet" -> Success(Seq(AttributeNumber(1), AttributeNumber(2))))),
       (expression1,
        Map(
-         "sampleset1" -> Success(
+         "daSampleSet" -> Success(
            Seq(AttributeValueRawJson("[[0,1,2],[3,4,5]]"), AttributeValueRawJson("[[3,4,5],[6,7,8]]"))
          )
        )
@@ -1191,7 +1250,7 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "sampleset1", "Sample", queryPlan)
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "Sample", queryPlan)
       .futureValue
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
@@ -1215,18 +1274,18 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", "sample1", "sample", queryPlan)
+      .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", sampleGood.name, "sample", queryPlan)
       .futureValue
     verify(mockQueries, never()).queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
-      (expression, Map("sample1" -> Success(Seq(AttributeNumber(1)))))
+      (expression, Map(sampleGood.name -> Success(Seq(AttributeNumber(1)))))
     )
 
   }
 
-  it should "handle namespaced attributes in executeQueryPlan" in withConfigData {
+  it should "handle namespaced attributes" in withConfigData {
     // Use real entity data with namespaced attributes
     val entityWithNamespacedAttr = toCompactEntityRecord(
       Entity(

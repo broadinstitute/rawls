@@ -781,6 +781,15 @@ trait MethodConfigTestSupport {
     dummyMethod
   )
 
+  val configEntityName = MethodConfiguration("config_namespace",
+                                             "configEntityName",
+                                             Some("Sample"),
+                                             None,
+                                             Map(stringArgNameWithWfName -> AttributeString("this.Sample_id")),
+                                             Map.empty,
+                                             dummyMethod
+  )
+
   class ConfigData extends TestData {
     override def save() =
       DBIO.seq(

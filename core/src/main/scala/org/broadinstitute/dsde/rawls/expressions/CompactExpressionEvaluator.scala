@@ -13,7 +13,9 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpress
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{
+  Attributable,
   AttributeName,
+  AttributeString,
   AttributeValue,
   AttributeValueList,
   ErrorReport,
@@ -164,7 +166,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
 
             val allLookups = inputExpressionData.flatMap { case (_, _, lookups) => lookups }
             val queryPlans = if (entityType != rootEntityType && entityLookups.nonEmpty) {
-              val entityRelationChain = entityLookups.flatMap(_.relations.map(_.attributeName().getText)).toList
+              val entityRelationChain = entityLookups.flatMap(_.attributeName).toList
               val baseQueryPlans = buildQueryPlans(allLookups)
 
               baseQueryPlans.map { plan =>
@@ -381,7 +383,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       .map { entityRecords =>
         // Validate entity types if we have entityLookups
         // TODO correct validation
-        // "queryRelatedRecordsWithArray should return entities from the last relationship in the chain. Those will only be of rootEntityType for expressions like this.foo. But for something like this.case_sample.foo it will likely not be the rootEntityType."
         if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
           val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
           if (actualEntityTypes.nonEmpty && !actualEntityTypes.contains(rootEntityType)) {
@@ -400,11 +401,21 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         plan.expressionMappings.toSeq.flatMap { case (expression, attributeNames) =>
           attributeNames.map { attrName =>
             val attributeName = AttributeName.fromDelimitedName(attrName)
+
             val entityToAttributeValues = entityRecords.map { case (actualEntityName, records) =>
-              val attrs: Seq[AttributeValue] = records.flatMap(_.toEntity.attributes.get(attributeName)).flatMap {
-                case avl: AttributeValueList => avl.list
-                case av: AttributeValue      => Seq(av)
-                case _                       => Seq.empty
+              val attrs: Seq[AttributeValue] = records.flatMap { record =>
+                val attributeNameToCheck =
+                  AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
+                record.toEntity.attributes.get(attributeName) match {
+                  case _ if attributeName == attributeNameToCheck =>
+                    Seq(AttributeString(record.name)) // Return the record's name as an AttributeString wrapped in a Seq
+                  case Some(avl: AttributeValueList) =>
+                    avl.list // Return the list of values directly
+                  case Some(av: AttributeValue) =>
+                    Seq(av) // Wrap the single value in a Seq
+                  case _ =>
+                    Seq.empty // Return an empty Seq for unmatched cases
+                }
               }
               actualEntityName -> Success(attrs)
             }
