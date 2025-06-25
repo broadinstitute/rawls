@@ -94,7 +94,7 @@ class CompactEntityProviderSpec
 
   it should "issue one insert statement for multiple entities" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
@@ -111,12 +111,12 @@ class CompactEntityProviderSpec
     Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    verify(mockQuery, times(1)).batchWriteEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
   }
 
   it should "issue multiple insert statements when given large batches" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
+    when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
@@ -142,12 +142,12 @@ class CompactEntityProviderSpec
 
     // should have called batchCreateEntities multiple times to write the entities
     verify(mockQuery, Mockito.atLeast(2))
-      .batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+      .batchWriteEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
   }
 
   it should "ask to insert references" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.batchCreateEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
+    when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
@@ -184,7 +184,7 @@ class CompactEntityProviderSpec
     val ref3 = EntityPointer("typeB", "name3")
 
     // should have called one batch-insert to write the entities
-    verify(mockQuery, times(1)).batchCreateEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
+    verify(mockQuery, times(1)).batchWriteEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any(), any())
   }
 
   "copyEntities" should "have tests" is pending
@@ -631,7 +631,7 @@ class CompactEntityProviderSpec
 
   it should "return empty map when no entities exist" in {
     val mockQuery = mock[CompactEntityQuery]
-    when(mockQuery.listEntityKeys(any[UUID]))
+    when(mockQuery.listEntityKeysViaEntity(any[UUID]))
       .thenReturn(DBIO.successful(Seq.empty))
     when(mockQuery.countEntitiesGroupedByType(any[UUID]))
       .thenReturn(DBIO.successful(Seq.empty))
@@ -647,7 +647,7 @@ class CompactEntityProviderSpec
   it should "return map with entity type and count when entities exist" in {
     val mockQuery = mock[CompactEntityQuery]
     // type1 and type2 have keys, type3 has no keys
-    when(mockQuery.listEntityKeys(any[UUID]))
+    when(mockQuery.listEntityKeysViaEntity(any[UUID]))
       .thenReturn(
         DBIO.successful(
           Seq(
@@ -738,6 +738,40 @@ class CompactEntityProviderSpec
       Await.result(provider.getEntity("nonexistent-type", "nonexistent-name", defaultRequestContext), atMost)
     }
     actual shouldBe a[EntityNotFoundException]
+  }
+
+  behavior of "listWorkflowEntities"
+
+  it should "pass the workspace and requested entity ids to the downstream query" in {
+    val mockQueries = mock[CompactEntityQuery]
+
+    val requestedIds = Seq(111L, 222L, 333L)
+
+    when(mockQueries.getEntitiesByIds(any(), any()))
+      .thenReturn(
+        DBIO.successful(Seq())
+      )
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    runAndWait(provider.listWorkflowEntities(mockDataAccess, defaultWorkspace, requestedIds), atMost)
+
+    verify(mockQueries, times(1)).getEntitiesByIds(defaultWorkspace.workspaceIdAsUUID, requestedIds)
+  }
+
+  it should "bypass the database when asked to save nothing" in {
+    val mockQueries = mock[CompactEntityQuery]
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    val actual =
+      runAndWait(provider.listWorkflowEntities(mockDataAccess, defaultWorkspace, Seq.empty[Long]), atMost)
+
+    actual shouldBe empty
+
+    verify(mockQueries, never()).getEntitiesByIds(any(), any())
   }
 
   "queryEntities" should "have tests" is pending
@@ -1161,6 +1195,43 @@ class CompactEntityProviderSpec
     }
 
     actual.code shouldBe StatusCodes.NotFound
+  }
+
+  behavior of "saveWorkflowOutputEntities"
+
+  it should "pass the workspace and requested entities to the downstream query" in {
+    val mockQueries = mock[CompactEntityQuery]
+    when(mockQueries.batchWriteEntities(any(), any(), any()))
+      .thenReturn(DBIO.successful(2))
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    val entitiesToUpdate = Seq(
+      Entity("name1", "type", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name2", "type", Map(AttributeName.withDefaultNS("baz") -> AttributeNumber(42)))
+    )
+
+    runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, entitiesToUpdate), atMost)
+
+    verify(mockQueries, times(1)).batchWriteEntities(defaultWorkspace.workspaceIdAsUUID,
+                                                     entitiesToUpdate,
+                                                     insertOnly = false
+    )
+  }
+
+  it should "bypass the database when asked to save nothing" in {
+    val mockQueries = mock[CompactEntityQuery]
+    val provider = providerWithMocks(mockQueries)
+
+    val mockDataAccess = mock[DataAccess]
+
+    val actual =
+      runAndWait(provider.saveWorkflowOutputEntities(mockDataAccess, defaultWorkspace, Seq.empty[Entity]), atMost)
+
+    actual shouldBe 0
+
+    verify(mockQueries, never()).batchWriteEntities(any(), any(), any())
   }
 
   // ====================================================================================================

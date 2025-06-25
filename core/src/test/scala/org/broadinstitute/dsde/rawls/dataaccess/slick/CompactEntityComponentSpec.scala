@@ -81,7 +81,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     // should throw a primary key violation error
     intercept[SQLIntegrityConstraintViolationException](
-      runAndWait(q.batchCreateEntities(wsid, entities, insertOnly = true))
+      runAndWait(q.batchWriteEntities(wsid, entities, insertOnly = true))
     )
 
     // entity 2 should still exist
@@ -192,6 +192,75 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // map CompactEntityRefRecord to AttributeEntityReference when comparing, since
     // CompactEntityRefRecord contains an id which can be different every time
     actual.map(_.toAttributeEntityReference) should contain theSameElementsAs expected
+  }
+
+  behavior of "getEntitiesByIds"
+
+  it should "return nothing if asked for nothing" in withMinimalTestDatabase { _ =>
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    val actual = runAndWait(q.getEntitiesByIds(wsid, Seq.empty))
+    actual shouldBe empty
+  }
+
+  it should "return existent entities" in withMinimalTestDatabase { dataSource =>
+    import driver.api._ // for Slick queries in this test
+
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // use the high-level Slick query object to get the actual rows saved to the database
+    val slickQuery: ReadAction[Seq[CompactEntityRecord]] = dataSource.dataAccess.compactEntitySlickQuery
+      .filter(e => e.workspaceId === wsid && e.entityType === entity1.entityType)
+      .result
+
+    val records: Seq[CompactEntityRecord] = runAndWait(slickQuery)
+
+    val ids = records.map(_.id)
+
+    val actual = runAndWait(q.getEntitiesByIds(wsid, ids))
+
+    actual should contain theSameElementsAs records
+  }
+
+  it should "return what it found even if not all entities exist" in withMinimalTestDatabase { dataSource =>
+    import driver.api._ // for Slick queries in this test
+
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // use the high-level Slick query object to get the actual rows saved to the database
+    val slickQuery: ReadAction[Seq[CompactEntityRecord]] = dataSource.dataAccess.compactEntitySlickQuery
+      .filter(e => e.workspaceId === wsid && e.entityType === entity1.entityType)
+      .result
+
+    val records: Seq[CompactEntityRecord] = runAndWait(slickQuery)
+
+    // and another query to find the max id currently in ENTITY
+    val maxEntityId = runAndWait(sql"select max(id) from ENTITY".as[Long].head)
+
+    // define which entity we are asking for (entity2)
+    val selectedRecords = records.filter(_.name == entity2.name)
+
+    // request 1 of the ids that exists, and more that do not
+    val ids = selectedRecords.map(_.id) ++ Seq(
+      maxEntityId + 1,
+      maxEntityId + 2
+    )
+
+    val actual = runAndWait(q.getEntitiesByIds(wsid, ids))
+
+    actual should contain theSameElementsAs selectedRecords
   }
 
   behavior of "ENTITY_KEYS population triggers"
@@ -2202,8 +2271,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
     // insert the entities
-    runAndWait(q.batchCreateEntities(wsid, ws1Entities, insertOnly = true)) shouldBe ws1Entities.size
-    runAndWait(q.batchCreateEntities(ws2id, ws2Entities, insertOnly = true)) shouldBe ws2Entities.size
+    runAndWait(q.batchWriteEntities(wsid, ws1Entities, insertOnly = true)) shouldBe ws1Entities.size
+    runAndWait(q.batchWriteEntities(ws2id, ws2Entities, insertOnly = true)) shouldBe ws2Entities.size
 
     // validate listed entities of entityType "testEntityType" in the first workspace
     runAndWait(q.listEntities(wsid, testEntityType)).map(_.toEntity) should contain theSameElementsAs Seq(entity1,
@@ -2711,7 +2780,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         AttributeName.withDefaultNS("ref") -> AttributeEntityReference(entity1.entityType, entity1.name)
       )
     )
-    runAndWait(q.batchCreateEntities(workspaceId, Seq(entity1Update, entity2Update), insertOnly = false))
+    runAndWait(q.batchWriteEntities(workspaceId, Seq(entity1Update, entity2Update), insertOnly = false))
 
     // Perform the recursive query
     val recursiveReferences = runAndWait(q.recursiveGetEntityReferences(workspaceId, Set(entity1.toPointer)))
@@ -2756,7 +2825,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
 
     // insert the entities
-    runAndWait(q.batchCreateEntities(workspaceId, entities, insertOnly = true)) shouldBe entities.size
+    runAndWait(q.batchWriteEntities(workspaceId, entities, insertOnly = true)) shouldBe entities.size
     // retrieve the entities; retrieved value includes its id
     entities.map { entity =>
       val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))

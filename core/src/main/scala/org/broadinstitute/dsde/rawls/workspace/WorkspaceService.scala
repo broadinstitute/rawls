@@ -1033,9 +1033,7 @@ class WorkspaceService(
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
               val forceEnhancedBucketMonitoring =
-                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceWorkspace.bucketName.startsWith(
-                  s"${config.workspaceBucketNamePrefix}-secure"
-                )
+                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || isBucketSecure(sourceWorkspace)
               createNewWorkspaceContext(
                 destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),
                                           attributes = newAttrs,
@@ -2548,6 +2546,9 @@ class WorkspaceService(
                                                      Identity.group(workspaceProjectOwnerEmail.value)
       )
     } yield ()
+
+  def isBucketSecure(workspace: Workspace): Boolean =
+    workspace.bucketName.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
 }
 
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
