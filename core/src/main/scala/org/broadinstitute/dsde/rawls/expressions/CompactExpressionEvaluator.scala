@@ -125,73 +125,13 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                           gatherInputsResult: MethodConfigResolver.GatherInputsResult
   )(implicit executionContext: ExecutionContext): Future[LazyList[SubmissionValidationEntityInputs]] = {
     // First, verify that necessary entity information is present and consistent
-    val entityInfoFuture: Future[(String, String, String)] =
+    val entityInfoFuture =
       (expressionEvaluationContext.entityType,
        expressionEvaluationContext.entityName,
        expressionEvaluationContext.rootEntityType
       ) match {
-        case (Some(et), Some(en), Some(ret)) =>
+        case (Some(entityType), Some(entityName), Some(rootEntityType)) =>
           // All three exist, assign their values
-          Future.successful((et, en, ret))
-
-        case (None, None, None) =>
-          // None exist, proceed without assignment
-          Future.successful((null, null, null))
-
-        case (Some(et), None, _) =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest, s"Missing entityName")
-            )
-          )
-
-        case (None, Some(en), _) =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest, s"Missing entityType")
-            )
-          )
-
-        case (None, None, Some(ret)) =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest, s"Missing entityType and entityName")
-            )
-          )
-
-        case (Some(et), Some(en), None) =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest, s"Missing rootEntityType")
-            )
-          )
-      }
-
-    entityInfoFuture
-      .flatMap {
-        case (null, null, null) =>
-          val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
-            val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-            val visitor = new CompactEvaluateVisitor()
-            val parsedTree = terraExpressionParser.root()
-            val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-            (input, parsedTree, inputLookups)
-          }
-
-          // Repackage the parsed expressions into the correct form without querying the database
-          Future.successful {
-            inputExpressionData.flatMap { case (input, parsedTree, _) =>
-              val resultMap = InputExpressionReassembler.constructFinalInputValues(
-                Seq.empty, // No database results since no entities are queried
-                parsedTree,
-                None, // No root entity names since no entities are queried
-                Some(input)
-              )
-              convertToSubmissionValidationValues(resultMap, input)
-            }
-          }
-
-        case (entityType, entityName, rootEntityType) =>
           if (
             expressionEvaluationContext.expression.isEmpty &&
             entityType != rootEntityType
@@ -244,12 +184,17 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               val rootEntityNames = if (entityType == rootEntityType) {
                 Seq(entityName)
               } else {
-                combinedExpressionAndResults.flatMap(_._2.keys).distinct
+                combinedExpressionAndResults.flatMap { case (_, resultMap) => resultMap.keys }.distinct
               }
 
+              // Pre-compute a map from expression -> ExpressionAndResult for O(1) lookup
+              val expressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+                combinedExpressionAndResults.groupBy { case (expression, _) => expression }
+
               inputExpressionData.flatMap { case (input, parsedTree, inputLookups) =>
+                // Lookup ExpressionAndResults relevant to this input
                 val relevantResults = inputLookups.flatMap { lookup =>
-                  combinedExpressionAndResults.groupBy(_._1).getOrElse(lookup.expression, Seq.empty)
+                  expressionToResultMap.getOrElse(lookup.expression, Seq.empty)
                 }
                 val resultMap = InputExpressionReassembler.constructFinalInputValues(
                   relevantResults,
@@ -261,22 +206,72 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               }
             }
           }
-      }
-      .map { resultsSeq =>
-        CollectionUtils
-          .groupByTuples(resultsSeq)
-          .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-            SubmissionValidationEntityInputs(
-              entityName = entityName,
-              inputResolutions = values.toSet
-            )
+
+        case (None, None, None) =>
+          // None exist, proceed without assignment
+          val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
+            val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
+            val visitor = new CompactEvaluateVisitor()
+            val parsedTree = terraExpressionParser.root()
+            val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+            (input, parsedTree, inputLookups)
           }
-          .to(LazyList)
+
+          // Repackage the parsed expressions into the correct form without querying the database
+          Future.successful {
+            inputExpressionData.flatMap { case (input, parsedTree, _) =>
+              val resultMap = InputExpressionReassembler.constructFinalInputValues(
+                Seq.empty, // No database results since no entities are queried
+                parsedTree,
+                None, // No root entity names since no entities are queried
+                Some(input)
+              )
+              convertToSubmissionValidationValues(resultMap, input)
+            }
+          }
+
+        case (Some(et), None, _) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing entityName")
+            )
+          )
+
+        case (None, Some(en), _) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing entityType")
+            )
+          )
+
+        case (None, None, Some(ret)) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing entityType and entityName")
+            )
+          )
+
+        case (Some(et), Some(en), None) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing rootEntityType")
+            )
+          )
       }
+
+    entityInfoFuture.map { resultsSeq =>
+      CollectionUtils
+        .groupByTuples(resultsSeq)
+        .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
+          SubmissionValidationEntityInputs(
+            entityName = entityName,
+            inputResolutions = values.toSet
+          )
+        }
+        .to(LazyList)
+    }
   }
 
-  // TODO this is now only used in one case; do we need a separate method anymore?
-  // It's useful for testing the visitor
   def parseLookups(expression: String): Seq[ExpressionLookup] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new CompactEvaluateVisitor()
@@ -367,7 +362,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
   ): Future[Seq[ExpressionAndResult]] =
     repository.dataSource
       .inTransaction { _ =>
-        if (plan.relationChain.isEmpty && entityLookups.isEmpty) {
+        if (plan.relationChain.isEmpty && entityLookups.isEmpty) { // TODO not sure if entityLookups.isEmpty is needed or not
           repository.queries.getEntity(workspaceId, entityType, entityName).map {
             case Some(entity) => Map(entity.name -> Seq(entity)) // Wrap the entity in a Seq to match the expected type
             case None =>
@@ -376,11 +371,17 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               )
           }
         } else {
-          repository.queries.queryRelatedRecordsWithArray(workspaceId, entityType, entityName, plan.relationChain)
+          repository.queries.queryRelatedRecordsWithRelationChain(workspaceId,
+                                                                  entityType,
+                                                                  entityName,
+                                                                  plan.relationChain
+          )
         }
       }
       .map { entityRecords =>
         // Validate entity types if we have entityLookups
+        // TODO correct validation
+        // "queryRelatedRecordsWithArray should return entities from the last relationship in the chain. Those will only be of rootEntityType for expressions like this.foo. But for something like this.case_sample.foo it will likely not be the rootEntityType."
         if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
           val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
           if (actualEntityTypes.nonEmpty && !actualEntityTypes.contains(rootEntityType)) {
@@ -399,28 +400,15 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         plan.expressionMappings.toSeq.flatMap { case (expression, attributeNames) =>
           attributeNames.map { attrName =>
             val attributeName = AttributeName.fromDelimitedName(attrName)
-
-            if (entityType == rootEntityType) {
-              // Entity type is the root entity type: aggregate all attributes and map to the original entity name
-              val attrs: Seq[AttributeValue] =
-                entityRecords.values.flatten.toSeq.flatMap(_.toEntity.attributes.get(attributeName)).flatMap {
-                  case avl: AttributeValueList => avl.list
-                  case av: AttributeValue      => Seq(av)
-                  case _                       => Seq.empty
-                }
-              (expression, Map(entityName -> Success(attrs)))
-            } else {
-              // Entity type is not root entity type, e.g. we're dealing with a set: map to actual entity names from the query results
-              val entityToAttributeValues = entityRecords.map { case (actualEntityName, records) =>
-                val attrs: Seq[AttributeValue] = records.flatMap(_.toEntity.attributes.get(attributeName)).flatMap {
-                  case avl: AttributeValueList => avl.list
-                  case av: AttributeValue      => Seq(av)
-                  case _                       => Seq.empty
-                }
-                actualEntityName -> Success(attrs)
+            val entityToAttributeValues = entityRecords.map { case (actualEntityName, records) =>
+              val attrs: Seq[AttributeValue] = records.flatMap(_.toEntity.attributes.get(attributeName)).flatMap {
+                case avl: AttributeValueList => avl.list
+                case av: AttributeValue      => Seq(av)
+                case _                       => Seq.empty
               }
-              (expression, entityToAttributeValues)
+              actualEntityName -> Success(attrs)
             }
+            (expression, entityToAttributeValues)
           }
         }
       }

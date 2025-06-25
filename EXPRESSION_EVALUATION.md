@@ -127,7 +127,7 @@ A single submission request can have many inputs, but these typically refer to o
 
 1. **Planning**: ExpressionLookups are grouped by their relation chains to minimize database queries. Multiple expressions requiring the same relation level share a single query (e.g., `this.sample.id` and `this.sample.name` both use `["sample"]` relation chain).
 
-2. **Execution**: Each QueryPlan executes [`queryRelatedRecordsWithArray`](core/src/main/scala/org/broadinstitute/dsde/rawls/dataaccess/slick/CompactEntityComponent.scala#L659) to retrieve entity data in batch operations, handling entity type transitions and complex traversals efficiently.
+2. **Execution**: Each QueryPlan executes [`queryRelatedRecordsWithRelationChain`](core/src/main/scala/org/broadinstitute/dsde/rawls/dataaccess/slick/CompactEntityComponent.scala#L659) to retrieve entity data in batch operations, handling entity type transitions and complex traversals efficiently.
 
 3. **Assembly**: Query results are transformed into `ExpressionAndResult` tuples, then processed by:
    - `constructFinalInputValues`: Takes the expression results and ANTLR parse tree to reconstruct the original input structure, returning `Map[EntityName, Try[Iterable[AttributeValue]]]`

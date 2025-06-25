@@ -387,7 +387,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
-  behavior of "queryRelatedRecordsWithArray"
+  behavior of "queryRelatedRecordsWithRelationChain"
 
   it should "get the record for a single reference" in withMinimalTestDatabase { _ =>
     // Insert referenced entity
@@ -410,7 +410,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(set)
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         wsid,
         "sample_set",
         "set1",
@@ -454,7 +454,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(set)
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
@@ -493,7 +493,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(sample, set))
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
@@ -549,7 +549,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(sample1, sample2, set))
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
@@ -628,7 +628,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(sample1, sample2, set))
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
@@ -673,7 +673,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(set)
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         wsid,
         "sample_set",
         "set1",
@@ -705,7 +705,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(set)
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         wsid,
         "Sample_set",
         "set1",
@@ -739,7 +739,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGetAll(Seq(sample, set, participant))
 
     val result1 = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
@@ -752,7 +752,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     result1.get(participant.name) shouldBe None
 
     val result2 = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
@@ -765,7 +765,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     result2.get(participant.name) shouldBe None
 
     val result3 = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
         "sample_set",
         "set1",
@@ -799,7 +799,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(set)
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         wsid,
         "sample_set",
         "Set1",
@@ -830,7 +830,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     insertAndGet(set)
 
     val result = runAndWait(
-      q.queryRelatedRecordsWithArray(
+      q.queryRelatedRecordsWithRelationChain(
         wsid,
         "sample_set",
         "set1",

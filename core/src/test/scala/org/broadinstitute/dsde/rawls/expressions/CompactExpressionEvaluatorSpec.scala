@@ -236,7 +236,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve method config inputs for a set entity" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -245,7 +245,7 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet2"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet2"), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -254,7 +254,7 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet4"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet4"), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -306,7 +306,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "resolve method config inputs for a set entity with root entity single type" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -400,7 +400,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "error on root entity type/expression evaluation mismatch" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq(sampleSet2.name), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -447,7 +447,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "error on root entity type/input entity mismatch" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), org.mockito.ArgumentMatchers.eq("daSampleSet"), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -553,7 +553,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "unpack array input expression with attribute reference into WDL-arrays" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(),
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
                                                org.mockito.ArgumentMatchers.eq(sampleSet2.name),
                                                any()
@@ -583,7 +583,7 @@ class CompactExpressionEvaluatorSpec
   // Expression: """{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah}"""
   it should "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name),
@@ -630,7 +630,7 @@ class CompactExpressionEvaluatorSpec
   // Expression: """{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah,"foo":{"bar":this.samples.blah}}"""
   it should "correctly unpack nested wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name),
@@ -678,7 +678,7 @@ class CompactExpressionEvaluatorSpec
   // Expression: """{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah}"""
   it should "unpack wdl struct expression with attribute references into WDL Struct input" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
@@ -786,7 +786,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "unpack AttributeValueRawJson into lists-of WDL-arrays" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet2.name),
@@ -828,7 +828,7 @@ class CompactExpressionEvaluatorSpec
       )
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
@@ -892,7 +892,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "cast attribute numbers into strings for string inputs via a set" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet2.name),
@@ -950,7 +950,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "return all attribute values for an attribute reference in a set" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet.name),
@@ -1028,7 +1028,7 @@ class CompactExpressionEvaluatorSpec
 
   it should "return values from a mixed expression" in withConfigData {
     when(
-      mockQueries.queryRelatedRecordsWithArray(
+      mockQueries.queryRelatedRecordsWithRelationChain(
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet.name),
@@ -1105,7 +1105,7 @@ class CompactExpressionEvaluatorSpec
     val queryPlan = QueryPlan(List("samples"), Map(expression -> Set("blah")))
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), any(), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -1130,7 +1130,7 @@ class CompactExpressionEvaluatorSpec
       QueryPlan(List("samples"), Map(expression1 -> Set("rawJsonDoubleArray"), expression2 -> Set("blah")))
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), any(), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -1159,7 +1159,7 @@ class CompactExpressionEvaluatorSpec
     val queryPlan = QueryPlan(List("samples"), Map(expression -> Set("blah")))
 
     when(
-      mockQueries.queryRelatedRecordsWithArray(any(), any(), any(), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -1193,7 +1193,7 @@ class CompactExpressionEvaluatorSpec
     val result = compactExpressionEvaluator
       .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", "sample1", "sample", queryPlan)
       .futureValue
-    verify(mockQueries, never()).queryRelatedRecordsWithArray(any(), any(), any(), any())
+    verify(mockQueries, never()).queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
