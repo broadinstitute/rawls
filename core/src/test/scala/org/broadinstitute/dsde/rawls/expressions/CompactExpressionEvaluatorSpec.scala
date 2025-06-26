@@ -34,6 +34,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Random, Success}
 
@@ -1195,9 +1196,11 @@ class CompactExpressionEvaluatorSpec
           Map(sampleSet.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
         )
       )
-    val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
-      .futureValue
+    val result = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
+    )
+
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
@@ -1220,9 +1223,10 @@ class CompactExpressionEvaluatorSpec
           Map(sampleSet.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
         )
       )
-    val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
-      .futureValue
+    val result = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
+    )
     result.size shouldBe 2
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
@@ -1249,9 +1253,10 @@ class CompactExpressionEvaluatorSpec
           Map(sampleGoodAsCER.name -> Seq(sampleGoodAsCER), sampleGood2AsCER.name -> Seq(sampleGood2AsCER))
         )
       )
-    val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "Sample", queryPlan)
-      .futureValue
+    val result = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "Sample", queryPlan)
+    )
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
@@ -1273,9 +1278,10 @@ class CompactExpressionEvaluatorSpec
           Some(sampleGoodAsCER)
         )
       )
-    val result = compactExpressionEvaluator
-      .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", sampleGood.name, "sample", queryPlan)
-      .futureValue
+    val result = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", sampleGood.name, "sample", queryPlan)
+    )
     verify(mockQueries, never()).queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
@@ -1309,9 +1315,10 @@ class CompactExpressionEvaluatorSpec
         )
       )
     val result =
-      compactExpressionEvaluator
-        .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", "sample1", "sample", queryPlan)
-        .futureValue
+      runAndWait(
+        compactExpressionEvaluator
+          .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", "sample1", "sample", queryPlan)
+      )
 
     result.size shouldBe 1
 
