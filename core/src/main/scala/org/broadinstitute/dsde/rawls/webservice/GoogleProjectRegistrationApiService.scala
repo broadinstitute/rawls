@@ -11,7 +11,8 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   GoogleProjectRegistration,
   RawlsBillingProjectName,
-  RawlsRequestContext
+  RawlsRequestContext,
+  UserInfo
 }
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 
@@ -22,57 +23,56 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
 
   val googleProjectRegServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService
 
-  def googleProjectRegistrationRoutes(otelContext: Context = Context.root()): server.Route =
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      pathPrefix("googleProjects") {
-        pathEnd {
-          put {
-            entity(as[GoogleProjectRegistration]) { entity =>
+  def googleProjectRegistrationRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    pathPrefix("googleProjects") {
+      pathEnd {
+        put {
+          entity(as[GoogleProjectRegistration]) { entity =>
+            complete {
+              googleProjectRegServiceConstructor(ctx)
+                .registerGoogleProject(
+                  entity
+                )
+                .map {
+                  case None          => StatusCodes.OK -> None
+                  case Some(project) => StatusCodes.Created -> Some(project)
+                }
+            }
+          }
+        } ~
+          get {
+            parameters(
+              "billingProjectId".optional,
+              "pageSize".as[Int].withDefault(100),
+              "offset".as[Int].withDefault(0)
+            ) { (billingProjectId, pageSize, offset) =>
               complete {
                 googleProjectRegServiceConstructor(ctx)
-                  .registerGoogleProject(
-                    entity
-                  )
-                  .map {
-                    case None          => StatusCodes.OK -> None
-                    case Some(project) => StatusCodes.Created -> Some(project)
-                  }
+                  .getGoogleProjects(billingProjectId.map(RawlsBillingProjectName), pageSize, offset)
               }
+            }
+          }
+      } ~
+        path(Segment) { googleProjectId =>
+          delete {
+            complete {
+              googleProjectRegServiceConstructor(ctx)
+                .unregisterGoogleProject(GoogleProjectId(googleProjectId))
+                .map(_ => StatusCodes.NoContent)
             }
           } ~
             get {
-              parameters(
-                "billingProjectId".optional,
-                "pageSize".as[Int].withDefault(100),
-                "offset".as[Int].withDefault(0)
-              ) { (billingProjectId, pageSize, offset) =>
-                complete {
-                  googleProjectRegServiceConstructor(ctx)
-                    .getGoogleProjects(billingProjectId.map(RawlsBillingProjectName), pageSize, offset)
-                }
+              onSuccess(
+                googleProjectRegServiceConstructor(ctx)
+                  .getGoogleProjectById(GoogleProjectId(googleProjectId))
+              ) {
+                case Some(project) => complete(StatusCodes.OK -> project)
+                case None =>
+                  complete(StatusCodes.NotFound -> "Google project does not exist or you don't have access.")
               }
             }
-        } ~
-          path(Segment) { googleProjectId =>
-            delete {
-              complete {
-                googleProjectRegServiceConstructor(ctx)
-                  .unregisterGoogleProject(GoogleProjectId(googleProjectId))
-                  .map(_ => StatusCodes.NoContent)
-              }
-            } ~
-              get {
-                onSuccess(
-                  googleProjectRegServiceConstructor(ctx)
-                    .getGoogleProjectById(GoogleProjectId(googleProjectId))
-                ) {
-                  case Some(project) => complete(StatusCodes.OK -> project)
-                  case None =>
-                    complete(StatusCodes.NotFound -> "Google project does not exist or you don't have access.")
-                }
-              }
-          }
-      }
+        }
     }
+  }
 }

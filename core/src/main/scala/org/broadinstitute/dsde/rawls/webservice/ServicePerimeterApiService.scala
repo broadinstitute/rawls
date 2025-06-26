@@ -20,19 +20,18 @@ trait ServicePerimeterApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val userServiceConstructor: RawlsRequestContext => UserService
-  def servicePerimeterRoutes(otelContext: Context = Context.root()): server.Route =
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
-        put {
-          complete {
-            userServiceConstructor(ctx)
-              .addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)),
-                                            RawlsBillingProjectName(projectId)
-              )
-              .map(_ => StatusCodes.NoContent)
-          }
+  def servicePerimeterRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
+      put {
+        complete {
+          userServiceConstructor(ctx)
+            .addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)),
+                                          RawlsBillingProjectName(projectId)
+            )
+            .map(_ => StatusCodes.NoContent)
         }
       }
     }
+  }
 }
