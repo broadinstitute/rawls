@@ -13,7 +13,6 @@ trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
 
   def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
-  def listWorkspaces(ctx: RawlsRequestContext, batchSize: Int = 100): List[WorkspaceDescription]
   def createWorkspace(workspaceId: UUID,
                       workspaceType: WorkspaceType,
                       policyInputs: Option[WsmPolicyInputs],
