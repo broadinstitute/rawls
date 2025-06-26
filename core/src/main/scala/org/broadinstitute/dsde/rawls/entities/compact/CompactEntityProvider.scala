@@ -76,6 +76,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     with BatchHandling {
   override def entityStoreId: Option[String] = None // unused
 
+  private val expressionEvaluator = new CompactExpressionEvaluator(repository)
+
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
   val workspaceContext: Workspace = requestArguments.workspace
 
@@ -365,18 +367,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                   expression: String,
                                   parentContext: RawlsRequestContext
   ): Future[Seq[AttributeValue]] =
-    // TODO presumably this can be created once for the whole provider
-    new CompactExpressionEvaluator(repository).evaluateExpression(workspaceId, expression, entityType, entityName)
+    expressionEvaluator.evaluateExpression(workspaceId, expression, entityType, entityName)
 
   // Note that localEntityProvider ignores workspaceExpressionResults
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: MethodConfigResolver.GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
   ): Future[LazyList[SubmissionValidationEntityInputs]] =
-    new CompactExpressionEvaluator(repository).evaluateExpressions(workspaceId,
-                                                                   expressionEvaluationContext,
-                                                                   gatherInputsResult
-    )
+    expressionEvaluator.evaluateExpressions(workspaceId, expressionEvaluationContext, gatherInputsResult)
 
   // TODO Verify that LocalEntityExpressionValidator works for Compact Entities then rename
   override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator

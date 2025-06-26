@@ -34,7 +34,6 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Random, Success}
 
@@ -104,8 +103,7 @@ class CompactExpressionEvaluatorSpec
             ExpressionLookup(
               expression = "this.type",
               relations = List(),
-              attributeName = Some("type"),
-              values = Seq.empty
+              attributeName = Some("type")
             )
           )
         ),
@@ -120,8 +118,7 @@ class CompactExpressionEvaluatorSpec
             ExpressionLookup(
               expression = "workspace.string",
               relations = List(),
-              attributeName = Some("string"),
-              values = Seq.empty
+              attributeName = Some("string")
             )
           )
         ),
@@ -131,8 +128,7 @@ class CompactExpressionEvaluatorSpec
             ExpressionLookup(
               expression = "this.pfb:projects",
               relations = List(),
-              attributeName = Some("pfb:projects"),
-              values = Seq.empty
+              attributeName = Some("pfb:projects")
             )
           )
         )
@@ -1149,20 +1145,17 @@ class CompactExpressionEvaluatorSpec
     Mockito.when(mockParticipantRelationContext.attributeName()).thenReturn(mockParticipantAttributeContext)
     val relationExpression = "this.samples.type"
     val relationExpressionLookup =
-      ExpressionLookup(relationExpression, List(mockSampleRelationContext), Some("type"), Seq.empty)
+      ExpressionLookup(relationExpression, List(mockSampleRelationContext), Some("type"))
     val plainExpression = "this.foo"
-    val plainExpressionLookup = ExpressionLookup(plainExpression, List(), Some("foo"), Seq.empty)
+    val plainExpressionLookup = ExpressionLookup(plainExpression, List(), Some("foo"))
     val chainedExpression = "this.samples.participants.id"
-    val chainedExpressionLookup = ExpressionLookup(chainedExpression,
-                                                   List(mockSampleRelationContext, mockParticipantRelationContext),
-                                                   Some("id"),
-                                                   Seq.empty
-    )
+    val chainedExpressionLookup =
+      ExpressionLookup(chainedExpression, List(mockSampleRelationContext, mockParticipantRelationContext), Some("id"))
     val complexExpression = "{\"id\": this.bar, \"this.samples\": this.samples.blah}"
     val complexExpressionLookup1 =
-      ExpressionLookup(complexExpression, List(), Some("bar"), Seq.empty)
+      ExpressionLookup(complexExpression, List(), Some("bar"))
     val complexExpressionLookup2 =
-      ExpressionLookup(complexExpression, List(mockSampleRelationContext), Some("blah"), Seq.empty)
+      ExpressionLookup(complexExpression, List(mockSampleRelationContext), Some("blah"))
 
     // The expressions above all together should result in 3 queries: one for the base entity, one for base -> samples, and one for base -> samples -> participants
     val result = compactExpressionEvaluator.buildQueryPlans(

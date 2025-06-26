@@ -6,17 +6,14 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
   RelationContext
 }
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import org.broadinstitute.dsde.rawls.model.AttributeValue
 
 import scala.jdk.CollectionConverters._
-import scala.util.{Success, Try}
 
 object CompactEvaluateVisitor {
   case class ExpressionLookup(
     expression: String, // the original expression or literal
     relations: List[RelationContext],
-    attributeName: Option[String], // None for literals
-    values: Seq[AttributeValue] // the result of evaluating this lookup (from DB or literal) //TODO is this ever used
+    attributeName: Option[String] // None for literals
   )
 }
 
@@ -33,8 +30,7 @@ class CompactEvaluateVisitor extends TerraExpressionBaseVisitor[Seq[ExpressionLo
       ExpressionLookup(
         expression = ctx.getText,
         relations = ctx.relation().asScala.toList,
-        attributeName = Some(toDelimitedName(AntlrTerraExpressionParser.toAttributeName(ctx.attributeName()))),
-        values = Seq.empty
+        attributeName = Some(toDelimitedName(AntlrTerraExpressionParser.toAttributeName(ctx.attributeName())))
       )
     )
 
@@ -45,8 +41,7 @@ class CompactEvaluateVisitor extends TerraExpressionBaseVisitor[Seq[ExpressionLo
       ExpressionLookup(
         expression = ctx.getText,
         relations = List.empty,
-        attributeName = Some(ctx.attributeName().name().getText),
-        values = Seq.empty
+        attributeName = Some(ctx.attributeName().name().getText)
       )
     )
 
@@ -59,8 +54,7 @@ class CompactEvaluateVisitor extends TerraExpressionBaseVisitor[Seq[ExpressionLo
       ExpressionLookup(
         expression = ctx.getText,
         relations = ctx.relation().asScala.toList,
-        attributeName = Some(ctx.attributeName().name().getText),
-        values = Seq.empty
+        attributeName = Some(ctx.attributeName().name().getText)
       )
     )
 

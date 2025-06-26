@@ -752,7 +752,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     result.get(sample1.name).get should contain(insertedSampleWS1)
   }
 
-  // TODO double check these tests are testing what they should
   it should "be case-sensitive on entity type" in withMinimalTestDatabase { _ =>
     // Insert referenced entity
     val sample = Entity(

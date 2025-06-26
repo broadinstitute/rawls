@@ -75,7 +75,6 @@ case class ExpressionLookup(
      expression: String,
      relations: List[RelationContext],
      attributeName: Option[String], // None for literals
-     values: Seq[AttributeValue]
 )
 ```
 
@@ -83,10 +82,8 @@ Represents a single expression's database requirements:
 - `expression`: the original expression or literal
 - `relations`: list of `RelationContext`s found in the expression
 - `attributeName`: the final attribute to get for the expression
-- `values`: the result of evaluating this lookup (from DB or literal)
 
 Examples:
-(values are left out, as these are not initially used)
 ```scala
   ExpressionLookup("this.file", List(), Some("file"))
   ExpressionLookup("this.sample.name", List("sample"), Some("name"))
