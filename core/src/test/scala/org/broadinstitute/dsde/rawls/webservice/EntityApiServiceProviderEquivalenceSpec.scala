@@ -224,7 +224,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
     Seq(legacyWs, compactWs) foreach { ws =>
       withClue(s"POST batchUpsert for workspace ${ws.toWorkspaceName}") {
         Post(s"/workspaces/${ws.namespace}/${ws.name}/entities/batchUpsert", httpJson(payload)) ~>
-          withHandlers(services.entityRoutes()) ~>
+          withHandlers(services.entityRoutes(userInfo = userInfo)) ~>
           check {
             status shouldBe StatusCodes.NoContent
           }
@@ -254,7 +254,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
     // List entities in both workspaces
     def listEntities(ws: Workspace): Seq[Entity] =
       Get(s"/workspaces/${ws.namespace}/${ws.name}/entities/myType") ~>
-        withHandlers(services.entityRoutes()) ~>
+        withHandlers(services.entityRoutes(userInfo = userInfo)) ~>
         check {
           status shouldBe StatusCodes.OK
           responseAs[Seq[Entity]]
@@ -292,7 +292,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
   private def createEntity(ws: Workspace, entity: Entity, services: TestApiService): Entity =
     withClue(s"createEntity helper for workspace ${ws.toWorkspaceName}") {
       Post(s"/workspaces/${ws.namespace}/${ws.name}/entities", httpJson(entity)) ~>
-        withHandlers(services.entityRoutes()) ~>
+        withHandlers(services.entityRoutes(userInfo = userInfo)) ~>
         check {
           status shouldBe StatusCodes.Created
           val created = responseAs[Entity]
@@ -305,7 +305,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
   private def getEntity(ws: Workspace, entityType: String, entityName: String, services: TestApiService): Entity =
     withClue(s"getEntity helper for workspace ${ws.toWorkspaceName}") {
       Get(s"/workspaces/${ws.namespace}/${ws.name}/entities/$entityType/$entityName") ~>
-        withHandlers(services.entityRoutes()) ~>
+        withHandlers(services.entityRoutes(userInfo = userInfo)) ~>
         check {
           status shouldBe StatusCodes.OK
           val retrieved = responseAs[Entity]
@@ -317,7 +317,7 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
   private def getEntityTypeMetadata(ws: Workspace, services: TestApiService): Map[String, EntityTypeMetadata] =
     withClue(s"getEntityTypeMetadata helper for workspace ${ws.toWorkspaceName}") {
       Get(s"/workspaces/${ws.namespace}/${ws.name}/entities") ~>
-        withHandlers(services.entityRoutes()) ~>
+        withHandlers(services.entityRoutes(userInfo = userInfo)) ~>
         check {
           status shouldBe StatusCodes.OK
           val retrieved = responseAs[Map[String, EntityTypeMetadata]]
