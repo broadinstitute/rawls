@@ -37,7 +37,6 @@ case class QueryPlan(
 
 class CompactExpressionEvaluator(repository: CompactEntityRepository) extends ExpressionEvaluationSupport {
 
-  // TODO: if the end result is a reference attribute, we get blank.  i think that should be an error
   /**
    * Evaluates a single expression against a specific entity and returns the resulting attribute values.
    *
@@ -376,7 +375,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     executionContext: ExecutionContext
   ): ReadAction[Seq[ExpressionAndResult]] = {
     val queryAction =
-      if (plan.relationChain.isEmpty && entityLookups.isEmpty) { // TODO not sure if entityLookups.isEmpty is needed or not
+      if (plan.relationChain.isEmpty) {
         repository.queries.getEntity(workspaceId, entityType, entityName).map {
           case Some(entity) => Map(entity.name -> Seq(entity)) // Wrap the entity in a Seq to match the expected type
           case None =>
@@ -390,7 +389,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
 
     queryAction.map { entityRecords =>
       // Validate entity types if we have entityLookups
-      // TODO correct validation
       if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
         val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
         if (actualEntityTypes.nonEmpty && !actualEntityTypes.contains(rootEntityType)) {

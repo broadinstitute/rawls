@@ -486,7 +486,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    // TODO why is the list in an option?
+
     result.get(sample.name).get should contain(insertedSample)
   }
 
@@ -504,7 +504,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
     )
 
-    // TODO if i do insertAndGetAll is there a convenient way to do the comparison
     // We'll need these later for comparison
     val insertedSample1 = insertAndGet(sample1)
     val insertedSample2 = insertAndGet(sample2)

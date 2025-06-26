@@ -152,8 +152,6 @@ class CompactExpressionEvaluatorSpec
           "pfb:projects.",
           Some("id")
         )
-
-//        ("workspace.sample1ref.type", "sample1ref.", "type") // TODO do i need to implement workspace entities?
       )
 
     forAll(relationTests) { (input, getText, attributeName) =>
