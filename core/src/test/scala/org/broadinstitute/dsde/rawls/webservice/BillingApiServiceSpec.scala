@@ -357,7 +357,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       ).thenReturn(Future.successful(true))
 
       Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
-        sealRoute(services.servicePerimeterRoutes()) ~>
+        sealRoute(services.servicePerimeterRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -389,7 +389,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       ).thenReturn(Future.successful(false))
 
       Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
-        sealRoute(services.servicePerimeterRoutes()) ~>
+        sealRoute(services.servicePerimeterRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -413,7 +413,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       ).thenReturn(Future.successful(false))
 
       Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
-        sealRoute(services.servicePerimeterRoutes()) ~>
+        sealRoute(services.servicePerimeterRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.NotFound) {
             status
