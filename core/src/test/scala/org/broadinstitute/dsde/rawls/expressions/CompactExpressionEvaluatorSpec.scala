@@ -644,7 +644,7 @@ class CompactExpressionEvaluatorSpec
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleSet2.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
+          Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
         )
       )
     val context =

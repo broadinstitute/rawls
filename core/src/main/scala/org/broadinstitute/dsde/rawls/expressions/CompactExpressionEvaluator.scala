@@ -402,22 +402,43 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
           attributeNames.map { attrName =>
             val attributeName = AttributeName.fromDelimitedName(attrName)
 
-            val entityToAttributeValues = entityRecords.map { case (actualEntityName, records) =>
-              val attrs: Seq[AttributeValue] = records.flatMap { record =>
+            val entityToAttributeValues = if (entityType == rootEntityType) {
+              // Group all results under the original entityName since we want results grouped by the starting entity type
+              val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
                 val attributeNameToCheck =
                   AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
                 record.toEntity.attributes.get(attributeName) match {
-                  case _ if attributeName == attributeNameToCheck =>
-                    Seq(AttributeString(record.name)) // Return the record's name as an AttributeString wrapped in a Seq
                   case Some(avl: AttributeValueList) =>
-                    avl.list // Return the list of values directly
+                    avl.list.toSeq
                   case Some(av: AttributeValue) =>
-                    Seq(av) // Wrap the single value in a Seq
+                    Seq(av)
+                  case _ if attributeName == attributeNameToCheck =>
+                    Seq(AttributeString(record.name))
                   case _ =>
-                    Seq.empty // Return an empty Seq for unmatched cases
+                    Seq.empty
                 }
               }
-              actualEntityName -> Success(attrs)
+              Map(entityName -> Success(allAttrs))
+            } else {
+              entityRecords.map { case (actualEntityName, records) =>
+                val attrs: Seq[AttributeValue] = records.flatMap { record =>
+                  val attributeNameToCheck =
+                    AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
+                  record.toEntity.attributes.get(attributeName) match {
+                    case _ if attributeName == attributeNameToCheck =>
+                      Seq(
+                        AttributeString(record.name)
+                      ) // Return the record's name as an AttributeString wrapped in a Seq
+                    case Some(avl: AttributeValueList) =>
+                      avl.list // Return the list of values directly
+                    case Some(av: AttributeValue) =>
+                      Seq(av) // Wrap the single value in a Seq
+                    case _ =>
+                      Seq.empty // Return an empty Seq for unmatched cases
+                  }
+                }
+                actualEntityName -> Success(attrs)
+              }
             }
             (expression, entityToAttributeValues)
           }
