@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.expressions
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{
   AntlrTerraExpressionParser,
-  LocalOutputExpressionValidationVisitor
+  OutputExpressionValidationVisitor
 }
 import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeName, AttributeNull, ErrorReport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -28,7 +28,7 @@ object OutputExpression {
     if (expr.isEmpty) Success(UnboundOutputExpression)
     else {
       val terraExpressionParser = AntlrTerraExpressionParser.getParser(expr)
-      val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption)
+      val visitor = new OutputExpressionValidationVisitor(rootEntityTypeOption)
 
       for {
         parseTree <- Try(terraExpressionParser.root()).recoverWith { case regrets: RawlsException =>
