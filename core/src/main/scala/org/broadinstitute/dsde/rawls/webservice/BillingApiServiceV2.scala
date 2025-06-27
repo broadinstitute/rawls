@@ -56,249 +56,245 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
 
   implicit def dateTimeUnmarshaller: Unmarshaller[String, DateTime] = Unmarshaller.strict(DateTime.parse)
 
-  def billingRoutesV2(otelContext: Context = Context.root()): server.Route = {
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      pathPrefix("billing" / "v2") {
-        pathPrefix("id") {
-          pathPrefix(Segment) { id =>
-            pathEndOrSingleSlash {
-              get {
-                complete {
-                  userServiceConstructor(ctx).getBillingProjectById(UUID.fromString(id)).map {
-                    case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
-                    case None                  => StatusCodes.NotFound -> None
-                  }
-                }
-              }
-            } ~
-              pathPrefix("verifyAction") {
-                path(Segment) { action =>
-                  get {
-                    complete {
-                      userServiceConstructor(ctx)
-                        .verifyBillingProjectAccess(UUID.fromString(id), SamResourceAction(action))
-                        .map {
-                          case Some(true)  => StatusCodes.OK -> None
-                          case Some(false) => StatusCodes.Forbidden -> None
-                          case None        => StatusCodes.NotFound -> None
-                        }
-                    }
-                  }
-                }
-              }
-          }
-        } ~
-          pathPrefix("spendReport") {
-            pathEndOrSingleSlash {
-              get {
-                parameters(
-                  "startDate".as[DateTime],
-                  "endDate".as[DateTime],
-                  "pageSize".as[Int],
-                  "offset".as[Int]
-                ) { (startDate, endDate, pageSize, offset) =>
-                  complete {
-                    spendReportingConstructor(ctx).getSpendForAllWorkspaces(
-                      startDate,
-                      endDate.plusDays(1).minusMillis(1),
-                      pageSize,
-                      offset
-                    )
-                  }
+  def billingRoutesV2(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    pathPrefix("billing" / "v2") {
+      pathPrefix("id") {
+        pathPrefix(Segment) { id =>
+          pathEndOrSingleSlash {
+            get {
+              complete {
+                userServiceConstructor(ctx).getBillingProjectById(UUID.fromString(id)).map {
+                  case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
+                  case None                  => StatusCodes.NotFound -> None
                 }
               }
             }
           } ~
-          pathPrefix(Segment) { projectId =>
-            pathEnd {
-              get {
-                complete {
-                  import spray.json._
-                  userServiceConstructor(ctx).getBillingProject(RawlsBillingProjectName(projectId)).map {
-                    case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse).toJson
-                    case None => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
-                  }
-                }
-              } ~
-                delete {
+            pathPrefix("verifyAction") {
+              path(Segment) { action =>
+                get {
                   complete {
-                    billingProjectOrchestratorConstructor(ctx)
-                      .deleteBillingProjectV2(RawlsBillingProjectName(projectId))
-                      .map(_ => StatusCodes.NoContent)
-                  }
-                }
-            } ~
-              pathPrefix("spendReport") {
-                pathEndOrSingleSlash {
-                  get {
-                    parameters(
-                      "startDate".as[DateTime],
-                      "endDate".as[DateTime],
-                      "aggregationKey"
-                        .as[SpendReportingAggregationKeyWithSub](aggregationKeyParameterUnmarshaller)
-                        .repeated
-                    ) { (startDate, endDate, aggregationKeyParameters) =>
-                      complete {
-                        spendReportingConstructor(ctx).getSpendForBillingProject(
-                          RawlsBillingProjectName(projectId),
-                          startDate,
-                          endDate.plusDays(1).minusMillis(1),
-                          aggregationKeyParameters.toSet
-                        )
-                      }
-                    }
-                  }
-                }
-              } ~
-              pathPrefix("spendReportConfiguration") {
-                pathEnd {
-                  put {
-                    entity(as[BillingProjectSpendConfiguration]) { spendConfiguration =>
-                      complete {
-                        userServiceConstructor(ctx)
-                          .setBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId), spendConfiguration)
-                          .map(_ => StatusCodes.NoContent)
-                      }
-                    }
-                  } ~
-                    delete {
-                      complete {
-                        userServiceConstructor(ctx)
-                          .clearBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId))
-                          .map(_ => StatusCodes.NoContent)
-                      }
-                    } ~
-                    get {
-                      complete {
-                        userServiceConstructor(ctx)
-                          .getBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId))
-                          .map {
-                            case Some(config) => StatusCodes.OK -> Option(config)
-                            case None         => StatusCodes.NoContent -> None
-                          }
-                      }
-                    }
-                }
-              } ~
-              pathPrefix("billingAccount") {
-                pathEnd {
-                  put {
-                    entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
-                      complete {
-                        userServiceConstructor(ctx)
-                          .updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest)
-                          .map {
-                            case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
-                            case None                 => StatusCodes.NoContent -> None
-                          }
-                      }
-                    }
-                  } ~
-                    delete {
-                      complete {
-                        userServiceConstructor(ctx).deleteBillingAccount(RawlsBillingProjectName(projectId)).map {
-                          case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
-                          case None                 => StatusCodes.NoContent -> None
-                        }
-                      }
-                    }
-                }
-              } ~
-              pathPrefix("members") {
-                pathEnd {
-                  get {
-                    complete {
-                      userServiceConstructor(ctx).getBillingProjectMembers(RawlsBillingProjectName(projectId))
-                    }
-                  } ~
-                    patch {
-                      parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound =>
-                        entity(as[BatchProjectAccessUpdate]) { batchProjectAccessUpdate =>
-                          complete {
-                            userServiceConstructor(ctx)
-                              .batchUpdateBillingProjectMembers(RawlsBillingProjectName(projectId),
-                                                                batchProjectAccessUpdate,
-                                                                inviteUsersNotFound.getOrElse("false").toBoolean
-                              )
-                              .map(_ => StatusCodes.NoContent -> None)
-                          }
-                        }
-                      }
-                    }
-                } ~
-                  // these routes are for adding/removing users from projects
-                  path(Segment / Segment) { (workbenchRole, userEmail) =>
-                    put {
-                      complete {
-                        userServiceConstructor(ctx)
-                          .addUserToBillingProjectV2(RawlsBillingProjectName(projectId),
-                                                     ProjectAccessUpdate(userEmail,
-                                                                         ProjectRoles.withName(workbenchRole)
-                                                     )
-                          )
-                          .map(_ => StatusCodes.OK)
-                      }
-                    } ~
-                      delete {
-                        complete {
-                          userServiceConstructor(ctx)
-                            .removeUserFromBillingProjectV2(RawlsBillingProjectName(projectId),
-                                                            ProjectAccessUpdate(userEmail,
-                                                                                ProjectRoles.withName(workbenchRole)
-                                                            )
-                            )
-                            .map(_ => StatusCodes.OK)
-                        }
+                    userServiceConstructor(ctx)
+                      .verifyBillingProjectAccess(UUID.fromString(id), SamResourceAction(action))
+                      .map {
+                        case Some(true)  => StatusCodes.OK -> None
+                        case Some(false) => StatusCodes.Forbidden -> None
+                        case None        => StatusCodes.NotFound -> None
                       }
                   }
-              } ~
-              pathPrefix("bucketMigration") {
-                val billingProjectName = RawlsBillingProjectName(projectId)
-                pathEndOrSingleSlash {
-                  post {
-                    complete {
-                      bucketMigrationServiceConstructor(ctx)
-                        .migrateWorkspaceBucketsInBillingProject(billingProjectName)
-                        .map(StatusCodes.Created -> _)
-                    }
-                  } ~
-                    get {
-                      complete {
-                        bucketMigrationServiceConstructor(ctx)
-                          .getBucketMigrationAttemptsForBillingProject(billingProjectName)
-                          .map(ms => StatusCodes.OK -> ms)
-                      }
-                    }
-                } ~
-                  path("progress") {
-                    get {
-                      complete {
-                        bucketMigrationServiceConstructor(ctx)
-                          .getBucketMigrationProgressForBillingProject(billingProjectName)
-                          .map(StatusCodes.OK -> _)
-                      }
-                    }
-                  }
+                }
               }
-          } ~
+            }
+        }
+      } ~
+        pathPrefix("spendReport") {
+          pathEndOrSingleSlash {
+            get {
+              parameters(
+                "startDate".as[DateTime],
+                "endDate".as[DateTime],
+                "pageSize".as[Int],
+                "offset".as[Int]
+              ) { (startDate, endDate, pageSize, offset) =>
+                complete {
+                  spendReportingConstructor(ctx).getSpendForAllWorkspaces(
+                    startDate,
+                    endDate.plusDays(1).minusMillis(1),
+                    pageSize,
+                    offset
+                  )
+                }
+              }
+            }
+          }
+        } ~
+        pathPrefix(Segment) { projectId =>
           pathEnd {
             get {
               complete {
-                userServiceConstructor(ctx).listBillingProjectsV2()
+                import spray.json._
+                userServiceConstructor(ctx).getBillingProject(RawlsBillingProjectName(projectId)).map {
+                  case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse).toJson
+                  case None => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
+                }
               }
             } ~
-              post {
-                entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>
-                  complete {
-                    billingProjectOrchestratorConstructor(ctx)
-                      .createBillingProjectV2(createProjectRequest)
-                      .map(_ => StatusCodes.Created)
+              delete {
+                complete {
+                  billingProjectOrchestratorConstructor(ctx)
+                    .deleteBillingProjectV2(RawlsBillingProjectName(projectId))
+                    .map(_ => StatusCodes.NoContent)
+                }
+              }
+          } ~
+            pathPrefix("spendReport") {
+              pathEndOrSingleSlash {
+                get {
+                  parameters(
+                    "startDate".as[DateTime],
+                    "endDate".as[DateTime],
+                    "aggregationKey"
+                      .as[SpendReportingAggregationKeyWithSub](aggregationKeyParameterUnmarshaller)
+                      .repeated
+                  ) { (startDate, endDate, aggregationKeyParameters) =>
+                    complete {
+                      spendReportingConstructor(ctx).getSpendForBillingProject(
+                        RawlsBillingProjectName(projectId),
+                        startDate,
+                        endDate.plusDays(1).minusMillis(1),
+                        aggregationKeyParameters.toSet
+                      )
+                    }
                   }
                 }
               }
-          }
-      }
+            } ~
+            pathPrefix("spendReportConfiguration") {
+              pathEnd {
+                put {
+                  entity(as[BillingProjectSpendConfiguration]) { spendConfiguration =>
+                    complete {
+                      userServiceConstructor(ctx)
+                        .setBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId), spendConfiguration)
+                        .map(_ => StatusCodes.NoContent)
+                    }
+                  }
+                } ~
+                  delete {
+                    complete {
+                      userServiceConstructor(ctx)
+                        .clearBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId))
+                        .map(_ => StatusCodes.NoContent)
+                    }
+                  } ~
+                  get {
+                    complete {
+                      userServiceConstructor(ctx)
+                        .getBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId))
+                        .map {
+                          case Some(config) => StatusCodes.OK -> Option(config)
+                          case None         => StatusCodes.NoContent -> None
+                        }
+                    }
+                  }
+              }
+            } ~
+            pathPrefix("billingAccount") {
+              pathEnd {
+                put {
+                  entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
+                    complete {
+                      userServiceConstructor(ctx)
+                        .updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest)
+                        .map {
+                          case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
+                          case None                 => StatusCodes.NoContent -> None
+                        }
+                    }
+                  }
+                } ~
+                  delete {
+                    complete {
+                      userServiceConstructor(ctx).deleteBillingAccount(RawlsBillingProjectName(projectId)).map {
+                        case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
+                        case None                 => StatusCodes.NoContent -> None
+                      }
+                    }
+                  }
+              }
+            } ~
+            pathPrefix("members") {
+              pathEnd {
+                get {
+                  complete {
+                    userServiceConstructor(ctx).getBillingProjectMembers(RawlsBillingProjectName(projectId))
+                  }
+                } ~
+                  patch {
+                    parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound =>
+                      entity(as[BatchProjectAccessUpdate]) { batchProjectAccessUpdate =>
+                        complete {
+                          userServiceConstructor(ctx)
+                            .batchUpdateBillingProjectMembers(RawlsBillingProjectName(projectId),
+                                                              batchProjectAccessUpdate,
+                                                              inviteUsersNotFound.getOrElse("false").toBoolean
+                            )
+                            .map(_ => StatusCodes.NoContent -> None)
+                        }
+                      }
+                    }
+                  }
+              } ~
+                // these routes are for adding/removing users from projects
+                path(Segment / Segment) { (workbenchRole, userEmail) =>
+                  put {
+                    complete {
+                      userServiceConstructor(ctx)
+                        .addUserToBillingProjectV2(RawlsBillingProjectName(projectId),
+                                                   ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                        )
+                        .map(_ => StatusCodes.OK)
+                    }
+                  } ~
+                    delete {
+                      complete {
+                        userServiceConstructor(ctx)
+                          .removeUserFromBillingProjectV2(RawlsBillingProjectName(projectId),
+                                                          ProjectAccessUpdate(userEmail,
+                                                                              ProjectRoles.withName(workbenchRole)
+                                                          )
+                          )
+                          .map(_ => StatusCodes.OK)
+                      }
+                    }
+                }
+            } ~
+            pathPrefix("bucketMigration") {
+              val billingProjectName = RawlsBillingProjectName(projectId)
+              pathEndOrSingleSlash {
+                post {
+                  complete {
+                    bucketMigrationServiceConstructor(ctx)
+                      .migrateWorkspaceBucketsInBillingProject(billingProjectName)
+                      .map(StatusCodes.Created -> _)
+                  }
+                } ~
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .getBucketMigrationAttemptsForBillingProject(billingProjectName)
+                        .map(ms => StatusCodes.OK -> ms)
+                    }
+                  }
+              } ~
+                path("progress") {
+                  get {
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .getBucketMigrationProgressForBillingProject(billingProjectName)
+                        .map(StatusCodes.OK -> _)
+                    }
+                  }
+                }
+            }
+        } ~
+        pathEnd {
+          get {
+            complete {
+              userServiceConstructor(ctx).listBillingProjectsV2()
+            }
+          } ~
+            post {
+              entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>
+                complete {
+                  billingProjectOrchestratorConstructor(ctx)
+                    .createBillingProjectV2(createProjectRequest)
+                    .map(_ => StatusCodes.Created)
+                }
+              }
+            }
+        }
     }
   }
 }
