@@ -2592,11 +2592,6 @@ class WorkspaceServiceSpec
       services.policyService.listPaos(any, any[RawlsRequestContext])
     ).thenReturn(Future.successful(Seq(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
 
-    when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
-      List(
-        workspaceDescription
-      )
-    )
     createdWorkspace
   }
 
@@ -2654,11 +2649,6 @@ class WorkspaceServiceSpec
       services.policyService.listPaos(any, any[RawlsRequestContext])
     ).thenReturn(Future.successful(Seq(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
 
-    when(services.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
-      List(
-        workspaceDescription
-      )
-    )
     createdWorkspace
   }
 
@@ -2930,120 +2920,12 @@ class WorkspaceServiceSpec
 
   behavior of "listWorkspaces"
 
-  it should "list the correct cloud platform and state for Azure and Google workspaces" in withTestDataServices {
-    services =>
-      val service = services.workspaceService
-      val workspaceId1 = UUID.randomUUID().toString
-      val workspaceId2 = UUID.randomUUID().toString
-
-      // set up test data
-      val azureWorkspace =
-        Workspace.buildReadyMcWorkspace("test_namespace1",
-                                        "name",
-                                        workspaceId1,
-                                        new DateTime(),
-                                        new DateTime(),
-                                        "testUser1",
-                                        Map.empty
-        )
-      val googleWorkspace = Workspace("test_namespace2",
-                                      workspaceId2,
-                                      workspaceId2,
-                                      "aBucket",
-                                      Some("workflow-collection"),
-                                      new DateTime(),
-                                      new DateTime(),
-                                      "testUser2",
-                                      Map.empty
-      )
-      val azureWorkspaceDetails =
-        WorkspaceDetails.fromWorkspaceAndOptions(azureWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Azure))
-      val googleWorkspaceDetails =
-        WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
-      val expected = List(
-        (azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform, azureWorkspaceDetails.state),
-        (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform, googleWorkspaceDetails.state)
-      )
-
-      runAndWait {
-        for {
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
-        } yield ()
-      }
-
-      // mock external calls
-      when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
-        List(
-          new WorkspaceDescription()
-            .id(googleWorkspace.workspaceIdAsUUID)
-            .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-            .gcpContext(new GcpContext()),
-          new WorkspaceDescription()
-            .id(azureWorkspace.workspaceIdAsUUID)
-            .stage(WorkspaceStageModel.MC_WORKSPACE)
-            .azureContext(
-              new AzureContext()
-                .tenantId(UUID.randomUUID.toString)
-                .subscriptionId(UUID.randomUUID.toString)
-                .resourceGroupId(UUID.randomUUID.toString)
-            )
-        )
-      )
-      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
-        Future(
-          Seq(
-            SamUserResource(
-              workspaceId1,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            ),
-            SamUserResource(
-              workspaceId2,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            )
-          )
-        )
-      )
-      when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
-
-      // actually call listWorkspaces to get result it returns given the mocked calls you set up
-      val result =
-        Await
-          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-          .convertTo[Seq[WorkspaceListResponse]]
-
-      // verify that the result is what you expect it to be
-      result.map(ws =>
-        (ws.workspace.workspaceId, ws.workspace.cloudPlatform, ws.workspace.state)
-      ) should contain theSameElementsAs expected
-  }
-
-  it should "not return MC workspaces that do not have a cloud context" in withTestDataServices { services =>
+  it should "list the correct cloud platform and state for Google workspaces" in withTestDataServices { services =>
     val service = services.workspaceService
     val workspaceId1 = UUID.randomUUID().toString
     val workspaceId2 = UUID.randomUUID().toString
-    val workspaceId3 = UUID.randomUUID().toString
 
     // set up test data
-    val deletingAzureWorkspace =
-      Workspace.buildMcWorkspace("test_namespace1",
-                                 "name1",
-                                 workspaceId1,
-                                 new DateTime(),
-                                 new DateTime(),
-                                 "testUser1",
-                                 Map.empty,
-                                 WorkspaceState.Deleting
-      )
-
     val googleWorkspace = Workspace("test_namespace2",
                                     workspaceId2,
                                     workspaceId2,
@@ -3054,37 +2936,19 @@ class WorkspaceServiceSpec
                                     "testUser2",
                                     Map.empty
     )
-
-    val readyAzureWorkspace =
-      Workspace.buildReadyMcWorkspace("test_namespace3",
-                                      "name3",
-                                      workspaceId3,
-                                      new DateTime(),
-                                      new DateTime(),
-                                      "testUser3",
-                                      Map.empty
-      )
+    val googleWorkspaceDetails =
+      WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
+    val expected = List(
+      (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform, googleWorkspaceDetails.state)
+    )
 
     runAndWait {
       for {
-        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(readyAzureWorkspace)
         _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
-        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(deletingAzureWorkspace)
       } yield ()
     }
-    when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
-      List(
-        // no azureContext, should not be returned
-        new WorkspaceDescription().id(deletingAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
-        // no azureContext, should not be returned
-        new WorkspaceDescription().id(readyAzureWorkspace.workspaceIdAsUUID).stage(WorkspaceStageModel.MC_WORKSPACE),
-        new WorkspaceDescription()
-          .id(googleWorkspace.workspaceIdAsUUID)
-          .gcpContext(new GcpContext())
-          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-      )
-    )
 
+    // mock external calls
     when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
       Future(
         Seq(
@@ -3103,105 +2967,22 @@ class WorkspaceServiceSpec
             SamRolesAndActions(Set.empty, Set.empty),
             Set.empty,
             Set.empty
-          ),
-          SamUserResource(
-            workspaceId3,
-            SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
           )
         )
       )
     )
     when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
 
+    // actually call listWorkspaces to get result it returns given the mocked calls you set up
     val result =
       Await
         .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
         .convertTo[Seq[WorkspaceListResponse]]
-    val expected = List((googleWorkspace.workspaceId, Some(WorkspaceCloudPlatform.Gcp)))
-    result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
-  }
 
-  it should "log a warning and filter out the workspace if WSM's listWorkspaces call doesn't return a matching workspace" in withTestDataServices {
-    services =>
-      val service = services.workspaceService
-      val workspaceId1 = UUID.randomUUID().toString
-      val workspaceId2 = UUID.randomUUID().toString
-
-      // set up test data
-      val azureWorkspace =
-        Workspace.buildReadyMcWorkspace("test_namespace1",
-                                        "azureWorkspaceWithNoWsmRecord",
-                                        workspaceId1,
-                                        new DateTime(),
-                                        new DateTime(),
-                                        "testUser1",
-                                        Map.empty
-        )
-      val googleWorkspace = Workspace(
-        "test_namespace2",
-        "googleWorkspaceWithWsmRecord",
-        workspaceId2,
-        "aBucket",
-        Some("workflow-collection"),
-        new DateTime(),
-        new DateTime(),
-        "testUser2",
-        Map.empty
-      )
-      val googleWorkspaceDetails =
-        WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
-      val expected = List((googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform))
-
-      runAndWait {
-        for {
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
-          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
-        } yield ()
-      }
-
-      when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
-        List(
-          new WorkspaceDescription()
-            .id(googleWorkspace.workspaceIdAsUUID)
-            .gcpContext(new GcpContext())
-            .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-        )
-      )
-
-      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
-        Future(
-          Seq(
-            SamUserResource(
-              workspaceId1,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            ),
-            SamUserResource(
-              workspaceId2,
-              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              SamRolesAndActions(Set.empty, Set.empty),
-              Set.empty,
-              Set.empty
-            )
-          )
-        )
-      )
-      when(services.policyService.listPaos(any, any)).thenReturn(Future.successful(Seq.empty))
-
-      val result =
-        Await
-          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-          .convertTo[Seq[WorkspaceListResponse]]
-
-      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+    // verify that the result is what you expect it to be
+    result.map(ws =>
+      (ws.workspace.workspaceId, ws.workspace.cloudPlatform, ws.workspace.state)
+    ) should contain theSameElementsAs expected
   }
 
   it should "return only the leftmost N characters of string attributes" in withTestDataServices { services =>
@@ -3502,28 +3283,10 @@ class WorkspaceServiceSpec
     matchingWorkspaces.size should be(1)
   }
 
-  it should "return canCompute and canShare for Azure and Google workspaces" in withTestDataServices { services =>
+  it should "return canCompute and canShare for Google workspaces" in withTestDataServices { services =>
     val service = services.workspaceService
 
     // set up test data
-    val azureWriterWorkspace =
-      Workspace.buildReadyMcWorkspace("azureWriterNamespace",
-                                      "azureWriterWorkspace",
-                                      UUID.randomUUID().toString,
-                                      new DateTime(),
-                                      new DateTime(),
-                                      "testUser1",
-                                      Map.empty
-      )
-    val azureShareReaderWorkspace =
-      Workspace.buildReadyMcWorkspace("azureReaderNamespace",
-                                      "azureReaderWorkspace",
-                                      UUID.randomUUID().toString,
-                                      new DateTime(),
-                                      new DateTime(),
-                                      "testUser1",
-                                      Map.empty
-      )
     val googleShareWriterNoComputeWorkspace = Workspace(
       "googleWriterNoComputeNamespace",
       "googleWriterNoComputeWorkspace",
@@ -3558,8 +3321,6 @@ class WorkspaceServiceSpec
       Map.empty
     )
     val expected = List(
-      (azureShareReaderWorkspace.name, Some(false), Some(true)), // share-reader added
-      (azureWriterWorkspace.name, Some(true), Some(false)), // does not have share-writer
       (googleReaderWorkspace.name, Some(false), Some(false)), // does not have share-reader
       (googleShareWriterNoComputeWorkspace.name, Some(false), Some(true)), // share-writer added
       (googleWriterCanComputeWorkspace.name, Some(true), Some(false)) // does not have share-writer
@@ -3567,8 +3328,6 @@ class WorkspaceServiceSpec
 
     runAndWait {
       for {
-        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureShareReaderWorkspace)
-        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWriterWorkspace)
         _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleReaderWorkspace)
         _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleShareWriterNoComputeWorkspace)
         _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWriterCanComputeWorkspace)
@@ -3576,59 +3335,9 @@ class WorkspaceServiceSpec
     }
 
     // mock external calls
-    when(service.workspaceManagerDAO.listWorkspaces(any, any)).thenReturn(
-      List(
-        new WorkspaceDescription()
-          .id(googleReaderWorkspace.workspaceIdAsUUID)
-          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-          .gcpContext(new GcpContext()),
-        new WorkspaceDescription()
-          .id(googleShareWriterNoComputeWorkspace.workspaceIdAsUUID)
-          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-          .gcpContext(new GcpContext()),
-        new WorkspaceDescription()
-          .id(googleWriterCanComputeWorkspace.workspaceIdAsUUID)
-          .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-          .gcpContext(new GcpContext()),
-        new WorkspaceDescription()
-          .id(azureShareReaderWorkspace.workspaceIdAsUUID)
-          .stage(WorkspaceStageModel.MC_WORKSPACE)
-          .azureContext(
-            new AzureContext()
-              .tenantId(UUID.randomUUID.toString)
-              .subscriptionId(UUID.randomUUID.toString)
-              .resourceGroupId(UUID.randomUUID.toString)
-          ),
-        new WorkspaceDescription()
-          .id(azureWriterWorkspace.workspaceIdAsUUID)
-          .stage(WorkspaceStageModel.MC_WORKSPACE)
-          .azureContext(
-            new AzureContext()
-              .tenantId(UUID.randomUUID.toString)
-              .subscriptionId(UUID.randomUUID.toString)
-              .resourceGroupId(UUID.randomUUID.toString)
-          )
-      )
-    )
     when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
       Future(
         Seq(
-          SamUserResource(
-            azureShareReaderWorkspace.workspaceId,
-            SamRolesAndActions(Set(SamWorkspaceRoles.reader, SamWorkspaceRoles.shareReader), Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
-          ),
-          SamUserResource(
-            azureWriterWorkspace.workspaceId,
-            SamRolesAndActions(Set(SamWorkspaceRoles.writer), Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            SamRolesAndActions(Set.empty, Set.empty),
-            Set.empty,
-            Set.empty
-          ),
           SamUserResource(
             googleReaderWorkspace.workspaceId,
             SamRolesAndActions(Set(SamWorkspaceRoles.reader), Set.empty),

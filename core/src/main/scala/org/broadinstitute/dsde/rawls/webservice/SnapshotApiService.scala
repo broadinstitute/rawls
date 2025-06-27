@@ -30,127 +30,124 @@ trait SnapshotApiService extends UserInfoDirectives {
 
   val snapshotServiceConstructor: RawlsRequestContext => SnapshotService
 
-  def snapshotRoutes(otelContext: Context = Context.root()): server.Route =
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      path("workspaces" / Segment / Segment / "snapshots" / "v3") { (workspaceNamespace, workspaceName) =>
+  def snapshotRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    path("workspaces" / Segment / Segment / "snapshots" / "v3") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[Set[String]]) { snapshotIds =>
+          complete {
+            snapshotServiceConstructor(ctx)
+              .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName),
+                                                snapshotIds.map(UUID.fromString)
+              )
+              .map(_ => StatusCodes.NoContent)
+          }
+        }
+      }
+    } ~
+      path("workspaces" / Segment / "snapshots" / "v3") { workspaceId =>
         post {
           entity(as[Set[String]]) { snapshotIds =>
             complete {
               snapshotServiceConstructor(ctx)
-                .createSnapshotsByWorkspaceNameV3(WorkspaceName(workspaceNamespace, workspaceName),
-                                                  snapshotIds.map(UUID.fromString)
-                )
+                .createSnapshotsByWorkspaceIdV3(workspaceId, snapshotIds.map(UUID.fromString))
                 .map(_ => StatusCodes.NoContent)
             }
           }
         }
       } ~
-        path("workspaces" / Segment / "snapshots" / "v3") { workspaceId =>
-          post {
-            entity(as[Set[String]]) { snapshotIds =>
-              complete {
-                snapshotServiceConstructor(ctx)
-                  .createSnapshotsByWorkspaceIdV3(workspaceId, snapshotIds.map(UUID.fromString))
-                  .map(_ => StatusCodes.NoContent)
-              }
+      path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
+        post {
+          entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+            complete {
+              snapshotServiceConstructor(ctx)
+                .createSnapshotByWorkspaceName(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot)
+                .map(StatusCodes.Created -> _)
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
-          post {
-            entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
-              complete {
-                snapshotServiceConstructor(ctx)
-                  .createSnapshotByWorkspaceName(WorkspaceName(workspaceNamespace, workspaceName),
-                                                 namedDataRepoSnapshot
+          get {
+            // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+            // that method provides a 400 Bad Request response and nice error message
+            parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+              (offset, limit, referencedSnapshotId) =>
+                complete {
+                  snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
+                                                                                                  workspaceName
+                                                                                    ),
+                                                                                    offset,
+                                                                                    limit,
+                                                                                    referencedSnapshotId
                   )
-                  .map(StatusCodes.Created -> _)
-              }
+                }
+            }
+          }
+      } ~
+      path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) {
+        (workspaceNamespace, workspaceName, snapshotId) =>
+          get {
+            complete {
+              snapshotServiceConstructor(ctx).getSnapshotResourceFromWsm(WorkspaceName(workspaceNamespace,
+                                                                                       workspaceName
+                                                                         ),
+                                                                         snapshotId
+              )
             }
           } ~
-            get {
-              // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
-              // that method provides a 400 Bad Request response and nice error message
-              parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
-                (offset, limit, referencedSnapshotId) =>
-                  complete {
-                    snapshotServiceConstructor(ctx).enumerateSnapshotsByWorkspaceName(WorkspaceName(workspaceNamespace,
-                                                                                                    workspaceName
-                                                                                      ),
-                                                                                      offset,
-                                                                                      limit,
-                                                                                      referencedSnapshotId
-                    )
-                  }
-              }
-            }
-        } ~
-        path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) {
-          (workspaceNamespace, workspaceName, snapshotId) =>
-            get {
-              complete {
-                snapshotServiceConstructor(ctx).getSnapshotResourceFromWsm(WorkspaceName(workspaceNamespace,
-                                                                                         workspaceName
-                                                                           ),
-                                                                           snapshotId
-                )
-              }
-            } ~
-              patch {
-                entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
-                  complete {
-                    snapshotServiceConstructor(ctx)
-                      .updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName),
-                                      snapshotId,
-                                      updateDataRepoSnapshotReferenceRequestBody
-                      )
-                      .map(_ => StatusCodes.NoContent)
-                  }
-                }
-              } ~
-              delete {
+            patch {
+              entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
                 complete {
                   snapshotServiceConstructor(ctx)
-                    .deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
+                    .updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName),
+                                    snapshotId,
+                                    updateDataRepoSnapshotReferenceRequestBody
+                    )
                     .map(_ => StatusCodes.NoContent)
                 }
               }
-        } ~
-        path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) {
-          (workspaceNamespace, workspaceName, referenceName) =>
-            get {
-              complete {
-                snapshotServiceConstructor(ctx).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                  referenceName
-                )
-              }
-            }
-        } ~
-        path("workspaces" / Segment / "snapshots" / "v2") { workspaceId =>
-          post {
-            entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+            } ~
+            delete {
               complete {
                 snapshotServiceConstructor(ctx)
-                  .createSnapshotByWorkspaceId(workspaceId, namedDataRepoSnapshot)
-                  .map(StatusCodes.Created -> _)
+                  .deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
+                  .map(_ => StatusCodes.NoContent)
               }
             }
-          } ~
-            get {
-              // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
-              // that method provides a 400 Bad Request response and nice error message
-              parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
-                (offset, limit, referencedSnapshotId) =>
-                  complete {
-                    snapshotServiceConstructor(ctx).enumerateSnapshotsById(workspaceId,
-                                                                           offset,
-                                                                           limit,
-                                                                           referencedSnapshotId
-                    )
-                  }
-              }
+      } ~
+      path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) {
+        (workspaceNamespace, workspaceName, referenceName) =>
+          get {
+            complete {
+              snapshotServiceConstructor(ctx).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                referenceName
+              )
             }
-        }
-    }
+          }
+      } ~
+      path("workspaces" / Segment / "snapshots" / "v2") { workspaceId =>
+        post {
+          entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+            complete {
+              snapshotServiceConstructor(ctx)
+                .createSnapshotByWorkspaceId(workspaceId, namedDataRepoSnapshot)
+                .map(StatusCodes.Created -> _)
+            }
+          }
+        } ~
+          get {
+            // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+            // that method provides a 400 Bad Request response and nice error message
+            parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+              (offset, limit, referencedSnapshotId) =>
+                complete {
+                  snapshotServiceConstructor(ctx).enumerateSnapshotsById(workspaceId,
+                                                                         offset,
+                                                                         limit,
+                                                                         referencedSnapshotId
+                  )
+                }
+            }
+          }
+      }
+  }
 }

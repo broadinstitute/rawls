@@ -62,7 +62,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     withStatsD {
       Get("/admin/submissions") ~>
-        sealRoute(captureRequestMetrics(traceRequests(services.adminRoutes))) ~>
+        sealRoute(captureRequestMetrics(traceRequests(_ => services.adminRoutes(userInfo = userInfo)))) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -81,7 +81,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices {
     services =>
       Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>
-        sealRoute(services.entityRoutes()) ~>
+        sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -89,7 +89,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
 
       Get(s"/admin/submissions") ~>
-        sealRoute(services.adminRoutes()) ~>
+        sealRoute(services.adminRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -131,7 +131,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(
       s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/${testData.submissionTerminateTest.submissionId}"
     ) ~>
-      sealRoute(services.adminRoutes()) ~>
+      sealRoute(services.adminRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.NoContent)(status)
       }
@@ -139,7 +139,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when aborting a bogus active submission" in withTestDataApiServices { services =>
     Delete(s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/fake") ~>
-      sealRoute(services.adminRoutes()) ~>
+      sealRoute(services.adminRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -185,7 +185,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
 
     Get("/admin/submissions/queueStatusByUser") ~>
-      sealRoute(services.adminRoutes()) ~>
+      sealRoute(services.adminRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -223,7 +223,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val flagApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/flags"
     // workspace should start with zero flags
     Get(flagApiUrl) ~>
-      sealRoute(services.adminRoutes()) ~>
+      sealRoute(services.adminRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertResult(List.empty[String])(responseAs[List[String]])
@@ -241,7 +241,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     flagAttempts foreach { flags =>
       withClue(s"when attempting to put feature flags $flags ... ") {
         Put(flagApiUrl, flags) ~>
-          sealRoute(services.adminRoutes()) ~>
+          sealRoute(services.adminRoutes(userInfo = userInfo)) ~>
           check {
             assertResult(StatusCodes.OK)(status)
             responseAs[List[String]] should contain theSameElementsAs flags
@@ -250,7 +250,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
       withClue(s"when attempting to get feature flags, expecting $flags ... ") {
         Get(flagApiUrl) ~>
-          sealRoute(services.adminRoutes()) ~>
+          sealRoute(services.adminRoutes(userInfo = userInfo)) ~>
           check {
             assertResult(StatusCodes.OK)(status)
             responseAs[List[String]] should contain theSameElementsAs flags
@@ -267,7 +267,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     val idApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/id"
     Get(idApiUrl) ~>
-      sealRoute(service.adminRoutes()) ~>
+      sealRoute(service.adminRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String])(status)
         println(responseAs[String])
@@ -284,7 +284,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val idApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/$nonExistentWorkspace/id"
 
     Get(idApiUrl) ~>
-      sealRoute(service.adminRoutes()) ~>
+      sealRoute(service.adminRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }

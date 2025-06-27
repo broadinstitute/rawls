@@ -23,38 +23,37 @@ trait BillingApiService extends UserInfoDirectives {
 
   val userServiceConstructor: RawlsRequestContext => UserService
 
-  def billingRoutes(otelContext: Context = Context.root()): server.Route =
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      pathPrefix("billing" / Segment) { projectId =>
-        path("members") {
-          get {
-            complete {
-              userServiceConstructor(ctx).getBillingProjectMembers(RawlsBillingProjectName(projectId))
-            }
+  def billingRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    pathPrefix("billing" / Segment) { projectId =>
+      path("members") {
+        get {
+          complete {
+            userServiceConstructor(ctx).getBillingProjectMembers(RawlsBillingProjectName(projectId))
           }
-        } ~
-          // these routes are for adding/removing users from projects
-          path(Segment / Segment) { (workbenchRole, userEmail) =>
-            put {
+        }
+      } ~
+        // these routes are for adding/removing users from projects
+        path(Segment / Segment) { (workbenchRole, userEmail) =>
+          put {
+            complete {
+              userServiceConstructor(ctx)
+                .addUserToBillingProject(RawlsBillingProjectName(projectId),
+                                         ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                )
+                .map(_ => StatusCodes.OK)
+            }
+          } ~
+            delete {
               complete {
                 userServiceConstructor(ctx)
-                  .addUserToBillingProject(RawlsBillingProjectName(projectId),
-                                           ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                  .removeUserFromBillingProject(RawlsBillingProjectName(projectId),
+                                                ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
                   )
                   .map(_ => StatusCodes.OK)
               }
-            } ~
-              delete {
-                complete {
-                  userServiceConstructor(ctx)
-                    .removeUserFromBillingProject(RawlsBillingProjectName(projectId),
-                                                  ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
-                    )
-                    .map(_ => StatusCodes.OK)
-                }
-              }
-          }
-      }
+            }
+        }
     }
+  }
 }
