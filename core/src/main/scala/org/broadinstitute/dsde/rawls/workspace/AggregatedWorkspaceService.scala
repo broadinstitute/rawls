@@ -30,51 +30,6 @@ import scala.util.Try
 class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) extends LazyLogging {
 
   /**
-    * Given a list of workspaces, aggregates any available workspace information from workspace manager (WSM).
-    *
-    * Pre-fetches all available workspace data from WSM for the given context.
-    *
-    * If the WSM workspace is a legacy Rawls workspace, it is assumed to be GCP, and the googleProjectId from the
-    * provided workspace will be echo'd back out, and it will not attempt to match the workspace with WSM data
-    *
-    * Exceptions encountered when matching a multi-cloud/WSM workspace to the data from WSM are reported in the errorMessage of the workspace
-    *
-    * @param workspaces The list of source rawls workspaces
-    * @param ctx Rawls request and tracing context.
-    *
-    */
-  def fetchAggregatedWorkspaces(workspaces: Seq[Workspace], ctx: RawlsRequestContext): Seq[AggregatedWorkspace] =
-    TracingUtils.traceNakedWithParent("listWorkspacesFromWorkspaceManager", ctx.toTracingContext) { _ =>
-      val wsmResponse = workspaceManagerDAO.listWorkspaces(ctx).groupBy(_.getId)
-      workspaces.map { workspace =>
-        val id = workspace.workspaceIdAsUUID
-        wsmResponse
-          .get(id)
-          .map(wsmInfo =>
-            Try(aggregateMCWorkspaceWithWSMInfo(workspace, wsmInfo.head)).recover {
-              case e: InvalidCloudContextException =>
-                val ws =
-                  workspace.copy(errorMessage = Some(s"Invalid Cloud Context from Workspace Manager: ${e.getMessage}"))
-                AggregatedWorkspace(ws, None, None, policies = List.empty)
-            }.get
-          )
-          .getOrElse {
-            // Rawls workspaces without a RAWLS_STAGE stub workspace have no record in WSM.
-            if (workspace.workspaceType == WorkspaceType.RawlsWorkspace) {
-              AggregatedWorkspace(workspace,
-                                  Some(workspace.googleProjectId),
-                                  azureCloudContext = None,
-                                  policies = List.empty
-              )
-            } else {
-              val ws = workspace.copy(errorMessage = Some("Workspace not found in Workspace Manager"))
-              AggregatedWorkspace(ws, None, None, policies = List.empty)
-            }
-          }
-      }
-    }
-
-  /**
    * Given a workspace, aggregates any available workspace information from workspace manager (WSM).
    *
    * If the WSM workspace is a legacy Rawls workspace, it is assumed to be GCP, and the googleProjectId from the

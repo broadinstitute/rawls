@@ -378,7 +378,7 @@ class WorkspaceService(
   def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
     val options = processOptions(params, stringAttributeMaxLength, WorkspaceFieldNames.workspaceListResponseFieldNames)
 
-    def processDetails(workspace: AggregatedWorkspace,
+    def processDetails(workspace: Workspace,
                        samResource: SamUserResource,
                        accessLevel: WorkspaceAccessLevel,
                        stats: Option[WorkspaceSubmissionStats],
@@ -386,12 +386,12 @@ class WorkspaceService(
     ): WorkspaceListResponse = {
       val workspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(
-          workspace.baseWorkspace,
+          workspace,
           Option(
             samResource.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))
           ),
           useAttributes = options.attrSpecs.all || options.attrSpecs.attrsToSelect.nonEmpty,
-          workspace.getCloudPlatform
+          Some(WorkspaceCloudPlatform.Gcp)
         )
 
       val canShare = options.anyPresent("canShare") {
@@ -403,13 +403,8 @@ class WorkspaceService(
       }
       val canCompute: Option[Boolean] = options
         .anyPresent("canCompute") {
-          workspace.getCloudPlatform.map {
-            case WorkspaceCloudPlatform.Azure => accessLevel >= WorkspaceAccessLevels.Write
-            case WorkspaceCloudPlatform.Gcp if accessLevel >= WorkspaceAccessLevels.Owner => true
-            case WorkspaceCloudPlatform.Gcp => samResource.hasRole(SamWorkspaceRoles.canCompute)
-          }
+          accessLevel >= WorkspaceAccessLevels.Owner || samResource.hasRole(SamWorkspaceRoles.canCompute)
         }
-        .flatten
       WorkspaceListResponse(
         accessLevel,
         canShare,
@@ -442,23 +437,18 @@ class WorkspaceService(
         resource.resourceId -> resource.allRoles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).max
       }.toMap
       workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
-      aggregatedWorkspaces = new AggregatedWorkspaceService(workspaceManagerDAO)
-        .fetchAggregatedWorkspaces(workspaces, ctx)
-        // Filter out workspaces with no cloud contexts
-        .filter(ws => Try(ws.getCloudPlatform).map(context => context.isDefined).getOrElse(false))
 
-      responseWorkspaces = aggregatedWorkspaces.map { wsmContext =>
-        val workspace = wsmContext.baseWorkspace
+      responseWorkspaces = workspaces.map { workspace =>
         val workspaceResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
         val accessLevel =
           if (workspaceResource.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess
           else highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
         val stats = submissionSummaryStats.flatMap {
-          _.get(wsmContext.baseWorkspace.workspaceIdAsUUID)
+          _.get(workspace.workspaceIdAsUUID)
         }
         val workspacePolicies =
           policiesByWorkspaceId.getOrElse(Map.empty).getOrElse(workspace.workspaceIdAsUUID, List.empty)
-        processDetails(wsmContext, workspaceResource, accessLevel, stats, workspacePolicies)
+        processDetails(workspace, workspaceResource, accessLevel, stats, workspacePolicies)
       }
 
     } yield deepFilterJsValue(responseWorkspaces.toJson, options.options)
