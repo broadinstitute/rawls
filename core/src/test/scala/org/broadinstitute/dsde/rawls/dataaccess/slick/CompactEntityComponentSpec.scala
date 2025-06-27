@@ -487,7 +487,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
     )
 
-    result.get(sample.name).get should contain(insertedSample)
+    result(sample.name) should contain(insertedSample)
   }
 
   it should "get the records for a list of references" in withMinimalTestDatabase { _ =>
@@ -531,8 +531,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(sample1.name).get should contain(insertedSample1)
-    result.get(sample2.name).get should contain(insertedSample2)
+    result(sample1.name) should contain(insertedSample1)
+    result(sample2.name) should contain(insertedSample2)
   }
 
   it should "get the record for a chain of references" in withMinimalTestDatabase { _ =>
@@ -571,7 +571,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(sample.name).get should contain(insertedParticipant)
+    result(sample.name) should contain(insertedParticipant)
   }
 
   it should "get the records for a chain of references with an array" in withMinimalTestDatabase { _ =>
@@ -627,8 +627,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(sample1.name).get should contain(insertedParticipant1)
-    result.get(sample2.name).get should contain(insertedParticipant2)
+    result(sample1.name) should contain(insertedParticipant1)
+    result(sample2.name) should contain(insertedParticipant2)
   }
 
   it should "get the records for a chain of references with multiple arrays" in withMinimalTestDatabase { _ =>
@@ -706,10 +706,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     )
-    result.get(sample1.name).get should contain theSameElementsAs Seq(insertedParticipant1, insertedParticipant3)
-    result.get(sample2.name).get should contain theSameElementsAs Seq(insertedParticipant2, insertedParticipant4)
-//    result.get(participant3.name) should equal(Some(insertedParticipant3))
-//    result.get(participant4.name) should equal(Some(insertedParticipant4))
+    result(sample1.name) should contain theSameElementsAs Seq(insertedParticipant1, insertedParticipant3)
+    result(sample2.name) should contain theSameElementsAs Seq(insertedParticipant2, insertedParticipant4)
   }
 
   it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
@@ -727,9 +725,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
     )
 
-    // We'll need this later for comparison
+    // We'll need these later for comparison
     val insertedSampleWS1 = insertAndGet(sample1)
-    insertAndGet(sample2, minimalTestData.workspace2.workspaceIdAsUUID)
+    val insertedSampleWS2 = insertAndGet(sample2, minimalTestData.workspace2.workspaceIdAsUUID)
 
     // Referencing entity
     val set = Entity(
@@ -748,7 +746,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    result.get(sample1.name).get should contain(insertedSampleWS1)
+    result(sample1.name) should contain(insertedSampleWS1)
+    result(sample1.name) should not contain insertedSampleWS2
   }
 
   it should "be case-sensitive on entity type" in withMinimalTestDatabase { _ =>
@@ -759,9 +758,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
     )
 
-    // We'll need this later for comparison
-    val insertedSample = insertAndGet(sample)
-
     // Referencing entity
     val set = Entity(
       "set1",
@@ -769,8 +765,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
     )
 
-    insertAndGet(set)
+    insertAndGetAll(Seq(set, sample))
 
+    // Note we're searching for capital Sample_set when only lowercase exists
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
         wsid,
@@ -805,6 +802,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGetAll(Seq(sample, set, participant))
 
+    // Note we're looking for capital Samples and/or Participant when only lowercase exists
     val result1 = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
         minimalTestData.workspace.workspaceIdAsUUID,
@@ -865,6 +863,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGet(set)
 
+    // For entity names, capital and lowercase differences shouldn't matter
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
         wsid,
@@ -873,7 +872,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("samples")
       )
     )
-    result.get(sample.name).get should contain(insertedSample)
+    result(sample.name) should contain(insertedSample)
   }
 
   it should "handle non-default namespaces in attribute names" in withMinimalTestDatabase { _ =>
@@ -904,7 +903,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         List("set_namespace:samples")
       )
     )
-    result.get(sample.name).get should contain(insertedSample)
+    result(sample.name) should contain(insertedSample)
   }
 
   behavior of "listEntityKeysViaEntity"

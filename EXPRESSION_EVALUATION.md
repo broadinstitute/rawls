@@ -54,9 +54,9 @@ For example, if the expression `"this.samples.bam"` is evaluated against a sampl
 
 ### Expression Evaluation Methods
 
-[`evaluateExpression`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L66) evaluates a single expression and returns only the attributes, no `SubmissionValidationEntityInputs`. It doesn't distinguish an entity expression from an input expression. This can be used from the API for expression verification, but is not otherwise used in Terra.
+[`evaluateExpression`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L70) evaluates a single expression and returns only the attributes, no `SubmissionValidationEntityInputs`. It doesn't distinguish an entity expression from an input expression. This can be used from the API for expression verification, but is not otherwise used in Terra.
 
-[`evaluateExpressions`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L122) is used in submission processing. It evaluates both the entity expression and all the input expressions from the method config.
+[`evaluateExpressions`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala#L132) is used in submission processing. It evaluates both the entity expression and all the input expressions from the method config.
 
 ### ANTLR Expression Parsing
 
@@ -82,6 +82,11 @@ Represents a single expression's database requirements:
 - `expression`: the original expression or literal
 - `relations`: list of `RelationContext`s found in the expression
 - `attributeName`: the final attribute to get for the expression
+
+A `RelationContext` is a class defined in ANTLR's `TerraExpressionParser.scala`; 
+it stores the name of a relation (i.e. the column in which a reference to another entity is stored) 
+in the `attributeName()` field.
+`RelationContexts` are represented in this document by strings of the `attributeName`.
 
 Examples:
 ```scala
@@ -124,7 +129,7 @@ A single submission request can have many inputs, but these typically refer to o
 
 1. **Planning**: ExpressionLookups are grouped by their relation chains to minimize database queries. Multiple expressions requiring the same relation level share a single query (e.g., `this.sample.id` and `this.sample.name` both use `["sample"]` relation chain).
 
-2. **Execution**: Each QueryPlan executes [`queryRelatedRecordsWithRelationChain`](core/src/main/scala/org/broadinstitute/dsde/rawls/dataaccess/slick/CompactEntityComponent.scala#L659) to retrieve entity data in batch operations, handling entity type transitions and complex traversals efficiently.
+2. **Execution**: Each QueryPlan executes [`queryRelatedRecordsWithRelationChain`](core/src/main/scala/org/broadinstitute/dsde/rawls/dataaccess/slick/CompactEntityComponent.scala#L678) to retrieve entity data in batch operations, handling entity type transitions and complex traversals efficiently.
 
 3. **Assembly**: Query results are transformed into `ExpressionAndResult` tuples, then processed by:
    - `constructFinalInputValues`: Takes the expression results and ANTLR parse tree to reconstruct the original input structure, returning `Map[EntityName, Try[Iterable[AttributeValue]]]`

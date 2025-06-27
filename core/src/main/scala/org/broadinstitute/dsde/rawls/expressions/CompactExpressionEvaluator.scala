@@ -12,7 +12,9 @@ import org.broadinstitute.dsde.rawls.entities.base.{
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, CompactEvaluateVisitor}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.RootContext
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeName,
@@ -20,8 +22,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValue,
   AttributeValueList,
   ErrorReport,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationValue
+  SubmissionValidationEntityInputs
 }
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio.DBIO
@@ -75,16 +76,16 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     val visitor = new CompactEvaluateVisitor()
     val parsedTree = terraExpressionParser.root()
     val lookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+
+    // Determine the queries needed to find the correct entities
     val queryPlans = buildQueryPlans(lookups)
     val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
       executeQueryPlan(workspaceId, entityType, entityName, entityType, plan)
     }
 
-    val combinedAction = DBIO.sequence(queryActions)
-
     repository.dataSource
       .inTransaction { _ =>
-        combinedAction
+        DBIO.sequence(queryActions)
       }
       .map { allResults =>
         val combinedResults: Seq[ExpressionAndResult] = allResults.flatten
@@ -109,8 +110,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
    * This method is designed for workflow submission validation where multiple input expressions
    * need to be evaluated against potentially different entity types. It handles cases where
    * the input entity type differs from the target entity type (rootEntityType) by properly
-   * traversing entity relationships. The method optimizes performance by consolidating all
-   * expression lookups into efficient query plans and executing them in batch.
+   * traversing entity relationships.
    *
    * @param workspaceId The UUID of the workspace containing the entities to evaluate against
    * @param expressionEvaluationContext Context containing:
@@ -133,14 +133,13 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                           expressionEvaluationContext: ExpressionEvaluationContext,
                           gatherInputsResult: MethodConfigResolver.GatherInputsResult
   )(implicit executionContext: ExecutionContext): Future[LazyList[SubmissionValidationEntityInputs]] = {
-    // First, verify that necessary entity information is present and consistent
+
     val entityInfoFuture =
       (expressionEvaluationContext.entityType,
        expressionEvaluationContext.entityName,
        expressionEvaluationContext.rootEntityType
       ) match {
         case (Some(entityType), Some(entityName), Some(rootEntityType)) =>
-          // All three exist, assign their values
           if (
             expressionEvaluationContext.expression.isEmpty &&
             entityType != rootEntityType
@@ -153,7 +152,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               new RawlsExceptionWithErrorReport(
                 errorReport = ErrorReport(
                   StatusCodes.BadRequest,
-                  s"Method configuration expects an entity of type ${rootEntityType}, but you gave us $whatYouGaveUs."
+                  s"Method configuration expects an entity of type $rootEntityType, but you gave us $whatYouGaveUs."
                 )
               )
             )
@@ -163,15 +162,13 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               case Some(expression) => parseLookups(expression)
             }
 
-            val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
-              val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-              val visitor = new CompactEvaluateVisitor()
-              val parsedTree = terraExpressionParser.root()
-              val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-              (input, parsedTree, inputLookups)
-            }
+            val inputExpressionData: Seq[(MethodInput, RootContext, Seq[ExpressionLookup])] = inputsToExpressionData(
+              gatherInputsResult
+            )
 
             val allLookups = inputExpressionData.flatMap { case (_, _, lookups) => lookups }
+
+            // If we have an entitylookup, prepend it to the relation chain of the query
             val queryPlans = if (entityType != rootEntityType && entityLookups.nonEmpty) {
               val entityRelationChain = entityLookups.flatMap(_.attributeName).toList
               val baseQueryPlans = buildQueryPlans(allLookups)
@@ -187,10 +184,9 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               executeQueryPlan(workspaceId, entityType, entityName, rootEntityType, plan, entityLookups)
             }
 
-            val combinedAction = DBIO.sequence(queryActions)
             repository.dataSource
               .inTransaction { _ =>
-                combinedAction
+                DBIO.sequence(queryActions)
               }
               .map { allQueryResults =>
                 val combinedExpressionAndResults: Seq[ExpressionAndResult] = allQueryResults.flatten
@@ -222,14 +218,10 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
           }
 
         case (None, None, None) =>
-          // None exist, proceed without assignment
-          val inputExpressionData = gatherInputsResult.processableInputs.toSeq.map { input =>
-            val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
-            val visitor = new CompactEvaluateVisitor()
-            val parsedTree = terraExpressionParser.root()
-            val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
-            (input, parsedTree, inputLookups)
-          }
+          // No entities involved, this should be static input expressions only
+          val inputExpressionData: Seq[(MethodInput, RootContext, Seq[ExpressionLookup])] = inputsToExpressionData(
+            gatherInputsResult
+          )
 
           // Repackage the parsed expressions into the correct form without querying the database
           Future.successful {
@@ -244,28 +236,29 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             }
           }
 
-        case (Some(et), None, _) =>
+        // If there are exactly one or two of entity type, entity name, and root entity, fail
+        case (Some(_), None, _) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.BadRequest, s"Missing entityName")
             )
           )
 
-        case (None, Some(en), _) =>
+        case (None, Some(_), _) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.BadRequest, s"Missing entityType")
             )
           )
 
-        case (None, None, Some(ret)) =>
+        case (None, None, Some(_)) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.BadRequest, s"Missing entityType and entityName")
             )
           )
 
-        case (Some(et), Some(en), None) =>
+        case (Some(_), Some(_), None) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.BadRequest, s"Missing rootEntityType")
@@ -314,8 +307,9 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
    *     up to relationLevel
    * @param relationLevel The current relation level starting with 0 and incrementing with each
    *     recursive call
-   * @return A seq of QueryPlans, which contain: List of string representing the chain of relations,
-   *         map of expression to list of strings representing the attributes to get from the entities at the end of the chain
+   * @return A seq of QueryPlans, which contain: 
+   *         - List of string representing the chain of relations,
+   *         - Map of expression -> list of strings representing the attributes to get from the entities at the end of the chain
    */
   def buildQueryPlans(
     lookups: Seq[ExpressionLookup],
@@ -348,7 +342,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
   }
 
   /**
-   * Executes a single query plan to retrieve entity records and extract the required attributes.
+   * Creates an action to execute a single query plan to retrieve entity records and extract the required attributes.
    * Processes the attained attributes into ExpressionAndResult tuples that can be consumed
    * by the InputExpressionReassembler.
    *
@@ -434,13 +428,13 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                   case _ if attributeName == attributeNameToCheck =>
                     Seq(
                       AttributeString(record.name)
-                    ) // Return the record's name as an AttributeString wrapped in a Seq
+                    )
                   case Some(avl: AttributeValueList) =>
-                    avl.list // Return the list of values directly
+                    avl.list
                   case Some(av: AttributeValue) =>
-                    Seq(av) // Wrap the single value in a Seq
+                    Seq(av)
                   case _ =>
-                    Seq.empty // Return an empty Seq for unmatched cases
+                    Seq.empty
                 }
               }
               actualEntityName -> Success(attrs)
@@ -451,4 +445,17 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       }
     }
   }
+
+  // Given method inputs, parse the expressions and retain the original expression, the parsed tree,
+  // and the list of `ExpressionLookup`s to be used for building queries
+  private def inputsToExpressionData(
+    gatherInputsResult: GatherInputsResult
+  ): Seq[(MethodInput, RootContext, Seq[ExpressionLookup])] =
+    gatherInputsResult.processableInputs.toSeq.map { input =>
+      val terraExpressionParser = AntlrTerraExpressionParser.getParser(input.expression)
+      val visitor = new CompactEvaluateVisitor()
+      val parsedTree = terraExpressionParser.root()
+      val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+      (input, parsedTree, inputLookups)
+    }
 }

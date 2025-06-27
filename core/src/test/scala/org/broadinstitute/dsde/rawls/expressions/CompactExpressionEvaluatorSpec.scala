@@ -34,7 +34,6 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
 
-import scala.concurrent.duration._
 import scala.util.{Random, Success}
 
 class CompactExpressionEvaluatorSpec
@@ -45,10 +44,6 @@ class CompactExpressionEvaluatorSpec
     with TableDrivenPropertyChecks
     with TestDriverComponent
     with MethodConfigTestSupport {
-
-  // TODO this is just for debugging, remove or reduce timeout
-  implicit override val patienceConfig: PatienceConfig =
-    PatienceConfig(timeout = 300.seconds, interval = 100.millis)
 
   val compactEntityRepository: CompactEntityRepository = mock[CompactEntityRepository]
   val mockQueries: CompactEntityQuery = mock[CompactEntityQuery]
@@ -62,7 +57,6 @@ class CompactExpressionEvaluatorSpec
     reset(mockQueries) // Reset the mock before each test
   }
 
-  // I didn't put this method on the Entity itself because that doesn't have workspace id or id or anything
   def toCompactEntityRecord(entity: Entity): CompactEntityRecord = CompactEntityRecord(
     Random.nextLong(),
     entity.name,
@@ -141,15 +135,15 @@ class CompactExpressionEvaluatorSpec
     val relationTests =
       Table(
         ("input", "getText", "attributeName"),
-        ("this.samples.type", "samples.", Some("type")),
+        ("this.samples.type", "samples", Some("type")),
         (
           "[[10,11,12],this.samples.blah]",
-          "samples.",
+          "samples",
           Some("blah")
         ),
         (
           "this.pfb:projects.id",
-          "pfb:projects.",
+          "pfb:projects",
           Some("id")
         )
       )
@@ -158,7 +152,7 @@ class CompactExpressionEvaluatorSpec
       val result: Seq[ExpressionLookup] = compactExpressionEvaluator.parseLookups(input)
       result.size shouldBe 1
       result.head.relations.size shouldBe 1
-      result.head.relations.head.getText shouldBe getText
+      result.head.relations.head.attributeName().getText shouldBe getText
       result.head.attributeName shouldBe attributeName
     }
 
@@ -188,7 +182,7 @@ class CompactExpressionEvaluatorSpec
 
   }
 
-  // Test cases are taken from LocalEntityProviderSpec
+  // Many test cases are taken from LocalEntityProviderSpec
   behavior of "evaluateExpressions"
 
   it should "resolve method config inputs for a single entity" in withConfigData {
