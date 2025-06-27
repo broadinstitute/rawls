@@ -10,6 +10,7 @@ import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.dataaccess.slick.QuicksilverMigrationResult
 import org.broadinstitute.dsde.rawls.entities.{EntityService, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
@@ -346,16 +347,18 @@ trait EntityApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "quicksilverMigration") { (workspaceNamespace, workspaceName) =>
         post {
-          entity(as[String]) { postBody =>
-            if (postBody != "I understand that this API will delete all my data tables.") {
-              complete(StatusCodes.BadRequest -> "You must consent to use this API.")
-            } else {
-              complete {
-                entityServiceConstructor(ctx)
-                  .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName))
-                  .map { migrationResults =>
-                    StatusCodes.OK -> Map("entitiesUpdated" -> migrationResults)
-                  }
+          // read the "cleanup" query parameter, defaulting to false if not specified
+          parameters("cleanup".as[Boolean].withDefault(false)) { cleanup =>
+            entity(as[String]) { postBody =>
+              if (postBody != "I understand that this API will delete all my data tables.") {
+                complete(StatusCodes.BadRequest -> "You must consent to use this API.")
+              } else {
+                implicit val quicksilverMigrationResultFormat: RootJsonFormat[QuicksilverMigrationResult] =
+                  jsonFormat3(QuicksilverMigrationResult)
+                complete {
+                  entityServiceConstructor(ctx)
+                    .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName), cleanup)
+                }
               }
             }
           }
