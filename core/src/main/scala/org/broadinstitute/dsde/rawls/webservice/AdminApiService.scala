@@ -37,130 +37,99 @@ trait AdminApiService extends UserInfoDirectives {
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
   val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService
 
-  def adminRoutes(otelContext: Context = Context.root()): server.Route = {
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      path("admin" / "billing" / Segment) { projectId =>
-        val billingProjectName = RawlsBillingProjectName(projectId)
+  def adminRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    path("admin" / "billing" / Segment) { projectId =>
+      val billingProjectName = RawlsBillingProjectName(projectId)
+      get {
+        complete {
+          billingAdminServiceConstructor(ctx)
+            .getBillingProjectSupportSummary(billingProjectName)
+            .map(StatusCodes.OK -> _)
+        }
+      } ~
+        delete {
+          entity(as[Map[String, String]]) { ownerInfo =>
+            complete {
+              userServiceConstructor(ctx)
+                .adminDeleteBillingProject(billingProjectName, ownerInfo)
+                .map(_ => StatusCodes.NoContent)
+            }
+          }
+        }
+    } ~
+      path("admin" / "submissions") {
         get {
           complete {
-            billingAdminServiceConstructor(ctx)
-              .getBillingProjectSupportSummary(billingProjectName)
-              .map(StatusCodes.OK -> _)
+            submissionsServiceConstructor(ctx).adminListAllActiveSubmissions()
           }
-        } ~
-          delete {
-            entity(as[Map[String, String]]) { ownerInfo =>
-              complete {
-                userServiceConstructor(ctx)
-                  .adminDeleteBillingProject(billingProjectName, ownerInfo)
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
+        }
       } ~
-        path("admin" / "submissions") {
-          get {
-            complete {
-              submissionsServiceConstructor(ctx).adminListAllActiveSubmissions()
-            }
+      path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
+        delete {
+          complete {
+            submissionsServiceConstructor(ctx)
+              .adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
+              .map { count =>
+                if (count == 1) StatusCodes.NoContent -> None
+                else
+                  StatusCodes.NotFound -> Option(
+                    ErrorReport(StatusCodes.NotFound,
+                                s"Unable to abort submission. Submission ${submissionId} could not be found."
+                    )
+                  )
+              }
           }
-        } ~
-        path("admin" / "submissions" / Segment / Segment / Segment) {
-          (workspaceNamespace, workspaceName, submissionId) =>
-            delete {
-              complete {
-                submissionsServiceConstructor(ctx)
-                  .adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
-                  .map { count =>
-                    if (count == 1) StatusCodes.NoContent -> None
-                    else
-                      StatusCodes.NotFound -> Option(
-                        ErrorReport(StatusCodes.NotFound,
-                                    s"Unable to abort submission. Submission ${submissionId} could not be found."
-                        )
-                      )
-                  }
+        }
+      } ~
+      path("admin" / "submissions" / "queueStatusByUser") {
+        get {
+          complete {
+            submissionsServiceConstructor(ctx).adminWorkflowQueueStatusByUser
+          }
+        }
+      } ~
+      pathPrefix("admin" / "bucketMigration") {
+        pathPrefix("workspaces") {
+          pathEndOrSingleSlash {
+            post {
+              entity(as[List[WorkspaceName]]) { workspaceNames =>
+                complete {
+                  bucketMigrationServiceConstructor(ctx)
+                    .adminMigrateAllWorkspaceBuckets(workspaceNames)
+                    .map(StatusCodes.Created -> _)
+                }
               }
             }
-        } ~
-        path("admin" / "submissions" / "queueStatusByUser") {
-          get {
-            complete {
-              submissionsServiceConstructor(ctx).adminWorkflowQueueStatusByUser
-            }
-          }
-        } ~
-        pathPrefix("admin" / "bucketMigration") {
-          pathPrefix("workspaces") {
-            pathEndOrSingleSlash {
-              post {
-                entity(as[List[WorkspaceName]]) { workspaceNames =>
-                  complete {
-                    bucketMigrationServiceConstructor(ctx)
-                      .adminMigrateAllWorkspaceBuckets(workspaceNames)
-                      .map(StatusCodes.Created -> _)
+          } ~
+            pathPrefix("getProgress") {
+              pathEndOrSingleSlash {
+                post {
+                  entity(as[List[WorkspaceName]]) { workspaceNames =>
+                    complete {
+                      bucketMigrationServiceConstructor(ctx)
+                        .adminGetBucketMigrationProgressForWorkspaces(workspaceNames)
+                        .map(StatusCodes.OK -> _)
+                    }
                   }
                 }
               }
             } ~
-              pathPrefix("getProgress") {
-                pathEndOrSingleSlash {
-                  post {
-                    entity(as[List[WorkspaceName]]) { workspaceNames =>
-                      complete {
-                        bucketMigrationServiceConstructor(ctx)
-                          .adminGetBucketMigrationProgressForWorkspaces(workspaceNames)
-                          .map(StatusCodes.OK -> _)
-                      }
-                    }
-                  }
-                }
-              } ~
-              pathPrefix(Segment / Segment) { (namespace, name) =>
-                val workspaceName = WorkspaceName(namespace, name)
-                pathEndOrSingleSlash {
-                  get {
-                    complete {
-                      bucketMigrationServiceConstructor(ctx)
-                        .adminGetBucketMigrationAttemptsForWorkspace(workspaceName)
-                        .map(ms => StatusCodes.OK -> ms)
-                    }
-                  } ~
-                    post {
-                      complete {
-                        bucketMigrationServiceConstructor(ctx)
-                          .adminMigrateWorkspaceBucket(workspaceName)
-                          .map(StatusCodes.Created -> _)
-                      }
-                    }
-                } ~
-                  path("progress") {
-                    get {
-                      complete {
-                        bucketMigrationServiceConstructor(ctx)
-                          .adminGetBucketMigrationProgressForWorkspace(workspaceName)
-                          .map(StatusCodes.OK -> _)
-                      }
-                    }
-                  }
-              }
-          } ~
-            pathPrefix("billing" / Segment) { projectName =>
-              val billingProjectName = RawlsBillingProjectName(projectName)
+            pathPrefix(Segment / Segment) { (namespace, name) =>
+              val workspaceName = WorkspaceName(namespace, name)
               pathEndOrSingleSlash {
-                post {
+                get {
                   complete {
                     bucketMigrationServiceConstructor(ctx)
-                      .adminMigrateWorkspaceBucketsInBillingProject(billingProjectName)
-                      .map(StatusCodes.Created -> _)
+                      .adminGetBucketMigrationAttemptsForWorkspace(workspaceName)
+                      .map(ms => StatusCodes.OK -> ms)
                   }
                 } ~
-                  get {
+                  post {
                     complete {
                       bucketMigrationServiceConstructor(ctx)
-                        .adminGetBucketMigrationAttemptsForBillingProject(billingProjectName)
-                        .map(ms => StatusCodes.OK -> ms)
+                        .adminMigrateWorkspaceBucket(workspaceName)
+                        .map(StatusCodes.Created -> _)
                     }
                   }
               } ~
@@ -168,66 +137,94 @@ trait AdminApiService extends UserInfoDirectives {
                   get {
                     complete {
                       bucketMigrationServiceConstructor(ctx)
-                        .adminGetBucketMigrationProgressForBillingProject(billingProjectName)
+                        .adminGetBucketMigrationProgressForWorkspace(workspaceName)
                         .map(StatusCodes.OK -> _)
                     }
                   }
                 }
             }
         } ~
-        pathPrefix("admin" / "workspaces") {
-          pathPrefix(Segment / Segment) { (workspaceNamespace, workspaceName) =>
-            path("flags") {
-              get {
+          pathPrefix("billing" / Segment) { projectName =>
+            val billingProjectName = RawlsBillingProjectName(projectName)
+            pathEndOrSingleSlash {
+              post {
                 complete {
-                  workspaceAdminServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
-                    WorkspaceName(workspaceNamespace, workspaceName)
-                  )
+                  bucketMigrationServiceConstructor(ctx)
+                    .adminMigrateWorkspaceBucketsInBillingProject(billingProjectName)
+                    .map(StatusCodes.Created -> _)
                 }
               } ~
-                put {
-                  entity(as[List[String]]) { flagNames =>
-                    complete {
-                      workspaceAdminServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(
-                        WorkspaceName(workspaceNamespace, workspaceName),
-                        flagNames
-                      )
-                    }
+                get {
+                  complete {
+                    bucketMigrationServiceConstructor(ctx)
+                      .adminGetBucketMigrationAttemptsForBillingProject(billingProjectName)
+                      .map(ms => StatusCodes.OK -> ms)
                   }
                 }
             } ~
-              path("deleteAzureWorkspace") {
-                delete {
-                  complete {
-                    workspaceAdminServiceConstructor(ctx)
-                      .adminDeleteMcWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
-                      .map(_ => StatusCodes.NoContent)
-                  }
-                }
-              } ~
-              path("id") {
+              path("progress") {
                 get {
                   complete {
-                    workspaceAdminServiceConstructor(ctx)
-                      .getWorkspaceId(WorkspaceName(workspaceNamespace, workspaceName))
-                      .map {
-                        case Some(id) => StatusCodes.OK -> Option(JsString(id))
-                        case None     => StatusCodes.NotFound -> None
-                      }
+                    bucketMigrationServiceConstructor(ctx)
+                      .adminGetBucketMigrationProgressForBillingProject(billingProjectName)
+                      .map(StatusCodes.OK -> _)
+                  }
+                }
+              }
+          }
+      } ~
+      pathPrefix("admin" / "workspaces") {
+        pathPrefix(Segment / Segment) { (workspaceNamespace, workspaceName) =>
+          path("flags") {
+            get {
+              complete {
+                workspaceAdminServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
+                  WorkspaceName(workspaceNamespace, workspaceName)
+                )
+              }
+            } ~
+              put {
+                entity(as[List[String]]) { flagNames =>
+                  complete {
+                    workspaceAdminServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(
+                      WorkspaceName(workspaceNamespace, workspaceName),
+                      flagNames
+                    )
                   }
                 }
               }
           } ~
-            path(Segment) { workspaceId =>
+            path("deleteAzureWorkspace") {
+              delete {
+                complete {
+                  workspaceAdminServiceConstructor(ctx)
+                    .adminDeleteMcWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                    .map(_ => StatusCodes.NoContent)
+                }
+              }
+            } ~
+            path("id") {
               get {
                 complete {
                   workspaceAdminServiceConstructor(ctx)
-                    .getWorkspaceById(UUID.fromString(workspaceId))
-                    .map(StatusCodes.OK -> _)
+                    .getWorkspaceId(WorkspaceName(workspaceNamespace, workspaceName))
+                    .map {
+                      case Some(id) => StatusCodes.OK -> Option(JsString(id))
+                      case None     => StatusCodes.NotFound -> None
+                    }
                 }
               }
             }
-        }
-    }
+        } ~
+          path(Segment) { workspaceId =>
+            get {
+              complete {
+                workspaceAdminServiceConstructor(ctx)
+                  .getWorkspaceById(UUID.fromString(workspaceId))
+                  .map(StatusCodes.OK -> _)
+              }
+            }
+          }
+      }
   }
 }

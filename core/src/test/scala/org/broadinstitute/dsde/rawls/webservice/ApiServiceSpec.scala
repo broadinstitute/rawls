@@ -477,18 +477,18 @@ trait ApiServiceSpec
     val sealedInstrumentedRoutes: Route = captureRequestMetrics {
       traceRequests { otelContext =>
         sealRoute(
-          workspaceRoutesV2(otelContext) ~
-            workspaceRoutes(otelContext) ~
-            entityRoutes(otelContext) ~
-            methodConfigRoutes(otelContext) ~
-            submissionRoutes(otelContext) ~
-            adminRoutes(otelContext) ~
-            userRoutes(otelContext) ~
-            billingRoutesV2(otelContext) ~
-            billingRoutes(otelContext) ~
+          workspaceRoutesV2(otelContext, userInfo) ~
+            workspaceRoutes(otelContext, userInfo) ~
+            entityRoutes(otelContext, userInfo) ~
+            methodConfigRoutes(otelContext, userInfo) ~
+            submissionRoutes(otelContext, userInfo) ~
+            adminRoutes(otelContext, userInfo) ~
+            userRoutes(otelContext, userInfo) ~
+            billingRoutesV2(otelContext, userInfo) ~
+            billingRoutes(otelContext, userInfo) ~
             notificationsRoutes ~
-            servicePerimeterRoutes(otelContext) ~
-            snapshotRoutes(otelContext) ~
+            servicePerimeterRoutes(otelContext, userInfo) ~
+            snapshotRoutes(otelContext, userInfo) ~
             statusRoute
         )
       }

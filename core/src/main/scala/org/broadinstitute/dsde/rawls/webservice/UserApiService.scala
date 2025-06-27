@@ -25,56 +25,55 @@ trait UserApiService extends UserInfoDirectives {
 
   // standard /api routes begin here
 
-  def userRoutes(otelContext: Context = Context.root()): server.Route =
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      pathPrefix("user" / "billing") {
-        pathEnd {
-          get {
-            complete {
-              userServiceConstructor(ctx).listBillingProjects()
-            }
+  def userRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    pathPrefix("user" / "billing") {
+      pathEnd {
+        get {
+          complete {
+            userServiceConstructor(ctx).listBillingProjects()
           }
-        } ~
-          path(Segment) { projectName =>
-            get {
-              complete {
-                import spray.json._
-                userServiceConstructor(ctx).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
-                  case Some(status) => StatusCodes.OK -> Option(status).toJson
-                  case _            => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
-                }
-              }
-            }
-          } ~
-          path(Segment) { projectName =>
-            delete {
-              complete {
-                userServiceConstructor(ctx)
-                  .deleteBillingProject(RawlsBillingProjectName(projectName))
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
+        }
       } ~
-        path("user" / "role" / "admin") {
+        path(Segment) { projectName =>
           get {
             complete {
-              userServiceConstructor(ctx).isAdmin(userInfo.userEmail).map {
-                case true  => StatusCodes.OK
-                case false => StatusCodes.NotFound
+              import spray.json._
+              userServiceConstructor(ctx).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
+                case Some(status) => StatusCodes.OK -> Option(status).toJson
+                case _            => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
               }
             }
           }
         } ~
-        path("user" / "billingAccounts") {
-          get {
-            parameters("firecloudHasAccess".as[Boolean].optional) { firecloudHasAccess =>
-              complete {
-                userServiceConstructor(ctx).listBillingAccounts(firecloudHasAccess)
-              }
+        path(Segment) { projectName =>
+          delete {
+            complete {
+              userServiceConstructor(ctx)
+                .deleteBillingProject(RawlsBillingProjectName(projectName))
+                .map(_ => StatusCodes.NoContent)
             }
           }
         }
-    }
+    } ~
+      path("user" / "role" / "admin") {
+        get {
+          complete {
+            userServiceConstructor(ctx).isAdmin(userInfo.userEmail).map {
+              case true  => StatusCodes.OK
+              case false => StatusCodes.NotFound
+            }
+          }
+        }
+      } ~
+      path("user" / "billingAccounts") {
+        get {
+          parameters("firecloudHasAccess".as[Boolean].optional) { firecloudHasAccess =>
+            complete {
+              userServiceConstructor(ctx).listBillingAccounts(firecloudHasAccess)
+            }
+          }
+        }
+      }
+  }
 }

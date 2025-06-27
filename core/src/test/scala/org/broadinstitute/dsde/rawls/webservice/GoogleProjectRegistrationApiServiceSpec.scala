@@ -48,7 +48,7 @@ class GoogleProjectRegistrationApiServiceSpec
 
     Get(
       "/googleProjects?billingProjectId=test-billing-project&pageSize=10&offset=0"
-    ) ~> googleProjectRegistrationRoutes() ~> check {
+    ) ~> googleProjectRegistrationRoutes(userInfo = userInfo) ~> check {
       status shouldEqual StatusCodes.OK
       responseAs[Seq[GoogleProjectRegistration]] shouldEqual Seq(googleProjectRegistration)
     }
@@ -65,7 +65,7 @@ class GoogleProjectRegistrationApiServiceSpec
     when(mockGoogleProjectRegService.getGoogleProjectById(GoogleProjectId("test-project-id")))
       .thenReturn(Future.successful(Some(googleProjectRegistration)))
 
-    Get("/googleProjects/test-project-id") ~> googleProjectRegistrationRoutes() ~> check {
+    Get("/googleProjects/test-project-id") ~> googleProjectRegistrationRoutes(userInfo = userInfo) ~> check {
       status shouldEqual StatusCodes.OK
       responseAs[GoogleProjectRegistration] shouldEqual googleProjectRegistration
     }
@@ -75,7 +75,7 @@ class GoogleProjectRegistrationApiServiceSpec
     when(mockGoogleProjectRegService.getGoogleProjectById(GoogleProjectId("non-existent-project-id")))
       .thenReturn(Future.successful(None))
 
-    Get("/googleProjects/non-existent-project-id") ~> googleProjectRegistrationRoutes() ~> check {
+    Get("/googleProjects/non-existent-project-id") ~> googleProjectRegistrationRoutes(userInfo = userInfo) ~> check {
       status shouldEqual StatusCodes.NotFound
       responseAs[String] shouldEqual "Google project does not exist or you don't have access."
     }
