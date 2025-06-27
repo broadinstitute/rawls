@@ -708,11 +708,11 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           JOIN JSON_TABLE(
             JSON_EXTRACT(e#$idx.attributes, '$$.refs'),
             '$$[*]' COLUMNS (
-              attributeName#$idx VARCHAR(255) PATH '$$.a',
-              entityType#$idx VARCHAR(255) PATH '$$.t',
+              attributeName#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+              entityType#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
               entityName#$idx VARCHAR(255) PATH '$$.n'
             )
-          ) jt#$idx ON BINARY jt#$idx.attributeName#$idx = $relation
+          ) jt#$idx ON jt#$idx.attributeName#$idx = $relation
           JOIN ENTITY e#$nextIdx ON e#$nextIdx.entity_type = jt#$idx.entityType#$idx
             AND e#$nextIdx.name = jt#$idx.entityName#$idx
             AND e#$nextIdx.workspace_id = $workspaceId
