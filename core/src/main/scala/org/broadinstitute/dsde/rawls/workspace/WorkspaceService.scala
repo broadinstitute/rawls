@@ -314,8 +314,6 @@ class WorkspaceService(
           samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
         }
       }
-      // wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
-      // wsmContext = AggregatedWorkspace(workspace, Some(workspace.googleProjectId), None, List.empty)
 
       canCompute <- options.anyPresentFuture("canCompute") {
         if (accessLevel >= WorkspaceAccessLevels.Owner)
