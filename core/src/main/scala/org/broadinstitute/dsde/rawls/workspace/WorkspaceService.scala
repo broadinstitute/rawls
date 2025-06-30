@@ -526,6 +526,19 @@ class WorkspaceService(
         throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Multi Cloud workspaces not supported")
       case WorkspaceType.RawlsWorkspace => ()
     }
+    // disallow deletion of workspaces with children
+    wsResourceChildren <- traceFutureWithParent("listResourceChildren", ctx)(_ =>
+      samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+    )
+    _ = if (wsResourceChildren.nonEmpty) {
+      throw RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          s"Workspace ${workspace.toWorkspaceName} cannot be deleted because it contains at least one cloud resource such as an application or cloud environment. " +
+            s"Delete those resources first."
+        )
+      )
+    }
     _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspace)
     workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", ctx)(_ =>
       submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)
