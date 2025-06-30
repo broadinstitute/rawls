@@ -185,7 +185,8 @@ trait CompactEntityMigration {
           update ENTITY e
               join CTE tmp
               on e.id = tmp.entity_id
-              set e.attributes = JSON_SET(e.attributes, $slickRefsPath, tmp.refs)
+              set e.attributes = JSON_SET(e.attributes, $slickRefsPath, tmp.refs),
+                  e.all_attribute_values = null
               where e.workspace_id = $workspaceId
               and deleted = 0;""".asUpdate
 
@@ -197,23 +198,19 @@ trait CompactEntityMigration {
   def migrationDropEntityTempTable: ReadWriteAction[Int] =
     sql"""drop temporary table QS_ENTITY_TEMP;""".asUpdate
 
-  /** Delete the all_attribute_values text from a compact ENTITY.
-      * Currently unused, but leaving here in case we change our mind.
-      */
-  @unused
-  def migrationClearAllAttributesString(workspaceId: UUID): ReadWriteAction[Int] =
-    sql"""update ENTITY
-          set all_attribute_values = null
-          where workspace_id = $workspaceId;""".asUpdate
-
   /** Clean up legacy attributes for entities in a given workspace.
-    * Currently unused, but leaving here in case we change our mind.
     */
-  @unused
-  def migrationDeleteLegacyReferences(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
+  def migrationDeleteLegacyAttributes(workspaceId: UUID, shardId: String): ReadWriteAction[Int] =
     sql"""delete ea
          from ENTITY e, ENTITY_ATTRIBUTE_#$shardId ea
          where ea.owner_id = e.id
          and e.workspace_id = $workspaceId""".asUpdate
+
+  /** Clean up all soft-deleted entities, of all types, in a given workspace.
+   */
+  def migrationHardDeleteEntitiesMarkedForDeletion(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""delete ignore from ENTITY
+          where workspace_id = $workspaceId
+          and deleted = 1""".asUpdate
 
 }
