@@ -314,28 +314,18 @@ class WorkspaceService(
           samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, sharePolicy, ctx)
         }
       }
-      wsmService = new AggregatedWorkspaceService(workspaceManagerDAO)
-      wsmContext = Try(wsmService.fetchAggregatedWorkspace(workspace, ctx)).recover {
-        // return workspace with no WSM information for gcp workspace
-        case _: AggregateWorkspaceNotFoundException if workspace.workspaceType == WorkspaceType.RawlsWorkspace =>
-          AggregatedWorkspace(workspace, Some(workspace.googleProjectId), None, List.empty)
-      }.get
 
       canCompute <- options.anyPresentFuture("canCompute") {
-        wsmContext.getCloudPlatform match {
-          case Some(WorkspaceCloudPlatform.Azure) => Future.successful(accessLevel >= WorkspaceAccessLevels.Write)
-          case _ if accessLevel >= WorkspaceAccessLevels.Owner => Future.successful(true)
-          case _ => samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
-        }
+        if (accessLevel >= WorkspaceAccessLevels.Owner)
+          Future.successful(true)
+        else
+          samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
       }
 
-      bucketDetails: Option[WorkspaceBucketOptions] <- wsmContext.googleProjectId match {
-        case None => Future.successful(None)
-        case Some(_) =>
-          options.anyPresentFuture("bucketOptions")(
-            getBucketOptions(WorkspaceName(workspace.namespace, workspace.name), userProject)
-          )
-      }
+      bucketDetails: Option[WorkspaceBucketOptions] <-
+        options.anyPresentFuture("bucketOptions")(
+          getBucketOptions(WorkspaceName(workspace.namespace, workspace.name), userProject)
+        )
 
       policies <- options.anyPresentFuture("policies") {
         policyService.getPao(UUID.fromString(workspaceId), ctx)
@@ -349,12 +339,12 @@ class WorkspaceService(
         workspace,
         authDomain,
         options.useAttributes,
-        wsmContext.getCloudPlatform
+        Some(WorkspaceCloudPlatform.Gcp)
       ),
       stats.flatten,
       bucketDetails,
       owners,
-      wsmContext.azureCloudContext,
+      None,
       policies.flatten.map(convertPolicies)
     )
   }
