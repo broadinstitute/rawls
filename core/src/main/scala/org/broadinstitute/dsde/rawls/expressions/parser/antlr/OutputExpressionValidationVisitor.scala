@@ -1,20 +1,22 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser._
 import org.broadinstitute.dsde.rawls.expressions.{
   BoundOutputExpression,
   OutputExpression,
+  ThisEntityTarget,
   UnboundOutputExpression,
   WorkspaceTarget
 }
-import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeNull, ErrorReportSource}
-import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
+import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeNull, ErrorReport, ErrorReportSource}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 
 import scala.util.{Failure, Success, Try}
 
 /** Output expressions don't allow for entity references (relations) in the middle or for any JSON. They must
   * be of the form workspace.attribute */
-class OutputExpressionValidationVisitor
+class OutputExpressionValidationVisitor(rootEntityTypeOption: Option[String])
     extends TerraExpressionBaseVisitor[Try[Attribute => OutputExpression]]
     with StringValidationUtils {
 
@@ -53,4 +55,23 @@ class OutputExpressionValidationVisitor
 
   override def visitLiteral(ctx: LiteralContext): Try[Attribute => OutputExpression] =
     Failure(new RawlsException("Output expressions cannot be JSON"))
+
+  override def visitEntityLookup(ctx: EntityLookupContext): Try[Attribute => OutputExpression] =
+    rootEntityTypeOption match {
+      case None =>
+        Failure(
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              "Output expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."
+            )
+          )
+        )
+      case Some(rootEntityType) =>
+        val attributeName = AntlrTerraExpressionParser.toAttributeName(ctx.attributeName())
+        for {
+          _ <- Try(validateAttributeName(attributeName, rootEntityType))
+          _ <- visitChildren(ctx)
+        } yield (attribute: Attribute) => BoundOutputExpression(ThisEntityTarget, attributeName, attribute)
+    }
 }
