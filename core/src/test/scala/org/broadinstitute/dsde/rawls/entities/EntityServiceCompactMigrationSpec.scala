@@ -8,7 +8,7 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{QuicksilverMigrationResult, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
@@ -149,10 +149,10 @@ class EntityServiceCompactMigrationSpec
 
         // perform migration - this keeps legacy attributes and adds Quicksilver attributes
         // set a low batch size to ensure we exercise the batching logic
-        val entitiesUpdated =
+        val migrationResult =
           Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName, batchSize = 3), atMost)
 
-        entitiesUpdated shouldBe expectedCount
+        migrationResult shouldBe QuicksilverMigrationResult(expectedCount, 0, 0)
 
         val defaultRequestContext =
           RawlsRequestContext(
@@ -266,10 +266,10 @@ class EntityServiceCompactMigrationSpec
     savedEntity shouldBe entity
 
     // perform migration - this keeps legacy attributes and adds Quicksilver attributes
-    val entitiesUpdated =
+    val migrationResult =
       Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
 
-    entitiesUpdated shouldBe 19 // 18 from the test data, plus the one we just created
+    migrationResult shouldBe QuicksilverMigrationResult(19, 0, 0) // 18 from the test data, plus the one we just created
 
     val compactEntity =
       Await.result(compactProvider.getEntity(entity.entityType, entity.name, defaultRequestContext), atMost)
@@ -356,10 +356,10 @@ class EntityServiceCompactMigrationSpec
     savedEntity shouldBe entity
 
     // perform migration - this keeps legacy attributes and adds Quicksilver attributes
-    val entitiesUpdated =
+    val migrationResult =
       Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
 
-    entitiesUpdated shouldBe 19 // 18 from the test data, plus the one we just created
+    migrationResult shouldBe QuicksilverMigrationResult(19, 0, 0) // 18 from the test data, plus the one we just created
 
     val compactEntity =
       Await.result(compactProvider.getEntity(entity.entityType, entity.name, defaultRequestContext), atMost)
@@ -374,6 +374,41 @@ class EntityServiceCompactMigrationSpec
       }
     }
 
+  }
+
+  it should s"hard delete legacy data when requested" in withTestDataServices { apiService =>
+    val workspace = testData.workspace // has some entities we can use to test references
+
+    val defaultRequestContext =
+      RawlsRequestContext(
+        UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
+      )
+
+    val requestArguments = EntityRequestArguments(workspace, defaultRequestContext)
+
+    // get providers
+    val localProvider =
+      new LocalEntityProvider(requestArguments,
+                              slickDataSource,
+                              true,
+                              java.time.Duration.ofSeconds(60),
+                              workbenchMetricBaseName
+      )
+
+    // Attempt to soft-delete two existing entities. This will actually only delete indiv2, since indiv1 is referenced
+    // by a submission.
+    val softDeletes = Seq(testData.indiv1.toPointer, testData.indiv2.toPointer)
+    val softDeleteResult = Await.result(localProvider.deleteEntities(softDeletes, defaultRequestContext), atMost)
+    softDeleteResult shouldBe 2
+
+    // perform migration with cleanup - this deletes legacy attributes and hard-deleted soft-deleted entities
+    val migrationResult =
+      Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName, cleanup = true), atMost)
+
+    migrationResult shouldBe QuicksilverMigrationResult(16, 1, 36)
+    // numEntitiesUpdated: test data has 18, but we soft-deleted 2
+    // numEntitiesDeleted: 1 soft-deleted entity were hard-deleted
+    // numAttributesDeleted: we delete all attributes in the workspace, not just the soft-deleted ones
   }
 
 }

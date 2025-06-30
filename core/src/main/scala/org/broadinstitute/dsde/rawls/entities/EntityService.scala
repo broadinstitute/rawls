@@ -7,7 +7,12 @@ import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.time.StopWatch
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  QuicksilverMigrationResult,
+  ReadAction,
+  ReadWriteAction
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -30,6 +35,8 @@ import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, Json
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
+import spray.json.DefaultJsonProtocol.jsonFormat3
+import spray.json.RootJsonFormat
 
 import java.sql.SQLException
 import java.util.UUID
@@ -560,7 +567,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * @param workspaceName the name of the workspace to migrate
     * @param batchSize the number of entities to migrate in a single batch; defaults to 50,000
     */
-  def quicksilverMigration(workspaceName: WorkspaceName, batchSize: Int = 50000): Future[Int] =
+  def quicksilverMigration(workspaceName: WorkspaceName,
+                           cleanup: Boolean = false,
+                           batchSize: Int = 50000
+  ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
         // verify owner of workspace.
@@ -619,21 +629,19 @@ class EntityService(protected val ctx: RawlsRequestContext,
               })
               numEntitiesUpdated = updateCounts.sum
 
-              /** *** don't delete legacy data; we'll do that en masse after everything is migrated
-              *  // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
-              *  _ = logger.info(s"Quicksilver migration: deleting legacy attributes ...")
-              *  _ <- dataAccess.compactEntityQuery.migrationDeleteLegacyReferences(workspaceContext.workspaceIdAsUUID,
-              *  shardId
-              *  )
-              *  // delete the all_attribute_values column for this workspace
-              *  _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
-              *  _ <- dataAccess.compactEntityQuery.migrationClearAllAttributesString(workspaceContext.workspaceIdAsUUID)
-              * *** */
+              (numAttributesDeleted, numEntitiesDeleted) <-
+                if (cleanup) {
+                  // hard delete legacy data if requested
+                  hardDeleteLegacyData(workspaceId, shardId, dataAccess)
+                } else {
+                  // otherwise, just log that we did not delete legacy data
+                  DBIO.successful((0, 0))
+                }
 
               _ = logger.info(
                 s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
               )
-            } yield numEntitiesUpdated
+            } yield QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted)
           }
 
         }
@@ -649,6 +657,20 @@ class EntityService(protected val ctx: RawlsRequestContext,
         // return a count of entities updated
       } yield userResult
     }
+
+  private def hardDeleteLegacyData(workspaceId: UUID,
+                                   shardId: String,
+                                   dataAccess: DataAccess
+  ): ReadWriteAction[(Int, Int)] = {
+    logger.info(s"Quicksilver migration: deleting legacy attributes ...")
+    for {
+      // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
+      numAttributesDeleted <- dataAccess.compactEntityQuery.migrationDeleteLegacyAttributes(workspaceId, shardId)
+      // delete the all_attribute_values column for this workspace
+      _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
+      numEntitiesDeleted <- dataAccess.compactEntityQuery.migrationHardDeleteEntitiesMarkedForDeletion(workspaceId)
+    } yield (numAttributesDeleted, numEntitiesDeleted) // return count of attributes and entities deleted
+  }
 
   /** Executes a database operation `op` in a session using 8MB of `sort_buffer_size` memory,
     * then resets the sort buffer size back to its original value */

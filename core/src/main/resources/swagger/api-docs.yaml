@@ -2488,6 +2488,14 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - name: cleanup
+          in: query
+          description: |
+            Should this API fully delete all unnecessary data after the migration?
+            Setting this to true can greatly increase the execution time of this API.
+          schema:
+            type: boolean
+            default: false
       requestBody:
         description: Consent to execute
         content:
