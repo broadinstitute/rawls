@@ -617,7 +617,7 @@ class WorkspaceService(
   ): Future[Unit] = {
     def destroyPet(userIdInfo: UserIdInfo, projectName: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
       for {
-        petSAJson <- traceFutureWithParent("listAllResourceMemberIds", ctx)(_ =>
+        petSAJson <- traceFutureWithParent("getPetServiceAccountKeyForUser", ctx)(_ =>
           samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
         )
         petUserInfo <- traceFutureWithParent("getUserInfoUsingJson", ctx)(_ => gcsDAO.getUserInfoUsingJson(petSAJson))
