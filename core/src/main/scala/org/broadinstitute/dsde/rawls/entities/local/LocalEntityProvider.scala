@@ -303,7 +303,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     }
 
-  override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator
+  override def expressionValidator: ExpressionValidator = new ExpressionValidator
 
   protected[local] def evaluateExpressionsInternal(workspaceContext: Workspace,
                                                    inputs: Set[MethodInput],

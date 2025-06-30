@@ -376,8 +376,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   ): Future[LazyList[SubmissionValidationEntityInputs]] =
     expressionEvaluator.evaluateExpressions(workspaceId, expressionEvaluationContext, gatherInputsResult)
 
-  // TODO Verify that LocalEntityExpressionValidator works for Compact Entities then rename
-  override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator
+  override def expressionValidator: ExpressionValidator = new ExpressionValidator
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
     val queryResult = repository.dataSource.inTransaction(ReadOnly) { _ =>
