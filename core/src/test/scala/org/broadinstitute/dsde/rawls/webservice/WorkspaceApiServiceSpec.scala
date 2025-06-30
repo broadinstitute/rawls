@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.joda.time.DateTime
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
@@ -105,7 +106,7 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).listWorkspaces(WorkspaceFieldSpecs(), -1) // empty seq and -1 are the default values
   }
 
-  it should "call MCWorkspaceService.createMultiCloudOrRawlsWorkspace to create a workspace" in {
+  it should "call WorkspaceService.createWorkspace to create a workspace" in {
     val workspaceService = mock[WorkspaceService]
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
@@ -114,9 +115,8 @@ class WorkspaceApiServiceSpec
       name = workspace.name,
       Map.empty
     )
-    val details = WorkspaceDetails(workspace, Set())
-    when(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(newWorkspace, workspaceService))
-      .thenReturn(Future.successful(details))
+    when(workspaceService.createWorkspace(ArgumentMatchers.eq(newWorkspace), any[RawlsRequestContext]))
+      .thenReturn(Future.successful(workspace))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -128,7 +128,7 @@ class WorkspaceApiServiceSpec
         val response = responseAs[WorkspaceDetails]
         response.name shouldBe workspace.name
       }
-    verify(mcWorkspaceService).createMultiCloudOrRawlsWorkspace(newWorkspace, workspaceService, null)
+    verify(workspaceService).createWorkspace(ArgumentMatchers.eq(newWorkspace), any[RawlsRequestContext])
   }
 
   private val tagsTestParameters = Table[String, Option[String], Option[Int]](

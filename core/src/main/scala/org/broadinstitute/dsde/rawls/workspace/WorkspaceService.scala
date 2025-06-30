@@ -212,6 +212,12 @@ class WorkspaceService(
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
+      // ensure this creation request is not happening in a leftover Azure billing project
+      _ = if (billingProject.azureManagedAppCoordinates.isDefined) {
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, "Unsupported billing project: Azure billing projects are not supported")
+        )
+      }
       // explicit policies in the request are not supported on GCP workspaces. instead, we derive the policies from other fields in the request
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
