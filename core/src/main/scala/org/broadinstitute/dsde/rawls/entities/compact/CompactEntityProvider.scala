@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   EntityReferenceNotFoundException,
   UnsupportedEntityOperationException
 }
-import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionValidator
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
 import org.broadinstitute.dsde.rawls.expressions.CompactExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
