@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
 
 import scala.util.{Failure, Success, Try}
 
-class LocalInputExpressionValidationVisitor(allowRootEntity: Boolean) extends TerraExpressionBaseVisitor[Try[Unit]] {
+class InputExpressionValidationVisitor(allowRootEntity: Boolean) extends TerraExpressionBaseVisitor[Try[Unit]] {
 
   override def defaultResult() = Success(())
 

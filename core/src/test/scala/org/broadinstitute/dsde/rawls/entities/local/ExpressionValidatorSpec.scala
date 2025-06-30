@@ -12,7 +12,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.time.{Seconds, Span}
 
-class LocalEntityLocalExpressionValidatorSpec
+class ExpressionValidatorSpec
     extends AnyFlatSpec
     with TestDriverComponent
     with LocalExpressionFixture
@@ -82,7 +82,7 @@ class LocalEntityLocalExpressionValidatorSpec
     AgoraMethod("dsde", "three_step", 1)
   )
 
-  val expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator()
+  val expressionValidator: ExpressionValidator = new ExpressionValidator()
 
   it should "validateAndParseMCExpressions" in {
     implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))

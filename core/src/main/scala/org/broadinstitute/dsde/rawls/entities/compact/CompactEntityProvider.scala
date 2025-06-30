@@ -369,7 +369,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
   ): Future[LazyList[SubmissionValidationEntityInputs]] = ???
 
-  override def expressionValidator: ExpressionValidator = ???
+  override def expressionValidator: ExpressionValidator = new ExpressionValidator
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
     val queryResult = repository.dataSource.inTransaction(ReadOnly) { _ =>

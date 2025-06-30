@@ -2,6 +2,12 @@ package org.broadinstitute.dsde.rawls.entities.base
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.expressions.OutputExpression
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{
+  AntlrTerraExpressionParser,
+  InputExpressionValidationVisitor,
+  OutputExpressionValidationVisitor
+}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
@@ -15,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Try
 
-trait ExpressionValidator {
+class ExpressionValidator {
 
   /** validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration */
   def validateMCExpressions(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult)(implicit
@@ -98,7 +104,30 @@ trait ExpressionValidator {
     ValidatedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
   }
 
-  protected[entities] def validateInputExpr(rootEntityTypeOption: Option[String] = None)(expression: String): Try[Unit]
+  protected[entities] def validateInputExpr(
+    rootEntityTypeOption: Option[String]
+  )(expression: String): Try[Unit] = {
+    val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
+    val visitor = new InputExpressionValidationVisitor(rootEntityTypeOption.isDefined)
 
-  protected[entities] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit]
+    /*
+      parse the expression using ANTLR parser for input expressions and walk the tree using `visit()` to examine
+      child nodes. If it finds an entityLookup node at any point, it fails unless allowRootEntity is true since
+      entity expressions are only allowed when running with the workspace data model
+     */
+    Try(terraExpressionParser.root()).flatMap(visitor.visit)
+  }
+
+  protected[entities] def validateOutputExpr(
+    rootEntityTypeOption: Option[String]
+  )(expression: String): Try[Unit] = {
+    val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
+    val visitor = new OutputExpressionValidationVisitor(rootEntityTypeOption)
+
+    for {
+      parseTree <- Try(terraExpressionParser.root())
+      _ <- visitor.visit(parseTree)
+      _ <- OutputExpression.validate(expression, rootEntityTypeOption)
+    } yield ()
+  }
 }
