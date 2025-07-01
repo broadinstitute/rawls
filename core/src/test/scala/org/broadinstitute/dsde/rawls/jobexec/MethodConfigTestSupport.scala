@@ -654,7 +654,7 @@ trait MethodConfigTestSupport {
   val configRawJsonTripleArray = MethodConfiguration(
     "config_namespace",
     "configSample",
-    Some("Sample"),
+    Some("SampleSet"),
     None,
     Map(tripleIntArrayNameWithWfName -> AttributeString("this.samples.rawJsonDoubleArray")),
     Map.empty,
@@ -759,6 +759,35 @@ trait MethodConfigTestSupport {
     Map(strArrayNameWithWfName -> AttributeString("this.samples.blah")),
     Map.empty,
     dummyMethod
+  )
+
+  val configSampleSetSingleInput = MethodConfiguration(
+    "config_namespace",
+    "configSampleSetSingleInput",
+    Some("SampleSet"),
+    None,
+    Map(stringArgNameWithWfName -> AttributeString("this.samples.blah")),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configStaticInput = MethodConfiguration(
+    "config_namespace",
+    "configStaticInput",
+    None,
+    None,
+    Map(stringArgNameWithWfName -> AttributeString("\"plain value\"")),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configEntityName = MethodConfiguration("config_namespace",
+                                             "configEntityName",
+                                             Some("Sample"),
+                                             None,
+                                             Map(stringArgNameWithWfName -> AttributeString("this.Sample_id")),
+                                             Map.empty,
+                                             dummyMethod
   )
 
   class ConfigData extends TestData {
