@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityQuery, CompactEntityRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityRepository, CompactEntitySerialization}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{
@@ -14,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeNumber,
   AttributeString,
+  AttributeValue,
   AttributeValueEmptyList,
   AttributeValueList,
   AttributeValueRawJson,
@@ -34,7 +36,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
 
-import scala.util.{Random, Success}
+import scala.util.{Random, Success, Try}
 
 class CompactExpressionEvaluatorSpec
     extends AnyFlatSpec
@@ -992,6 +994,39 @@ class CompactExpressionEvaluatorSpec
         )
       )
     )
+  }
+
+  it should "include any workspace expressions passed to it" in withConfigData {
+    when(
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.name)
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Some(sampleGoodAsCER)
+        )
+      )
+
+    val context =
+      ExpressionEvaluationContext(Some(sampleGood.entityType), Some(sampleGood.name), None, Some(sampleGood.entityType))
+    val gatherInputsResult =
+      methodConfigResolver.gatherInputs(userInfo, configWorkspaceAttr, littleWdl).get
+    val workspaceExpressions = Map("workspace.att1" -> Success(Seq(AttributeNumber(2))))
+    val result = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID, context, gatherInputsResult, workspaceExpressions)
+      .futureValue
+    result should contain(
+      SubmissionValidationEntityInputs(
+        sampleGood.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName),
+          SubmissionValidationValue(Some(AttributeNumber(2)), None, intOptNameWithWfName)
+        )
+      )
+    )
+
   }
 
   behavior of "evaluateExpression"
