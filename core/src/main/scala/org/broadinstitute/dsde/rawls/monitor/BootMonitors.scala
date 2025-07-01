@@ -6,7 +6,7 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectDeletion, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
@@ -41,11 +41,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
-  BPMBillingProjectDeleteRunner,
-  CloneWorkspaceContainerRunner,
-  LandingZoneCreationStatusRunner
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunner
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -75,7 +71,6 @@ object BootMonitors extends LazyLogging {
                    pubSubDAO: GooglePubSubDAO,
                    cwdsDAO: CwdsDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
-                   billingProfileManagerDAO: BillingProfileManagerDAO,
                    leonardoDAO: LeonardoDAO,
                    workspaceRepository: WorkspaceRepository,
                    googleStorage: GoogleStorageService[IO],
@@ -236,7 +231,6 @@ object BootMonitors extends LazyLogging {
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
-      billingProfileManagerDAO,
       gcsDAO,
       leonardoDAO,
       workspaceRepository
@@ -464,7 +458,6 @@ object BootMonitors extends LazyLogging {
     dataSource: SlickDataSource,
     samDAO: SamDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
-    billingProfileManagerDAO: BillingProfileManagerDAO,
     gcsDAO: GoogleServicesDAO,
     leonardoDAO: LeonardoDAO,
     workspaceRepository: WorkspaceRepository
@@ -499,17 +492,8 @@ object BootMonitors extends LazyLogging {
           JobType.LeoAppDeletionPoll -> workspaceDeletionRunner,
           JobType.LeoRuntimeDeletionPoll -> workspaceDeletionRunner,
           JobType.WSMWorkspaceDeletionPoll -> workspaceDeletionRunner,
-          JobType.AzureLandingZoneResult ->
-            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
             new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
-          JobType.BpmBillingProjectDelete -> new BPMBillingProjectDeleteRunner(
-            samDAO,
-            gcsDAO,
-            workspaceManagerDAO,
-            billingRepo,
-            new BillingProjectDeletion(samDAO, billingRepo, billingProfileManagerDAO)
-          )
         ) ++ JobType.cloneJobTypes.map(jobType => jobType -> workspaceCloneRunner).toMap
       )
     )

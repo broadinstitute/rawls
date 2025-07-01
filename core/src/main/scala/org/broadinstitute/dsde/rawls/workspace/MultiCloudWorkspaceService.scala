@@ -10,7 +10,7 @@ import bio.terra.workspace.model._
 import cats.Apply
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -58,7 +58,6 @@ import scala.util.{Failure, Success, Try}
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   workspaceManagerDAO: WorkspaceManagerDAO,
-                  billingProfileManagerDAO: BillingProfileManagerDAO,
                   samDAO: SamDAO,
                   multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                   leonardoDAO: LeonardoDAO,
@@ -67,7 +66,6 @@ object MultiCloudWorkspaceService {
     new MultiCloudWorkspaceService(
       ctx,
       workspaceManagerDAO,
-      billingProfileManagerDAO,
       samDAO,
       multiCloudWorkspaceConfig,
       leonardoDAO,
@@ -115,7 +113,6 @@ object MultiCloudWorkspaceService {
   */
 class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                  val workspaceManagerDAO: WorkspaceManagerDAO,
-                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  override val samDAO: SamDAO,
                                  val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  val leonardoDAO: LeonardoDAO,
@@ -317,16 +314,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         // fail if the billing project lists a billing profile that doesn't exist
         profileModel <- traceFutureWithParent("getBillingProfile", parentContext) { s =>
           Future(blocking {
-            billingProfileManagerDAO
-              .getBillingProfile(profileId, s)
-              .getOrElse(
-                throw RawlsExceptionWithErrorReport(
-                  ErrorReport(
-                    StatusCodes.InternalServerError,
-                    s"Unable to find billing profile with billingProfileId: $profileId"
-                  )
-                )
+            throw RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.InternalServerError,
+                s"Unable to find billing profile with billingProfileId: $profileId"
               )
+            )
           })
         }
       } yield profileModel

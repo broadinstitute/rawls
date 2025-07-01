@@ -1352,8 +1352,6 @@ class WorkspaceService(
               revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
             } else Future.successful()
 
-          _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
-
           // Sync FastPass grants once ACLs are updated
           _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { email =>
             fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace, email)
