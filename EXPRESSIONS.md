@@ -51,13 +51,13 @@ Input and output expressions will tell the method configuration what to associat
 Workflow expansion expressions can also be associated with submissions, and will define how to expand a workflow on a single entity into multiple workflows that is run on multiple entities. One example of this would be using a workflow expansion expression to run a workflow on each ```pair``` in a ```pair_set```. In this case, the workflow expansion expression would be ```this.pairs```. Workflow expansion expressions work on workspace collection types (```pair_set```, ```participant_set```, and ```sample_set```), as well as user defined reference lists.
 
 # General Syntax
-|Input Name|Input Value|
-|---|---|
-|```<workflow_id>.<task_id>.<input_name>```|```<this|workspace>.<attribute_name>```|
+|Input Name| Input Value                              |
+|---|------------------------------------------|
+|```<workflow_id>.<task_id>.<input_name>```| ```<this\|workspace>.<attribute_name>``` |
 
-|Output Name|Output Value|
-|---|---|
-|```<workflow_id>.<task_id>.<output_name>```|```<this|workspace>.<attribute_name>```|
+|Output Name| Output Value                             |
+|---|------------------------------------------|
+|```<workflow_id>.<task_id>.<output_name>```| ```<this\|workspace>.<attribute_name>``` |
 
 
 To map the ```ref_fasta``` attribute of ```HCC1143_pair``` to the input ```ref_fasta``` in the ```CancerExomePipeline_v2```, use an Input Name of ```CancerExomePipeline.M2.ref_fasta``` and an Input Value of ```this.ref_fasta```.
