@@ -131,7 +131,12 @@ trait WorkspaceSupport {
     ignoreLock: Boolean = false
   ): Future[Workspace] =
     for {
-      workspace <- getV2WorkspaceOrThrow(workspaceName, attributeSpecs)
+      workspace <- getV2WorkspaceOrThrow(workspaceName, attributeSpecs) recoverWith {
+        // If the workspace does not exist, we still want to check if the user is enabled
+        // and return Unauthorized if not.
+        case ogException: NoSuchWorkspaceException =>
+          userEnabledCheck.flatMap[Workspace](_ => Future.failed(ogException))
+      }
       _ <- accessCheck(workspace, requiredAction)
       _ <- if (ignoreLock) Future.successful() else checkLock(workspace, requiredAction)
     } yield workspace
@@ -142,17 +147,15 @@ trait WorkspaceSupport {
     attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
-      workspace <- getV2WorkspaceByWorkspaceIdOrThrow(workspaceId, attributeSpecs)
+      workspace <- getV2WorkspaceByWorkspaceIdOrThrow(workspaceId, attributeSpecs) recoverWith {
+        // If the workspace does not exist, we still want to check if the user is enabled
+        // and return Unauthorized if not.
+        case ogException: NoSuchWorkspaceException =>
+          userEnabledCheck.flatMap[Workspace](_ => Future.failed(ogException))
+      }
       _ <- accessCheck(workspaceId, requiredAction)
       _ <- checkLock(workspace, requiredAction)
     } yield workspace
-
-  def getV2WorkspaceContextByWorkspaceId(workspaceId: String,
-                                         attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] = for {
-    _ <- userEnabledCheck
-    workspaceContext <- getV2WorkspaceByWorkspaceIdOrThrow(workspaceId, attributeSpecs)
-  } yield workspaceContext
 
   def getV2WorkspaceContext(workspaceName: WorkspaceName,
                             attributeSpecs: Option[WorkspaceAttributeSpecs] = None
