@@ -530,7 +530,10 @@ class WorkspaceService(
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] = for {
-    workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
+    workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                     SamWorkspaceActions.delete,
+                                                     Some(WorkspaceAttributeSpecs(all = false))
+    )
     _ = workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
         throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Multi Cloud workspaces not supported")
@@ -550,6 +553,9 @@ class WorkspaceService(
         )
       )
     }
+    _ = logger.info(
+      s"Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
+    )
     _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspace)
     workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", ctx)(_ =>
       submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)
