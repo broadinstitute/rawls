@@ -218,6 +218,10 @@ class WorkspaceService(
           ErrorReport(StatusCodes.BadRequest, "Unsupported billing project: Azure billing projects are not supported")
         )
       }
+      // ensure the user has the create_workspace permission on the billing project
+      _ <- traceFutureWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
+        requireCreateWorkspaceAction(billingProject.projectName, childContext)
+      }
       // explicit policies in the request are not supported on GCP workspaces. instead, we derive the policies from other fields in the request
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
