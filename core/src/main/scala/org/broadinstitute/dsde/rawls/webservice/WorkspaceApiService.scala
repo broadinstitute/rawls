@@ -34,10 +34,16 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             complete {
               val workspaceService = workspaceServiceConstructor(ctx)
-              val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
-              mcWorkspaceService
-                .createMultiCloudOrRawlsWorkspace(workspace, workspaceService)
-                .map(w => StatusCodes.Created -> w)
+              workspaceService
+                .createWorkspace(workspace, ctx)
+                .map(w =>
+                  StatusCodes.Created -> WorkspaceDetails.fromWorkspaceAndOptions(
+                    w,
+                    Some(workspace.authorizationDomain.getOrElse(Set.empty)),
+                    useAttributes = true,
+                    Some(WorkspaceCloudPlatform.Gcp)
+                  )
+                )
             }
           }
         }
