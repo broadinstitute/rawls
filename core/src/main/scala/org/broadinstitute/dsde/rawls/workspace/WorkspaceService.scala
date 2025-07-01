@@ -550,6 +550,9 @@ class WorkspaceService(
         )
       )
     }
+    _ = logger.info(
+      s"Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
+    )
     _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspace)
     workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", ctx)(_ =>
       submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)
