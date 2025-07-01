@@ -304,15 +304,14 @@ class WorkspaceApiServiceSpec
     forAll(
       Table(
         ("bucketResult", "message"),
-        (None, "Your workspace has been deleted."),
         (Some("BucketName"), s"Your Google bucket BucketName will be deleted within 24h.")
       )
     ) { (bucketResult, message) =>
       val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val workspaceName = WorkspaceName("ns", "n")
       val workspaceService = mock[WorkspaceService]
-      when(mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService))
-        .thenReturn(Future.successful(bucketResult))
+      when(workspaceService.deleteWorkspace(workspaceName))
+        .thenReturn(Future.successful(WorkspaceDeletionResult.fromGcpBucketName(bucketResult.getOrElse(""))))
       val service = new MockApiService(
         workspaceServiceConstructor = _ => workspaceService,
         multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -324,7 +323,7 @@ class WorkspaceApiServiceSpec
           responseAs[String] shouldBe message
 
         }
-      verify(mcWorkspaceService).deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService)
+      verify(workspaceService).deleteWorkspace(workspaceName)
     }
 
   it should "get accessInstructions by name and namespace" in {
