@@ -372,7 +372,11 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                    gatherInputsResult: MethodConfigResolver.GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
   ): Future[LazyList[SubmissionValidationEntityInputs]] =
-    expressionEvaluator.evaluateExpressions(workspaceId, expressionEvaluationContext, gatherInputsResult, workspaceExpressionResults)
+    expressionEvaluator.evaluateExpressions(workspaceId,
+                                            expressionEvaluationContext,
+                                            gatherInputsResult,
+                                            workspaceExpressionResults
+    )
 
   override def expressionValidator: ExpressionValidator = new ExpressionValidator
 
