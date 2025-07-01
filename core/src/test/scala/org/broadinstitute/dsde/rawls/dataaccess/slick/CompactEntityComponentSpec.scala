@@ -2478,7 +2478,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val testAttrName2 = AttributeName.withDefaultNS("bar")
     // this test searches on entity names, so the names configured here are important
     val entity1 =
-      Entity("do-findme1",
+      Entity("do-FindMe1",
              entityType1,
              Map(testAttrName1 -> AttributeString("asdffoo"), testAttrName2 -> AttributeString("bar"))
       )
@@ -2493,7 +2493,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
              Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString), testAttrName2 -> AttributeString("bar"))
       )
     val entity4 =
-      Entity("do-findme2",
+      Entity("do-FindMe2",
              entityType1,
              Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("barasdf"))
       )
@@ -2511,10 +2511,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
                     10,
                     Attributable.nameReservedAttribute,
                     SortDirections.Ascending,
-                    Some("findme"),
+                    Some("FINDME"),
                     FilterOperators.And
         ),
-        Seq("findme")
+        Seq("FINDME")
       )
     )
     actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
