@@ -536,6 +536,20 @@ class WorkspaceService(
         throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Multi Cloud workspaces not supported")
       case WorkspaceType.RawlsWorkspace => ()
     }
+    // Disallow deletion of workspaces with any children *other* than its google project.
+    // This method knows how to delete that child google project.
+    wsResourceChildren <- traceFutureWithParent("listResourceChildren", ctx)(_ =>
+      samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+    )
+    _ = if (wsResourceChildren.exists(_.resourceTypeName != SamResourceTypeNames.googleProject.value)) {
+      throw RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          s"Workspace ${workspace.toWorkspaceName} cannot be deleted because it contains at least one cloud resource such as an application or cloud environment. " +
+            s"Delete those resources first."
+        )
+      )
+    }
     _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspace)
     workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", ctx)(_ =>
       submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)

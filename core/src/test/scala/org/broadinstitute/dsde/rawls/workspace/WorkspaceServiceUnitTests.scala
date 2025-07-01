@@ -588,6 +588,12 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
+    when(sam.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq()))
+    when(sam.getResourceAuthDomain(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
+      .thenReturn(Future(Seq()))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -645,6 +651,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -703,6 +711,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -758,6 +768,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -811,6 +823,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -864,6 +878,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -921,6 +937,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -981,6 +999,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
@@ -1048,6 +1068,8 @@ class WorkspaceServiceUnitTests
     when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
+    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      .thenReturn(Future(Seq.empty))
     when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))

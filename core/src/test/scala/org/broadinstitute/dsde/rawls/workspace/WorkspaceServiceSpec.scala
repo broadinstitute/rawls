@@ -1114,6 +1114,31 @@ class WorkspaceServiceSpec
     runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
   }
 
+  it should "fail if Sam reports children for this workspace" in withTestDataServices { services =>
+    // check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    when(
+      services.samDAO.listResourceChildren(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                           ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceId),
+                                           any[RawlsRequestContext]
+      )
+    ).thenReturn(
+      Future.successful(
+        Seq(SamFullyQualifiedResourceId("fake-id", "notebook-cluster"))
+      ) // Simulate that there are children resources
+    )
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+    }
+    assertResult(Some(StatusCodes.BadRequest)) {
+      error.errorReport.statusCode
+    }
+  }
+
   behavior of "getTags"
 
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
