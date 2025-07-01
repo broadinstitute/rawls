@@ -990,8 +990,7 @@ class WorkspaceService(
     } yield result
 
   // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
-  def cloneWorkspace(sourceWorkspace: Workspace,
-                     billingProject: RawlsBillingProject,
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName,
                      destWorkspaceRequest: WorkspaceRequest,
                      parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
@@ -1004,6 +1003,9 @@ class WorkspaceService(
       destWorkspaceRequest.attributes.keys
 
     for {
+      sourceWorkspace <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
+      billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
+      _ <- requireCreateWorkspaceAction(billingProject.projectName)
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       _ <- failIfBucketRegionInvalid(destWorkspaceRequest.bucketLocation)

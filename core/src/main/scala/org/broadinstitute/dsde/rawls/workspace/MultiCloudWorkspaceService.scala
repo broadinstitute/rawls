@@ -359,7 +359,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
           traceFutureWithParent("cloneRawlsWorkspace", ctx) { s =>
             wsService
-              .cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+              .cloneWorkspace(sourceWorkspaceName, destWorkspaceRequest, s)
               .map(workspace => (workspace, WorkspaceCloudPlatform.Gcp))
           }
 
@@ -471,7 +471,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
           traceFutureWithParent("cloneRawlsWorkspace", ctx) { s =>
             wsService
-              .cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest, s)
+              .cloneWorkspace(sourceWorkspaceName, destWorkspaceRequest, s)
               .map(workspace => (workspace, WorkspaceCloudPlatform.Gcp))
           }
 

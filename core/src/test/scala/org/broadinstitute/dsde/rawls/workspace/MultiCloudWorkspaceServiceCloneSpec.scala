@@ -318,7 +318,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     val clonedWorkspace = mock[Workspace]
     val cloneRequest = WorkspaceRequest(destWorkspaceName.namespace, destWorkspaceName.name, Map.empty)
     val workspaceService = mock[WorkspaceService]
-    when(workspaceService.cloneWorkspace(sourceWorkspace, billingProject, cloneRequest, testContext))
+    when(workspaceService.cloneWorkspace(sourceWorkspace.toWorkspaceName, cloneRequest, testContext))
       .thenReturn(Future(clonedWorkspace))
     val result = Await.result(
       service.cloneMultiCloudWorkspace(
@@ -335,7 +335,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       true,
       Some(WorkspaceCloudPlatform.Gcp)
     )
-    verify(workspaceService).cloneWorkspace(sourceWorkspace, billingProject, cloneRequest, testContext)
+    verify(workspaceService).cloneWorkspace(sourceWorkspace.toWorkspaceName, cloneRequest, testContext)
   }
 
   it should "call WorkspaceService to clone a rawls workspace with a gcp billing profile" in {
@@ -391,7 +391,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     val clonedWorkspace = mock[Workspace]
     val cloneRequest = WorkspaceRequest(destWorkspaceName.namespace, destWorkspaceName.name, Map.empty)
     val workspaceService = mock[WorkspaceService]
-    when(workspaceService.cloneWorkspace(sourceWorkspace, billingProject, cloneRequest, testContext))
+    when(workspaceService.cloneWorkspace(sourceWorkspace.toWorkspaceName, cloneRequest, testContext))
       .thenReturn(Future(clonedWorkspace))
 
     val result = Await.result(
@@ -409,7 +409,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       useAttributes = true,
       Some(WorkspaceCloudPlatform.Gcp)
     )
-    verify(workspaceService).cloneWorkspace(sourceWorkspace, billingProject, cloneRequest, testContext)
+    verify(workspaceService).cloneWorkspace(sourceWorkspace.toWorkspaceName, cloneRequest, testContext)
   }
 
   it should "call cloneAzureWorkspace for an azure workspace and an azure billing project" in {
@@ -1175,8 +1175,7 @@ class MultiCloudWorkspaceServiceCloneSpec
     when(
       workspaceService
         .cloneWorkspace(
-          ArgumentMatchers.eq(sourceWorkspace),
-          ArgumentMatchers.eq(billingProject),
+          ArgumentMatchers.eq(sourceWorkspace.toWorkspaceName),
           ArgumentMatchers.eq(destWorkspaceRequest),
           ArgumentMatchers.any()
         )
@@ -1209,8 +1208,7 @@ class MultiCloudWorkspaceServiceCloneSpec
       Some(WorkspaceCloudPlatform.Gcp)
     )
     verify(workspaceService).cloneWorkspace(
-      ArgumentMatchers.eq(sourceWorkspace),
-      ArgumentMatchers.eq(billingProject),
+      ArgumentMatchers.eq(sourceWorkspace.toWorkspaceName),
       ArgumentMatchers.eq(destWorkspaceRequest),
       ArgumentMatchers.any()
     )
