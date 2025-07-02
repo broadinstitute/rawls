@@ -54,7 +54,7 @@ trait WorkspaceSupport {
     } recoverWith {
       case apiException: ApiException
           if apiException.getCode == StatusCodes.Unauthorized.intValue
-            && apiException.getMessage.equals("User is disabled.") =>
+            && apiException.getMessage.contains("Message: User is disabled.") =>
         Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
     }
 

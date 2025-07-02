@@ -261,15 +261,27 @@ class WorkspaceServiceUnitTests
     exception.errorReport.message should include(invalidField)
   }
 
+  // TODO: add a unit test for the case where the user is disabled AND the workspace does not exist
   it should "return an unauthorized error if the user is disabled" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser.copy(enabled = false))))
+    when(
+      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                           any(),
+                           ArgumentMatchers.eq(SamWorkspaceActions.read),
+                           any()
+      )
+    )
+      .thenReturn(
+        Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException(401, "User is disabled."))
+      )
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
 
     val exception = intercept[UserDisabledException] {
-      val service = workspaceServiceConstructor(samDAO = samDAO)(ctx)
-      Await.result(service.getWorkspace(WorkspaceName("fake_namespace", "fake_name"), WorkspaceFieldSpecs()),
-                   Duration.Inf
-      )
+      val service = workspaceServiceConstructor(samDAO = samDAO, workspaceRepository = repository)(ctx)
+      Await.result(service.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Unauthorized)
   }
