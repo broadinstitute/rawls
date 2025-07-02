@@ -2471,6 +2471,55 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
   }
 
+  it should "return the entities with filter terms matching on the entity name" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val testAttrName1 = AttributeName.withDefaultNS("foo")
+    val testAttrName2 = AttributeName.withDefaultNS("bar")
+    // this test searches on entity names, so the names configured here are important
+    val entity1 =
+      Entity("do-FindMe1",
+             entityType1,
+             Map(testAttrName1 -> AttributeString("asdffoo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity2 =
+      Entity("some-other-unfindable-value",
+             entityType2,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity3 =
+      Entity("another-unfindable-value",
+             entityType1,
+             Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity4 =
+      Entity("do-FindMe2",
+             entityType1,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("barasdf"))
+      )
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // different attribute value
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.queryEntitiesWithFilterTerms(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    Attributable.nameReservedAttribute,
+                    SortDirections.Ascending,
+                    Some("FINDME"),
+                    FilterOperators.And
+        ),
+        Seq("FINDME")
+      )
+    )
+    actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
+  }
+
   it should "respect desired fields" in withMinimalTestDatabase { _ =>
     testDesiredFields(Some("foo"), None) { (entityType, entityQuery) =>
       q.queryEntitiesWithFilterTerms(

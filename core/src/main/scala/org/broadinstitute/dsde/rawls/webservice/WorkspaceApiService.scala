@@ -113,10 +113,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
           delete {
             complete {
               val workspaceService = workspaceServiceConstructor(ctx)
-              val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
-              mcWorkspaceService
-                .deleteMultiCloudOrRawlsWorkspace(WorkspaceName(workspaceNamespace, workspaceName), workspaceService)
-                .map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
+              workspaceService
+                .deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(deletionResult =>
+                  StatusCodes.Accepted -> workspaceDeleteMessage(deletionResult.gcpContext.map(_.bucketName))
+                )
             }
           }
       } ~
@@ -144,13 +145,17 @@ trait WorkspaceApiService extends UserInfoDirectives {
           entity(as[WorkspaceRequest]) { destWorkspace =>
             addLocationHeader(destWorkspace.toWorkspaceName.path) {
               complete {
-                multiCloudWorkspaceServiceConstructor(ctx)
-                  .cloneMultiCloudWorkspace(
-                    workspaceServiceConstructor(ctx),
-                    WorkspaceName(sourceNamespace, sourceWorkspace),
-                    destWorkspace
+                workspaceServiceConstructor(ctx)
+                  .cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace, ctx)
+                  .map(w =>
+                    StatusCodes.Created ->
+                      WorkspaceDetails.fromWorkspaceAndOptions(
+                        w,
+                        Some(destWorkspace.authorizationDomain.getOrElse(Set.empty)),
+                        useAttributes = true,
+                        Some(WorkspaceCloudPlatform.Gcp)
+                      )
                   )
-                  .map(w => StatusCodes.Created -> w)
               }
             }
           }

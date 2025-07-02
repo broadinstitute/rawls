@@ -547,7 +547,8 @@ class WorkspaceServiceUnitTests
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx))
       .thenReturn(Future(true))
     val repo = mock[WorkspaceRepository]
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repo)(ctx)
 
     intercept[WorkspaceAccessDeniedException] {
@@ -564,7 +565,8 @@ class WorkspaceServiceUnitTests
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
       .thenReturn(Future(true))
     val repo = mock[WorkspaceRepository]
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     val service = workspaceServiceConstructor(samDAO = sam, workspaceRepository = repo)(ctx)
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
@@ -594,7 +596,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(Seq()))
     when(sam.getResourceAuthDomain(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
       .thenReturn(Future(Seq()))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -653,7 +656,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -713,7 +717,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -770,7 +775,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -825,7 +831,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -880,7 +887,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -939,7 +947,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -1001,7 +1010,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows
@@ -1070,7 +1080,8 @@ class WorkspaceServiceUnitTests
       .thenReturn(Future(true))
     when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(workspace.toWorkspaceName, None)).thenReturn(Future(Some(workspace)))
+    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
     // delete requester pays records
     when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
     // abort workflows

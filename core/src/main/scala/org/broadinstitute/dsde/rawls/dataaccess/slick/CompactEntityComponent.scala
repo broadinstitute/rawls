@@ -1142,9 +1142,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
 
   private def filterTermsCondition(filterTerms: Seq[String], operator: FilterOperator) = {
-    // note the lower casing for case insensitive search
+    // note the lower casing for case-insensitive search in JSON_SEARCH;
+    // this is not necessary for the name search since the name column uses a case-insensitive collation
     val filterClauses = filterTerms.map { filterTerm =>
-      sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
+      sql"""(e.name like ${'%' + filterTerm + '%'}
+              or JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})
+            )"""
     }
     concatSqlActions(
       sql" and (",

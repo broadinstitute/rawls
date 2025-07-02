@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.Gcp
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -303,15 +304,14 @@ class WorkspaceApiServiceSpec
     forAll(
       Table(
         ("bucketResult", "message"),
-        (None, "Your workspace has been deleted."),
         (Some("BucketName"), s"Your Google bucket BucketName will be deleted within 24h.")
       )
     ) { (bucketResult, message) =>
       val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val workspaceName = WorkspaceName("ns", "n")
       val workspaceService = mock[WorkspaceService]
-      when(mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService))
-        .thenReturn(Future.successful(bucketResult))
+      when(workspaceService.deleteWorkspace(workspaceName))
+        .thenReturn(Future.successful(WorkspaceDeletionResult.fromGcpBucketName(bucketResult.getOrElse(""))))
       val service = new MockApiService(
         workspaceServiceConstructor = _ => workspaceService,
         multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -323,7 +323,7 @@ class WorkspaceApiServiceSpec
           responseAs[String] shouldBe message
 
         }
-      verify(mcWorkspaceService).deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService)
+      verify(workspaceService).deleteWorkspace(workspaceName)
     }
 
   it should "get accessInstructions by name and namespace" in {
@@ -393,7 +393,7 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).getBucketOptions(workspaceName, userProject.some)
   }
 
-  it should "clone a workspace using the multicloud workspace service" in {
+  it should "clone a workspace using the workspace service" in {
     val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val workspaceName = workspace.toWorkspaceName
@@ -404,12 +404,20 @@ class WorkspaceApiServiceSpec
       Map.empty
     )
     val details =
-      WorkspaceDetails(workspace.copy(namespace = cloneWorkspace.namespace, name = cloneWorkspace.name), Set())
-    when(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(any, any, any))
-      .thenReturn(Future.successful(details))
+      WorkspaceDetails.fromWorkspaceAndOptions(
+        workspace.copy(namespace = cloneWorkspace.namespace, name = cloneWorkspace.name),
+        Option(Set()),
+        useAttributes = true,
+        cloudPlatform = Some(Gcp)
+      )
 
-    when(mcWorkspaceService.cloneMultiCloudWorkspace(workspaceService, workspaceName, cloneWorkspace))
-      .thenReturn(Future.successful(details))
+    when(
+      workspaceService.cloneWorkspace(ArgumentMatchers.eq(workspaceName),
+                                      ArgumentMatchers.eq(cloneWorkspace),
+                                      any[RawlsRequestContext]
+      )
+    )
+      .thenReturn(Future.successful(details.toWorkspace))
     val service = new MockApiService(
       workspaceServiceConstructor = _ => workspaceService,
       multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
@@ -422,7 +430,10 @@ class WorkspaceApiServiceSpec
         resp shouldBe details
       }
 
-    verify(mcWorkspaceService).cloneMultiCloudWorkspace(workspaceService, workspaceName, cloneWorkspace)
+    verify(workspaceService).cloneWorkspace(ArgumentMatchers.eq(workspaceName),
+                                            ArgumentMatchers.eq(cloneWorkspace),
+                                            any[RawlsRequestContext]
+    )
   }
 
   it should "get the workspace ACL by name and namespace" in {
