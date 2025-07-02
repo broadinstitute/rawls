@@ -23,6 +23,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Failure, Success, Try}
 
+object CloneWorkspaceStorageContainerInitStep {
+  def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
+}
+
 class CloneWorkspaceStorageContainerInitStep(
   val workspaceManagerDAO: WorkspaceManagerDAO,
   workspaceRepository: WorkspaceRepository,
@@ -40,7 +44,7 @@ class CloneWorkspaceStorageContainerInitStep(
       case None     => return fail("Clone Storage Container", "no source workspace specified").map(_ => Complete)
     }
     val prefixToClone = WorkspaceCloningRunner.getStorageContainerClonePrefix(job.args)
-    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    val expectedContainerName = CloneWorkspaceStorageContainerInitStep.getStorageContainerName(sourceWorkspaceId)
 
     findSourceWorkspaceStorageContainer(sourceWorkspaceId, expectedContainerName, userCtx) match {
       case None =>
@@ -94,7 +98,7 @@ class CloneWorkspaceStorageContainerInitStep(
         sourceWorkspaceId,
         destinationWorkspaceId,
         container.getMetadata.getResourceId,
-        MultiCloudWorkspaceService.getStorageContainerName(destinationWorkspaceId),
+        CloneWorkspaceStorageContainerInitStep.getStorageContainerName(destinationWorkspaceId),
         CloningInstructionsEnum.RESOURCE,
         prefixToClone,
         ctx

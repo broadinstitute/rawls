@@ -52,7 +52,7 @@ class CloneWorkspaceStorageContainerInitStepSpec
       JobType.CloneWorkspaceContainerInit
     )
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
-    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    val expectedContainerName = CloneWorkspaceStorageContainerInitStep.getStorageContainerName(sourceWorkspaceId)
     val matchingContainer = new ResourceDescription()
       .metadata(
         new ResourceMetadata()
@@ -101,7 +101,7 @@ class CloneWorkspaceStorageContainerInitStepSpec
       JobType.CloneWorkspaceContainerInit
     )
     val workspaceManagerDAO = mock[WorkspaceManagerDAO]
-    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    val expectedContainerName = CloneWorkspaceStorageContainerInitStep.getStorageContainerName(sourceWorkspaceId)
     val resourceList = new ResourceList().resources(
       List(
         // both of these should be filtered out, either because the name doesn't match or because the access is invalid
@@ -176,7 +176,7 @@ class CloneWorkspaceStorageContainerInitStepSpec
       Some(Map(WorkspaceCloningRunner.SOURCE_WORKSPACE_KEY -> sourceWorkspaceId.toString)),
       JobType.CloneWorkspaceContainerInit
     )
-    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    val expectedContainerName = CloneWorkspaceStorageContainerInitStep.getStorageContainerName(sourceWorkspaceId)
 
     val container = new ResourceDescription()
       .metadata(
@@ -212,7 +212,7 @@ class CloneWorkspaceStorageContainerInitStepSpec
       Some(Map(WorkspaceCloningRunner.SOURCE_WORKSPACE_KEY -> sourceWorkspaceId.toString)),
       JobType.CloneWorkspaceContainerInit
     )
-    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    val expectedContainerName = CloneWorkspaceStorageContainerInitStep.getStorageContainerName(sourceWorkspaceId)
 
     val container = new ResourceDescription()
       .metadata(
