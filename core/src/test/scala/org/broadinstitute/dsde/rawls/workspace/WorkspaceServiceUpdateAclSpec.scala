@@ -622,8 +622,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
     when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
     when(multiCloudWorkspaceAclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(multiCloudWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(any(), any(), any()))
-      .thenReturn(Future.successful(()))
     when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
 
     val workspaceService = workspaceServiceConstructor(

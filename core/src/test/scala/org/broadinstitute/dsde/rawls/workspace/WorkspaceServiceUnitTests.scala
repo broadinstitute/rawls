@@ -12,15 +12,12 @@ import bio.terra.workspace.model.{
   WorkspaceDescription,
   WorkspaceStageModel
 }
-import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
-import com.google.api.client.http.{HttpHeaders, HttpResponseException}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
@@ -39,9 +36,8 @@ import org.broadinstitute.dsde.rawls.{
 }
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.OptionValues
@@ -50,7 +46,6 @@ import org.scalatest.matchers.dsl.MatcherWords.not.contain
 import org.scalatest.matchers.must.Matchers.{include, not}
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.scalatest.prop.TableDrivenPropertyChecks
-import spray.json.JsArray
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -112,7 +107,6 @@ class WorkspaceServiceUnitTests
     terraWorkspaceNextflowRole: String = "",
     terraBucketReaderRole: String = "",
     terraBucketWriterRole: String = "",
-    billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
     fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
       mock[FastPassService](RETURNS_SMART_NULLS),
@@ -144,7 +138,7 @@ class WorkspaceServiceUnitTests
       terraBucketReaderRole,
       terraBucketWriterRole,
       new RawlsWorkspaceAclManager(samDAO),
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, aclManagerDatasource),
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, aclManagerDatasource),
       fastPassServiceConstructor,
       workspaceRepository,
       billingRepository,

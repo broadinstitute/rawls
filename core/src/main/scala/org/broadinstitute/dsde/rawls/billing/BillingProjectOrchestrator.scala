@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.ServerError
-import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Sentry, SentryEvent}
@@ -51,7 +50,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
                                  billingProjectDeletion: BillingProjectDeletion,
-                                 config: MultiCloudWorkspaceConfig,
+                                 config: MultiCloudWorkspaceConfig
 )(implicit val executionContext: ExecutionContext)
     extends StringValidationUtils
     with UserUtils

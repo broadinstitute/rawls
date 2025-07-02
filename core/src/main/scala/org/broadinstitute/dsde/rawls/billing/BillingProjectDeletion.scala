@@ -8,7 +8,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class BillingProjectDeletion(
   val samDAO: SamDAO,
-  val billingRepository: BillingRepository,
+  val billingRepository: BillingRepository
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging {
 

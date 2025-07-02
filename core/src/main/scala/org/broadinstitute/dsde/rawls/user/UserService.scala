@@ -561,7 +561,7 @@ class UserService(
       for {
         billingProfileId <- billingRepository.getBillingProfileId(projectName)
         policies = billingProfileId match {
-          case None => getLegacyBillingPolicies(projectAccessUpdate.role)
+          case None                   => getLegacyBillingPolicies(projectAccessUpdate.role)
           case Some(billingProfileId) => Seq(getV2BillingPolicy(projectAccessUpdate.role))
         }
         _ <- addUserToBillingProjectInner(projectName, projectAccessUpdate, policies)

@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.model.{DeleteAzureLandingZoneResult, JobReport}
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.BpmBillingProjectDelete
@@ -29,7 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers.{any, argThat}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -52,8 +51,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     landingZoneAllowAttach = false
   )
 
-  val billingProfileId = UUID.randomUUID()
-  val azureBillingProfile = new ProfileModel()
+  val billingProfileId: UUID = UUID.randomUUID()
+  val azureBillingProfile: ProfileModel = new ProfileModel()
     .id(billingProfileId)
     .tenantId(UUID.randomUUID())
     .subscriptionId(UUID.randomUUID())
@@ -63,7 +62,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   val userInfo: UserInfo =
     UserInfo(RawlsUserEmail("fake@example.com"), OAuth2BearerToken("fake_token"), 0, RawlsUserSubjectId("sub"), None)
-  val testContext = RawlsRequestContext(userInfo)
+  val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
     MultiCloudWorkspaceManagerConfig("fake_app_id", Duration(1, "second"), Duration(1, "second")),
     azConfig
@@ -90,10 +89,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       mock[BillingRepository],
       gbp,
-      mock[AzureBillingProjectLifecycle],
       mock[BillingProjectDeletion],
-      mock[MultiCloudWorkspaceConfig],
-      mock[WorkspaceManagerResourceMonitorRecordDao]
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -171,10 +168,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       billingRepository,
       bpCreator,
-      mock[AzureBillingProjectLifecycle],
       billingProjectDeletion,
-      multiCloudWorkspaceConfig,
-      mock[WorkspaceManagerResourceMonitorRecordDao]
+      multiCloudWorkspaceConfig
     )
 
     Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
@@ -215,10 +210,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       billingRepository,
       bpCreator,
-      mock[AzureBillingProjectLifecycle],
       mock[BillingProjectDeletion],
-      mock[MultiCloudWorkspaceConfig],
-      mock[WorkspaceManagerResourceMonitorRecordDao]
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[DuplicateBillingProjectException] {
@@ -245,10 +238,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       mock[BillingRepository],
       mock[GoogleBillingProjectLifecycle],
-      mock[AzureBillingProjectLifecycle],
       mock[BillingProjectDeletion],
-      mock[MultiCloudWorkspaceConfig],
-      mock[WorkspaceManagerResourceMonitorRecordDao]
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -320,10 +311,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       repo,
       creator,
-      mock[AzureBillingProjectLifecycle],
       billingProjectDeletion,
-      multiCloudWorkspaceConfig,
-      mock[WorkspaceManagerResourceMonitorRecordDao]
+      multiCloudWorkspaceConfig
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -396,10 +385,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       mock[BillingRepository],
       mock[GoogleBillingProjectLifecycle],
-      mock[AzureBillingProjectLifecycle],
       mock[BillingProjectDeletion],
-      mock[MultiCloudWorkspaceConfig],
-      mock[WorkspaceManagerResourceMonitorRecordDao]
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -436,10 +423,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       billingRepository,
       mock[GoogleBillingProjectLifecycle](RETURNS_SMART_NULLS),
-      mock[AzureBillingProjectLifecycle](RETURNS_SMART_NULLS),
       mock[BillingProjectDeletion],
-      mock[MultiCloudWorkspaceConfig],
-      mock[WorkspaceManagerResourceMonitorRecordDao]
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -456,12 +441,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
     val landingZoneId = UUID.randomUUID()
     val billingRepository = happyBillingRepository(Some(landingZoneId))
-    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
-    doAnswer(_ =>
-      throw new LandingZoneDeletionException(
-        ErrorReport(StatusCodes.InternalServerError, "Failed to delete landing zone")
-      )
-    ).when(azureBillingProjectLifecycle).cleanupLandingZone(landingZoneId, testContext)
 
     val bpo = spy(
       new BillingProjectOrchestrator(
@@ -470,19 +449,12 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         mock[NotificationDAO],
         billingRepository,
         mock[GoogleBillingProjectLifecycle](RETURNS_SMART_NULLS),
-        azureBillingProjectLifecycle,
         mock[BillingProjectDeletion],
-        mock[MultiCloudWorkspaceConfig],
-        monitorRecordDao
+        mock[MultiCloudWorkspaceConfig]
       )
     )
     doReturn(Future.successful()).when(bpo).maybeDeleteGoogleProject(billingProjectName, testContext)
 
-    intercept[LandingZoneDeletionException] {
-      Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
-    }
-
-    verify(azureBillingProjectLifecycle).cleanupLandingZone(landingZoneId, testContext)
     verify(monitorRecordDao, never).create(ArgumentMatchers.any())
     verify(billingRepository, never).updateCreationStatus(billingProjectName, CreationStatuses.Deleting, None)
     verify(billingRepository, never()).deleteBillingProject(billingProjectName)
@@ -504,10 +476,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         mock[GoogleBillingProjectLifecycle](
           RETURNS_SMART_NULLS
         ), // Not called because maybeDeleteGoogleProject is mocked
-        mock[AzureBillingProjectLifecycle](RETURNS_SMART_NULLS), // Not called because there is no landing zone ID
         billingProjectDeletion,
-        mock[MultiCloudWorkspaceConfig],
-        mock[WorkspaceManagerResourceMonitorRecordDao] // nothing mocked - will fail if called
+        mock[MultiCloudWorkspaceConfig]
       )
     )
     doReturn(Future.successful()).when(bpo).maybeDeleteGoogleProject(billingProjectName, testContext)
@@ -515,7 +485,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
     verify(bpo).maybeDeleteGoogleProject(billingProjectName, testContext)
-    verify(bpo).maybeDeleteLandingZone(billingProjectName, testContext)
     verify(billingProjectDeletion).finalizeDelete(billingProjectName, testContext)
   }
 
@@ -524,9 +493,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
     val landingZoneId = UUID.randomUUID()
     val billingRepository = happyBillingRepository(Some(landingZoneId))
-
-    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
-    when(azureBillingProjectLifecycle.cleanupLandingZone(landingZoneId, testContext)).thenReturn(None)
 
     val billingProjectDeletion = mock[BillingProjectDeletion]
     when(billingProjectDeletion.finalizeDelete(billingProjectName, testContext)).thenReturn(Future.successful())
@@ -538,17 +504,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         mock[NotificationDAO],
         billingRepository,
         mock[GoogleBillingProjectLifecycle](RETURNS_SMART_NULLS),
-        azureBillingProjectLifecycle,
         billingProjectDeletion,
-        mock[MultiCloudWorkspaceConfig],
-        mock[WorkspaceManagerResourceMonitorRecordDao] // nothing mocked - will fail if called
+        mock[MultiCloudWorkspaceConfig]
       )
     )
     doReturn(Future.successful()).when(bpo).maybeDeleteGoogleProject(billingProjectName, testContext)
 
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
-    verify(azureBillingProjectLifecycle).cleanupLandingZone(landingZoneId, testContext)
     verify(billingProjectDeletion).finalizeDelete(billingProjectName, testContext)
   }
 
@@ -567,11 +530,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val landingZoneId = UUID.randomUUID()
     val billingRepository = happyBillingRepository(Some(landingZoneId))
 
-    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
-    when(azureBillingProjectLifecycle.deleteJobType).thenReturn(BpmBillingProjectDelete)
-    when(azureBillingProjectLifecycle.cleanupLandingZone(landingZoneId, testContext))
-      .thenReturn(Some(new DeleteAzureLandingZoneResult().jobReport(new JobReport().id(jobId.toString))))
-
     val bpo = spy(
       new BillingProjectOrchestrator(
         testContext,
@@ -579,10 +537,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         mock[NotificationDAO],
         billingRepository,
         mock[GoogleBillingProjectLifecycle](RETURNS_SMART_NULLS),
-        azureBillingProjectLifecycle,
         mock[BillingProjectDeletion],
-        mock[MultiCloudWorkspaceConfig],
-        monitorRecordDao
+        mock[MultiCloudWorkspaceConfig]
       )
     )
     doReturn(Future.successful()).when(bpo).maybeDeleteGoogleProject(billingProjectName, testContext)
@@ -609,10 +565,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       billingRepository,
       mock[GoogleBillingProjectLifecycle],
-      mock[AzureBillingProjectLifecycle],
       mock[BillingProjectDeletion],
-      mock[MultiCloudWorkspaceConfig],
-      happyMonitorRecordDao
+      mock[MultiCloudWorkspaceConfig]
     )
 
     intercept[BillingProjectDeletionException](

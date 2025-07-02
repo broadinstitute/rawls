@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamAdminDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamAdminDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   BillingProjectAdminResponse,
   CreationStatuses,
@@ -15,15 +15,13 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeAdminActions,
   SamResourceTypeNames,
   UserInfo,
-  Workspace,
-  WorkspaceAdminResponse,
-  WorkspaceDetails
+  Workspace
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.joda.time.DateTime
-import org.mockito.{ArgumentMatchers, Mockito}
+import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper

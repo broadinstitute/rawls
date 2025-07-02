@@ -493,7 +493,7 @@ object BootMonitors extends LazyLogging {
           JobType.LeoRuntimeDeletionPoll -> workspaceDeletionRunner,
           JobType.WSMWorkspaceDeletionPoll -> workspaceDeletionRunner,
           JobType.CloneWorkspaceContainerResult ->
-            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
+            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO)
         ) ++ JobType.cloneJobTypes.map(jobType => jobType -> workspaceCloneRunner).toMap
       )
     )

@@ -4,10 +4,8 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.TpsPaoGetResult
-import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -55,7 +53,6 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -172,8 +169,6 @@ class FastPassMonitorSpec
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAOImpl](RETURNS_SMART_NULLS)
-
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -181,7 +176,6 @@ class FastPassMonitorSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
@@ -212,7 +206,6 @@ class FastPassMonitorSpec
       MultiCloudWorkspaceService.constructor(
         dataSource,
         workspaceManagerDAO,
-        mock[BillingProfileManagerDAOImpl],
         samDAO,
         multiCloudWorkspaceConfig,
         leonardoDAO,
@@ -240,7 +233,7 @@ class FastPassMonitorSpec
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
     val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"

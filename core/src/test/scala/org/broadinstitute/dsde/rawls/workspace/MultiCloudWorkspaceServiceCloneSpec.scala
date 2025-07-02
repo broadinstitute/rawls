@@ -19,7 +19,7 @@ import bio.terra.workspace.model.{
   WsmPolicyInputs
 }
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, TestExecutionContext}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
@@ -115,7 +115,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -178,7 +177,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -243,7 +241,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -306,7 +303,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -356,8 +352,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(RawlsBillingProjectName(destWorkspaceName.namespace)))
       .thenReturn(Future(Some(billingProject)))
-    val bpmDAO = mock[BillingProfileManagerDAO]
-    when(bpmDAO.getBillingProfile(billingProfile.getId, testContext)).thenReturn(Some(billingProfile))
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(testContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", enabled = true))))
     when(
@@ -379,7 +373,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      bpmDAO,
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -448,13 +441,10 @@ class MultiCloudWorkspaceServiceCloneSpec
         testContext
       )
     ).thenReturn(Future.successful(true))
-    val bpmDAO = mock[BillingProfileManagerDAO]
-    when(bpmDAO.getBillingProfile(billingProfile.getId, testContext)).thenReturn(Some(billingProfile))
     val service = spy(
       new MultiCloudWorkspaceService(
         testContext,
         mock[WorkspaceManagerDAO],
-        bpmDAO,
         samDAO,
         mock[MultiCloudWorkspaceConfig],
         mock[LeonardoDAO],
@@ -522,7 +512,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -608,7 +597,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
       leonardoDAO,
@@ -678,7 +666,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
       leonardoDAO,
@@ -714,7 +701,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -751,7 +737,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -808,7 +793,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -870,7 +854,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
       mock[LeonardoDAO],
@@ -954,7 +937,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
       mock[LeonardoDAO],
@@ -980,7 +962,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
       mock[LeonardoDAO],
@@ -1028,7 +1009,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       MultiCloudWorkspaceConfig(MultiCloudWorkspaceManagerConfig("app", 1 seconds, 1 seconds), mock[AzureConfig]),
       mock[LeonardoDAO],
@@ -1066,8 +1046,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     )
     val billingProfile = mock[ProfileModel]
     when(billingProfile.getCloudPlatform).thenReturn(CloudPlatform.AZURE)
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
-    when(billingProfileManagerDAO.getBillingProfile(billingProfileId, testContext)).thenReturn(Some(billingProfile))
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(testContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
     when(
@@ -1096,7 +1074,6 @@ class MultiCloudWorkspaceServiceCloneSpec
       new MultiCloudWorkspaceService(
         testContext,
         mock[WorkspaceManagerDAO],
-        billingProfileManagerDAO,
         samDAO,
         mock[MultiCloudWorkspaceConfig],
         mock[LeonardoDAO],
@@ -1144,8 +1121,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     // Mocks
     val billingProfile = mock[ProfileModel]
     when(billingProfile.getCloudPlatform).thenReturn(CloudPlatform.GCP)
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
-    when(billingProfileManagerDAO.getBillingProfile(billingProfileId, testContext)).thenReturn(Some(billingProfile))
     val samDAO = mock[SamDAO]
     when(samDAO.getUserStatus(testContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
     when(
@@ -1184,7 +1159,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      billingProfileManagerDAO,
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -1228,7 +1202,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -1268,7 +1241,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -1312,7 +1284,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -1362,7 +1333,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -1429,7 +1399,6 @@ class MultiCloudWorkspaceServiceCloneSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],

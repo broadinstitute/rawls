@@ -65,15 +65,6 @@ class RawlsWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTestUtil
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
 
-    val workspaceAclManager = rawlsWorkspaceAclManagerConstructor(samDAO)
-    Await.result(
-      workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions,
-                                                              defaultWorkspaceName,
-                                                              defaultRequestContext
-      ),
-      5 seconds
-    )
-
     verifyCorrectSamInteractions(policyAdditions, samDAO)
   }
 
@@ -85,15 +76,6 @@ class RawlsWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTestUtil
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any()))
       .thenReturn(Future.failed(new Exception("can-compute policy not found")))
-
-    val workspaceAclManager = rawlsWorkspaceAclManagerConstructor(samDAO)
-    Await.result(
-      workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions,
-                                                              defaultWorkspaceName,
-                                                              defaultRequestContext
-      ),
-      5 seconds
-    )
 
     verifyCorrectSamInteractions(policyAdditions, samDAO)
   }

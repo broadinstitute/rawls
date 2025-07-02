@@ -7,7 +7,7 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{JobReport, JobResult, WorkspaceDescription}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
@@ -119,7 +119,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -158,7 +157,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -194,7 +192,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -228,7 +225,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -266,7 +262,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -306,7 +301,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
       new MultiCloudWorkspaceService(
         testContext,
         wsmDAO,
-        mock[BillingProfileManagerDAO],
         samDAO,
         mock[MultiCloudWorkspaceConfig],
         mock[LeonardoDAO],
@@ -345,7 +339,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       mock[WorkspaceManagerDAO],
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -384,7 +377,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -422,7 +414,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       samDAO,
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -458,7 +449,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mcWorkspaceConfig,
       mock[LeonardoDAO],
@@ -480,7 +470,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -502,7 +491,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mock[MultiCloudWorkspaceConfig],
       mock[LeonardoDAO],
@@ -528,7 +516,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mcWorkspaceConfig,
       mock[LeonardoDAO],
@@ -560,7 +547,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mcWorkspaceConfig,
       mock[LeonardoDAO],
@@ -593,7 +579,6 @@ class MultiCloudWorkspaceServiceDeleteSpec
     val service = new MultiCloudWorkspaceService(
       testContext,
       wsmDAO,
-      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       mcWorkspaceConfig,
       mock[LeonardoDAO],
