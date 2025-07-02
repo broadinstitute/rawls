@@ -422,13 +422,12 @@ class FastPassServiceSpec
 
     val childWorkspace =
       Await
-        .result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                     parentWorkspace.toWorkspaceName,
-                                                                     workspaceRequest
+        .result(services.workspaceService.cloneWorkspace(
+                  parentWorkspace.toWorkspaceName,
+                  workspaceRequest
                 ),
                 Duration.Inf
         )
-        .toWorkspace
 
     verify(services.mockFastPassService)
       .setupFastPassForUserInClonedWorkspace(
@@ -1094,9 +1093,9 @@ class FastPassServiceSpec
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                      parentWorkspace.toWorkspaceName,
-                                                                      workspaceRequest
+    Await.result(services.workspaceService.cloneWorkspace(
+                   parentWorkspace.toWorkspaceName,
+                   workspaceRequest
                  ),
                  Duration.Inf
     )
