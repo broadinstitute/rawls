@@ -17,6 +17,7 @@ object Settings {
     "internal-maven-proxy" at artifactory + "maven-central"
   )
 
+
   
   val commonResolvers = List(
     "artifactory-releases" at artifactory + "libs-release",
