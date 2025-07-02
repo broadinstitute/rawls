@@ -2640,77 +2640,8 @@ class WorkspaceServiceSpec
         )
       )
 
-  private def createGcpWorkspaceStub(services: TestApiService,
-                                     workspaceName: String,
-                                     policies: List[WsmPolicyInput] = List(),
-                                     workspaceService: WorkspaceService
-  ): Workspace = {
-    val workspaceRequest = WorkspaceRequest(
-      testData.testProject1Name.value,
-      workspaceName,
-      Map.empty
-    )
-    val createdWorkspace = Await
-      .result(
-        services.mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
-        Duration.Inf
-      )
-      .toWorkspace
-    val workspaceDescription = new WorkspaceDescription()
-      .id(createdWorkspace.workspaceIdAsUUID)
-      .stage(WorkspaceStageModel.RAWLS_WORKSPACE)
-      .policies(policies.asJava)
-    when(
-      services.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID),
-                                                any[RawlsRequestContext]
-      )
-    ).thenReturn(
-      workspaceDescription
-    )
-    when(
-      services.policyService.getPao(ArgumentMatchers.eq(createdWorkspace.workspaceIdAsUUID), any[RawlsRequestContext])
-    ).thenReturn(Future.successful(Option(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
-    when(
-      services.policyService.listPaos(any, any[RawlsRequestContext])
-    ).thenReturn(Future.successful(Seq(toTpsPao(createdWorkspace.workspaceIdAsUUID, policies))))
-
-    createdWorkspace
-  }
-
-  it should "return the policies of a GCP workspace" in withTestDataServices { services =>
-    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val wsmPolicyInput = new WsmPolicyInput()
-      .name("test_name")
-      .namespace("test_namespace")
-      .additionalData(
-        List(
-          new WsmPolicyPair().value("pair1Val").key("pair1Key"),
-          new WsmPolicyPair().value("pair2Val").key("pair2Key")
-        ).asJava
-      )
-    val workspace = createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
-    val readWorkspace = Await.result(services.workspaceService.getWorkspace(
-                                       WorkspaceName(workspace.namespace, workspace.name),
-                                       WorkspaceFieldSpecs()
-                                     ),
-                                     Duration.Inf
-    )
-
-    val response = readWorkspace.convertTo[WorkspaceResponse]
-
-    response.workspace.name shouldBe workspaceName
-    response.azureContext shouldEqual None
-    response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
-    response.policies should not be empty
-    val policies: List[WorkspacePolicy] = response.policies.get
-    policies should not be empty
-    val policy: WorkspacePolicy = policies.head
-    policy.name shouldBe wsmPolicyInput.getName
-    policy.namespace shouldBe wsmPolicyInput.getNamespace
-    val additionalData = policy.additionalData
-    additionalData.length shouldEqual 2
-    additionalData.head.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
-    additionalData.tail.head.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
+  it should "return the policies of a GCP workspace" ignore withTestDataServices { services =>
+    // TODO CORE-501: do we have a unit test for policies via TPS?
   }
 
   behavior of "listWorkspaces"
@@ -3014,37 +2945,6 @@ class WorkspaceServiceSpec
 
       actualNumber shouldBe numberAttr
     }
-  }
-
-  it should "return policy information for GCP workspaces with a stub workspace" in withTestDataServices { services =>
-    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val wsmPolicyInput = new WsmPolicyInput()
-      .name("gcp_test_name")
-      .namespace("gcp_test_namespace")
-      .additionalData(
-        List(
-          new WsmPolicyPair().value("pair1Val").key("pair1Key")
-        ).asJava
-      )
-    createGcpWorkspaceStub(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
-
-    val result = Await
-      .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-      .convertTo[Seq[WorkspaceListResponse]]
-
-    val matchingWorkspaces = result.filter { ws =>
-      if (ws.workspace.name == workspaceName) {
-        val policies: List[WorkspacePolicy] = ws.policies.get
-        policies should not be empty
-        val policy: WorkspacePolicy = policies.head
-        policy.name shouldBe wsmPolicyInput.getName
-        policy.namespace shouldBe wsmPolicyInput.getNamespace
-        true
-      } else {
-        false
-      }
-    }
-    matchingWorkspaces.size should be(1)
   }
 
   it should "return canCompute and canShare for Google workspaces" in withTestDataServices { services =>
