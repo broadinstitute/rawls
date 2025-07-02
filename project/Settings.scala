@@ -14,12 +14,12 @@ import org.scalafmt.sbt.ScalafmtPlugin.autoImport.scalafmtFilter
 //noinspection TypeAnnotation
 object Settings {
   val proxyResolvers = List(
-    "internal-maven-proxy" at artifactory + "maven-central"
+    "internal-maven-proxy" at googleArtifactoryRegistry + "maven-central"
   )
 
   val commonResolvers = List(
-    "artifactory-releases" at artifactory + "libs-release",
-    "artifactory-snapshots" at artifactory + "libs-snapshot"
+    "artifactory-releases" at googleArtifactoryRegistry + "libs-release",
+    "artifactory-snapshots" at googleArtifactoryRegistry + "libs-snapshot"
   )
 
   //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings
