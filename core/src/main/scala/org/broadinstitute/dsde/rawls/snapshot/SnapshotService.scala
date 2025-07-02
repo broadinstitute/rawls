@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.policy.{PolicyService, PolicyUtilities}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{AggregatedWorkspaceService, WorkspaceRepository, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -42,7 +42,6 @@ object SnapshotService {
       workspaceManagerDAO,
       terraDataRepoUrl,
       dataRepoDAO,
-      new AggregatedWorkspaceService(workspaceManagerDAO),
       workspaceServiceConstructor,
       policyService
     )
@@ -54,7 +53,6 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                       workspaceManagerDAO: WorkspaceManagerDAO,
                       terraDataRepoInstanceName: String,
                       dataRepoDAO: DataRepoDAO,
-                      aggregatedWorkspaceService: AggregatedWorkspaceService,
                       workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
                       policyService: PolicyService
 )(implicit protected val executionContext: ExecutionContext)
