@@ -3,37 +3,18 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.client.ApiException
 import bio.terra.datarepo.model.SnapshotModel
-import bio.terra.workspace.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{
-  DataReferenceName,
-  ErrorReport,
-  NamedDataRepoSnapshot,
-  RawlsRequestContext,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  SnapshotListResponse,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceCloudPlatform,
-  WorkspaceName
-}
+import org.broadinstitute.dsde.rawls.model.TpsModel.TpsPolicies
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.policy.{PolicyService, PolicyUtilities}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{
-  AggregateWorkspaceNotFoundException,
-  AggregatedWorkspaceService,
-  WorkspaceRepository,
-  WorkspaceService
-}
+import org.broadinstitute.dsde.rawls.workspace.{AggregatedWorkspaceService, WorkspaceRepository, WorkspaceService}
 
 import java.util.UUID
-import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
