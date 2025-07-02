@@ -177,7 +177,6 @@ class WorkspaceApiSpec
             "dataproc.serviceAgent",
             "owner",
             "editor",
-            "lifesciences.serviceAgent",
             "pubsub.serviceAgent"
           )
 
