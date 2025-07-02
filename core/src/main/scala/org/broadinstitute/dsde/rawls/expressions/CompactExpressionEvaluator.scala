@@ -243,11 +243,21 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             gatherInputsResult
           )
 
+          // Transform workspaceExpressionResults to the correct shape
+          val workspaceExpressionAndResults: Seq[ExpressionAndResult] = workspaceExpressionResults.map {
+            case (lookupExpression, tryValues) =>
+              // Create a result map with the workspace values for all root entity names
+              (lookupExpression, Map("" -> tryValues))
+          }.toSeq
+
+          val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+            workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
+
           // Repackage the parsed expressions into the correct form without querying the database
           Future.successful {
             inputExpressionData.flatMap { case (input, parsedTree, _) =>
               val resultMap = InputExpressionReassembler.constructFinalInputValues(
-                Seq.empty, // No database results since no entities are queried
+                workspaceExpressionToResultMap.getOrElse(input.expression, Seq.empty),
                 parsedTree,
                 None, // No root entity names since no entities are queried
                 Some(input)

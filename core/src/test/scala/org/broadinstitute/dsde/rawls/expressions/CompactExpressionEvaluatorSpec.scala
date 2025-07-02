@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityQuery, CompactEntityRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityRepository, CompactEntitySerialization}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{
@@ -15,7 +14,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeNumber,
   AttributeString,
-  AttributeValue,
   AttributeValueEmptyList,
   AttributeValueList,
   AttributeValueRawJson,
@@ -36,7 +34,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
 
-import scala.util.{Random, Success, Try}
+import scala.util.{Random, Success}
 
 class CompactExpressionEvaluatorSpec
     extends AnyFlatSpec
@@ -1021,8 +1019,28 @@ class CompactExpressionEvaluatorSpec
       SubmissionValidationEntityInputs(
         sampleGood.name,
         Set(
-          SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName),
-          SubmissionValidationValue(Some(AttributeNumber(2)), None, intOptNameWithWfName)
+          SubmissionValidationValue(Some(AttributeNumber(1)), None, intOptNameWithWfName),
+          SubmissionValidationValue(Some(AttributeNumber(2)), None, intArgNameWithWfName)
+        )
+      )
+    )
+
+    val contextNoEntity =
+      ExpressionEvaluationContext(None, None, None, None)
+    val gatherInputsResultNoEntity =
+      methodConfigResolver.gatherInputs(userInfo, configWorkspaceNoEntity, littleWdl).get
+    val resultNoEntity = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID,
+                           contextNoEntity,
+                           gatherInputsResultNoEntity,
+                           workspaceExpressions
+      )
+      .futureValue
+    resultNoEntity should contain(
+      SubmissionValidationEntityInputs(
+        "",
+        Set(
+          SubmissionValidationValue(Some(AttributeNumber(2)), None, intArgNameWithWfName)
         )
       )
     )

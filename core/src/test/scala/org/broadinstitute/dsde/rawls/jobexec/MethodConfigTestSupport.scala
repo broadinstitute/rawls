@@ -795,8 +795,20 @@ trait MethodConfigTestSupport {
     "configWorkspaceAttr",
     Some("Sample"),
     None,
-    Map(intArgNameWithWfName -> AttributeString("this.blah"),
-        intOptNameWithWfName -> AttributeString("workspace.att1")
+    Map(intOptNameWithWfName -> AttributeString("this.blah"),
+        intArgNameWithWfName -> AttributeString("workspace.att1")
+    ),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configWorkspaceNoEntity = MethodConfiguration(
+    "config_namespace",
+    "configWorkspaceAttr",
+    None,
+    None,
+    Map(
+      intArgNameWithWfName -> AttributeString("workspace.att1")
     ),
     Map.empty,
     dummyMethod
