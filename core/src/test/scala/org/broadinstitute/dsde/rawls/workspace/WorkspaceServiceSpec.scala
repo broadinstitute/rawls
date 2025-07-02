@@ -241,17 +241,6 @@ class WorkspaceServiceSpec
       "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
-    override val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
-      MultiCloudWorkspaceService.constructor(
-        dataSource,
-        workspaceManagerDAO,
-        mock[BillingProfileManagerDAOImpl],
-        samDAO,
-        multiCloudWorkspaceConfig,
-        leonardoDAO,
-        workbenchMetricBaseName
-      )
-    lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =

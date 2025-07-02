@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.CloningFailed
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, WorkspaceState}
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doAnswer, doReturn, spy, verify, when}
 import org.scalatest.concurrent.ScalaFutures

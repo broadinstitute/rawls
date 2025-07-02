@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives.addLocationHeader
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceSettingService}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
