@@ -3,7 +3,12 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.client
-import bio.terra.datarepo.model.{DatasetSummaryModel, SnapshotModel, SnapshotSourceModel, CloudPlatform => SnapshotCloudPlatform}
+import bio.terra.datarepo.model.{
+  CloudPlatform => SnapshotCloudPlatform,
+  DatasetSummaryModel,
+  SnapshotModel,
+  SnapshotSourceModel
+}
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -12,7 +17,16 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamUserStatusResponse, Workspace}
+import org.broadinstitute.dsde.rawls.model.{
+  DataReferenceDescriptionField,
+  DataReferenceName,
+  RawlsRequestContext,
+  SamResourceAction,
+  SamResourceTypeName,
+  SamResourceTypeNames,
+  SamUserStatusResponse,
+  Workspace
+}
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.mockito.ArgumentMatchers
