@@ -3004,6 +3004,37 @@ class WorkspaceServiceSpec
     }
   }
 
+  it should "return policy information for GCP workspaces with a stub workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("gcp_test_name")
+      .namespace("gcp_test_namespace")
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key")
+        ).asJava
+      )
+    createGcpWorkspacePolicy(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
+
+    val result = Await
+      .result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+      .convertTo[Seq[WorkspaceListResponse]]
+
+    val matchingWorkspaces = result.filter { ws =>
+      if (ws.workspace.name == workspaceName) {
+        val policies: List[WorkspacePolicy] = ws.policies.get
+        policies should not be empty
+        val policy: WorkspacePolicy = policies.head
+        policy.name shouldBe wsmPolicyInput.getName
+        policy.namespace shouldBe wsmPolicyInput.getNamespace
+        true
+      } else {
+        false
+      }
+    }
+    matchingWorkspaces.size should be(1)
+  }
+
   it should "return canCompute and canShare for Google workspaces" in withTestDataServices { services =>
     val service = services.workspaceService
 
