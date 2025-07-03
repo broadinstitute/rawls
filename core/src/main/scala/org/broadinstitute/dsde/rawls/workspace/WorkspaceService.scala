@@ -90,7 +90,6 @@ object WorkspaceService {
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
                   policyService: PolicyService
   )(
@@ -118,7 +117,6 @@ object WorkspaceService {
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       (context: RawlsRequestContext) => fastPassServiceConstructor(context, dataSource),
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource),
@@ -168,7 +166,6 @@ class WorkspaceService(
   val terraBucketReaderRole: String,
   val terraBucketWriterRole: String,
   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-  DELETEMEmultiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
   val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository,

@@ -231,8 +231,6 @@ class SubmissionsServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
@@ -278,7 +276,6 @@ class SubmissionsServiceSpec
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService
     ) _
@@ -332,8 +329,6 @@ class SubmissionsServiceSpec
 
     // these need to be overridden to use the new samDAO
     override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    override val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
   }
 
   def withTestDataServices[T](testCode: TestApiService => T): T =

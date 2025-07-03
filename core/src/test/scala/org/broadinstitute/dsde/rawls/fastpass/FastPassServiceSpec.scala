@@ -256,8 +256,6 @@ class FastPassServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
@@ -304,7 +302,6 @@ class FastPassServiceSpec
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService
     ) _

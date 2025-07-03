@@ -333,8 +333,6 @@ trait ApiServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val fastPassConfig = FastPassConfig.apply(testConf)
     val fastPassServiceConstructor = FastPassServiceImpl.constructor(
@@ -371,7 +369,6 @@ trait ApiServiceSpec
       terraBucketReaderRole = "fakeTerraBucketReaderRole",
       terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService
     ) _

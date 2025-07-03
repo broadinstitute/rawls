@@ -417,7 +417,6 @@ object Boot extends IOApp with LazyLogging {
         terraBucketWriterRole =
           appConfigManager.gcsConfig.map(_.getString("terraBucketWriterRole")).getOrElse("unsupported"),
         new RawlsWorkspaceAclManager(samDAO),
-        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
         fastPassServiceConstructor,
         policyService
       )

@@ -144,7 +144,6 @@ class WorkspaceServiceUnitTests
       terraBucketReaderRole,
       terraBucketWriterRole,
       new RawlsWorkspaceAclManager(samDAO),
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, aclManagerDatasource),
       fastPassServiceConstructor,
       workspaceRepository,
       billingRepository,
