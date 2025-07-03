@@ -141,7 +141,6 @@ class WorkspaceServiceSpec
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])

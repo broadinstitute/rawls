@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   SlickDataSource
 }
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, RemoveAttribute}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,

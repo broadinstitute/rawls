@@ -116,7 +116,6 @@ class FastPassMonitorSpec
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
     val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
