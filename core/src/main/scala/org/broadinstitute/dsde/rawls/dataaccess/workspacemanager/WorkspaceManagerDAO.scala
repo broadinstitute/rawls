@@ -95,7 +95,7 @@ trait WorkspaceManagerDAO {
                                          refName: DataReferenceName,
                                          ctx: RawlsRequestContext
   ): DataRepoSnapshotResource
-  @VisibleForTesting
+  @unused
   def enumerateDataRepoSnapshotReferences(workspaceId: UUID,
                                           offset: Int,
                                           limit: Int,

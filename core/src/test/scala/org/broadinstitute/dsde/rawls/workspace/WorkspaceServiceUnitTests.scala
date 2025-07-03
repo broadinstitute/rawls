@@ -1005,33 +1005,6 @@ class WorkspaceServiceUnitTests
 
   behavior of "getAcl"
 
-  def mockWsmForAclTests(ownerEmail: String = "owner@example.com",
-                         writerEmail: String = "writer@example.com",
-                         readerEmail: String = "reader@example.com"
-  ): WorkspaceManagerDAO = {
-    val projectOwnerBinding =
-      new RoleBinding().role(IamRole.PROJECT_OWNER).members(List("projectOwner@example.com").asJava)
-    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
-    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
-    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val discovererBinding =
-      new RoleBinding().role(IamRole.DISCOVERER).members(List("discoverer@example.com", readerEmail).asJava)
-    val applicationBinding = new RoleBinding().role(IamRole.APPLICATION).members(List("application@example.com").asJava)
-    val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(
-      List(projectOwnerBinding,
-           ownerBinding,
-           writerBinding,
-           readerBinding,
-           discovererBinding,
-           applicationBinding
-      ).asJava
-    )
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
-    wsmDAO
-  }
-
   def mockSamForAclTests(): SamDAO = {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.getUserIdInfo(any(), any()))
