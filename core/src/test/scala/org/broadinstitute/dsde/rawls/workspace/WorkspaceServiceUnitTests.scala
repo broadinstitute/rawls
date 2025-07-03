@@ -166,8 +166,6 @@ class WorkspaceServiceUnitTests
     when(repository.getWorkspace(workspace.workspaceIdAsUUID, Some(WorkspaceAttributeSpecs(false))))
       .thenReturn(Future(Some(workspace)))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any))
-      .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val service = workspaceServiceConstructor(
       samDAO = sam,
       workspaceRepository = repository,
@@ -232,7 +230,6 @@ class WorkspaceServiceUnitTests
     when(repository.getWorkspace(workspace.toWorkspaceName, Some(WorkspaceAttributeSpecs(false))))
       .thenReturn(Future(Some(workspace)))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val service = workspaceServiceConstructor(
       samDAO = sam,
       workspaceRepository = repository,
@@ -291,7 +288,6 @@ class WorkspaceServiceUnitTests
   it should "not preform operations for fields that are not requested" in {
     val options = WorkspaceService.QueryOptions(Set(), WorkspaceAttributeSpecs(false))
     val wsmDao = mock[WorkspaceManagerDAO]
-    when(wsmDao.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
@@ -304,7 +300,6 @@ class WorkspaceServiceUnitTests
   it should "check for the catalog permission in sam the field is requested" in {
     val options = WorkspaceService.QueryOptions(Set("catalog"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.catalog, ctx))
       .thenReturn(Future(true))
@@ -319,7 +314,6 @@ class WorkspaceServiceUnitTests
   it should "return the highest access level in accessLevel" in {
     val options = WorkspaceService.QueryOptions(Set("accessLevel"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set(SamResourceRole("READER"), SamResourceRole("OWNER"))))
@@ -336,7 +330,6 @@ class WorkspaceServiceUnitTests
     // but it's the default specified
     val options = WorkspaceService.QueryOptions(Set("accessLevel"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set()))
@@ -351,7 +344,6 @@ class WorkspaceServiceUnitTests
   it should "return true for canCompute if the user is an owner" in {
     val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set(SamResourceRole("OWNER"))))
@@ -397,7 +389,6 @@ class WorkspaceServiceUnitTests
   it should "query sam for canCompute if the user is not an owner on a gcp workspace" in {
     val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
     val wsmDao = mock[WorkspaceManagerDAO]
-    when(wsmDao.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set(SamResourceRole("WRITER"))))
@@ -418,7 +409,6 @@ class WorkspaceServiceUnitTests
     forAll(Table("role", "OWNER", "PROJECT_OWNER")) { (role: String) =>
       val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
       val wsm = mock[WorkspaceManagerDAO]
-      when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
       val sam = mock[SamDAO]
       when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
         .thenReturn(Future(Set(SamResourceRole(role))))
@@ -443,8 +433,6 @@ class WorkspaceServiceUnitTests
     ) { (role: String, samAnswer: Boolean) =>
       val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
       val wsmDao = mock[WorkspaceManagerDAO]
-      when(wsmDao.getWorkspace(any, any))
-        .thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
       val sam = mock[SamDAO]
       when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
         .thenReturn(Future(Set(SamResourceRole(role))))
@@ -475,7 +463,6 @@ class WorkspaceServiceUnitTests
   it should "get the bucket options from gcs when requested" in {
     val options = WorkspaceService.QueryOptions(Set("bucketOptions"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val gcs = mock[GoogleServicesDAO]
     val bucketDetails = WorkspaceBucketOptions(true, "")
     when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
@@ -506,7 +493,6 @@ class WorkspaceServiceUnitTests
   it should "get the owner emails using the policy from sam when requested" in {
     val options = WorkspaceService.QueryOptions(Set("owners"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     val ownerEmails = Set("user1@test.com", "user2@test.com")
     val owners = SamPolicy(ownerEmails.map(WorkbenchEmail), Set(), Set())
@@ -522,7 +508,6 @@ class WorkspaceServiceUnitTests
   it should "get the auth domain from sam when requested" in {
     val options = WorkspaceService.QueryOptions(Set("workspace"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val sam = mock[SamDAO]
     val authDomains = Seq("some-auth-domain")
     when(sam.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
@@ -538,7 +523,6 @@ class WorkspaceServiceUnitTests
   it should "get the submissionSummaryStats when requested" in {
     val options = WorkspaceService.QueryOptions(Set("workspaceSubmissionStats"), WorkspaceAttributeSpecs(false))
     val wsm = mock[WorkspaceManagerDAO]
-    when(wsm.getWorkspace(any, any)).thenAnswer(_ => throw new AggregateWorkspaceNotFoundException(ErrorReport("")))
     val stats = WorkspaceSubmissionStats(None, None, 3)
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getSubmissionSummaryStats(workspace.workspaceIdAsUUID)).thenReturn(Future(Some(stats)))
