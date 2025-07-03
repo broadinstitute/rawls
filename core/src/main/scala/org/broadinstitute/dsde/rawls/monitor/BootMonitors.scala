@@ -16,8 +16,6 @@ import org.broadinstitute.dsde.rawls.coordination.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
-import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
@@ -37,11 +35,6 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
-import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.clone.WorkspaceCloningRunner
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.WorkspaceDeletionRunner
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.WsmDeletionAction
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunner
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -224,17 +217,6 @@ object BootMonitors extends LazyLogging {
       util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("initialDelay"))
     )
     startCloneWorkspaceFileTransferMonitor(system, cloneWorkspaceFileTransferMonitorConfig, slickDataSource, gcsDAO)
-
-    startWorkspaceResourceMonitor(
-      system,
-      appConfigManager.conf,
-      slickDataSource,
-      samDAO,
-      workspaceManagerDAO,
-      gcsDAO,
-      leonardoDAO,
-      workspaceRepository
-    )
 
   }
 
@@ -451,53 +433,6 @@ object BootMonitors extends LazyLogging {
         dataSource
       )
     )
-
-  private def startWorkspaceResourceMonitor(
-    system: ActorSystem,
-    config: Config,
-    dataSource: SlickDataSource,
-    samDAO: SamDAO,
-    workspaceManagerDAO: WorkspaceManagerDAO,
-    gcsDAO: GoogleServicesDAO,
-    leonardoDAO: LeonardoDAO,
-    workspaceRepository: WorkspaceRepository
-  ) = {
-    val billingRepo = new BillingRepository(dataSource)
-
-    val leoService = new LeonardoService(leonardoDAO)(system)
-    val wsmDeletionAction = new WsmDeletionAction(workspaceManagerDAO)(system)
-    val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
-    val workspaceDeletionRunner = new WorkspaceDeletionRunner(samDAO,
-                                                              workspaceManagerDAO,
-                                                              workspaceRepository,
-                                                              leoService,
-                                                              wsmDeletionAction,
-                                                              gcsDAO,
-                                                              monitorRecordDao
-    )
-    val workspaceCloneRunner = new WorkspaceCloningRunner(
-      samDAO,
-      gcsDAO,
-      leonardoDAO,
-      workspaceManagerDAO,
-      monitorRecordDao,
-      workspaceRepository
-    )
-    system.actorOf(
-      WorkspaceResourceMonitor.props(
-        config,
-        dataSource,
-        Map(
-          JobType.WorkspaceDeleteInit -> workspaceDeletionRunner,
-          JobType.LeoAppDeletionPoll -> workspaceDeletionRunner,
-          JobType.LeoRuntimeDeletionPoll -> workspaceDeletionRunner,
-          JobType.WSMWorkspaceDeletionPoll -> workspaceDeletionRunner,
-          JobType.CloneWorkspaceContainerResult ->
-            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO)
-        ) ++ JobType.cloneJobTypes.map(jobType => jobType -> workspaceCloneRunner).toMap
-      )
-    )
-  }
 
   private def startMultiregonalBucketMigrationActor(system: ActorSystem,
                                                     config: Config,
