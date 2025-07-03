@@ -33,7 +33,6 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
   RawlsWorkspaceAclManager,
   WorkspaceRepository,
   WorkspaceService,

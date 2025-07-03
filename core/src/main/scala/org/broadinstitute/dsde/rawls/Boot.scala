@@ -65,7 +65,6 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
   RawlsWorkspaceAclManager,
   WorkspaceAdminService,
   WorkspaceRepository,
