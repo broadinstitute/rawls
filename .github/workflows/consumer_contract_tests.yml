@@ -52,6 +52,7 @@ env:
 jobs:
   bump-check:
     runs-on: ubuntu-latest
+    if: false # Prevent running since we removed BPM which was the only provider for Rawls.
     outputs:
       is-bump: ${{ steps.skiptest.outputs.is-bump }}
     steps:
