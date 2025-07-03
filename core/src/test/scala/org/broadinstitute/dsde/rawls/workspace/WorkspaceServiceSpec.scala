@@ -3828,4 +3828,56 @@ class WorkspaceServiceSpec
 
   }
 
+  behavior of "updateWorkspace"
+
+  it should "fail to add entity references to workspace attributes" in withTestDataServices { services =>
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.updateWorkspace(
+          testData.wsName,
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS("referenceAttribute"),
+                               AttributeEntityReference("sample", "sample1")
+            )
+          )
+        ),
+        Duration.Inf
+      )
+    }
+    err.errorReport.message should include("Workspace attributes cannot reference entities")
+    err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    val err2 = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.updateWorkspace(
+          testData.wsName,
+          Seq(
+            CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("referenceListAttribute")
+            )
+          )
+        ),
+        Duration.Inf
+      )
+    }
+    err2.errorReport.message should include("Workspace attributes cannot reference entities")
+    err2.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    val err3 = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.updateWorkspace(
+          testData.wsName,
+          Seq(
+            AddListMember(AttributeName.withDefaultNS("referenceAttribute"),
+              AttributeEntityReference("sample", "sample1")
+            )
+          )
+        ),
+        Duration.Inf
+      )
+    }
+    err3.errorReport.message should include("Workspace attributes cannot reference entities")
+    err3.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+  }
+
 }

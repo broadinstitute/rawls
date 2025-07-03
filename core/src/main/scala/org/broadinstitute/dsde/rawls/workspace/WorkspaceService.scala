@@ -687,6 +687,7 @@ class WorkspaceService(
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        _ = validateNoEntityReferences(operations)
         workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
           dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
           TransactionIsolation.ReadCommitted
@@ -2548,6 +2549,28 @@ class WorkspaceService(
 
   def isBucketSecure(workspace: Workspace): Boolean =
     workspace.bucketName.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+
+  private def validateNoEntityReferences(operations: Seq[AttributeUpdateOperation]): Unit =
+    operations.foreach { operation =>
+      operation match {
+        case AddUpdateAttribute(_, value) => checkAttributeValue(value)
+        case AddListMember(_, value)      => checkAttributeValue(value)
+        case CreateAttributeEntityReferenceList(_) =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Workspace attributes cannot reference entities")
+          )
+        case _ => // RemoveAttribute, RemoveListMember don't add new values
+      }
+    }
+
+  private def checkAttributeValue(value: Attribute): Unit =
+    value match {
+      case _: AttributeEntityReference | _: AttributeEntityReferenceList | AttributeEntityReferenceEmptyList =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Workspace attributes cannot reference entities")
+        )
+      case _ => // allowed attribute types
+    }
 }
 
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
