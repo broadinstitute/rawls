@@ -6,7 +6,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -55,7 +54,6 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
 
@@ -171,8 +169,6 @@ class SubmissionsServiceSpec
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAOImpl](RETURNS_SMART_NULLS)
-
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -180,7 +176,6 @@ class SubmissionsServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
@@ -342,7 +337,7 @@ class SubmissionsServiceSpec
   def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T =
     withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
 
-  def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
+  def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user)(executionContext)
     try
       testCode(apiService)
@@ -351,7 +346,7 @@ class SubmissionsServiceSpec
   }
 
   private def withServicesCustomSam[T](dataSource: SlickDataSource, user: RawlsUser)(
-    testCode: (TestApiServiceWithCustomSamDAO) => T
+    testCode: TestApiServiceWithCustomSamDAO => T
   ) = {
     val apiService = new TestApiServiceWithCustomSamDAO(dataSource, user)(executionContext)
 

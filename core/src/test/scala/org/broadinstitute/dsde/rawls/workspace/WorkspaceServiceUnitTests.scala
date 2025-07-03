@@ -3,13 +3,10 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
@@ -44,7 +41,6 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 /**
@@ -100,7 +96,6 @@ class WorkspaceServiceUnitTests
     terraWorkspaceNextflowRole: String = "",
     terraBucketReaderRole: String = "",
     terraBucketWriterRole: String = "",
-    billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
     fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
       mock[FastPassService](RETURNS_SMART_NULLS),

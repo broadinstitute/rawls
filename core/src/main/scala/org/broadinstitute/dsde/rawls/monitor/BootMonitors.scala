@@ -6,7 +6,7 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
@@ -63,7 +63,6 @@ object BootMonitors extends LazyLogging {
                    notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
                    cwdsDAO: CwdsDAO,
-                   billingProfileManagerDAO: BillingProfileManagerDAO,
                    leonardoDAO: LeonardoDAO,
                    workspaceRepository: WorkspaceRepository,
                    googleStorage: GoogleStorageService[IO],
