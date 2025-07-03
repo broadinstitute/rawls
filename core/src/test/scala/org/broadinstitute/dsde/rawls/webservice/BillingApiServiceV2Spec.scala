@@ -37,6 +37,19 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       with MockUserInfoDirectives {
     override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
+    override val billingProjectDeletion: BillingProjectDeletion = {
+      val mockDeletion = mock[BillingProjectDeletion](RETURNS_SMART_NULLS)
+      when(mockDeletion.finalizeDelete(any[RawlsBillingProjectName], any[RawlsRequestContext])(any[ExecutionContext]))
+        .thenReturn(Future.successful(()))
+      when(
+        mockDeletion.unregisterBillingProject(any[RawlsBillingProjectName], any[RawlsRequestContext])(
+          any[ExecutionContext]
+        )
+      )
+        .thenReturn(Future.successful(()))
+      mockDeletion
+    }
+
     when(workspaceManagerResourceMonitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
 
     override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
@@ -1033,7 +1046,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         }
   }
 
-  "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" ignore withEmptyDatabaseAndApiServices {
+  "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices {
     services =>
       val project = createProject("project")
       // wow there are a lot of sam calls in delete billing project
@@ -1105,7 +1118,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         ArgumentMatchers.argThat(userInfoEq(testContext))
       )
   }
-  ignore should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(
       services.samDAO.userHasAction(
