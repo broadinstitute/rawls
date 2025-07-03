@@ -23,6 +23,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -218,6 +219,7 @@ class WorkspaceService(
           ErrorReport(StatusCodes.BadRequest, "Unsupported billing project: Azure billing projects are not supported")
         )
       }
+      _ = validateNoEntityReferences(workspaceRequest.attributes)
       // ensure the user has the create_workspace permission on the billing project
       _ <- traceFutureWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
         requireCreateWorkspaceAction(billingProject.projectName, childContext)
@@ -1011,6 +1013,7 @@ class WorkspaceService(
     for {
       sourceWorkspace <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
+      _ = validateNoEntityReferences(destWorkspaceRequest.attributes)
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
@@ -2562,6 +2565,9 @@ class WorkspaceService(
         case _ => // RemoveAttribute, RemoveListMember don't add new values
       }
     }
+
+  private def validateNoEntityReferences(attributeMap: AttributeMap): Unit =
+    attributeMap.map { case (_, value) => checkAttributeValue(value) }
 
   private def checkAttributeValue(value: Attribute): Unit =
     value match {

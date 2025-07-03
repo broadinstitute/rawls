@@ -1797,6 +1797,42 @@ class WorkspaceServiceSpec
     verify(services.policyService, never()).mergeWorkspacePao(any(), any(), any())
   }
 
+  it should "fail to add entity references as workspace attributes" in withTestDataServices { services =>
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      val workspaceName = WorkspaceName(testData.testProject1Name.value, s"${UUID.randomUUID()}")
+      val workspaceRequest = WorkspaceRequest(workspaceName.namespace,
+                                              workspaceName.name,
+                                              Map(
+                                                AttributeName.withDefaultNS("referenceAttribute") ->
+                                                  AttributeEntityReference("sample", "sample1")
+                                              )
+      )
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("Workspace attributes cannot reference entities")
+
+    val error2 = intercept[RawlsExceptionWithErrorReport] {
+      val workspaceName = WorkspaceName(testData.testProject1Name.value, s"${UUID.randomUUID()}")
+      val workspaceRequest = WorkspaceRequest(
+        workspaceName.namespace,
+        workspaceName.name,
+        Map(
+          AttributeName.withDefaultNS("referenceListAttribute") ->
+            AttributeEntityReferenceList(
+              Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+            )
+        )
+      )
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("Workspace attributes cannot reference entities")
+
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {
@@ -2397,6 +2433,55 @@ class WorkspaceServiceSpec
       any[Option[WsmPolicyInputs]]
     )
     thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
+  }
+
+  it should "fail to clone entity reference workspace attributes" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(
+      testData.testProject1Name.value,
+      newWorkspaceName,
+      Map(
+        AttributeName.withDefaultNS("referenceAttribute") ->
+          AttributeEntityReference("sample", "sample1")
+      )
+    )
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(
+                     baseWorkspace.toWorkspaceName,
+                     workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("Workspace attributes cannot reference entities")
+
+    val workspaceRequest2 = WorkspaceRequest(
+      testData.testProject1Name.value,
+      newWorkspaceName,
+      Map(
+        AttributeName.withDefaultNS("referenceListAttribute") ->
+          AttributeEntityReferenceList(
+            Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+          )
+      )
+    )
+
+    val error2 = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(
+                     baseWorkspace.toWorkspaceName,
+                     workspaceRequest2
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    error2.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error2.errorReport.message should include("Workspace attributes cannot reference entities")
+
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
