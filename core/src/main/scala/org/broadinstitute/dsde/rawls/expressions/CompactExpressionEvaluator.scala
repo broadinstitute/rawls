@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.expressions
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.ExpressionAndResult
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{
   ExpressionEvaluationContext,
   ExpressionEvaluationSupport,
@@ -131,7 +131,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
    */
   def evaluateExpressions(workspaceId: UUID,
                           expressionEvaluationContext: ExpressionEvaluationContext,
-                          gatherInputsResult: MethodConfigResolver.GatherInputsResult
+                          gatherInputsResult: MethodConfigResolver.GatherInputsResult,
+                          workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]] = Map.empty
   )(implicit executionContext: ExecutionContext): Future[LazyList[SubmissionValidationEntityInputs]] = {
 
     val entityInfoFuture =
@@ -198,14 +199,33 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                 }
 
                 // Pre-compute a map from expression -> ExpressionAndResult for O(1) lookup
-                val expressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+                val entityExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
                   combinedExpressionAndResults.groupBy { case (expression, _) => expression }
+
+                // Transform workspaceExpressionResults to the same shape and add to the map
+                val workspaceExpressionAndResults: Seq[ExpressionAndResult] = workspaceExpressionResults.map {
+                  case (lookupExpression, tryValues) =>
+                    // Create a result map with the workspace values for all root entity names
+                    val resultMap = rootEntityNames.map { entityName =>
+                      entityName -> tryValues
+                    }.toMap
+
+                    (lookupExpression, resultMap)
+                }.toSeq
+
+                val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+                  workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
+
+                // Combine both maps, with workspace results taking precedence if there are conflicts
+                val expressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+                  entityExpressionToResultMap ++ workspaceExpressionToResultMap
 
                 inputExpressionData.flatMap { case (input, parsedTree, inputLookups) =>
                   // Lookup ExpressionAndResults relevant to this input
                   val relevantResults = inputLookups.flatMap { lookup =>
                     expressionToResultMap.getOrElse(lookup.expression, Seq.empty)
                   }
+
                   val resultMap = InputExpressionReassembler.constructFinalInputValues(
                     relevantResults,
                     parsedTree,
@@ -223,11 +243,21 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             gatherInputsResult
           )
 
+          // Transform workspaceExpressionResults to the correct shape
+          val workspaceExpressionAndResults: Seq[ExpressionAndResult] = workspaceExpressionResults.map {
+            case (lookupExpression, tryValues) =>
+              // Create a result map with the workspace values for all root entity names
+              (lookupExpression, Map("" -> tryValues))
+          }.toSeq
+
+          val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+            workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
+
           // Repackage the parsed expressions into the correct form without querying the database
           Future.successful {
             inputExpressionData.flatMap { case (input, parsedTree, _) =>
               val resultMap = InputExpressionReassembler.constructFinalInputValues(
-                Seq.empty, // No database results since no entities are queried
+                workspaceExpressionToResultMap.getOrElse(input.expression, Seq.empty),
                 parsedTree,
                 None, // No root entity names since no entities are queried
                 Some(input)

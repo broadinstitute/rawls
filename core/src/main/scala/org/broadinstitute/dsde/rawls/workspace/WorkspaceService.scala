@@ -995,7 +995,6 @@ class WorkspaceService(
       result <- workspaceRepository.getTags(v2WorkspaceIdsForUser, query, limit)
     } yield result
 
-  // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName,
                      destWorkspaceRequest: WorkspaceRequest,
                      parentContext: RawlsRequestContext = ctx

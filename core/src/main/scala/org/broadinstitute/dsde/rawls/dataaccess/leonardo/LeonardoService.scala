@@ -2,22 +2,21 @@ package org.broadinstitute.dsde.rawls.dataaccess.leonardo
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.LeonardoDAO
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsRequestContext, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.deletion.actions.DeletionAction.when500OrProcessingException
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsRequestContext, Workspace}
 import org.broadinstitute.dsde.rawls.util.Retry
-import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
+import org.broadinstitute.dsde.workbench.client.leonardo.{ApiException, ApiException => LeoApiException}
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   AppStatus,
   ClusterStatus,
   ListAppResponse,
   ListRuntimeResponse
 }
-import org.broadinstitute.dsde.workbench.model.Notifications.WorkspaceName
 
 import java.util.UUID
+import javax.ws.rs.ProcessingException
 import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -66,6 +65,14 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     logger.info(s"Polling app deletion [workspaceId=${workspace.workspaceId}]")
     pollOperation[ListAppResponse](workspace, ctx, listNonErroredApps)
   }
+
+  def when500OrProcessingException(throwable: Throwable): Boolean =
+    throwable match {
+      case t: WsmApiException     => t.getCode / 100 == 5
+      case t: LeoApiException     => t.getCode / 100 == 5
+      case _: ProcessingException => true
+      case _                      => false
+    }
 
   def listNonErroredApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext

@@ -790,6 +790,30 @@ trait MethodConfigTestSupport {
                                              dummyMethod
   )
 
+  val configWorkspaceAttr = MethodConfiguration(
+    "config_namespace",
+    "configWorkspaceAttr",
+    Some("Sample"),
+    None,
+    Map(intOptNameWithWfName -> AttributeString("this.blah"),
+        intArgNameWithWfName -> AttributeString("workspace.att1")
+    ),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configWorkspaceNoEntity = MethodConfiguration(
+    "config_namespace",
+    "configWorkspaceAttr",
+    None,
+    None,
+    Map(
+      intArgNameWithWfName -> AttributeString("workspace.att1")
+    ),
+    Map.empty,
+    dummyMethod
+  )
+
   class ConfigData extends TestData {
     override def save() =
       DBIO.seq(
