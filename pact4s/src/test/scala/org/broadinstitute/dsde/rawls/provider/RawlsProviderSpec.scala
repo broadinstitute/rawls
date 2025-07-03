@@ -2,15 +2,9 @@ package org.broadinstitute.dsde.rawls.provider
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
-import bio.terra.workspace.model.{
-  CloningInstructionsEnum,
-  DataRepoSnapshotAttributes,
-  DataRepoSnapshotResource,
-  ResourceMetadata,
-  ResourceType,
-  StewardshipType
-}
+import bio.terra.workspace.model._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import io.opentelemetry.context.Context
@@ -20,60 +14,47 @@ import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
+import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
+import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.{
   ApplicationVersion,
-  NamedDataRepoSnapshot,
   RawlsRequestContext,
-  SnapshotListResponse,
   StatusCheckResponse,
   SubsystemStatus,
   Subsystems,
   UserInfo
 }
+import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.RawlsApiServiceImpl
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceService,
-  WorkspaceAdminService,
-  WorkspaceService,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceAdminService, WorkspaceService, WorkspaceSettingService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
-import org.mockito.ArgumentMatchers.{any, anyInt, anyString}
-import org.mockito.Mockito.{reset, when}
+import org.mockito.ArgumentMatchers.{any, anyString}
+import org.mockito.Mockito.when
 import org.mockito.stubbing.OngoingStubbing
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
-import pact4s.provider.Authentication.BasicAuth
-import pact4s.provider.{ConsumerVersionSelectors, PactSource, ProviderInfoBuilder, ProviderTags}
-import pact4s.scalatest.PactVerifier
-import pact4s.provider._
 import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.typelevel.log4cats.StructuredLogger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+import pact4s.provider.Authentication.BasicAuth
 import pact4s.provider.StateManagement.StateManagementFunction
+import pact4s.provider._
+import pact4s.scalatest.PactVerifier
 
 import java.lang.Thread.sleep
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.FiniteDuration
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
-import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
-import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
-import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
-
-import java.io.File
-import scala.collection.immutable.Map
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
 object States {
-  val oneSnapshot = "one snapshot in the given workspace"
   val rawlsOK = "Rawls is ok"
   val snapshotCreatePolicy = "policies allowing snapshot reference creation"
 }
@@ -108,10 +89,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
         )
       )
 
-  val mockMultiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService = {
-    lazy val mockMultiCloudWorkspaceService: MultiCloudWorkspaceService = mock[MultiCloudWorkspaceService]
-    _ => mockMultiCloudWorkspaceService
-  }
   val mockWorkspaceServiceConstructor: RawlsRequestContext => WorkspaceService = {
     lazy val mockWorkspaceService: WorkspaceService = mock[WorkspaceService]
     _ => mockWorkspaceService
@@ -178,7 +155,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   val mockOtelContext: Option[Context] = Some(mock[Context])
 
   val rawlsApiService = new RawlsApiServiceImpl(
-    mockMultiCloudWorkspaceServiceConstructor,
     mockWorkspaceServiceConstructor,
     mockWorkspaceAdminServiceConstructor,
     mockWorkspaceSettingServiceConstructor,
@@ -226,16 +202,9 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
   // Create Seq[DataRepoSnapshotResource]
   val dataRepoSnapshotResources: Seq[DataRepoSnapshotResource] = Seq(dataRepoSnapshotResource)
 
-  private val mockedEnumerateSnapshotsResponse = SnapshotListResponse(dataRepoSnapshotResources)
-
   private val providerStatesHandler: StateManagementFunction = StateManagementFunction {
     case ProviderState(States.rawlsOK, _) =>
       mockSubsystemsStatus(true)
-    case ProviderState(States.oneSnapshot, _) =>
-      mockEnumerateSnapshots(
-        mockSnapshotServiceConstructor(RawlsRequestContext(userInfo = mockUserInfo, otelContext = mockOtelContext)),
-        mockedEnumerateSnapshotsResponse
-      )
     case ProviderState(States.snapshotCreatePolicy, _) =>
       mockCreateSnapshots(
         mockSnapshotServiceConstructor(RawlsRequestContext(userInfo = mockUserInfo, otelContext = mockOtelContext))
@@ -243,22 +212,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     case _ =>
       loggerIO.debug("State not found")
   }
-
-  private def mockEnumerateSnapshots(mockSnapshotService: SnapshotService,
-                                     mockResponse: SnapshotListResponse
-  ): OngoingStubbing[Future[SnapshotListResponse]] =
-    when {
-      mockSnapshotService.enumerateSnapshotsById(anyString(), anyInt(), anyInt(), any[Option[UUID]])
-    } thenReturn
-      Future.successful(mockResponse)
-
-  private def mockCreateSnapshot(mockSnapshotService: SnapshotService,
-                                 mockResponse: DataRepoSnapshotResource
-  ): OngoingStubbing[Future[DataRepoSnapshotResource]] =
-    when {
-      mockSnapshotService.createSnapshotByWorkspaceId(anyString(), any[NamedDataRepoSnapshot])
-    } thenReturn
-      Future.successful(mockResponse)
 
   private def mockCreateSnapshots(mockSnapshotService: SnapshotService): OngoingStubbing[Future[Unit]] =
     when {
