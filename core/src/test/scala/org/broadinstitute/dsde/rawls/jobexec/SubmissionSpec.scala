@@ -488,7 +488,6 @@ class SubmissionSpec(_system: ActorSystem)
         MockBigQueryServiceFactory.ioFactory(),
         testConf.getString("gcs.pathToCredentialJson"),
         servicePerimeterService,
-        mock[WorkspaceManagerDAO],
         mock[NotificationDAO]
       ) _
 

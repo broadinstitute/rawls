@@ -170,7 +170,6 @@ class FastPassMonitorSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 

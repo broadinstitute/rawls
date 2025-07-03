@@ -90,7 +90,6 @@ class UserServiceSpec
                      adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName(
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
-                     workspaceManagerDao: WorkspaceManagerDAO = defaultMockWsmDAO,
                      billingRepository: Option[BillingRepository] = None,
                      workspaceMonitorRecordDao: Option[WorkspaceManagerResourceMonitorRecordDao] = None
   ): UserService =
@@ -102,7 +101,6 @@ class UserServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      workspaceManagerDao,
       billingRepository.getOrElse(new BillingRepository(dataSource)),
       mock[NotificationDAO]
     )

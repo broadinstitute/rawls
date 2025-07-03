@@ -176,7 +176,7 @@ trait WorkspaceManagerDAO {
   @VisibleForTesting
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
 
-  // TODO CORE-501: in use
+  @VisibleForTesting
   def createLandingZone(definition: String,
                         version: String,
                         landingZoneParameters: Map[String, String],
@@ -188,7 +188,7 @@ trait WorkspaceManagerDAO {
   @unused
   def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
 
-  // TODO CORE-501: in use
+  @unused
   def getLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): AzureLandingZone
 
   /**
@@ -196,7 +196,7 @@ trait WorkspaceManagerDAO {
     * This will either return the delete result, which will contain a job ID that can be used to check the status of the deletion,
     * or None if there is no job to wait for (such as the landing zone already being deleted, if WSM returns a 404).
    */
-  // TODO CORE-501: in use
+  @VisibleForTesting
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): Option[DeleteAzureLandingZoneResult]
 
   @unused
