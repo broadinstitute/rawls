@@ -7,7 +7,6 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.TpsModel.TpsPolicies
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -29,7 +28,6 @@ import scala.util.{Failure, Success, Try}
 object SnapshotService {
   def constructor(workspaceRepository: WorkspaceRepository,
                   samDAO: SamDAO,
-                  workspaceManagerDAO: WorkspaceManagerDAO,
                   terraDataRepoUrl: String,
                   dataRepoDAO: DataRepoDAO,
                   workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
@@ -39,7 +37,6 @@ object SnapshotService {
       ctx,
       workspaceRepository,
       samDAO,
-      workspaceManagerDAO,
       terraDataRepoUrl,
       dataRepoDAO,
       workspaceServiceConstructor,
@@ -50,7 +47,6 @@ object SnapshotService {
 class SnapshotService(protected val ctx: RawlsRequestContext,
                       val workspaceRepository: WorkspaceRepository,
                       val samDAO: SamDAO,
-                      workspaceManagerDAO: WorkspaceManagerDAO,
                       terraDataRepoInstanceName: String,
                       dataRepoDAO: DataRepoDAO,
                       workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
