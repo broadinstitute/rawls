@@ -72,7 +72,6 @@ import scala.util.{Failure, Success, Try}
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   executionServiceCluster: ExecutionServiceCluster,
-                  workspaceManagerDAO: WorkspaceManagerDAO,
                   leonardoService: LeonardoService,
                   gcsDAO: GoogleServicesDAO,
                   samDAO: SamDAO,
@@ -99,7 +98,6 @@ object WorkspaceService {
       ctx,
       dataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -148,7 +146,6 @@ class WorkspaceService(
   val ctx: RawlsRequestContext,
   val dataSource: SlickDataSource,
   executionServiceCluster: ExecutionServiceCluster,
-  val workspaceManagerDAO: WorkspaceManagerDAO,
   val leonardoService: LeonardoService,
   val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
@@ -575,11 +572,6 @@ class WorkspaceService(
     _ <- traceFutureWithParent("deleteGoogleProject", ctx)(innerCtx =>
       deleteGoogleProject(workspace.googleProjectId, innerCtx)
     )
-    // attempt to delete workspace in WSM, in case thsi is a TDR snapshot - but don't fail on it
-    _ = Try(workspaceManagerDAO.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).recover {
-      case e: ApiException if e.getCode != StatusCodes.NotFound.intValue =>
-        logger.warn(s"Unexpected failure deleting workspace in WSM for workspace `${workspace.toWorkspaceName}]", e)
-    }
     // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
     _ <- traceFutureWithParent("deleteWorkspaceTransaction", ctx)(_ =>
       workspaceRepository.deleteRawlsWorkspace(workspace)
@@ -1093,28 +1085,6 @@ class WorkspaceService(
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
       )
 
-      _ <- traceFutureWithParent("cloneWsmWorkspace", parentContext)(context =>
-        Future {
-          workspaceManagerDAO.cloneWorkspace(
-            sourceWorkspaceId = sourceWorkspaceContext.workspaceIdAsUUID,
-            workspaceId = destWorkspaceContext.workspaceIdAsUUID,
-            displayName = destWorkspaceContext.name,
-            spendProfile = None,
-            billingProjectNamespace = destWorkspaceContext.namespace,
-            context
-          )
-        }.recoverWith { case e: ApiException =>
-          if (e.getCode != StatusCodes.NotFound.intValue) {
-            logger.warn(
-              s"Unexpected failure cloning workspace (while cloning Rawls-stage workspace in Workspace Manager) [sourceWorkspaceId=${sourceWorkspaceContext.workspaceId}, destWorkspaceId=${destWorkspaceContext.workspaceId}]. Received ${e.getCode}: [${e.getResponseBody}]"
-            )
-            throw e
-          } else {
-            // 404 == workspace manager does not know about this workspace, move on
-            Future.successful()
-          }
-        }
-      )
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
       // we also don't want to block returning a response on this call because it's already a slow endpoint

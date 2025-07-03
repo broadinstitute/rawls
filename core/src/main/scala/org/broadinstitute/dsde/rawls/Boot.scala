@@ -393,7 +393,6 @@ object Boot extends IOApp with LazyLogging {
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         shardedExecutionServiceCluster,
-        workspaceManagerDAO,
         new LeonardoService(leonardoDAO),
         gcsDAO,
         samDAO,
