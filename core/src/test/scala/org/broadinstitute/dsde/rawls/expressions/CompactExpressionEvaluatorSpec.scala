@@ -994,6 +994,59 @@ class CompactExpressionEvaluatorSpec
     )
   }
 
+  it should "include any workspace expressions passed to it" in withConfigData {
+    when(
+      mockQueries.getEntity(any(),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.entityType),
+                            org.mockito.ArgumentMatchers.eq(sampleGood.name)
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Some(sampleGoodAsCER)
+        )
+      )
+
+    val context =
+      ExpressionEvaluationContext(Some(sampleGood.entityType), Some(sampleGood.name), None, Some(sampleGood.entityType))
+    val gatherInputsResult =
+      methodConfigResolver.gatherInputs(userInfo, configWorkspaceAttr, littleWdl).get
+    val workspaceExpressions = Map("workspace.att1" -> Success(Seq(AttributeNumber(2))))
+    val result = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID, context, gatherInputsResult, workspaceExpressions)
+      .futureValue
+    result should contain(
+      SubmissionValidationEntityInputs(
+        sampleGood.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeNumber(1)), None, intOptNameWithWfName),
+          SubmissionValidationValue(Some(AttributeNumber(2)), None, intArgNameWithWfName)
+        )
+      )
+    )
+
+    val contextNoEntity =
+      ExpressionEvaluationContext(None, None, None, None)
+    val gatherInputsResultNoEntity =
+      methodConfigResolver.gatherInputs(userInfo, configWorkspaceNoEntity, littleWdl).get
+    val resultNoEntity = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID,
+                           contextNoEntity,
+                           gatherInputsResultNoEntity,
+                           workspaceExpressions
+      )
+      .futureValue
+    resultNoEntity should contain(
+      SubmissionValidationEntityInputs(
+        "",
+        Set(
+          SubmissionValidationValue(Some(AttributeNumber(2)), None, intArgNameWithWfName)
+        )
+      )
+    )
+
+  }
+
   behavior of "evaluateExpression"
 
   it should "return attribute values for a simple attribute" in withConfigData {
