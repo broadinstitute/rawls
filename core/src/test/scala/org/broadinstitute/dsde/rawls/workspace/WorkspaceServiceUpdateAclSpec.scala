@@ -96,8 +96,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
     terraBucketReaderRole: String = "",
     terraBucketWriterRole: String = "",
     rawlsWorkspaceAclManager: RawlsWorkspaceAclManager = mock[RawlsWorkspaceAclManager](RETURNS_SMART_NULLS),
-    multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager =
-      mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS),
     fastPassServiceConstructor: RawlsRequestContext => FastPassService = _ =>
       mock[FastPassService](RETURNS_SMART_NULLS),
     workspaceRepository: WorkspaceRepository = mock[WorkspaceRepository](RETURNS_SMART_NULLS),
@@ -128,7 +126,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       workspaceRepository,
       billingRepository,
@@ -587,15 +584,12 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
         allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
       )
     )
-    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
     val workspaceService = workspaceServiceConstructor(
       samDAO = samDAO,
       workspaceRepository = workspaceRepository,
       fastPassServiceConstructor = _ => fastPassService,
       requesterPaysSetupService = requesterPaysSetupService,
-      rawlsWorkspaceAclManager = rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
+      rawlsWorkspaceAclManager = rawlsWorkspaceAclManager
     )(ctx)
     val aclUpdate = WorkspaceACLUpdate("email@example.com", WorkspaceAccessLevels.Owner)
     Await.result(workspaceService.updateACL(workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false),
@@ -607,133 +601,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
                                                      WorkbenchEmail("email@example.com"),
                                                      ctx
     )
-    verifyNoInteractions(multiCloudWorkspaceAclManager)
-  }
-
-  it should "use the MultiCloudWorkspaceAclManager for multi cloud workspaces" in {
-    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
-    val (samDAO, rawlsWorkspaceAclManager, workspaceRepository, fastPassService, requesterPaysSetupService) =
-      getBasicMocks
-    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
-      Future.successful(
-        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
-      )
-    )
-    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(multiCloudWorkspaceAclManager.addUserToPolicy(any(), any(), any(), any())).thenReturn(Future.successful(()))
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
-
-    val workspaceService = workspaceServiceConstructor(
-      samDAO = samDAO,
-      workspaceRepository = workspaceRepository,
-      fastPassServiceConstructor = _ => fastPassService,
-      requesterPaysSetupService = requesterPaysSetupService,
-      rawlsWorkspaceAclManager = rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
-    )(ctx)
-    val aclUpdate = WorkspaceACLUpdate("email@example.com", WorkspaceAccessLevels.Owner)
-    Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false),
-                 Duration.Inf
-    )
-
-    verify(multiCloudWorkspaceAclManager).addUserToPolicy(mcWorkspace,
-                                                          SamWorkspacePolicyNames.owner,
-                                                          WorkbenchEmail("email@example.com"),
-                                                          ctx
-    )
-    verifyNoInteractions(rawlsWorkspaceAclManager)
-  }
-
-  it should "not allow share writers for McWorkspaces" in {
-    val writerEmail = "writer@example.com"
-    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
-    val aclUpdate = WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, canShare = Some(true))
-
-    val (samDAO, _, workspaceRepository, _, _) = getBasicMocks
-    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
-      Future.successful(
-        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
-      )
-    )
-    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
-
-    val workspaceService = workspaceServiceConstructor(
-      samDAO = samDAO,
-      workspaceRepository = workspaceRepository,
-      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
-    )(ctx)
-
-    val exception = intercept[InvalidWorkspaceAclUpdateException] {
-      Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false),
-                   Duration.Inf
-      )
-    }
-
-    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-  }
-
-  it should "not allow share readers for McWorkspaces" in {
-    val readerEmail = "reader@example.com"
-    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
-    val aclUpdate = WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, canShare = Some(true))
-
-    val (samDAO, _, workspaceRepository, _, _) = getBasicMocks
-    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
-      Future.successful(
-        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
-      )
-    )
-    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
-
-    val workspaceService = workspaceServiceConstructor(
-      samDAO = samDAO,
-      workspaceRepository = workspaceRepository,
-      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
-    )(ctx)
-
-    val exception = intercept[InvalidWorkspaceAclUpdateException] {
-      Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false),
-                   Duration.Inf
-      )
-    }
-
-    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-  }
-
-  it should "not allow compute writers for McWorkspaces" in {
-    val writerEmail = "writer@example.com"
-    val mcWorkspace = workspace.copy(workspaceType = WorkspaceType.McWorkspace)
-    val aclUpdate =
-      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, canShare = Some(false), canCompute = Some(true))
-
-    val (samDAO, _, workspaceRepository, _, _) = getBasicMocks
-    when(samDAO.listUserActionsForResource(any(), any(), any())).thenReturn(
-      Future.successful(
-        allWorkspacePolicies.map(policyName => SamWorkspaceActions.sharePolicy(policyName.value))
-      )
-    )
-    val multiCloudWorkspaceAclManager = mock[MultiCloudWorkspaceAclManager](RETURNS_SMART_NULLS)
-    when(multiCloudWorkspaceAclManager.getWorkspacePolicies(any(), any())).thenReturn(Future.successful(Set.empty))
-    when(workspaceRepository.getWorkspace(any[WorkspaceName](), any())).thenReturn(Future.successful(Some(mcWorkspace)))
-
-    val workspaceService = workspaceServiceConstructor(
-      samDAO = samDAO,
-      workspaceRepository = workspaceRepository,
-      multiCloudWorkspaceAclManager = multiCloudWorkspaceAclManager
-    )(ctx)
-
-    val exception = intercept[InvalidWorkspaceAclUpdateException] {
-      Await.result(workspaceService.updateACL(mcWorkspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false),
-                   Duration.Inf
-      )
-    }
-
-    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "not allow users to change their own ACL" in {

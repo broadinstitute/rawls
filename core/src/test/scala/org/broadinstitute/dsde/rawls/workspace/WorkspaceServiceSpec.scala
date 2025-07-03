@@ -248,8 +248,6 @@ class WorkspaceServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
@@ -295,7 +293,6 @@ class WorkspaceServiceSpec
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService
     ) _
@@ -348,8 +345,6 @@ class WorkspaceServiceSpec
 
     // these need to be overridden to use the new samDAO
     override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    override val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, dataSource)
   }
 
   class TestApiServiceWithMockFastPassService(dataSource: SlickDataSource, override val user: RawlsUser)

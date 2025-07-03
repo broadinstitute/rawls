@@ -29,12 +29,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  RawlsWorkspaceAclManager,
-  WorkspaceService,
-  WorkspaceSettingRepository
-}
+import org.broadinstitute.dsde.rawls.workspace.{RawlsWorkspaceAclManager, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
@@ -250,8 +245,6 @@ class FastPassServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
@@ -298,7 +291,6 @@ class FastPassServiceSpec
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService
     ) _
