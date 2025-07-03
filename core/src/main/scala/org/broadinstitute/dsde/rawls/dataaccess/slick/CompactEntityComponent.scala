@@ -665,6 +665,83 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     queryEntitiesWithFilter(workspaceId, entityType, entityQuery, sql"")
 
   /**
+   * Queries related records in a workspace by traversing relationships defined in the attributes of entities.
+   * This method supports recursive traversal of relationships, handling both arrays and objects in JSON attributes.
+   *
+   * @param workspaceId      The UUID of the workspace containing the entities.
+   * @param startingEntityType  The type of the root entity to start the query from.
+   * @param startingEntityName    The name of the root entity to start the query from.
+   * @param relationChain   A chain of strings representing the relation columns between entities
+   * @return                 A `ReadAction` that resolves to a map of starting entity name to a Seq[`CompactEntityRecord`]
+   *                         that includes all entities found by traversing the specified relationships.
+   */
+  def queryRelatedRecordsWithRelationChain(
+    workspaceId: UUID,
+    startingEntityType: String,
+    startingEntityName: String,
+    relationChain: Seq[String]
+  ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
+    if (relationChain.isEmpty) {
+      DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
+    } else {
+      // Build the SQL with explicit joins for each relation in the chain
+      // Start with the base entity
+      val sqlBuilder = sql"""
+        SELECT DISTINCT
+          e1.name as rootEntityName,
+          e#${relationChain.length}.id,
+          e#${relationChain.length}.name,
+          e#${relationChain.length}.entity_type,
+          e#${relationChain.length}.workspace_id,
+          e#${relationChain.length}.record_version,
+          e#${relationChain.length}.deleted,
+          e#${relationChain.length}.attributes
+        FROM ENTITY e0
+      """
+
+      // Add joins for each relation in the chain
+      val joinsSql = relationChain.zipWithIndex.foldLeft(sqlBuilder) { case (sql, (relation, idx)) =>
+        val nextIdx = idx + 1
+        concatSqlActions(
+          sql,
+          sql"""
+          JOIN JSON_TABLE(
+            JSON_EXTRACT(e#$idx.attributes, '$$.refs'),
+            '$$[*]' COLUMNS (
+              attributeName#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+              entityType#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+              entityName#$idx VARCHAR(255) PATH '$$.n'
+            )
+          ) jt#$idx ON jt#$idx.attributeName#$idx = $relation
+          JOIN ENTITY e#$nextIdx ON e#$nextIdx.entity_type = jt#$idx.entityType#$idx
+            AND e#$nextIdx.name = jt#$idx.entityName#$idx
+            AND e#$nextIdx.workspace_id = $workspaceId
+            AND e#$nextIdx.deleted = 0
+          """
+        )
+      }
+
+      // Add the WHERE clause for the starting entity
+      val finalSql = concatSqlActions(
+        joinsSql,
+        sql"""
+        WHERE e0.workspace_id = $workspaceId
+          AND e0.entity_type = $startingEntityType
+          AND e0.name = $startingEntityName
+          AND e0.deleted = 0
+        """
+      )
+
+      case class RootNameAndEntity(rootEntityName: String, entity: CompactEntityRecord)
+      implicit val getRootNameAndEntity: GetResult[RootNameAndEntity] =
+        GetResult(r => RootNameAndEntity(r.<<, CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)))
+
+      finalSql.as[RootNameAndEntity].map { results =>
+        results.groupMap(_.rootEntityName)(_.entity)
+      }
+    }
+
+  /**
    * Renames an entity in the ENTITY table.
    *
    * Returns the number of entities that were renamed.
@@ -1065,9 +1142,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
 
   private def filterTermsCondition(filterTerms: Seq[String], operator: FilterOperator) = {
-    // note the lower casing for case insensitive search
+    // note the lower casing for case-insensitive search in JSON_SEARCH;
+    // this is not necessary for the name search since the name column uses a case-insensitive collation
     val filterClauses = filterTerms.map { filterTerm =>
-      sql"""JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})"""
+      sql"""(e.name like ${'%' + filterTerm + '%'}
+              or JSON_SEARCH(lower(e.attributes -> '#${CompactEntitySerialization.slickAttrsPath}'), 'one', ${'%' + filterTerm.toLowerCase + '%'})
+            )"""
     }
     concatSqlActions(
       sql" and (",

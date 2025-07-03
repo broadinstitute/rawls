@@ -52,7 +52,6 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceAdminService,
   WorkspaceRepository,
@@ -370,15 +369,6 @@ trait ApiServiceSpec
         samDAO,
         workbenchMetricBaseName
       )
-
-    override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      samDAO,
-      MultiCloudWorkspaceConfig(testConf),
-      leonardoDAO,
-      workbenchMetricBaseName
-    )
 
     val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
     val spendReportingServiceConfig =

@@ -66,7 +66,6 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceAdminService,
   WorkspaceRepository,
@@ -376,16 +375,6 @@ object Boot extends IOApp with LazyLogging {
       val leonardoDAO: LeonardoDAO =
         new HttpLeonardoDAO(leonardoConfig);
 
-      val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
-        MultiCloudWorkspaceService.constructor(
-          slickDataSource,
-          workspaceManagerDAO,
-          samDAO,
-          multiCloudWorkspaceConfig,
-          leonardoDAO,
-          metricsPrefix
-        )
-
       val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService =
         FastPassServiceConstructorFactory.createCloudFastPassService(
           appConfigManager,
@@ -544,7 +533,6 @@ object Boot extends IOApp with LazyLogging {
         new GoogleProjectRegistrationService(_, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)
 
       val service = new RawlsApiServiceImpl(
-        multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
         workspaceAdminServiceConstructor,
         workspaceSettingServiceConstructor,

@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives.addLocationHeader
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceSettingService}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -21,7 +21,6 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
-  val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService
   val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
   val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService
 
@@ -36,13 +35,17 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
             entity(as[WorkspaceRequest]) { destWorkspace =>
               addLocationHeader(destWorkspace.toWorkspaceName.path) {
                 complete {
-                  multiCloudWorkspaceServiceConstructor(ctx)
-                    .cloneMultiCloudWorkspaceAsync(
-                      workspaceServiceConstructor(ctx),
-                      workspaceName,
-                      destWorkspace
+                  workspaceServiceConstructor(ctx)
+                    .cloneWorkspace(workspaceName, destWorkspace, ctx)
+                    .map(workspace =>
+                      StatusCodes.Created ->
+                        WorkspaceDetails.fromWorkspaceAndOptions(
+                          workspace,
+                          Some(destWorkspace.authorizationDomain.getOrElse(Set.empty)),
+                          useAttributes = true,
+                          Some(WorkspaceCloudPlatform.Gcp)
+                        )
                     )
-                    .map(w => StatusCodes.Created -> w)
                 }
               }
             }
@@ -58,12 +61,9 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
           pathEndOrSingleSlash {
             delete {
               complete {
-                val workspaceService = workspaceServiceConstructor(ctx)
-                val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
-                mcWorkspaceService
-                  .deleteMultiCloudOrRawlsWorkspaceV2(workspaceName, workspaceService)
-                  .map(result => StatusCodes.Accepted -> JsObject(Map("result" -> result.toJson)))
-
+                workspaceServiceConstructor(ctx)
+                  .deleteWorkspace(workspaceName)
+                  .map(deletionResult => StatusCodes.Accepted -> deletionResult)
               }
             }
           } ~

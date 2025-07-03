@@ -456,6 +456,456 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     }
   }
 
+  behavior of "queryRelatedRecordsWithRelationChain"
+
+  it should "get the record for a single reference" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // We'll need this later for comparison
+    val insertedSample = insertAndGet(sample)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        wsid,
+        "sample_set",
+        "set1",
+        List("samples")
+      )
+    )
+
+    result(sample.name) should contain(insertedSample)
+  }
+
+  it should "get the records for a list of references" in withMinimalTestDatabase { _ =>
+    // Insert referenced entities
+    val sample1 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val sample2 = Entity(
+      "sample2",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    // We'll need these later for comparison
+    val insertedSample1 = insertAndGet(sample1)
+    val insertedSample2 = insertAndGet(sample2)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+        )
+      )
+    )
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "samples"
+        )
+      )
+    )
+    result(sample1.name) should contain(insertedSample1)
+    result(sample2.name) should contain(insertedSample2)
+  }
+
+  it should "get the record for a chain of references" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val insertedParticipant = insertAndGet(participant)
+
+    val sample = Entity(
+      "s1",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p1"))
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "s1"))
+    )
+
+    insertAndGetAll(Seq(sample, set))
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "samples",
+          "participant"
+        )
+      )
+    )
+    result(sample.name) should contain(insertedParticipant)
+  }
+
+  it should "get the records for a chain of references with an array" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant1 = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val participant2 = Entity(
+      "p2",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val insertedParticipant1 = insertAndGet(participant1)
+    val insertedParticipant2 = insertAndGet(participant2)
+
+    val sample1 = Entity(
+      "s1",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p1"))
+    )
+
+    val sample2 = Entity(
+      "s2",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p2"))
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("sample", "s1"), AttributeEntityReference("sample", "s2"))
+        )
+      )
+    )
+
+    insertAndGetAll(Seq(sample1, sample2, set))
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "samples",
+          "participant"
+        )
+      )
+    )
+    result(sample1.name) should contain(insertedParticipant1)
+    result(sample2.name) should contain(insertedParticipant2)
+  }
+
+  it should "get the records for a chain of references with multiple arrays" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant1 = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val participant2 = Entity(
+      "p2",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val participant3 = Entity(
+      "p3",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("c"))
+    )
+
+    val participant4 = Entity(
+      "p4",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("d"))
+    )
+
+    val insertedParticipant1 = insertAndGet(participant1)
+    val insertedParticipant2 = insertAndGet(participant2)
+    val insertedParticipant3 = insertAndGet(participant3)
+    val insertedParticipant4 = insertAndGet(participant4)
+
+    val sample1 = Entity(
+      "s1",
+      "sample",
+      Map(
+        AttributeName.withDefaultNS("participant") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("participant", "p1"), AttributeEntityReference("participant", "p3"))
+        )
+      )
+    )
+
+    val sample2 = Entity(
+      "s2",
+      "sample",
+      Map(
+        AttributeName.withDefaultNS("participant") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("participant", "p2"), AttributeEntityReference("participant", "p4"))
+        )
+      )
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("sample", "s1"), AttributeEntityReference("sample", "s2"))
+        )
+      )
+    )
+
+    insertAndGetAll(Seq(sample1, sample2, set))
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "samples",
+          "participant"
+        )
+      )
+    )
+    result(sample1.name) should contain theSameElementsAs Seq(insertedParticipant1, insertedParticipant3)
+    result(sample2.name) should contain theSameElementsAs Seq(insertedParticipant2, insertedParticipant4)
+  }
+
+  it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample1 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // Entity of same name/type in a different workspace
+    val sample2 = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    // We'll need these later for comparison
+    val insertedSampleWS1 = insertAndGet(sample1)
+    val insertedSampleWS2 = insertAndGet(sample2, minimalTestData.workspace2.workspaceIdAsUUID)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        wsid,
+        "sample_set",
+        "set1",
+        List("samples")
+      )
+    )
+    result(sample1.name) should contain(insertedSampleWS1)
+    result(sample1.name) should not contain insertedSampleWS2
+  }
+
+  it should "be case-sensitive on entity type" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGetAll(Seq(set, sample))
+
+    // Note we're searching for capital Sample_set when only lowercase exists
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        wsid,
+        "Sample_set",
+        "set1",
+        List("samples")
+      )
+    )
+    result.get(sample.name) shouldBe None
+  }
+
+  it should "be case-sensitive on attribute names" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val sample = Entity(
+      "s1",
+      "sample",
+      Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "p1"))
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "s1"))
+    )
+
+    insertAndGetAll(Seq(sample, set, participant))
+
+    // Note we're looking for capital Samples and/or Participant when only lowercase exists
+    val result1 = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "Samples",
+          "participant"
+        )
+      )
+    )
+    result1.get(participant.name) shouldBe None
+
+    val result2 = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "Samples",
+          "Participant"
+        )
+      )
+    )
+    result2.get(participant.name) shouldBe None
+
+    val result3 = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        minimalTestData.workspace.workspaceIdAsUUID,
+        "sample_set",
+        "set1",
+        List(
+          "samples",
+          "Participant"
+        )
+      )
+    )
+    result3.get(participant.name) shouldBe None
+  }
+
+  it should "be case-insensitive on entity name" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // We'll need this later for comparison
+    val insertedSample = insertAndGet(sample)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    // For entity names, capital and lowercase differences shouldn't matter
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        wsid,
+        "sample_set",
+        "Set1",
+        List("samples")
+      )
+    )
+    result(sample.name) should contain(insertedSample)
+  }
+
+  it should "handle non-default namespaces in attribute names" in withMinimalTestDatabase { _ =>
+    // Insert referenced entity
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // We'll need this later for comparison
+    val insertedSample = insertAndGet(sample)
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName("set_namespace", "samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        wsid,
+        "sample_set",
+        "set1",
+        List("set_namespace:samples")
+      )
+    )
+    result(sample.name) should contain(insertedSample)
+  }
+
   behavior of "listEntityKeysViaEntity"
 
   it should "return the keys for a workspace" in withMinimalTestDatabase { _ =>
@@ -1044,8 +1494,8 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   }
 
   /**
-   * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
-   */
+     * Creates 1 entity with the first half of keys, 1 entity with the second half of keys, and 1 entity with no keys.
+     */
   private def createEntitiesWithKeys(entityType1AttributeNames: List[AttributeName],
                                      entityType1: String,
                                      workspaceId: UUID
@@ -2019,6 +2469,55 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(
         _.attributes(sortAttrName).asInstanceOf[AttributeNumber].value
       )
+  }
+
+  it should "return the entities with filter terms matching on the entity name" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val testAttrName1 = AttributeName.withDefaultNS("foo")
+    val testAttrName2 = AttributeName.withDefaultNS("bar")
+    // this test searches on entity names, so the names configured here are important
+    val entity1 =
+      Entity("do-FindMe1",
+             entityType1,
+             Map(testAttrName1 -> AttributeString("asdffoo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity2 =
+      Entity("some-other-unfindable-value",
+             entityType2,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity3 =
+      Entity("another-unfindable-value",
+             entityType1,
+             Map(testAttrName1 -> AttributeString(UUID.randomUUID().toString), testAttrName2 -> AttributeString("bar"))
+      )
+    val entity4 =
+      Entity("do-FindMe2",
+             entityType1,
+             Map(testAttrName1 -> AttributeString("foo"), testAttrName2 -> AttributeString("barasdf"))
+      )
+    insertAndGet(entity1) // should get counted
+    insertAndGet(entity2) // different entityType
+    insertAndGet(entity3) // different attribute value
+    insertAndGet(entity4) // should get counted
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    val actual = runAndWait(
+      q.queryEntitiesWithFilterTerms(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    Attributable.nameReservedAttribute,
+                    SortDirections.Ascending,
+                    Some("FINDME"),
+                    FilterOperators.And
+        ),
+        Seq("FINDME")
+      )
+    )
+    actual should contain theSameElementsInOrderAs List(entity1, entity4).sortBy(_.name)
   }
 
   it should "respect desired fields" in withMinimalTestDatabase { _ =>

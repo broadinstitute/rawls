@@ -10,11 +10,13 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.Gcp
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.joda.time.DateTime
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
@@ -84,7 +86,6 @@ class WorkspaceApiServiceSpec
   behavior of "WorkspaceApiService"
 
   it should "call workspaceService.listWorkspaces" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val details = WorkspaceDetails(workspace, Set())
     val responseWorkspace = WorkspaceListResponse(WorkspaceAccessLevels.Read, None, None, details, None, false, None)
@@ -92,8 +93,7 @@ class WorkspaceApiServiceSpec
     val workspaceService = mock[WorkspaceService]
     when(workspaceService.listWorkspaces(any(), any())).thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get("/workspaces") ~>
       service.testRoutes ~>
@@ -105,21 +105,18 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).listWorkspaces(WorkspaceFieldSpecs(), -1) // empty seq and -1 are the default values
   }
 
-  it should "call MCWorkspaceService.createMultiCloudOrRawlsWorkspace to create a workspace" in {
+  it should "call WorkspaceService.createWorkspace to create a workspace" in {
     val workspaceService = mock[WorkspaceService]
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val newWorkspace = WorkspaceRequest(
       namespace = workspace.namespace,
       name = workspace.name,
       Map.empty
     )
-    val details = WorkspaceDetails(workspace, Set())
-    when(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(newWorkspace, workspaceService))
-      .thenReturn(Future.successful(details))
+    when(workspaceService.createWorkspace(ArgumentMatchers.eq(newWorkspace), any[RawlsRequestContext]))
+      .thenReturn(Future.successful(workspace))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Post("/workspaces", newWorkspace.toJson) ~>
       service.testRoutes ~>
@@ -128,7 +125,7 @@ class WorkspaceApiServiceSpec
         val response = responseAs[WorkspaceDetails]
         response.name shouldBe workspace.name
       }
-    verify(mcWorkspaceService).createMultiCloudOrRawlsWorkspace(newWorkspace, workspaceService, null)
+    verify(workspaceService).createWorkspace(ArgumentMatchers.eq(newWorkspace), any[RawlsRequestContext])
   }
 
   private val tagsTestParameters = Table[String, Option[String], Option[Int]](
@@ -141,10 +138,8 @@ class WorkspaceApiServiceSpec
   it should "call the workspace service to get tags with user query and limit" in
     forAll(tagsTestParameters) { (queryString: String, userQuery: Option[String], limit: Option[Int]) =>
       val workspaceService = mock[WorkspaceService]
-      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val service = new MockApiService(
-        workspaceServiceConstructor = _ => workspaceService,
-        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+        workspaceServiceConstructor = _ => workspaceService
       )
       val tag = WorkspaceTag("test-tag", 1)
       when(workspaceService.getTags(any, any)).thenReturn(Future.successful(Seq(tag)))
@@ -160,7 +155,6 @@ class WorkspaceApiServiceSpec
     }
 
   it should "get a workspace by id from the workspace service" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val details = WorkspaceDetails(workspace, Set())
     val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
@@ -169,8 +163,7 @@ class WorkspaceApiServiceSpec
     val params = WorkspaceFieldSpecs(Some(Set("a", "b", "c")))
     when(workspaceService.getWorkspaceById(workspace.workspaceId, params, None)).thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/id/${workspace.workspaceId}?fields=a,b,c") ~>
       service.testRoutes ~>
@@ -183,7 +176,6 @@ class WorkspaceApiServiceSpec
   }
 
   it should "get a workspace by id from the workspace service with user project" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val userProject = testData.workspace.googleProjectId
     val details = WorkspaceDetails(workspace, Set())
@@ -194,8 +186,7 @@ class WorkspaceApiServiceSpec
     when(workspaceService.getWorkspaceById(workspace.workspaceId, params, userProject.some))
       .thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/id/${workspace.workspaceId}?fields=a,b,c&userProject=${userProject.value}") ~>
       service.testRoutes ~>
@@ -208,7 +199,6 @@ class WorkspaceApiServiceSpec
   }
 
   it should "get a workspace by name and namespace from the workspace service" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val details = WorkspaceDetails(workspace, Set())
     val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
@@ -217,8 +207,7 @@ class WorkspaceApiServiceSpec
     when(workspaceService.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), None))
       .thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}") ~>
       service.testRoutes ~>
@@ -231,7 +220,6 @@ class WorkspaceApiServiceSpec
   }
 
   it should "get a workspace by name and namespace from the workspace service with user project" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val userProject = testData.workspace.googleProjectId
     val details = WorkspaceDetails(workspace, Set())
@@ -241,8 +229,7 @@ class WorkspaceApiServiceSpec
     when(workspaceService.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs(None), userProject.some))
       .thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}?userProject=${userProject.value}") ~>
       service.testRoutes ~>
@@ -255,7 +242,6 @@ class WorkspaceApiServiceSpec
   }
 
   it should "pass the fields parameter when getting a workspace by name and namespace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspace = testData.workspace
     val details = WorkspaceDetails(workspace, Set())
     val responseWorkspace = WorkspaceResponse(None, None, None, None, details, None, None, None, None, None)
@@ -264,8 +250,7 @@ class WorkspaceApiServiceSpec
     val params = WorkspaceFieldSpecs(Some(Set("a", "b", "c")))
     when(workspaceService.getWorkspace(workspace.toWorkspaceName, params, None)).thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}?fields=a,b,c") ~>
       service.testRoutes ~>
@@ -278,7 +263,6 @@ class WorkspaceApiServiceSpec
   }
 
   it should "update the workspace by name and namespace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val update =
       Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation)
@@ -286,8 +270,7 @@ class WorkspaceApiServiceSpec
     val workspaceService = mock[WorkspaceService]
     when(workspaceService.updateWorkspace(any, any)).thenReturn(Future.successful(details))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}", update.toJson) ~>
       service.testRoutes ~>
@@ -303,18 +286,15 @@ class WorkspaceApiServiceSpec
     forAll(
       Table(
         ("bucketResult", "message"),
-        (None, "Your workspace has been deleted."),
         (Some("BucketName"), s"Your Google bucket BucketName will be deleted within 24h.")
       )
     ) { (bucketResult, message) =>
-      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val workspaceName = WorkspaceName("ns", "n")
       val workspaceService = mock[WorkspaceService]
-      when(mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService))
-        .thenReturn(Future.successful(bucketResult))
+      when(workspaceService.deleteWorkspace(workspaceName))
+        .thenReturn(Future.successful(WorkspaceDeletionResult.fromGcpBucketName(bucketResult.getOrElse(""))))
       val service = new MockApiService(
-        workspaceServiceConstructor = _ => workspaceService,
-        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+        workspaceServiceConstructor = _ => workspaceService
       )
       Delete(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}") ~>
         service.testRoutes ~>
@@ -323,18 +303,16 @@ class WorkspaceApiServiceSpec
           responseAs[String] shouldBe message
 
         }
-      verify(mcWorkspaceService).deleteMultiCloudOrRawlsWorkspace(workspaceName, workspaceService)
+      verify(workspaceService).deleteWorkspace(workspaceName)
     }
 
   it should "get accessInstructions by name and namespace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val workspaceService = mock[WorkspaceService]
     val serviceResponse = Seq[ManagedGroupAccessInstructions]()
     when(workspaceService.getAccessInstructions(workspaceName)).thenReturn(Future.successful(serviceResponse))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/accessInstructions") ~>
       service.testRoutes ~>
@@ -348,14 +326,12 @@ class WorkspaceApiServiceSpec
   }
 
   it should "get bucketOptions by name and namespace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val workspaceService = mock[WorkspaceService]
     val serviceResponse = WorkspaceBucketOptions(requesterPays = true, "")
     when(workspaceService.getBucketOptions(workspaceName, None)).thenReturn(Future.successful(serviceResponse))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/bucketOptions") ~>
       service.testRoutes ~>
@@ -369,7 +345,6 @@ class WorkspaceApiServiceSpec
   }
 
   it should "get bucketOptions by name and namespace with user project" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val userProject = GoogleProjectId("123")
     val workspaceService = mock[WorkspaceService]
@@ -377,8 +352,7 @@ class WorkspaceApiServiceSpec
     when(workspaceService.getBucketOptions(workspaceName, userProject.some))
       .thenReturn(Future.successful(serviceResponse))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(
       s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/bucketOptions?userProject=${userProject.value}"
@@ -393,8 +367,7 @@ class WorkspaceApiServiceSpec
     verify(workspaceService).getBucketOptions(workspaceName, userProject.some)
   }
 
-  it should "clone a workspace using the multicloud workspace service" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
+  it should "clone a workspace using the workspace service" in {
     val workspace = testData.workspace
     val workspaceName = workspace.toWorkspaceName
     val workspaceService = mock[WorkspaceService]
@@ -404,15 +377,22 @@ class WorkspaceApiServiceSpec
       Map.empty
     )
     val details =
-      WorkspaceDetails(workspace.copy(namespace = cloneWorkspace.namespace, name = cloneWorkspace.name), Set())
-    when(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(any, any, any))
-      .thenReturn(Future.successful(details))
+      WorkspaceDetails.fromWorkspaceAndOptions(
+        workspace.copy(namespace = cloneWorkspace.namespace, name = cloneWorkspace.name),
+        Option(Set()),
+        useAttributes = true,
+        cloudPlatform = Some(Gcp)
+      )
 
-    when(mcWorkspaceService.cloneMultiCloudWorkspace(workspaceService, workspaceName, cloneWorkspace))
-      .thenReturn(Future.successful(details))
+    when(
+      workspaceService.cloneWorkspace(ArgumentMatchers.eq(workspaceName),
+                                      ArgumentMatchers.eq(cloneWorkspace),
+                                      any[RawlsRequestContext]
+      )
+    )
+      .thenReturn(Future.successful(details.toWorkspace))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Post(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/clone", cloneWorkspace.toJson) ~>
       service.testRoutes ~>
@@ -422,18 +402,19 @@ class WorkspaceApiServiceSpec
         resp shouldBe details
       }
 
-    verify(mcWorkspaceService).cloneMultiCloudWorkspace(workspaceService, workspaceName, cloneWorkspace)
+    verify(workspaceService).cloneWorkspace(ArgumentMatchers.eq(workspaceName),
+                                            ArgumentMatchers.eq(cloneWorkspace),
+                                            any[RawlsRequestContext]
+    )
   }
 
   it should "get the workspace ACL by name and namespace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceName = WorkspaceName("ns", "n")
     val workspaceService = mock[WorkspaceService]
     val serviceResponse = WorkspaceACL(acl = Map("a" -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))
     when(workspaceService.getACL(workspaceName)).thenReturn(Future.successful(serviceResponse))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/acl") ~>
       service.testRoutes ~>
@@ -457,7 +438,6 @@ class WorkspaceApiServiceSpec
         ("", false)
       )
     ) { (queryString, inviteMissingUsersValue) =>
-      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val workspaceName = WorkspaceName("ns", "n")
       val workspaceService = mock[WorkspaceService]
       val update: Set[WorkspaceACLUpdate] = Set(
@@ -473,8 +453,7 @@ class WorkspaceApiServiceSpec
       when(workspaceService.updateACL(workspaceName, update, inviteMissingUsersValue))
         .thenReturn(Future.successful(serviceResponse))
       val service = new MockApiService(
-        workspaceServiceConstructor = _ => workspaceService,
-        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+        workspaceServiceConstructor = _ => workspaceService
       )
       Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/acl" + queryString, update.toJson) ~>
         service.testRoutes ~>
@@ -488,7 +467,6 @@ class WorkspaceApiServiceSpec
     }
 
   it should "update the workspace library attributes" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]
     val workspace = testData.workspace
     val workspaceName = workspace.toWorkspaceName
@@ -498,8 +476,7 @@ class WorkspaceApiServiceSpec
     )
     when(workspaceService.updateWorkspace(workspaceName, update)).thenReturn(Future.successful(details))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Patch(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}", update.toJson) ~>
       service.testRoutes ~>
@@ -521,7 +498,6 @@ class WorkspaceApiServiceSpec
         (Some(new RawlsException("user has workspace read-only access yet ...")), StatusCodes.InternalServerError)
       )
     ) { (exception: Option[Throwable], statusCode: StatusCode) =>
-      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val workspaceService = mock[WorkspaceService]
       val workspaceName = testData.workspace.toWorkspaceName
       val serviceResponse: Future[Unit] = exception.map(e => Future.failed(e)).getOrElse(Future.successful())
@@ -529,8 +505,7 @@ class WorkspaceApiServiceSpec
       when(workspaceService.checkWorkspaceCloudPermissions(workspaceName)).thenReturn(serviceResponse)
 
       val service = new MockApiService(
-        workspaceServiceConstructor = _ => workspaceService,
-        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+        workspaceServiceConstructor = _ => workspaceService
       )
       Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/checkBucketReadAccess") ~>
         service.testRoutes ~>
@@ -548,15 +523,13 @@ class WorkspaceApiServiceSpec
         (false, StatusCodes.Forbidden)
       )
     ) { (accessResult, statusCode) =>
-      val mcWorkspaceService = mock[MultiCloudWorkspaceService]
       val workspaceService = mock[WorkspaceService]
       val workspaceName = testData.workspace.toWorkspaceName
 
       when(workspaceService.checkSamActionWithLock(workspaceName, SamWorkspaceActions.read))
         .thenReturn(Future.successful(accessResult))
       val service = new MockApiService(
-        workspaceServiceConstructor = _ => workspaceService,
-        multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+        workspaceServiceConstructor = _ => workspaceService
       )
       Get(
         s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/checkIamActionWithLock/${SamWorkspaceActions.read.value}"
@@ -570,7 +543,6 @@ class WorkspaceApiServiceSpec
     }
 
   it should "get the file transfers for the workspace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]
     val workspaceName = testData.workspace.toWorkspaceName
 
@@ -588,8 +560,7 @@ class WorkspaceApiServiceSpec
     )
     when(workspaceService.listPendingFileTransfersForWorkspace(workspaceName)).thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Get(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/fileTransfers") ~>
       service.testRoutes ~>
@@ -603,14 +574,12 @@ class WorkspaceApiServiceSpec
   }
 
   it should "lock the workspace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]
     val workspaceName = testData.workspace.toWorkspaceName
 
     when(workspaceService.lockWorkspace(workspaceName)).thenReturn(Future.successful(true))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Put(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/lock") ~>
       service.testRoutes ~>
@@ -622,14 +591,12 @@ class WorkspaceApiServiceSpec
   }
 
   it should "unlock the workspace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]
     val workspaceName = testData.workspace.toWorkspaceName
 
     when(workspaceService.unlockWorkspace(workspaceName)).thenReturn(Future.successful(true))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Put(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/unlock") ~>
       service.testRoutes ~>
@@ -641,14 +608,12 @@ class WorkspaceApiServiceSpec
   }
 
   it should "call sendChangeNotifications on the workspace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]
     val workspaceName = testData.workspace.toWorkspaceName
     val response = "12"
     when(workspaceService.sendChangeNotifications(workspaceName)).thenReturn(Future.successful(response))
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Post(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/sendChangeNotification") ~>
       service.testRoutes ~>
@@ -662,13 +627,11 @@ class WorkspaceApiServiceSpec
   }
 
   it should "call enableRequesterPaysForLinkedSAs for the workspace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]
     val workspaceName = testData.workspace.toWorkspaceName
     when(workspaceService.enableRequesterPaysForLinkedSAs(workspaceName)).thenReturn(Future.successful())
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Put(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/enableRequesterPaysForLinkedServiceAccounts") ~>
       service.testRoutes ~>
@@ -680,13 +643,11 @@ class WorkspaceApiServiceSpec
   }
 
   it should "call disableRequesterPaysForLinkedSAs on the workspace" in {
-    val mcWorkspaceService = mock[MultiCloudWorkspaceService]
     val workspaceService = mock[WorkspaceService]
     val workspaceName = testData.workspace.toWorkspaceName
     when(workspaceService.disableRequesterPaysForLinkedSAs(workspaceName)).thenReturn(Future.successful())
     val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService,
-      multiCloudWorkspaceServiceConstructor = _ => mcWorkspaceService
+      workspaceServiceConstructor = _ => workspaceService
     )
     Put(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/disableRequesterPaysForLinkedServiceAccounts") ~>
       service.testRoutes ~>

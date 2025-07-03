@@ -16,12 +16,16 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceState}
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceRepository}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 import scala.util.{Failure, Success, Try}
+
+object CloneWorkspaceStorageContainerInitStep {
+  def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
+}
 
 class CloneWorkspaceStorageContainerInitStep(
   val workspaceManagerDAO: WorkspaceManagerDAO,
@@ -40,7 +44,7 @@ class CloneWorkspaceStorageContainerInitStep(
       case None     => return fail("Clone Storage Container", "no source workspace specified").map(_ => Complete)
     }
     val prefixToClone = WorkspaceCloningRunner.getStorageContainerClonePrefix(job.args)
-    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    val expectedContainerName = CloneWorkspaceStorageContainerInitStep.getStorageContainerName(sourceWorkspaceId)
 
     findSourceWorkspaceStorageContainer(sourceWorkspaceId, expectedContainerName, userCtx) match {
       case None =>
@@ -94,7 +98,7 @@ class CloneWorkspaceStorageContainerInitStep(
         sourceWorkspaceId,
         destinationWorkspaceId,
         container.getMetadata.getResourceId,
-        MultiCloudWorkspaceService.getStorageContainerName(destinationWorkspaceId),
+        CloneWorkspaceStorageContainerInitStep.getStorageContainerName(destinationWorkspaceId),
         CloningInstructionsEnum.RESOURCE,
         prefixToClone,
         ctx

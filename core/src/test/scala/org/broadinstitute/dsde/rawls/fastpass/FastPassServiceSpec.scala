@@ -31,7 +31,6 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
 import org.broadinstitute.dsde.rawls.workspace.{
   MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceService,
   WorkspaceSettingRepository
@@ -231,16 +230,6 @@ class FastPassServiceSpec
       "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
-    override val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
-      MultiCloudWorkspaceService.constructor(
-        dataSource,
-        workspaceManagerDAO,
-        samDAO,
-        multiCloudWorkspaceConfig,
-        leonardoDAO,
-        workbenchMetricBaseName
-      )
-    lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
@@ -415,13 +404,12 @@ class FastPassServiceSpec
 
     val childWorkspace =
       Await
-        .result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                     parentWorkspace.toWorkspaceName,
-                                                                     workspaceRequest
+        .result(services.workspaceService.cloneWorkspace(
+                  parentWorkspace.toWorkspaceName,
+                  workspaceRequest
                 ),
                 Duration.Inf
         )
-        .toWorkspace
 
     verify(services.mockFastPassService)
       .setupFastPassForUserInClonedWorkspace(
@@ -1087,9 +1075,9 @@ class FastPassServiceSpec
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                      parentWorkspace.toWorkspaceName,
-                                                                      workspaceRequest
+    Await.result(services.workspaceService.cloneWorkspace(
+                   parentWorkspace.toWorkspaceName,
+                   workspaceRequest
                  ),
                  Duration.Inf
     )

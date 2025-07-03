@@ -212,6 +212,16 @@ class WorkspaceService(
       billingProject <- traceFutureWithParent("getBillingProjectContext", parentContext)(s =>
         getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
       )
+      // ensure this creation request is not happening in a leftover Azure billing project
+      _ = if (billingProject.azureManagedAppCoordinates.isDefined) {
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, "Unsupported billing project: Azure billing projects are not supported")
+        )
+      }
+      // ensure the user has the create_workspace permission on the billing project
+      _ <- traceFutureWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
+        requireCreateWorkspaceAction(billingProject.projectName, childContext)
+      }
       // explicit policies in the request are not supported on GCP workspaces. instead, we derive the policies from other fields in the request
       _ <- failIfPoliciesIncluded(workspaceRequest)
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
@@ -520,12 +530,32 @@ class WorkspaceService(
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[WorkspaceDeletionResult] = for {
-    workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
+    workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                     SamWorkspaceActions.delete,
+                                                     Some(WorkspaceAttributeSpecs(all = false))
+    )
     _ = workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
         throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, "Multi Cloud workspaces not supported")
       case WorkspaceType.RawlsWorkspace => ()
     }
+    // Disallow deletion of workspaces with any children *other* than its google project.
+    // This method knows how to delete that child google project.
+    wsResourceChildren <- traceFutureWithParent("listResourceChildren", ctx)(_ =>
+      samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+    )
+    _ = if (wsResourceChildren.exists(_.resourceTypeName != SamResourceTypeNames.googleProject.value)) {
+      throw RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          s"Workspace ${workspace.toWorkspaceName} cannot be deleted because it contains at least one cloud resource such as an application or cloud environment. " +
+            s"Delete those resources first."
+        )
+      )
+    }
+    _ = logger.info(
+      s"Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
+    )
     _ <- requesterPaysSetupService.deleteAllRecordsForWorkspace(workspace)
     workflowsToAbort <- traceFutureWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", ctx)(_ =>
       submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)
@@ -965,9 +995,7 @@ class WorkspaceService(
       result <- workspaceRepository.getTags(v2WorkspaceIdsForUser, query, limit)
     } yield result
 
-  // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
-  def cloneWorkspace(sourceWorkspace: Workspace,
-                     billingProject: RawlsBillingProject,
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName,
                      destWorkspaceRequest: WorkspaceRequest,
                      parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
@@ -980,6 +1008,9 @@ class WorkspaceService(
       destWorkspaceRequest.attributes.keys
 
     for {
+      sourceWorkspace <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
+      billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
+      _ <- requireCreateWorkspaceAction(billingProject.projectName)
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
       _ <- failIfBucketRegionInvalid(destWorkspaceRequest.bucketLocation)
