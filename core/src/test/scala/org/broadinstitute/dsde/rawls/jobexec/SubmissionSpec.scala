@@ -4,12 +4,9 @@ import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import bio.terra.datarepo.model.{ColumnModel, TableModel}
-import bio.terra.workspace.model.CloningInstructionsEnum
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -47,7 +44,6 @@ import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -485,11 +481,6 @@ class SubmissionSpec(_system: ActorSystem)
       val servicePerimeterService =
         new ServicePerimeterServiceImpl(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
 
-      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-        mock[BillingProfileManagerClientProvider],
-        mock[MultiCloudWorkspaceConfig]
-      )
-
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
@@ -497,7 +488,6 @@ class SubmissionSpec(_system: ActorSystem)
         MockBigQueryServiceFactory.ioFactory(),
         testConf.getString("gcs.pathToCredentialJson"),
         servicePerimeterService,
-        billingProfileManagerDAO,
         mock[WorkspaceManagerDAO],
         mock[NotificationDAO]
       ) _

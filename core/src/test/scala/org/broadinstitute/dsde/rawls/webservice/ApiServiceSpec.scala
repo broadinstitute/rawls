@@ -39,14 +39,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, Submissio
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
-import org.broadinstitute.dsde.rawls.model.{
-  Agora,
-  ApplicationVersion,
-  Dockstore,
-  GoogleProjectId,
-  RawlsRequestContext,
-  RawlsUser
-}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, GoogleProjectId, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -58,7 +51,6 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
   RawlsWorkspaceAclManager,
   WorkspaceAdminService,
   WorkspaceRepository,
@@ -81,7 +73,6 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
@@ -212,20 +203,16 @@ trait ApiServiceSpec
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf.getConfig("gcs"))
     val servicePerimeterService = new ServicePerimeterServiceImpl(slickDataSource, gcsDAO, servicePerimeterConfig)
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val billingRepository = spy(new BillingRepository(slickDataSource))
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
-    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
-    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
+    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository)
     val googleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      azureBillingProjectLifecycle,
       billingProjectDeletion,
-      workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )
 
@@ -236,7 +223,6 @@ trait ApiServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
@@ -277,7 +263,6 @@ trait ApiServiceSpec
         gpsDAO,
         methodRepoDAO,
         samDAO,
-        billingProfileManagerDAO,
         workspaceManagerDAO,
         executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
         Seq.empty,
@@ -333,8 +318,6 @@ trait ApiServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val fastPassConfig = FastPassConfig.apply(testConf)
     val fastPassServiceConstructor = FastPassServiceImpl.constructor(
@@ -371,7 +354,6 @@ trait ApiServiceSpec
       terraBucketReaderRole = "fakeTerraBucketReaderRole",
       terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService
     ) _
@@ -391,7 +373,6 @@ trait ApiServiceSpec
       slickDataSource,
       spendReportingBigQueryService,
       mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig,
       workspaceServiceConstructor,

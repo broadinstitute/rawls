@@ -65,7 +65,6 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
   RawlsWorkspaceAclManager,
   WorkspaceAdminService,
   WorkspaceRepository,
@@ -254,12 +253,6 @@ object Boot extends IOApp with LazyLogging {
         ServicePerimeterServiceFactory.createServicePerimeter(appConfigManager, slickDataSource, gcsDAO)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(appConfigManager.conf)
-      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-        new HttpBillingProfileManagerClientProvider(
-          appConfigManager.conf.getStringOption("billingProfileManager.baseUrl")
-        ),
-        multiCloudWorkspaceConfig
-      )
 
       val tpsDAO = new HttpTpsDAO(appConfigManager.conf.getString("policyService.baseUrl"),
                                   RawlsCredential.getCredential(appConfigManager)
@@ -291,7 +284,6 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.bigQueryServiceFactory,
           bqJsonCreds,
           servicePerimeterService,
-          billingProfileManagerDAO,
           workspaceManagerDAO,
           notificationDAO
         )
@@ -333,7 +325,6 @@ object Boot extends IOApp with LazyLogging {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
-            billingProfileManagerDAO,
             workspaceManagerDAO,
             executionServiceServers.map(c => c.key -> c.dao).toMap
           )
@@ -417,7 +408,6 @@ object Boot extends IOApp with LazyLogging {
         terraBucketWriterRole =
           appConfigManager.gcsConfig.map(_.getString("terraBucketWriterRole")).getOrElse("unsupported"),
         new RawlsWorkspaceAclManager(samDAO),
-        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
         fastPassServiceConstructor,
         policyService
       )
@@ -509,21 +499,14 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
 
-      val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
+      val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
           notificationDAO,
           billingRepository,
-          new GoogleBillingProjectLifecycle(billingRepository, billingProfileManagerDAO, samDAO, gcsDAO),
-          new AzureBillingProjectLifecycle(samDAO,
-                                           billingRepository,
-                                           billingProfileManagerDAO,
-                                           workspaceManagerDAO,
-                                           workspaceManagerResourceMonitorRecordDao
-          ),
+          new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
           billingProjectDeletion,
-          workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig
         )
 
@@ -532,7 +515,6 @@ object Boot extends IOApp with LazyLogging {
           slickDataSource,
           spendReportingBigQueryService,
           billingRepository,
-          billingProfileManagerDAO,
           samDAO,
           spendReportingServiceConfig,
           workspaceServiceConstructor,
@@ -598,7 +580,6 @@ object Boot extends IOApp with LazyLogging {
           pubSubDAO,
           cwdsDAO,
           workspaceManagerDAO,
-          billingProfileManagerDAO,
           leonardoDAO,
           workspaceRepository,
           appDependencies.googleStorageService,
