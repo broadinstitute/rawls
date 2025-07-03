@@ -486,7 +486,6 @@ object Boot extends IOApp with LazyLogging {
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
         workspaceRepository,
         samDAO,
-        workspaceManagerDAO,
         appConfigManager.conf.getString("dataRepo.terraInstanceName"),
         dataRepoDAO,
         workspaceServiceConstructor,
@@ -595,7 +594,6 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           pubSubDAO,
           cwdsDAO,
-          workspaceManagerDAO,
           billingProfileManagerDAO,
           leonardoDAO,
           workspaceRepository,

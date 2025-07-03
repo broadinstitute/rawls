@@ -63,7 +63,6 @@ object BootMonitors extends LazyLogging {
                    notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
                    cwdsDAO: CwdsDAO,
-                   workspaceManagerDAO: WorkspaceManagerDAO,
                    billingProfileManagerDAO: BillingProfileManagerDAO,
                    leonardoDAO: LeonardoDAO,
                    workspaceRepository: WorkspaceRepository,
