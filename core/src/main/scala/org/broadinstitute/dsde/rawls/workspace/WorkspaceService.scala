@@ -168,7 +168,7 @@ class WorkspaceService(
   val terraBucketReaderRole: String,
   val terraBucketWriterRole: String,
   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+  DELETEMEmultiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
   val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository,
@@ -1156,11 +1156,7 @@ class WorkspaceService(
   def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] =
     for {
       workspace <- getV2WorkspaceContext(workspaceName)
-      workspaceAclManager = workspace.workspaceType match {
-        case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
-        case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
-      }
-      workspaceACL <- workspaceAclManager.getAcl(workspace.workspaceIdAsUUID, ctx)
+      workspaceACL <- rawlsWorkspaceAclManager.getAcl(workspace.workspaceIdAsUUID, ctx)
     } yield workspaceACL
 
   private def loadV2WorkspaceId(workspaceName: WorkspaceName): Future[String] =
@@ -1311,11 +1307,7 @@ class WorkspaceService(
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         for {
           workspace <- getV2WorkspaceContext(workspaceName)
-          workspaceAclManager = workspace.workspaceType match {
-            case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
-            case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
-          }
-          existingPoliciesWithMembers <- workspaceAclManager.getWorkspacePolicies(workspace.workspaceIdAsUUID, ctx)
+          existingPoliciesWithMembers <- rawlsWorkspaceAclManager.getWorkspacePolicies(workspace.workspaceIdAsUUID, ctx)
 
           // convert all the existing policy memberships into WorkspaceAclUpdate objects
           existingAcls = existingPoliciesWithMembers
@@ -1370,11 +1362,11 @@ class WorkspaceService(
           // do additions before removals so users are not left unable to access the workspace in case of errors that
           // lead to incomplete application of these changes, remember: this is not transactional
           _ <- Future.traverse(policyAdditions) { case (policyName, email) =>
-            workspaceAclManager.addUserToPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
+            rawlsWorkspaceAclManager.addUserToPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
           }
 
           _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
-            workspaceAclManager.removeUserFromPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
+            rawlsWorkspaceAclManager.removeUserFromPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
           }
 
           // only revoke requester pays if there's a Google project to revoke it for
@@ -1383,7 +1375,7 @@ class WorkspaceService(
               revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
             } else Future.successful()
 
-          _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
+          _ <- rawlsWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
 
           // Sync FastPass grants once ACLs are updated
           _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { email =>

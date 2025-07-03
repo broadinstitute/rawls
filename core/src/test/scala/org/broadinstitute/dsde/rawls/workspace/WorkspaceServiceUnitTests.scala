@@ -1218,36 +1218,6 @@ class WorkspaceServiceUnitTests
     verify(samDAO).listPoliciesForResource(any(), any(), any())
   }
 
-  it should "fetch policies from WSM for McWorkspaces" in {
-    val ownerEmail = "owner@example.com"
-    val writerEmail = "writer@example.com"
-    val readerEmail = "reader@example.com"
-    val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
-
-    val workspaceRepository = mockWorkspaceRepositoryForAclTests(WorkspaceType.McWorkspace)
-
-    val samDAO = mockSamForAclTests()
-    val service = workspaceServiceConstructor(
-      workspaceRepository = workspaceRepository,
-      samDAO = samDAO,
-      workspaceManagerDAO = wsmDAO
-    )(ctx)
-
-    val expected = WorkspaceACL(
-      Map(
-        ownerEmail -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-        writerEmail -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-        readerEmail -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)
-      )
-    )
-
-    val result = Await.result(service.getACL(WorkspaceName("fake_namespace", "fake_name")), Duration.Inf)
-
-    result shouldBe expected
-    verify(samDAO, never).listPoliciesForResource(any(), any(), any())
-    verify(wsmDAO).getRoles(any(), any())
-  }
-
   behavior of "getBucketOptions"
 
   it should "get the bucket options for a gcp workspace" in {
