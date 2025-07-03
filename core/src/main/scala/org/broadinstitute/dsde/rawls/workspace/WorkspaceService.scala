@@ -23,6 +23,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -215,6 +216,7 @@ class WorkspaceService(
           ErrorReport(StatusCodes.BadRequest, "Unsupported billing project: Azure billing projects are not supported")
         )
       }
+      _ = validateNoEntityReferences(workspaceRequest.attributes)
       // ensure the user has the create_workspace permission on the billing project
       _ <- traceFutureWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
         requireCreateWorkspaceAction(billingProject.projectName, childContext)
@@ -684,6 +686,7 @@ class WorkspaceService(
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        _ = validateNoEntityReferences(operations)
         workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
           dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
           TransactionIsolation.ReadCommitted
@@ -1007,6 +1010,7 @@ class WorkspaceService(
     for {
       sourceWorkspace <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
+      _ = validateNoEntityReferences(destWorkspaceRequest.attributes)
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
@@ -2537,6 +2541,31 @@ class WorkspaceService(
 
   def isBucketSecure(workspace: Workspace): Boolean =
     workspace.bucketName.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+
+  private def validateNoEntityReferences(operations: Seq[AttributeUpdateOperation]): Unit =
+    operations.foreach { operation =>
+      operation match {
+        case AddUpdateAttribute(_, value) => checkAttributeValue(value)
+        case AddListMember(_, value)      => checkAttributeValue(value)
+        case CreateAttributeEntityReferenceList(_) =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Workspace attributes cannot reference entities")
+          )
+        case _ => // RemoveAttribute, RemoveListMember don't add new values
+      }
+    }
+
+  private def validateNoEntityReferences(attributeMap: AttributeMap): Unit =
+    attributeMap.map { case (_, value) => checkAttributeValue(value) }
+
+  private def checkAttributeValue(value: Attribute): Unit =
+    value match {
+      case _: AttributeEntityReference | _: AttributeEntityReferenceList | AttributeEntityReferenceEmptyList =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Workspace attributes cannot reference entities")
+        )
+      case _ => // allowed attribute types
+    }
 }
 
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
