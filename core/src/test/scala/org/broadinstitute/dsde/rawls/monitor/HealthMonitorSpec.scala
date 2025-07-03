@@ -4,10 +4,8 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
-import bio.terra.workspace.client.ApiException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
@@ -353,12 +351,6 @@ class HealthMonitorSpec
     when {
       dao.getStatus()
     } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
-    dao
-  }
-
-  def mockWorkspaceManagerDAO: WorkspaceManagerDAO = {
-    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    doNothing.when(dao).throwWhenUnavailable()
     dao
   }
 

@@ -6,7 +6,6 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
@@ -16,7 +15,6 @@ import org.broadinstitute.dsde.rawls.coordination.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
