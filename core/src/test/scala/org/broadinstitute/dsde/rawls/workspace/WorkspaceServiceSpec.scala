@@ -3852,8 +3852,7 @@ class WorkspaceServiceSpec
         services.workspaceService.updateWorkspace(
           testData.wsName,
           Seq(
-            CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("referenceListAttribute")
-            )
+            CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("referenceListAttribute"))
           )
         ),
         Duration.Inf
@@ -3868,7 +3867,7 @@ class WorkspaceServiceSpec
           testData.wsName,
           Seq(
             AddListMember(AttributeName.withDefaultNS("referenceAttribute"),
-              AttributeEntityReference("sample", "sample1")
+                          AttributeEntityReference("sample", "sample1")
             )
           )
         ),
