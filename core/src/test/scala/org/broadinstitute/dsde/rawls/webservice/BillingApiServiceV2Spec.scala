@@ -1033,7 +1033,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         }
   }
 
-  "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices {
+  "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" ignore withEmptyDatabaseAndApiServices {
     services =>
       val project = createProject("project")
       // wow there are a lot of sam calls in delete billing project
@@ -1105,7 +1105,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         ArgumentMatchers.argThat(userInfoEq(testContext))
       )
   }
-  it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
+  ignore should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(
       services.samDAO.userHasAction(

@@ -413,9 +413,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
           )
         )
       )
-    // Mock Google project with no billing profile
-    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
-      .thenReturn(Future.successful(None))
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -513,42 +510,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
     verify(billingProjectDeletion).finalizeDelete(billingProjectName, testContext)
-  }
-
-  it should "create a job to delete the Azure project and set the status of the billing project to Deleting if cleanupLandingZone returns returns a job report" in {
-    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    val jobId = UUID.randomUUID()
-
-    def matchedExpectedEvent(e: WorkspaceManagerResourceMonitorRecord) =
-      e.jobControlId.toString == jobId.toString &&
-        e.billingProjectId.get == billingProjectName.value &&
-        e.userEmail.get == testContext.userInfo.userEmail.value &&
-        e.jobType == BpmBillingProjectDelete
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
-    when(monitorRecordDao.create(ArgumentMatchers.argThat(matchedExpectedEvent))).thenReturn(Future.successful())
-
-    val landingZoneId = UUID.randomUUID()
-    val billingRepository = happyBillingRepository(Some(landingZoneId))
-
-    val bpo = spy(
-      new BillingProjectOrchestrator(
-        testContext,
-        alwaysGiveAccessSamDao,
-        mock[NotificationDAO],
-        billingRepository,
-        mock[GoogleBillingProjectLifecycle](RETURNS_SMART_NULLS),
-        mock[BillingProjectDeletion],
-        mock[MultiCloudWorkspaceConfig]
-      )
-    )
-    doReturn(Future.successful()).when(bpo).maybeDeleteGoogleProject(billingProjectName, testContext)
-
-    Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
-
-    verify(monitorRecordDao).create(ArgumentMatchers.argThat(matchedExpectedEvent))
-    verify(billingRepository).updateCreationStatus(billingProjectName, CreationStatuses.Deleting, None)
-    // We don't delete the billing project because landing zone creation was kicked off.
-    verify(billingRepository, never()).deleteBillingProject(billingProjectName)
   }
 
   it should "fail when the status of the billing project is not in a terminal state" in {

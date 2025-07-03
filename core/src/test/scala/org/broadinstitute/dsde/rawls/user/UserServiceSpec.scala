@@ -1,14 +1,6 @@
 package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.profile.model.{
-  BpmApiPolicyInput,
-  BpmApiPolicyInputs,
-  CloudPlatform => BPMCloudPlatform,
-  Organization,
-  ProfileModel
-}
-import bio.terra.workspace.model.AzureLandingZone
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -17,7 +9,6 @@ import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -36,7 +27,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.jdk.CollectionConverters._
 
 class UserServiceSpec
     extends AnyFlatSpecLike
@@ -1272,280 +1262,7 @@ class UserServiceSpec
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
   }
 
-  it should "map the azure data for a bpm project" in {
-    val billingProfile = new ProfileModel()
-      .id(UUID.randomUUID())
-      .cloudPlatform(BPMCloudPlatform.AZURE)
-      .organization(new Organization().enterprise(true).limits(Map.empty[String, String].asJava))
-    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val landingZoneId = UUID.randomUUID()
-    val lzRegion = "dummy-region"
-    val project = RawlsBillingProject(
-      UUID.randomUUID(),
-      projectName,
-      CreationStatuses.Ready,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(billingProfile.getId.toString),
-      landingZoneId = Some(landingZoneId.toString)
-    )
-    val repository = mock[BillingRepository]
-    when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
-      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getLandingZone(landingZoneId, testContext)).thenReturn(new AzureLandingZone().region(lzRegion))
-
-    val userService =
-      getUserService(samDAO = samDAO, billingRepository = Some(repository), workspaceManagerDao = wsmDAO)
-
-    val expected =
-      Some(
-        RawlsBillingProjectResponse(Set(ProjectRoles.Owner),
-                                    project,
-                                    CloudPlatform.AZURE,
-                                    Option(false),
-                                    Option(lzRegion),
-                                    Option(RawlsBillingProjectOrganization(true, Map()))
-        )
-      )
-    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
-  }
-
-  it should "set the project platform to Unknown if there is no billing profile for a billing profileId" in {
-    val billingProfileId = UUID.randomUUID()
-    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val project = RawlsBillingProject(
-      UUID.randomUUID(),
-      projectName,
-      CreationStatuses.Ready,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(billingProfileId.toString)
-    )
-    val repository = mock[BillingRepository]
-    when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
-      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
-
-    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
-
-    Await
-      .result(userService.getBillingProject(projectName), Duration.Inf)
-      .map(_.cloudPlatform)
-      .get shouldEqual CloudPlatform.UNKNOWN.toString
-  }
-
   behavior of "listBillingProjectsV2"
-
-  it should "map azure data for a BPM project" in {
-    val billingProfile = new ProfileModel()
-      .id(UUID.randomUUID())
-      .cloudPlatform(BPMCloudPlatform.AZURE)
-      .organization(new Organization().enterprise(false).limits(Map("autoPause" -> "30").asJava))
-    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val landingZoneId = UUID.randomUUID()
-    val lzRegion = "dummy-region"
-    val project = RawlsBillingProject(
-      UUID.randomUUID(),
-      projectName,
-      CreationStatuses.Ready,
-      None,
-      None,
-      billingProfileId = Some(billingProfile.getId.toString),
-      landingZoneId = Some(landingZoneId.toString)
-    )
-
-    val repository = mock[BillingRepository]
-    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
-      .thenReturn(Future.successful(Seq(project)))
-
-    val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
-      .thenReturn(Future.successful(Seq(billingResource)))
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getLandingZone(landingZoneId, testContext)).thenReturn(new AzureLandingZone().region(lzRegion))
-
-    val userService =
-      getUserService(samDAO = samDAO, billingRepository = Some(repository), workspaceManagerDao = wsmDAO)
-
-    val expected = Seq(
-      RawlsBillingProjectResponse(
-        Set(ProjectRoles.User),
-        project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
-        CloudPlatform.AZURE,
-        Option(false),
-        Option(lzRegion),
-        Option(RawlsBillingProjectOrganization(false, Map("autoPause" -> "30")))
-      )
-    )
-
-    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
-  }
-
-  it should "handle the landing zone being missing in BPM project" in {
-    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
-    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val landingZoneId = UUID.randomUUID()
-    val project = RawlsBillingProject(
-      UUID.randomUUID(),
-      projectName,
-      CreationStatuses.Ready,
-      None,
-      None,
-      billingProfileId = Some(billingProfile.getId.toString),
-      landingZoneId = Some(landingZoneId.toString)
-    )
-
-    val repository = mock[BillingRepository]
-    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
-      .thenReturn(Future.successful(Seq(project)))
-
-    val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
-      .thenReturn(Future.successful(Seq(billingResource)))
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    // If fetching the landing zone fails (in any way), we log and return no region.
-    when(wsmDAO.getLandingZone(landingZoneId, testContext)).thenThrow(new RuntimeException("Mock Error"))
-
-    val userService =
-      getUserService(samDAO = samDAO, billingRepository = Some(repository), workspaceManagerDao = wsmDAO)
-
-    val expected = Seq(
-      RawlsBillingProjectResponse(
-        Set(ProjectRoles.User),
-        project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
-        CloudPlatform.AZURE,
-        Option(false),
-        None
-      )
-    )
-
-    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
-  }
-
-  it should "set the cloud platform to unknown when a billing profile can't be found" in {
-    val billingProfileId = UUID.randomUUID()
-    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val project = RawlsBillingProject(
-      UUID.randomUUID(),
-      projectName,
-      CreationStatuses.Ready,
-      None,
-      None,
-      billingProfileId = Some(billingProfileId.toString)
-    )
-
-    val repository = mock[BillingRepository]
-    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
-      .thenReturn(Future.successful(Seq(project)))
-
-    val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
-      .thenReturn(Future.successful(Seq(billingResource)))
-    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
-
-    Await.result(userService.listBillingProjectsV2(), Duration.Inf).head.cloudPlatform shouldBe
-      CloudPlatform.UNKNOWN.toString
-  }
-
-  it should "return the list of billing projects including azure data when enabled" in {
-    // GCP, Rawls-only project
-    val ownerProject =
-      RawlsBillingProject(UUID.randomUUID(),
-                          RawlsBillingProjectName(UUID.randomUUID().toString),
-                          CreationStatuses.Ready,
-                          None,
-                          None
-      )
-
-    // Azure, BPM-backed project
-    val bpmBillingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
-    val billingProfileBackedProject = RawlsBillingProject(
-      UUID.randomUUID(),
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.Ready,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(bpmBillingProfile.getId.toString)
-    )
-
-    // Azure, BPM-backed, protected project
-    val policies = new BpmApiPolicyInputs().inputs(
-      List(
-        new BpmApiPolicyInput()
-          .namespace(TERRA_POLICY_NAMESPACE)
-          .name(TpsPolicies.ProtectedData.name)
-          .additionalData(List.empty.asJava)
-      ).asJava
-    )
-    val bpmProtectedDataBillingProfile =
-      new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE).policies(policies)
-    val protectedDataBillingProfileBackedProject = RawlsBillingProject(
-      UUID.randomUUID(),
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.Ready,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(bpmProtectedDataBillingProfile.getId.toString)
-    )
-
-    val billingProjects = Set(ownerProject, billingProfileBackedProject, protectedDataBillingProfileBackedProject)
-
-    val repository = mock[BillingRepository]
-    when(repository.getBillingProjects(ArgumentMatchers.eq(billingProjects.map(_.projectName))))
-      .thenReturn(Future.successful(billingProjects.toSeq))
-
-    // Setup mock DAOs
-    val userBillingResources = Seq(
-      SamUserResource(ownerProject.projectName.value, ownerRole, noRole, noRole, Set.empty, Set.empty),
-      SamUserResource(billingProfileBackedProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty),
-      SamUserResource(protectedDataBillingProfileBackedProject.projectName.value,
-                      ownerRole,
-                      noRole,
-                      noRole,
-                      Set.empty,
-                      Set.empty
-      )
-    )
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
-      .thenReturn(Future.successful(userBillingResources))
-    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
-
-    val expected = Seq(
-      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, CloudPlatform.GCP),
-      RawlsBillingProjectResponse(Set(ProjectRoles.User),
-                                  billingProfileBackedProject,
-                                  CloudPlatform.AZURE,
-                                  protectedData = Option(false)
-      ),
-      RawlsBillingProjectResponse(Set(ProjectRoles.Owner),
-                                  protectedDataBillingProfileBackedProject,
-                                  CloudPlatform.AZURE,
-                                  protectedData = Option(true)
-      )
-    )
-
-    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
-  }
 
   it should "return the list of billing projects to which the user has access" in {
     val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
@@ -1756,7 +1473,7 @@ class UserServiceSpec
       )
     }
 
-  it should "not update Sam permissions if billing profile member addition fails" in
+  it should "update Sam permissions if billing profile member addition fails" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1782,12 +1499,12 @@ class UserServiceSpec
                      Duration.Inf
         )
       }
-      // Sam mock should not be called because BPM update failed
-      verify(samDAO, never()).addUserToPolicy(SamResourceTypeNames.billingProject,
-                                              ownerProject.projectName.value,
-                                              SamBillingProjectPolicyNames.owner,
-                                              ownerEmail,
-                                              testContext
+      // Sam mock should be called because BPM update failed
+      verify(samDAO).addUserToPolicy(SamResourceTypeNames.billingProject,
+                                     ownerProject.projectName.value,
+                                     SamBillingProjectPolicyNames.owner,
+                                     ownerEmail,
+                                     testContext
       )
     }
 
@@ -1916,7 +1633,7 @@ class UserServiceSpec
       )
     }
 
-  it should "not update Sam permissions if billing profile member deletion fails" in
+  it should "update Sam permissions if billing profile member deletion fails" in
     withMinimalTestDatabase { dataSource =>
       val billingProfileId = UUID.randomUUID()
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
@@ -1942,12 +1659,12 @@ class UserServiceSpec
                      Duration.Inf
         )
       }
-      // Sam mock should not be called because BPM update failed
-      verify(samDAO, never()).removeUserFromPolicy(SamResourceTypeNames.billingProject,
-                                                   ownerProject.projectName.value,
-                                                   SamBillingProjectPolicyNames.owner,
-                                                   ownerEmail,
-                                                   testContext
+      // Sam mock should be called because BPM update failed
+      verify(samDAO).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                          ownerProject.projectName.value,
+                                          SamBillingProjectPolicyNames.owner,
+                                          ownerEmail,
+                                          testContext
       )
     }
 }

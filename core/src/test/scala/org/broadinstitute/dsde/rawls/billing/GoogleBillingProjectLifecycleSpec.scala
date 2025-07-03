@@ -158,51 +158,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
   }
 
-  it should "store the billing profile ID during billing project creation" in {
-    val repo = mock[BillingRepository]
-    val samDAO = mock[SamDAO]
-    val wsmResourceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val bp = new GoogleBillingProjectLifecycle(repo, samDAO, mock[GoogleServicesDAO])
-
-    val createRequest = CreateRawlsV2BillingProjectFullRequest(
-      RawlsBillingProjectName("fake_project_name"),
-      Some(RawlsBillingAccountName("fake_billing_account_name")),
-      None,
-      None,
-      None,
-      None
-    )
-
-    when(
-      samDAO.syncPolicyToGoogle(
-        SamResourceTypeNames.billingProject,
-        createRequest.projectName.value,
-        SamBillingProjectPolicyNames.owner
-      )
-    ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-
-    when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId))
-      .thenReturn(Future.successful(1))
-
-    doReturn(Future.successful())
-      .when(wsmResourceRecordDao)
-      .create(ArgumentMatchers.any)
-
-    Await.result(bp.postCreationSteps(
-                   createRequest,
-                   mock[MultiCloudWorkspaceConfig],
-                   mock[BillingProjectDeletion],
-                   testContext
-                 ),
-                 Duration.Inf
-    )
-
-    verify(repo).setBillingProfileId(
-      createRequest.projectName,
-      profileModel.getId
-    )
-  }
-
   it should "add additional members to the BPM policy during billing project creation if specified" in {
     val repo = mock[BillingRepository]
     val samDAO = mock[SamDAO]

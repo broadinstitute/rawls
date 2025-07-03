@@ -53,33 +53,6 @@ class RawlsWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTestUtil
         verify(samDAO, times(0)).addUserToPolicy(any(), any(), any(), ArgumentMatchers.eq(email), any())
     }
 
-  "maybeShareWorkspaceNamespaceCompute" should "add new can-compute workspace users to the can-compute billing project policy" in {
-    val policyAdditions = Set(
-      (SamWorkspacePolicyNames.canCompute, "computer1@example.com"),
-      (SamWorkspacePolicyNames.canCompute, "computer2@example.com"),
-      (SamWorkspacePolicyNames.writer, "writer@example.com"),
-      (SamWorkspacePolicyNames.owner, "owner@example.com"),
-      (SamWorkspacePolicyNames.reader, "reader@example.com")
-    )
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
-
-    verifyCorrectSamInteractions(policyAdditions, samDAO)
-  }
-
-  it should "tolerate the can-compute policy not existing on the billing project" in {
-    val policyAdditions = Set(
-      (SamWorkspacePolicyNames.canCompute, "computer@example.com")
-    )
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.addUserToPolicy(any(), any(), any(), any(), any()))
-      .thenReturn(Future.failed(new Exception("can-compute policy not found")))
-
-    verifyCorrectSamInteractions(policyAdditions, samDAO)
-  }
-
   "getWorkspacePolicies" should "return the members of all workspace policies except the can-catalog policy" in {
     val workspaceId = UUID.randomUUID
     val user = WorkbenchEmail("user@example.com")

@@ -1,15 +1,12 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.profile.model.ProfileModel
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
-  CreationStatuses,
   RawlsBillingAccountName,
-  RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
   RawlsUserEmail,
@@ -19,7 +16,6 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -44,93 +40,6 @@ class BillingProjectDeletionSpec extends AnyFlatSpec {
     None
   )
   val profileModel: ProfileModel = new ProfileModel().id(UUID.randomUUID())
-
-  behavior of "finalizeDelete"
-
-  def mockBillingRepository(): BillingRepository = {
-    val billingProfileId = profileModel.getId
-    val repo = mock[BillingRepository]
-    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
-    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(Some(billingProfileId.toString)))
-    when(repo.deleteBillingProject(ArgumentMatchers.any())).thenReturn(Future.successful(true))
-    when(repo.getBillingProjectsWithProfile(Some(billingProfileId))).thenReturn(
-      Future.successful(
-        Seq(
-          RawlsBillingProject(
-            UUID.randomUUID(),
-            billingProjectName,
-            CreationStatuses.Ready,
-            None,
-            None,
-            billingProfileId = Some(billingProfileId.toString)
-          )
-        )
-      )
-    )
-    repo
-  }
-
-  it should "delete the billing profile if other no projects reference it" in {
-    val repo = mockBillingRepository()
-
-    val billingProjectDeletion = new BillingProjectDeletion(mock[SamDAO], repo)
-    Await.result(billingProjectDeletion.finalizeDelete(billingProjectName, testContext), Duration.Inf)
-
-    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
-  }
-
-  it should "not delete the billing profile if other projects reference it" in {
-    val repo = mockBillingRepository()
-    when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
-      Future.successful(
-        Seq(
-          RawlsBillingProject(UUID.randomUUID(),
-                              billingProjectName,
-                              CreationStatuses.Ready,
-                              None,
-                              None,
-                              billingProfileId = Some(profileModel.getId.toString)
-          ),
-          RawlsBillingProject(
-            UUID.randomUUID(),
-            RawlsBillingProjectName("other_billing_project"),
-            CreationStatuses.Ready,
-            None,
-            None,
-            billingProfileId = Some(profileModel.getId.toString)
-          )
-        )
-      )
-    )
-
-    val billingProjectDeletion = new BillingProjectDeletion(mock[SamDAO], repo)
-    Await.result(billingProjectDeletion.finalizeDelete(billingProjectName, testContext), Duration.Inf)
-
-    // Billing project is still deleted
-    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
-  }
-
-  it should "succeed if the billing profile id does not exist" in {
-    val repo = mock[BillingRepository]
-    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(None))
-    when(repo.deleteBillingProject(ArgumentMatchers.eq(billingProjectName))).thenReturn(Future.successful(true))
-
-    val billingProjectDeletion = new BillingProjectDeletion(mock[SamDAO], repo)
-    Await.result(billingProjectDeletion.finalizeDelete(billingProjectName, testContext), Duration.Inf)
-
-    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
-  }
-
-  it should "fail on non-404 errors from BPM" in {
-    val repo = mockBillingRepository()
-
-    val billingProjectDeletion = new BillingProjectDeletion(mock[SamDAO], repo)
-
-    intercept[BpmApiException] {
-      Await.result(billingProjectDeletion.finalizeDelete(billingProjectName, testContext), Duration.Inf)
-    }
-    verify(repo, Mockito.never).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
-  }
 
   behavior of "unregisterBillingProject"
 

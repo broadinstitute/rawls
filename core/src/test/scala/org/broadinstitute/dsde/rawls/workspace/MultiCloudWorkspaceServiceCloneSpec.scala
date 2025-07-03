@@ -340,14 +340,13 @@ class MultiCloudWorkspaceServiceCloneSpec
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
       .thenReturn(Future(Some(sourceWorkspace)))
-    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(CloudPlatform.GCP)
     val billingProject = RawlsBillingProject(
       UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceName.namespace),
       CreationStatuses.Ready,
       None,
       None,
-      billingProfileId = Some(billingProfile.getId.toString)
+      None
     )
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(RawlsBillingProjectName(destWorkspaceName.namespace)))
@@ -403,74 +402,6 @@ class MultiCloudWorkspaceServiceCloneSpec
       Some(WorkspaceCloudPlatform.Gcp)
     )
     verify(workspaceService).cloneWorkspace(sourceWorkspace, billingProject, cloneRequest, testContext)
-  }
-
-  it should "call cloneAzureWorkspace for an azure workspace and an azure billing project" in {
-    val sourceWorkspace = defaultWorkspace
-    val destWorkspaceName = WorkspaceName("dest-namespace", "dest-name")
-    val workspaceRepository = mock[WorkspaceRepository]
-    when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
-      .thenReturn(Future(Some(sourceWorkspace)))
-    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(CloudPlatform.AZURE)
-    val billingProject = RawlsBillingProject(
-      UUID.randomUUID(),
-      RawlsBillingProjectName(destWorkspaceName.namespace),
-      CreationStatuses.Ready,
-      None,
-      None,
-      billingProfileId = Some(billingProfile.getId.toString)
-    )
-    val billingRepository = mock[BillingRepository]
-    when(billingRepository.getBillingProject(RawlsBillingProjectName(destWorkspaceName.namespace)))
-      .thenReturn(Future(Some(billingProject)))
-    val samDAO = mock[SamDAO]
-    when(samDAO.getUserStatus(testContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", enabled = true))))
-    when(
-      samDAO.userHasAction(
-        SamResourceTypeNames.workspace,
-        sourceWorkspace.workspaceId,
-        SamWorkspaceActions.read,
-        testContext
-      )
-    ).thenReturn(Future(true))
-    when(
-      samDAO.userHasAction(
-        SamResourceTypeNames.billingProject,
-        billingProject.projectName.value,
-        SamBillingProjectActions.createWorkspace,
-        testContext
-      )
-    ).thenReturn(Future.successful(true))
-    val service = spy(
-      new MultiCloudWorkspaceService(
-        testContext,
-        mock[WorkspaceManagerDAO],
-        samDAO,
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test",
-        mock[WorkspaceManagerResourceMonitorRecordDao],
-        workspaceRepository,
-        billingRepository
-      )
-    )
-    val request = WorkspaceRequest(destWorkspaceName.namespace, destWorkspaceName.name, Map.empty)
-    val clonedWorkspace = mock[Workspace]
-    doReturn(Future(clonedWorkspace))
-      .when(service)
-      .cloneAzureWorkspace(sourceWorkspace, billingProfile, request, testContext)
-
-    val result = Await.result(
-      service.cloneMultiCloudWorkspace(mock[WorkspaceService], sourceWorkspace.toWorkspaceName, request),
-      Duration.Inf
-    )
-
-    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(clonedWorkspace,
-                                                             Some(Set.empty),
-                                                             useAttributes = true,
-                                                             Some(WorkspaceCloudPlatform.Azure)
-    )
-    verify(service).cloneAzureWorkspace(sourceWorkspace, billingProfile, request, testContext)
   }
 
   it should "throw an exception for an azure workspace with no billing profile id" in {
@@ -1031,92 +962,17 @@ class MultiCloudWorkspaceServiceCloneSpec
 
   behavior of "cloneMultiCloudWorkspaceAsync"
 
-  it should "pass a request to clone an azure workspace to cloneAzureWorkspaceAsync" in {
-    // Set up static data
-    val sourceWorkspace = defaultWorkspace
-    val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map())
-    val billingProfileId = UUID.randomUUID()
-    val billingProject = RawlsBillingProject(
-      UUID.randomUUID(),
-      RawlsBillingProjectName(destWorkspaceRequest.namespace),
-      CreationStatuses.Ready,
-      None,
-      None,
-      billingProfileId = Some(billingProfileId.toString)
-    )
-    val billingProfile = mock[ProfileModel]
-    when(billingProfile.getCloudPlatform).thenReturn(CloudPlatform.AZURE)
-    val samDAO = mock[SamDAO]
-    when(samDAO.getUserStatus(testContext)).thenReturn(Future(Some(SamUserStatusResponse("", "", true))))
-    when(
-      samDAO.userHasAction(
-        SamResourceTypeNames.workspace,
-        sourceWorkspace.workspaceId,
-        SamWorkspaceActions.read,
-        testContext
-      )
-    ).thenReturn(Future(true))
-    when(
-      samDAO.userHasAction(
-        SamResourceTypeNames.billingProject,
-        billingProject.projectName.value,
-        SamBillingProjectActions.createWorkspace,
-        testContext
-      )
-    ).thenReturn(Future(true))
-    val workspaceRepository = mock[WorkspaceRepository]
-    when(workspaceRepository.getWorkspace(sourceWorkspace.toWorkspaceName, None))
-      .thenReturn(Future(Some(sourceWorkspace)))
-    val billingRepository = mock[BillingRepository]
-    when(billingRepository.getBillingProject(RawlsBillingProjectName(destWorkspaceRequest.namespace)))
-      .thenReturn(Future(Some(billingProject)))
-    val service = spy(
-      new MultiCloudWorkspaceService(
-        testContext,
-        mock[WorkspaceManagerDAO],
-        samDAO,
-        mock[MultiCloudWorkspaceConfig],
-        mock[LeonardoDAO],
-        "MultiCloudWorkspaceService-test",
-        mock[WorkspaceManagerResourceMonitorRecordDao],
-        workspaceRepository,
-        billingRepository
-      )
-    )
-    val destWorkspace = mock[Workspace]
-    doReturn(Future(destWorkspace))
-      .when(service)
-      .cloneAzureWorkspaceAsync(sourceWorkspace, billingProfile, destWorkspaceRequest, testContext)
-
-    val result = Await.result(
-      service.cloneMultiCloudWorkspaceAsync(
-        mock[WorkspaceService],
-        sourceWorkspace.toWorkspaceName,
-        destWorkspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    result shouldBe WorkspaceDetails.fromWorkspaceAndOptions(destWorkspace,
-                                                             Some(Set.empty),
-                                                             useAttributes = true,
-                                                             Some(WorkspaceCloudPlatform.Azure)
-    )
-    verify(service).cloneAzureWorkspaceAsync(sourceWorkspace, billingProfile, destWorkspaceRequest, testContext)
-  }
-
   it should "pass a request to clone a GCP workspace to cloneWorkspace in workspaceService" in {
     val sourceWorkspace = defaultWorkspace.copy(workspaceType = WorkspaceType.RawlsWorkspace)
     val authDomain = Some(Set(ManagedGroupRef(RawlsGroupName("Test-Realm"))))
     val destWorkspaceRequest = WorkspaceRequest("dest-namespace", "dest-name", Map(), authorizationDomain = authDomain)
-    val billingProfileId = UUID.randomUUID()
     val billingProject = RawlsBillingProject(
       UUID.randomUUID(),
       RawlsBillingProjectName(destWorkspaceRequest.namespace),
       CreationStatuses.Ready,
       None,
       None,
-      billingProfileId = Some(billingProfileId.toString)
+      None
     )
     // Mocks
     val billingProfile = mock[ProfileModel]
