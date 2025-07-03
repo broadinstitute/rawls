@@ -22,7 +22,6 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class GoogleBillingProjectLifecycle(
   val billingRepository: BillingRepository,
-  val billingProfileManagerDAO: BillingProfileManagerDAO,
   val samDAO: SamDAO,
   val gcsDAO: GoogleServicesDAO
 )(implicit
@@ -33,7 +32,7 @@ class GoogleBillingProjectLifecycle(
   override val deleteJobType: JobType = GoogleBillingProjectDelete
 
   /**
-   * Validates that the desired billing account has granted Terra proper access as well as any needed service
+   * Validates that the desired billing account has granted Terra proper access as well as any "needed" service
    * perimeter access.
    * @return A successful future in the event of a passed validation, a failed future with an Exception in the event of
    *         validation failure.
@@ -59,9 +58,6 @@ class GoogleBillingProjectLifecycle(
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] =
     for {
-      profileModel <- createBillingProfile(createProjectRequest, ctx)
-      _ <- addMembersToBillingProfile(profileModel, createProjectRequest, ctx)
-      _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
 }
