@@ -243,7 +243,6 @@ trait ApiServiceSpec
     override val snapshotServiceConstructor = SnapshotService.constructor(
       new WorkspaceRepository(slickDataSource),
       samDAO,
-      workspaceManagerDAO,
       mockServer.mockServerBaseUrl,
       dataRepoDAO,
       _ => mock[WorkspaceService](RETURNS_SMART_NULLS),
@@ -350,7 +349,6 @@ trait ApiServiceSpec
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,

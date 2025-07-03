@@ -5,17 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
-import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{
-  AzureContext,
-  GcpContext,
-  WorkspaceDescription,
-  WorkspaceStageModel,
-  WsmPolicyInput,
-  WsmPolicyInputs,
-  WsmPolicyPair
-}
+import bio.terra.workspace.model.{WsmPolicyInput, WsmPolicyPair}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -24,7 +14,7 @@ import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -32,7 +22,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPassService}
@@ -85,9 +74,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
-import scala.util.Success
 
 class WorkspaceServiceSpec
     extends AnyFlatSpec
@@ -291,7 +278,6 @@ class WorkspaceServiceSpec
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -2296,102 +2282,6 @@ class WorkspaceServiceSpec
         )
 
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
-  }
-
-  it should "clone the WSM stub workspace if it exists" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "not fail if the source workspace doesn't have a WSM stub workspace" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
-      )
-    ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "fail if cloning the WSM stub workspace fails" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
-      )
-    ).thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "kablooey"))
-
-    val thrown = intercept[ApiException] {
-      Await.result(services.workspaceService.cloneWorkspace(
-                     baseWorkspace.toWorkspaceName,
-                     workspaceRequest
-                   ),
-                   Duration.Inf
-      )
-    }
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-    thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
