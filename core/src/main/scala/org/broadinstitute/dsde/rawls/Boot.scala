@@ -268,10 +268,6 @@ object Boot extends IOApp with LazyLogging {
       val methodRepoDAO =
         MethodRepoDAOFactory.createMethodRepoDAO(appConfigManager, metricsPrefix)
 
-      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(
-        new HttpWorkspaceManagerClientProvider(appConfigManager.conf.getString("workspaceManager.baseUrl"))
-      )
-
       val dataRepoDAO =
         new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstance"))
 
@@ -323,7 +319,6 @@ object Boot extends IOApp with LazyLogging {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
-            workspaceManagerDAO,
             executionServiceServers.map(c => c.key -> c.dao).toMap
           )
           .withDispatcher("health-monitor-dispatcher"),

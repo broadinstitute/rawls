@@ -154,8 +154,6 @@ trait ApiServiceSpec
 
     val samDAO: SamDAO = new MockSamDAO(dataSource)
 
-    val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
-
     val leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
@@ -261,7 +259,6 @@ trait ApiServiceSpec
         gpsDAO,
         methodRepoDAO,
         samDAO,
-        workspaceManagerDAO,
         executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
         Seq.empty,
         Seq("my-favorite-bucket")

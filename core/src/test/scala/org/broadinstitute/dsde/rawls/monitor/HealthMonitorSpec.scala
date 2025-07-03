@@ -136,20 +136,6 @@ class HealthMonitorSpec
     )
   }
 
-  it should "return a non-ok for WorkspaceManager" in {
-    val actor = newHealthMonitorActor(workspaceManagerDAO = failingWorkspaceManagerDAO)
-    actor ! CheckAll
-    checkCurrentStatus(
-      actor,
-      false,
-      successes = AllSubsystems.filterNot(_ == WorkspaceManager),
-      failures = Set(WorkspaceManager),
-      errorMessages = { case (WorkspaceManager, Some(messages)) =>
-        messages.size should be(1)
-      }
-    )
-  }
-
   it should "return a non-ok for Cromwell" in {
     val expectedMessages = sadExecSubsystems.keys map { sub =>
       s"""sadCrom-$sub: {"$sub": "is unhappy"}"""
@@ -265,7 +251,6 @@ class HealthMonitorSpec
                             googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
                             methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO,
                             samDAO: SamDAO = mockSamDAO,
-                            workspaceManagerDAO: WorkspaceManagerDAO = mockWorkspaceManagerDAO,
                             executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] =
                               mockExecutionServiceServers
   ): ActorRef =
@@ -276,7 +261,6 @@ class HealthMonitorSpec
         googlePubSubDAO,
         methodRepoDAO,
         samDAO,
-        workspaceManagerDAO,
         executionServiceServers,
         Seq("topic1", "topic2"),
         Seq("bucket1", "bucket2"),
@@ -375,12 +359,6 @@ class HealthMonitorSpec
   def mockWorkspaceManagerDAO: WorkspaceManagerDAO = {
     val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
     doNothing.when(dao).throwWhenUnavailable()
-    dao
-  }
-
-  def failingWorkspaceManagerDAO: WorkspaceManagerDAO = {
-    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(dao.throwWhenUnavailable()).thenThrow(new ApiException())
     dao
   }
 

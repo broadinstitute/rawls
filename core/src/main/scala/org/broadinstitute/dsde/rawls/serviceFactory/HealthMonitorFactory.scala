@@ -14,7 +14,6 @@ object HealthMonitorFactory {
                                pubSubDAO: GooglePubSubDAO,
                                methodRepoDAO: MethodRepoDAO,
                                samDAO: SamDAO,
-                               workspaceManagerDAO: WorkspaceManagerDAO,
                                executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO]
   ): Props =
     appConfigManager.gcsConfig match {
@@ -26,13 +25,12 @@ object HealthMonitorFactory {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
-            workspaceManagerDAO,
             executionServiceServers,
             Seq(gcsConfig.getString("notifications.topicName")),
             Seq.empty
           )
       case None =>
         HealthMonitor
-          .propsInAzureControlPlane(slickDataSource, samDAO, workspaceManagerDAO)
+          .propsInAzureControlPlane(slickDataSource, samDAO)
     }
 }

@@ -49,7 +49,6 @@ object HealthMonitor {
                                 googlePubSubDAO: GooglePubSubDAO,
                                 methodRepoDAO: MethodRepoDAO,
                                 samDAO: SamDAO,
-                                workspaceManagerDAO: WorkspaceManagerDAO,
                                 executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
                                 topicsToCheck: Seq[String],
                                 bucketsToCheck: Seq[String],
@@ -65,8 +64,7 @@ object HealthMonitor {
           (GoogleBilling, checkGoogleBilling(googleServicesDAO)),
           (GoogleBuckets, checkGoogleBuckets(googleServicesDAO, bucketsToCheck)),
           (GooglePubSub, checkGooglePubsub(googlePubSubDAO, topicsToCheck)),
-          (Sam, checkSam(samDAO)),
-          (WorkspaceManager, checkWSM(workspaceManagerDAO))
+          (Sam, checkSam(samDAO))
         ),
         futureTimeout,
         staleThreshold
@@ -75,7 +73,6 @@ object HealthMonitor {
 
   def propsInAzureControlPlane(slickDataSource: SlickDataSource,
                                samDAO: SamDAO,
-                               workspaceManagerDAO: WorkspaceManagerDAO,
                                futureTimeout: FiniteDuration = DefaultFutureTimeout,
                                staleThreshold: FiniteDuration = DefaultStaleThreshold
   ): Props =
@@ -83,8 +80,7 @@ object HealthMonitor {
       new HealthMonitor(
         List(
           (Database, checkDB(slickDataSource)),
-          (Sam, checkSam(samDAO)),
-          (WorkspaceManager, checkWSM(workspaceManagerDAO))
+          (Sam, checkSam(samDAO))
         ),
         futureTimeout,
         staleThreshold
