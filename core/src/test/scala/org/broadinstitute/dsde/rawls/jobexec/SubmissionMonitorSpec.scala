@@ -16,12 +16,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
   StatusCheckComplete
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{
-  MockDataRepoDAO,
-  MockSamDAO,
-  MockWorkspaceManagerDAO,
-  RemoteServicesMockServer
-}
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils

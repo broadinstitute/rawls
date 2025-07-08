@@ -1,12 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   EntityAndAttributesResult,
   EntityAttributeRecord,
@@ -19,12 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   SlickDataSource
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{
-  MockDataRepoDAO,
-  MockSamDAO,
-  MockWorkspaceManagerDAO,
-  RemoteServicesMockServer
-}
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
   AddUpdateAttribute,
@@ -62,6 +55,7 @@ import org.broadinstitute.dsde.rawls.util.{
 }
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec

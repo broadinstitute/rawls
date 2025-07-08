@@ -5,16 +5,17 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.config.ConfigFactory
 import cromwell.client.model.{ToolInputParameter, ValueType}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
   SlickDataSource
 }
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
@@ -35,16 +36,13 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
 
-import scala.concurrent.{Await, ExecutionContext}
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
-
-import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContext
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 

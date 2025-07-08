@@ -5,13 +5,12 @@ import akka.testkit.{TestActorRef, TestKit}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  MockBigQueryServiceFactory,
   MockGoogleServicesDAO,
   MockShardedExecutionServiceCluster,
   SlickDataSource
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeString,

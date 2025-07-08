@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import bio.terra.policy.model.TpsPaoGetResult
-import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -12,14 +11,13 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, _}
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
+import org.broadinstitute.dsde.rawls._
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
@@ -75,7 +73,6 @@ import scala.util.{Failure, Success, Try}
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   executionServiceCluster: ExecutionServiceCluster,
-                  workspaceManagerDAO: WorkspaceManagerDAO,
                   leonardoService: LeonardoService,
                   gcsDAO: GoogleServicesDAO,
                   samDAO: SamDAO,
@@ -104,7 +101,6 @@ object WorkspaceService {
       ctx,
       dataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -155,7 +151,6 @@ class WorkspaceService(
   val ctx: RawlsRequestContext,
   val dataSource: SlickDataSource,
   executionServiceCluster: ExecutionServiceCluster,
-  val workspaceManagerDAO: WorkspaceManagerDAO,
   val leonardoService: LeonardoService,
   val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
@@ -585,11 +580,6 @@ class WorkspaceService(
     _ <- traceFutureWithParent("deleteGoogleProject", ctx)(innerCtx =>
       deleteGoogleProject(workspace.googleProjectId, innerCtx)
     )
-    // attempt to delete workspace in WSM, in case thsi is a TDR snapshot - but don't fail on it
-    _ = Try(workspaceManagerDAO.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).recover {
-      case e: ApiException if e.getCode != StatusCodes.NotFound.intValue =>
-        logger.warn(s"Unexpected failure deleting workspace in WSM for workspace `${workspace.toWorkspaceName}]", e)
-    }
     // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
     _ <- traceFutureWithParent("deleteWorkspaceTransaction", ctx)(_ =>
       workspaceRepository.deleteRawlsWorkspace(workspace)
@@ -1102,29 +1092,6 @@ class WorkspaceService(
       _ <- traceFutureWithParent("FastPassService.setupFastPassClonedWorkspaceChild", parentContext)(childContext =>
         fastPassServiceConstructor(childContext)
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
-      )
-
-      _ <- traceFutureWithParent("cloneWsmWorkspace", parentContext)(context =>
-        Future {
-          workspaceManagerDAO.cloneWorkspace(
-            sourceWorkspaceId = sourceWorkspaceContext.workspaceIdAsUUID,
-            workspaceId = destWorkspaceContext.workspaceIdAsUUID,
-            displayName = destWorkspaceContext.name,
-            spendProfile = None,
-            billingProjectNamespace = destWorkspaceContext.namespace,
-            context
-          )
-        }.recoverWith { case e: ApiException =>
-          if (e.getCode != StatusCodes.NotFound.intValue) {
-            logger.warn(
-              s"Unexpected failure cloning workspace (while cloning Rawls-stage workspace in Workspace Manager) [sourceWorkspaceId=${sourceWorkspaceContext.workspaceId}, destWorkspaceId=${destWorkspaceContext.workspaceId}]. Received ${e.getCode}: [${e.getResponseBody}]"
-            )
-            throw e
-          } else {
-            // 404 == workspace manager does not know about this workspace, move on
-            Future.successful()
-          }
-        }
       )
 
       _ <-

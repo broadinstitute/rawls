@@ -30,10 +30,6 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
-  HttpWorkspaceManagerClientProvider,
-  HttpWorkspaceManagerDAO
-}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
@@ -64,14 +60,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  RawlsWorkspaceAclManager,
-  WorkspaceAdminService,
-  WorkspaceRepository,
-  WorkspaceService,
-  WorkspaceSettingRepository,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace._
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2._
@@ -84,7 +73,6 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
@@ -268,11 +256,6 @@ object Boot extends IOApp with LazyLogging {
       val methodRepoDAO =
         MethodRepoDAOFactory.createMethodRepoDAO(appConfigManager, metricsPrefix)
 
-      val workspaceManagerDAO =
-        new HttpWorkspaceManagerDAO(
-          new HttpWorkspaceManagerClientProvider(appConfigManager.conf.getString("workspaceManager.baseUrl"))
-        )
-
       val dataRepoDAO =
         new HttpDataRepoDAO(appConfigManager.conf.getString("dataRepo.terraInstance"))
 
@@ -284,7 +267,6 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.bigQueryServiceFactory,
           bqJsonCreds,
           servicePerimeterService,
-          workspaceManagerDAO,
           notificationDAO
         )
 
@@ -325,7 +307,6 @@ object Boot extends IOApp with LazyLogging {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
-            workspaceManagerDAO,
             executionServiceServers.map(c => c.key -> c.dao).toMap
           )
           .withDispatcher("health-monitor-dispatcher"),
@@ -407,7 +388,6 @@ object Boot extends IOApp with LazyLogging {
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         shardedExecutionServiceCluster,
-        workspaceManagerDAO,
         new LeonardoService(leonardoDAO),
         gcsDAO,
         samDAO,
@@ -481,7 +461,6 @@ object Boot extends IOApp with LazyLogging {
       val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
         workspaceRepository,
         samDAO,
-        workspaceManagerDAO,
         appConfigManager.conf.getString("dataRepo.terraInstanceName"),
         dataRepoDAO,
         workspaceServiceConstructor,
@@ -582,7 +561,6 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           pubSubDAO,
           cwdsDAO,
-          workspaceManagerDAO,
           leonardoDAO,
           workspaceRepository,
           appDependencies.googleStorageService,
