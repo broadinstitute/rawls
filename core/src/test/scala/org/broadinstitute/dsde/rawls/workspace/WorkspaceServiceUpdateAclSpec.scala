@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
@@ -25,8 +24,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceACLUpdate,
   WorkspaceACLUpdateResponseList,
   WorkspaceAccessLevels,
-  WorkspaceName,
-  WorkspaceType
+  WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -78,7 +76,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
   // This is just for convenience, so we only need to specify mocks we care about
   def workspaceServiceConstructor(
     executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
-    workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
     leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
     gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
     samDAO: SamDAO = mock[SamDAO],
@@ -108,7 +105,6 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
       info,
       mock[SlickDataSource](RETURNS_SMART_NULLS),
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,

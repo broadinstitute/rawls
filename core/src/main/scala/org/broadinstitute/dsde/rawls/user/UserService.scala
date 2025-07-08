@@ -10,7 +10,6 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
@@ -42,7 +41,6 @@ object UserService {
     bqServiceFactory: GoogleBigQueryServiceFactory,
     bigQueryCredentialJson: String,
     servicePerimeterService: ServicePerimeterService,
-    workspaceManagerDAO: WorkspaceManagerDAO,
     notificationDAO: NotificationDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
     new UserService(
@@ -53,7 +51,6 @@ object UserService {
       bqServiceFactory,
       bigQueryCredentialJson,
       servicePerimeterService,
-      workspaceManagerDAO,
       new BillingRepository(dataSource),
       notificationDAO
     )
@@ -166,7 +163,6 @@ class UserService(
   bqServiceFactory: GoogleBigQueryServiceFactory,
   bigQueryCredentialJson: String,
   servicePerimeterService: ServicePerimeterService,
-  val workspaceManagerDAO: WorkspaceManagerDAO,
   val billingRepository: BillingRepository,
   notificationDAO: NotificationDAO
 )(implicit protected val executionContext: ExecutionContext)

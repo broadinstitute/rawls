@@ -26,7 +26,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
@@ -50,14 +49,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.{
-  RawlsWorkspaceAclManager,
-  WorkspaceAdminService,
-  WorkspaceRepository,
-  WorkspaceService,
-  WorkspaceSettingRepository,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace._
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
@@ -154,8 +146,6 @@ trait ApiServiceSpec
 
     val samDAO: SamDAO = new MockSamDAO(dataSource)
 
-    val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
-
     val leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
@@ -223,14 +213,12 @@ trait ApiServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
       new WorkspaceRepository(slickDataSource),
       samDAO,
-      workspaceManagerDAO,
       mockServer.mockServerBaseUrl,
       dataRepoDAO,
       _ => mock[WorkspaceService](RETURNS_SMART_NULLS),
@@ -263,7 +251,6 @@ trait ApiServiceSpec
         gpsDAO,
         methodRepoDAO,
         samDAO,
-        workspaceManagerDAO,
         executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
         Seq.empty,
         Seq("my-favorite-bucket")
@@ -336,7 +323,6 @@ trait ApiServiceSpec
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,

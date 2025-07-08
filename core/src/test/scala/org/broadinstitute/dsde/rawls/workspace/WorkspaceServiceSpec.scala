@@ -5,8 +5,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{WsmPolicyInput, WsmPolicyInputs, WsmPolicyPair}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -22,7 +20,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPassService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
@@ -75,6 +72,11 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
+
+// WsmPolicyPair and WsmPolicyInput were originally defined in the WSM client library. They are replicated here
+// for ease of use in tests below.
+case class WsmPolicyPair(key: String, value: String)
+case class WsmPolicyInput(namespace: String, name: String, additionalData: List[WsmPolicyPair])
 
 class WorkspaceServiceSpec
     extends AnyFlatSpec
@@ -143,7 +145,6 @@ class WorkspaceServiceSpec
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
@@ -199,7 +200,6 @@ class WorkspaceServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
@@ -275,7 +275,6 @@ class WorkspaceServiceSpec
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -2318,102 +2317,6 @@ class WorkspaceServiceSpec
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
   }
 
-  it should "clone the WSM stub workspace if it exists" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "not fail if the source workspace doesn't have a WSM stub workspace" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
-      )
-    ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "fail if cloning the WSM stub workspace fails" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
-      )
-    ).thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "kablooey"))
-
-    val thrown = intercept[ApiException] {
-      Await.result(services.workspaceService.cloneWorkspace(
-                     baseWorkspace.toWorkspaceName,
-                     workspaceRequest
-                   ),
-                   Duration.Inf
-      )
-    }
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-    thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
-  }
-
   it should "fail to clone entity reference workspace attributes" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
@@ -2633,11 +2536,11 @@ class WorkspaceServiceSpec
           policies
             .map(p =>
               new TpsPolicyInput()
-                .name(p.getName)
-                .namespace(p.getNamespace)
+                .name(p.name)
+                .namespace(p.namespace)
                 .additionalData(
-                  p.getAdditionalData.asScala
-                    .map(pair => new TpsPolicyPair().key(pair.getKey).value(pair.getValue))
+                  p.additionalData
+                    .map(pair => new TpsPolicyPair().key(pair.key).value(pair.value))
                     .asJava
                 )
             )
@@ -2672,15 +2575,14 @@ class WorkspaceServiceSpec
 
   it should "return the policies of a GCP workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val wsmPolicyInput = new WsmPolicyInput()
-      .name("test_name")
-      .namespace("test_namespace")
-      .additionalData(
-        List(
-          new WsmPolicyPair().value("pair1Val").key("pair1Key"),
-          new WsmPolicyPair().value("pair2Val").key("pair2Key")
-        ).asJava
+    val wsmPolicyInput = new WsmPolicyInput(
+      name = "test_name",
+      namespace = "test_namespace",
+      additionalData = List(
+        WsmPolicyPair(value = "pair1Val", key = "pair1Key"),
+        WsmPolicyPair(value = "pair2Val", key = "pair2Key")
       )
+    )
     val workspace = createGcpWorkspacePolicy(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
     val readWorkspace = Await.result(services.workspaceService.getWorkspace(
                                        WorkspaceName(workspace.namespace, workspace.name),
@@ -2698,8 +2600,8 @@ class WorkspaceServiceSpec
     val policies: List[WorkspacePolicy] = response.policies.get
     policies should not be empty
     val policy: WorkspacePolicy = policies.head
-    policy.name shouldBe wsmPolicyInput.getName
-    policy.namespace shouldBe wsmPolicyInput.getNamespace
+    policy.name shouldBe wsmPolicyInput.name
+    policy.namespace shouldBe wsmPolicyInput.namespace
     val additionalData = policy.additionalData
     additionalData.length shouldEqual 2
     additionalData.head.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
@@ -3009,16 +2911,14 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "return policy information for GCP workspaces with a stub workspace" in withTestDataServices { services =>
+  it should "return policy information for GCP workspaces with a PAO" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val wsmPolicyInput = new WsmPolicyInput()
-      .name("gcp_test_name")
-      .namespace("gcp_test_namespace")
-      .additionalData(
-        List(
-          new WsmPolicyPair().value("pair1Val").key("pair1Key")
-        ).asJava
-      )
+    val wsmPolicyInput = new WsmPolicyInput(name = "gcp_test_name",
+                                            namespace = "gcp_test_namespace",
+                                            additionalData = List(
+                                              new WsmPolicyPair(value = "pair1Val", key = "pair1Key")
+                                            )
+    )
     createGcpWorkspacePolicy(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
 
     val result = Await
@@ -3030,8 +2930,8 @@ class WorkspaceServiceSpec
         val policies: List[WorkspacePolicy] = ws.policies.get
         policies should not be empty
         val policy: WorkspacePolicy = policies.head
-        policy.name shouldBe wsmPolicyInput.getName
-        policy.namespace shouldBe wsmPolicyInput.getNamespace
+        policy.name shouldBe wsmPolicyInput.name
+        policy.namespace shouldBe wsmPolicyInput.namespace
         true
       } else {
         false

@@ -3,20 +3,10 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{
-  AzureContext,
-  IamRole,
-  RoleBinding,
-  RoleBindingList,
-  WorkspaceDescription,
-  WorkspaceStageModel
-}
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
@@ -51,7 +41,6 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 /**
@@ -91,7 +80,6 @@ class WorkspaceServiceUnitTests
   // This is just for convenience, so we only need to specify mocks we care about
   def workspaceServiceConstructor(
     executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster](RETURNS_SMART_NULLS),
-    workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
     leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS),
     gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
     samDAO: SamDAO = mock[SamDAO],
@@ -121,7 +109,6 @@ class WorkspaceServiceUnitTests
       info,
       mock[SlickDataSource](RETURNS_SMART_NULLS),
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -159,11 +146,9 @@ class WorkspaceServiceUnitTests
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.workspaceIdAsUUID, Some(WorkspaceAttributeSpecs(false))))
       .thenReturn(Future(Some(workspace)))
-    val wsm = mock[WorkspaceManagerDAO]
     val service = workspaceServiceConstructor(
       samDAO = sam,
-      workspaceRepository = repository,
-      workspaceManagerDAO = wsm
+      workspaceRepository = repository
     )(ctx)
 
     val result = Await.result(
@@ -223,11 +208,9 @@ class WorkspaceServiceUnitTests
     val repository = mock[WorkspaceRepository]
     when(repository.getWorkspace(workspace.toWorkspaceName, Some(WorkspaceAttributeSpecs(false))))
       .thenReturn(Future(Some(workspace)))
-    val wsm = mock[WorkspaceManagerDAO]
     val service = workspaceServiceConstructor(
       samDAO = sam,
-      workspaceRepository = repository,
-      workspaceManagerDAO = wsm
+      workspaceRepository = repository
     )(ctx)
 
     val result = Await.result(
@@ -269,8 +252,7 @@ class WorkspaceServiceUnitTests
 
   it should "not preform operations for fields that are not requested" in {
     val options = WorkspaceService.QueryOptions(Set(), WorkspaceAttributeSpecs(false))
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(ctx)
+    val service = workspaceServiceConstructor()(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -281,11 +263,10 @@ class WorkspaceServiceUnitTests
 
   it should "check for the catalog permission in sam the field is requested" in {
     val options = WorkspaceService.QueryOptions(Set("catalog"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val sam = mock[SamDAO]
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.catalog, ctx))
       .thenReturn(Future(true))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -295,11 +276,10 @@ class WorkspaceServiceUnitTests
 
   it should "return the highest access level in accessLevel" in {
     val options = WorkspaceService.QueryOptions(Set("accessLevel"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set(SamResourceRole("READER"), SamResourceRole("OWNER"))))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -311,11 +291,10 @@ class WorkspaceServiceUnitTests
     // this isn't realistic, since the user should have at least read access to get here,
     // but it's the default specified
     val options = WorkspaceService.QueryOptions(Set("accessLevel"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set()))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -325,11 +304,10 @@ class WorkspaceServiceUnitTests
 
   it should "return true for canCompute if the user is an owner" in {
     val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set(SamResourceRole("OWNER"))))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -342,23 +320,10 @@ class WorkspaceServiceUnitTests
   it should "return true for canCompute if the user is a writer on an azure workspace" in {
     val workspace = this.workspace.copy(workspaceType = WorkspaceType.McWorkspace)
     val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
-    val wsmDao = mock[WorkspaceManagerDAO]
-    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, ctx))
-      .thenReturn(
-        new WorkspaceDescription()
-          .azureContext(
-            new AzureContext()
-              .tenantId(UUID.randomUUID().toString)
-              .subscriptionId(UUID.randomUUID().toString)
-              .resourceGroupId(UUID.randomUUID().toString)
-          )
-          .id(workspace.workspaceIdAsUUID)
-          .stage(WorkspaceStageModel.MC_WORKSPACE)
-      )
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set(SamResourceRole("OWNER"))))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -370,13 +335,12 @@ class WorkspaceServiceUnitTests
 
   it should "query sam for canCompute if the user is not an owner on a gcp workspace" in {
     val options = WorkspaceService.QueryOptions(Set("canCompute"), WorkspaceAttributeSpecs(false))
-    val wsmDao = mock[WorkspaceManagerDAO]
     val sam = mock[SamDAO]
     when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(Set(SamResourceRole("WRITER"))))
     when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.compute, ctx))
       .thenReturn(Future(true))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -390,11 +354,10 @@ class WorkspaceServiceUnitTests
   it should "return true for canShare if the user is a workspace or project owner" in
     forAll(Table("role", "OWNER", "PROJECT_OWNER")) { (role: String) =>
       val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
-      val wsm = mock[WorkspaceManagerDAO]
       val sam = mock[SamDAO]
       when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
         .thenReturn(Future(Set(SamResourceRole(role))))
-      val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(ctx)
+      val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
       val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -414,7 +377,6 @@ class WorkspaceServiceUnitTests
       )
     ) { (role: String, samAnswer: Boolean) =>
       val options = WorkspaceService.QueryOptions(Set("canShare"), WorkspaceAttributeSpecs(false))
-      val wsmDao = mock[WorkspaceManagerDAO]
       val sam = mock[SamDAO]
       when(sam.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
         .thenReturn(Future(Set(SamResourceRole(role))))
@@ -426,7 +388,7 @@ class WorkspaceServiceUnitTests
           ctx
         )
       ).thenReturn(Future(samAnswer))
-      val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao, samDAO = sam)(ctx)
+      val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
       val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -444,7 +406,6 @@ class WorkspaceServiceUnitTests
 
   it should "get the bucket options from gcs when requested" in {
     val options = WorkspaceService.QueryOptions(Set("bucketOptions"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val gcs = mock[GoogleServicesDAO]
     val bucketDetails = WorkspaceBucketOptions(true, "")
     when(gcs.getBucketDetails(workspace.bucketName, workspace.googleProjectId)).thenReturn(Future(bucketDetails))
@@ -459,11 +420,11 @@ class WorkspaceServiceUnitTests
     val settings = mock[WorkspaceSettingRepository]
     when(settings.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, GcpBucketRequesterPays))
       .thenReturn(Future(None))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm,
-                                              workspaceRepository = repository,
-                                              workspaceSettingRepository = settings,
-                                              samDAO = sam,
-                                              gcsDAO = gcs
+    val service = workspaceServiceConstructor(
+      workspaceRepository = repository,
+      workspaceSettingRepository = settings,
+      samDAO = sam,
+      gcsDAO = gcs
     )(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
@@ -474,13 +435,12 @@ class WorkspaceServiceUnitTests
 
   it should "get the owner emails using the policy from sam when requested" in {
     val options = WorkspaceService.QueryOptions(Set("owners"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val sam = mock[SamDAO]
     val ownerEmails = Set("user1@test.com", "user2@test.com")
     val owners = SamPolicy(ownerEmails.map(WorkbenchEmail), Set(), Set())
     when(sam.getPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.owner, ctx))
       .thenReturn(Future(owners))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -489,12 +449,11 @@ class WorkspaceServiceUnitTests
 
   it should "get the auth domain from sam when requested" in {
     val options = WorkspaceService.QueryOptions(Set("workspace"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val sam = mock[SamDAO]
     val authDomains = Seq("some-auth-domain")
     when(sam.getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       .thenReturn(Future(authDomains))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, samDAO = sam)(ctx)
+    val service = workspaceServiceConstructor(samDAO = sam)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -504,11 +463,10 @@ class WorkspaceServiceUnitTests
 
   it should "get the submissionSummaryStats when requested" in {
     val options = WorkspaceService.QueryOptions(Set("workspaceSubmissionStats"), WorkspaceAttributeSpecs(false))
-    val wsm = mock[WorkspaceManagerDAO]
     val stats = WorkspaceSubmissionStats(None, None, 3)
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getSubmissionSummaryStats(workspace.workspaceIdAsUUID)).thenReturn(Future(Some(stats)))
-    val service = workspaceServiceConstructor(workspaceManagerDAO = wsm, workspaceRepository = workspaceRepository)(ctx)
+    val service = workspaceServiceConstructor(workspaceRepository = workspaceRepository)(ctx)
 
     val result = Await.result(service.getWorkspaceDetails(workspace, options), Duration.Inf)
 
@@ -615,68 +573,6 @@ class WorkspaceServiceUnitTests
     result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
     verify(repo).deleteRawlsWorkspace(workspace)
     verify(sam).deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
-  }
-
-  it should "attempt to delete the workspace in wsm, but never fail because of it" in {
-    val sam = mock[SamDAO]
-    val repo = mock[WorkspaceRepository]
-    val requesterPaysService = mock[RequesterPaysSetupService]
-    val submissionsRepository = mock[SubmissionsRepository]
-    val leo = mock[LeonardoService]
-    val fastPass = mock[FastPassService]
-    val gcs = mock[GoogleServicesDAO]
-    val wsm = mock[WorkspaceManagerDAO]
-    val tps = mock[PolicyService]
-    // mocked operations are defined in the order they are called by the service
-    // initial auth checks/workspace retrieval
-    when(sam.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser)))
-    when(sam.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.delete, ctx))
-      .thenReturn(Future(true))
-    when(sam.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
-      .thenReturn(Future(Seq.empty))
-    when(repo.getWorkspace(ArgumentMatchers.eq(workspace.toWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
-      .thenReturn(Future(Some(workspace)))
-    // delete requester pays records
-    when(requesterPaysService.deleteAllRecordsForWorkspace(workspace)).thenReturn(Future(1))
-    // abort workflows
-    when(submissionsRepository.getActiveWorkflowsAndSetStatusToAborted(workspace)).thenReturn(Future(Seq()))
-    // delete fast pass grants
-    when(fastPass.removeFastPassGrantsForWorkspace(workspace)).thenReturn(Future())
-    // notify leo to clean up resources
-    when(leo.cleanupResources(workspace.googleProjectId, workspace.workspaceIdAsUUID, ctx)).thenReturn(Future())
-    // delete google project
-    when(sam.listAllResourceMemberIds(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
-      .thenReturn(Future(Set()))
-    when(gcs.deleteGoogleProject(workspace.googleProjectId)).thenReturn(Future())
-    when(sam.deleteResource(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx))
-      .thenReturn(Future())
-    // delete workspace in wsm
-    when(wsm.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).thenAnswer(_ => throw new ApiException(500, "failed"))
-    // delete workspace and associated records
-    when(repo.deleteRawlsWorkspace(workspace)).thenReturn(Future())
-    // delete workflow collection in sam
-    when(sam.deleteResource(SamResourceTypeNames.workflowCollection, workspace.workflowCollectionName.get, ctx))
-      .thenReturn(Future())
-    // delete workspace pao in tps
-    when(tps.deleteWorkspacePao(any(), any())).thenReturn(Future.unit)
-    // delete workspace in sam
-    when(sam.deleteResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)).thenReturn(Future())
-    val service = workspaceServiceConstructor(
-      samDAO = sam,
-      requesterPaysSetupService = requesterPaysService,
-      fastPassServiceConstructor = _ => fastPass,
-      leonardoService = leo,
-      workspaceRepository = repo,
-      workspaceManagerDAO = wsm,
-      gcsDAO = gcs,
-      submissionsRepository = submissionsRepository,
-      policyService = tps
-    )(ctx)
-
-    val result = Await.result(service.deleteWorkspace(workspace.toWorkspaceName), Duration.Inf)
-
-    result shouldBe WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
-    verify(wsm).deleteWorkspace(workspace.workspaceIdAsUUID, ctx)
   }
 
   it should "ignore 404 errors from sam when deleting the google project resource" in {
@@ -1103,33 +999,6 @@ class WorkspaceServiceUnitTests
   }
 
   behavior of "getAcl"
-
-  def mockWsmForAclTests(ownerEmail: String = "owner@example.com",
-                         writerEmail: String = "writer@example.com",
-                         readerEmail: String = "reader@example.com"
-  ): WorkspaceManagerDAO = {
-    val projectOwnerBinding =
-      new RoleBinding().role(IamRole.PROJECT_OWNER).members(List("projectOwner@example.com").asJava)
-    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
-    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
-    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val discovererBinding =
-      new RoleBinding().role(IamRole.DISCOVERER).members(List("discoverer@example.com", readerEmail).asJava)
-    val applicationBinding = new RoleBinding().role(IamRole.APPLICATION).members(List("application@example.com").asJava)
-    val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(
-      List(projectOwnerBinding,
-           ownerBinding,
-           writerBinding,
-           readerBinding,
-           discovererBinding,
-           applicationBinding
-      ).asJava
-    )
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
-    wsmDAO
-  }
 
   def mockSamForAclTests(): SamDAO = {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)

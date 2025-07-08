@@ -12,7 +12,6 @@ import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, Logg
 import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler, Route}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
-import bio.terra.workspace.client.ApiException
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.context.Context
 import io.sentry.Sentry
@@ -70,11 +69,6 @@ object RawlsApiService extends LazyLogging {
         )
         val message = s"Internal server exception [sentryId=${sentryId.toString}]"
         complete(StatusCodes.InternalServerError -> ErrorReport(message))
-      case wsmApiException: ApiException =>
-        if (wsmApiException.getCode >= 500) {
-          Sentry.captureException(wsmApiException)
-        }
-        complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
       case dataEntityException: DataEntityException =>
         // propagate only the message; don't include the stack trace
         complete(dataEntityException.code -> ErrorReport(dataEntityException.getMessage))
