@@ -1951,8 +1951,8 @@ class WorkspaceServiceSpec
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectNumber should not be empty
-    workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
-    workspace.attributes shouldBe Some(baseWorkspace.attributes)
+    workspace.workspaceType shouldBe WorkspaceType.RawlsWorkspace
+    workspace.attributes shouldBe baseWorkspace.attributes
     val destWorkspaceName = WorkspaceName(testData.testProject1Name.value, newWorkspaceName)
     verify(mockWorkspaceSettingService).setWorkspaceSettings(
       destWorkspaceName,
