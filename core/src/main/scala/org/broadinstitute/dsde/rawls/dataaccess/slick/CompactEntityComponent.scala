@@ -294,11 +294,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         entitiesCopiedCount <- copyEntities(sourceWs, destWs, chunk)
       } yield entitiesCopiedCount
 
-    val chunks: Iterator[Set[EntityPointer]] = if (entityRefs.size > batchSize) {
-      entityRefs.grouped(batchSize)
-    } else {
-      Iterator(entityRefs)
-    }
+    val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
+
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
     allCopies.map { copyActionResults: Iterator[Int] => (copyActionResults.sum, 0) }
   }
@@ -395,21 +392,31 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * `query execution plan (for select): index range scan on idx_entity_type_name.`
    */
-  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): WriteAction[Int] = {
-    val baseSQL = concatSqlActions(
+  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): WriteAction[Int] =
+    if (refs.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val typeNameClauses = generateTypeNameSql(refs)
+      val sql = concatSqlActions(
+        sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
+               select name, entity_type, $destWorkspaceId, record_version, 0, attributes
+               from ENTITY e
+               where e.workspace_id = $sourceWorkspaceId
+               and deleted = 0"""
+      )
+      val entityTypeNameTuples = reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or ")
+      concatSqlActions(sql, sql" and (", entityTypeNameTuples, sql")").as[Int].head
+    }
+
+  def copyAllEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID): WriteAction[Int] = {
+    val sql = concatSqlActions(
       sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
              select name, entity_type, $destWorkspaceId, record_version, 0, attributes
              from ENTITY e
              where e.workspace_id = $sourceWorkspaceId
              and deleted = 0"""
     )
-    if (refs.nonEmpty) {
-      val typeNameClauses = generateTypeNameSql(refs)
-      val entityTypeNameTuples = reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or ")
-      concatSqlActions(baseSQL, sql" and (", entityTypeNameTuples, sql")").as[Int].head
-    } else {
-      baseSQL.as[Int].head
-    }
+    sql.as[Int].head
   }
 
   /** Given a set of entity type/name pairs, return the count of those entities that exist.

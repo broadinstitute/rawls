@@ -160,9 +160,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                      destWorkspaceContext: Workspace,
                      parentContext: RawlsRequestContext
   ): WriteAction[(Int, Int)] =
-    repository.queries.copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-                                                  destWorkspaceContext.workspaceIdAsUUID
-    )
+    repository.queries
+      .copyAllEntities(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID)
+      .map { copyActionResults: Int => (copyActionResults, 0) }
 
   /**
    * Copy all entities from sourceWorkspaceId to destWorkspaceId, excluding any entities that
