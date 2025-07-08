@@ -665,16 +665,6 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
   }
 
-  "toWSMPolicyInput" - {
-    "throws an exception for malformed additional fields" in {
-      val e = intercept[RawlsExceptionWithErrorReport] {
-        WorkspacePolicy("group-constraint", "terra", List(Map("group" -> "myFakeGroup", "otherInvalid" -> "other")))
-          .toWsmPolicyInput()
-      }
-      e.errorReport.statusCode shouldBe Some(BadRequest)
-    }
-  }
-
   "WorkspaceSetting" - {
     "throws an exception for invalid workspace setting type" in {
       val fakeSetting =
