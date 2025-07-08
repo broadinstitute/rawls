@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import bio.terra.workspace.model.{WsmPolicyInput, WsmPolicyPair}
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -928,32 +927,7 @@ case class AzureManagedAppCoordinates(tenantId: UUID,
                                       landingZoneId: Option[UUID] = None
 )
 
-case class WorkspacePolicy(name: String, namespace: String, additionalData: List[Map[String, String]]) {
-
-  /**
-    * Adapts a Rawls WorkspacePolicy object to a Workspace Manager WsmPolicyInput object, suitable
-    * for usage in WSM createWorkspace() and other API calls
-    */
-  def toWsmPolicyInput(): WsmPolicyInput = {
-    val policyInput = new WsmPolicyInput().name(name).namespace(namespace)
-    additionalData.foreach { addlData: Map[String, String] =>
-      if (addlData.size > 1) {
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(BadRequest, "Policy additional data elements must consist of exactly one key-value pair")(
-            ErrorReportSource("rawls")
-          )
-        )
-      }
-
-      addlData.foreach { item =>
-        policyInput.addAdditionalDataItem(new WsmPolicyPair().key(item._1).value(item._2))
-      }
-
-    }
-    policyInput
-  }
-
-}
+case class WorkspacePolicy(name: String, namespace: String, additionalData: List[Map[String, String]])
 
 case class WorkspaceAdminResponse(workspace: WorkspaceDetails, settings: List[WorkspaceSetting])
 

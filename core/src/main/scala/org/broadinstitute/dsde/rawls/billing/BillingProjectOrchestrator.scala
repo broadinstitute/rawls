@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.ServerError
-import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -93,14 +92,12 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         creationStatus,
         None
       )
-    } yield {}).recover {
-      case e: RawlsExceptionWithErrorReport =>
-        e.errorReport.statusCode.collect {
-          case _: ServerError =>
-            tagAndCaptureSentryEvent(e)
-          case _ => throw e
-        }
-      case wsmException: WsmApiException if wsmException.getCode >= 500 => tagAndCaptureSentryEvent(wsmException)
+    } yield {}).recover { case e: RawlsExceptionWithErrorReport =>
+      e.errorReport.statusCode.collect {
+        case _: ServerError =>
+          tagAndCaptureSentryEvent(e)
+        case _ => throw e
+      }
     }
   }
 

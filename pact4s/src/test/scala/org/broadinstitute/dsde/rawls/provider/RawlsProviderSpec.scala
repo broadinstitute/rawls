@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
-import bio.terra.workspace.model._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import io.opentelemetry.context.Context
@@ -178,29 +177,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     mockOpenIDConnectConfiguration,
     mockGoogleProjectRegServiceConstructor
   ) with MockUserInfoDirectives
-
-  // Create ResourceMetadata
-  val resourceMetadata = new ResourceMetadata()
-    .workspaceId(UUID.fromString(WORKSPACE_UUID))
-    .resourceId(UUID.fromString(RESOURCE_UUID))
-    .name("testName")
-    .description("testDescription")
-    .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
-    .stewardshipType(StewardshipType.REFERENCED)
-    .cloningInstructions(CloningInstructionsEnum.NOTHING)
-
-  // Create DataRepoSnapshotAttributes
-  val dataRepoSnapshotAttributes = new DataRepoSnapshotAttributes()
-    .instanceName("testInstanceName")
-    .snapshot("testSnapshot")
-
-  // Create DataRepoSnapshotResource
-  val dataRepoSnapshotResource = new DataRepoSnapshotResource()
-    .metadata(resourceMetadata)
-    .attributes(dataRepoSnapshotAttributes)
-
-  // Create Seq[DataRepoSnapshotResource]
-  val dataRepoSnapshotResources: Seq[DataRepoSnapshotResource] = Seq(dataRepoSnapshotResource)
 
   private val providerStatesHandler: StateManagementFunction = StateManagementFunction {
     case ProviderState(States.rawlsOK, _) =>

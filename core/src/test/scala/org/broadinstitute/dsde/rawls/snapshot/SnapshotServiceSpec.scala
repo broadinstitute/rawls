@@ -3,27 +3,14 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.client
-import bio.terra.datarepo.model.{
-  CloudPlatform => SnapshotCloudPlatform,
-  DatasetSummaryModel,
-  SnapshotModel,
-  SnapshotSourceModel
-}
+import bio.terra.datarepo.model.{DatasetSummaryModel, SnapshotModel, SnapshotSourceModel, CloudPlatform => SnapshotCloudPlatform}
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
-import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.TpsModel.{TERRA_POLICY_NAMESPACE, TpsPolicies}
-import org.broadinstitute.dsde.rawls.model.{
-  RawlsRequestContext,
-  SamResourceAction,
-  SamResourceTypeName,
-  SamResourceTypeNames,
-  SamUserStatusResponse,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamUserStatusResponse, Workspace}
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService}
 import org.mockito.ArgumentMatchers
@@ -388,61 +375,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
                                                                  any()
       )
     }
-  }
-
-  def generateTestReferences(numReferences: Int): List[ResourceDescription] =
-    (1 to numReferences).toList.map { idx =>
-      val paddedIdx = "%08d".format(idx)
-
-      val metadata = new ResourceMetadata()
-      metadata.setResourceType(ResourceType.DATA_REPO_SNAPSHOT)
-      metadata.setName(s"snapshot_reference_$idx")
-      metadata.setResourceId(UUID.randomUUID())
-      metadata.setWorkspaceId(minimalTestData.workspace.workspaceIdAsUUID)
-
-      val snaprefAttrs = new DataRepoSnapshotAttributes()
-      snaprefAttrs.setSnapshot(s"00000000-0000-0000-0000-0000$paddedIdx")
-      snaprefAttrs.setInstanceName("terra")
-
-      val attrsUnion = new ResourceAttributesUnion()
-      attrsUnion.setGcpDataRepoSnapshot(snaprefAttrs)
-
-      val rd = new ResourceDescription()
-      rd.setMetadata(metadata)
-      rd.setResourceAttributes(attrsUnion)
-
-      rd
-    }
-
-  def mockSnapshotServiceForReferences(resources: List[ResourceDescription]): SnapshotService = {
-    // mock sam that always says we have permission
-    val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(
-      mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                               any[String],
-                               any[SamResourceAction],
-                               any[RawlsRequestContext]
-      )
-    ).thenReturn(Future.successful(true))
-    when(
-      mockSamDAO.getUserStatus(any[RawlsRequestContext])
-    ).thenReturn(
-      Future.successful(
-        Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
-      )
-    )
-
-    val mockDataRepoDAO = defaultDataRepoDao()
-
-    SnapshotService.constructor(
-      new WorkspaceRepository(slickDataSource),
-      mockSamDAO,
-      "fake-terra-data-repo-dev",
-      mockDataRepoDAO,
-      defaultWorkspaceServiceConstructor,
-      defaultPolicyService
-    )(testContext)
-
   }
 
 }
