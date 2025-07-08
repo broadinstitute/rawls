@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
@@ -146,7 +145,6 @@ class FastPassServiceSpec
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS)
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     val leonardoDAO = Mockito.spy(new MockLeonardoDAO())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
@@ -199,7 +197,6 @@ class FastPassServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
@@ -273,7 +270,6 @@ class FastPassServiceSpec
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,

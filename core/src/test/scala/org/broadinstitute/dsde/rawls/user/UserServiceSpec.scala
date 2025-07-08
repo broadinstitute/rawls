@@ -8,7 +8,6 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -55,7 +54,6 @@ class UserServiceSpec
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterServiceImpl =
     mock[ServicePerimeterServiceImpl](RETURNS_SMART_NULLS)
-  val defaultMockWsmDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
   val testConf: Config = ConfigFactory.load()
 
   val ownerRole: SamRolesAndActions =
@@ -90,7 +88,6 @@ class UserServiceSpec
                      adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName(
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
-                     workspaceManagerDao: WorkspaceManagerDAO = defaultMockWsmDAO,
                      billingRepository: Option[BillingRepository] = None,
                      workspaceMonitorRecordDao: Option[WorkspaceManagerResourceMonitorRecordDao] = None
   ): UserService =
@@ -102,7 +99,6 @@ class UserServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      workspaceManagerDao,
       billingRepository.getOrElse(new BillingRepository(dataSource)),
       mock[NotificationDAO]
     )

@@ -2,20 +2,18 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.{Actor, Props}
 import akka.pattern.{after, pipe}
-import bio.terra.workspace.client.ApiException
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 
 import java.util.concurrent.TimeoutException
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 
@@ -49,7 +47,6 @@ object HealthMonitor {
                                 googlePubSubDAO: GooglePubSubDAO,
                                 methodRepoDAO: MethodRepoDAO,
                                 samDAO: SamDAO,
-                                workspaceManagerDAO: WorkspaceManagerDAO,
                                 executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
                                 topicsToCheck: Seq[String],
                                 bucketsToCheck: Seq[String],
@@ -65,8 +62,7 @@ object HealthMonitor {
           (GoogleBilling, checkGoogleBilling(googleServicesDAO)),
           (GoogleBuckets, checkGoogleBuckets(googleServicesDAO, bucketsToCheck)),
           (GooglePubSub, checkGooglePubsub(googlePubSubDAO, topicsToCheck)),
-          (Sam, checkSam(samDAO)),
-          (WorkspaceManager, checkWSM(workspaceManagerDAO))
+          (Sam, checkSam(samDAO))
         ),
         futureTimeout,
         staleThreshold
@@ -75,7 +71,6 @@ object HealthMonitor {
 
   def propsInAzureControlPlane(slickDataSource: SlickDataSource,
                                samDAO: SamDAO,
-                               workspaceManagerDAO: WorkspaceManagerDAO,
                                futureTimeout: FiniteDuration = DefaultFutureTimeout,
                                staleThreshold: FiniteDuration = DefaultStaleThreshold
   ): Props =
@@ -83,8 +78,7 @@ object HealthMonitor {
       new HealthMonitor(
         List(
           (Database, checkDB(slickDataSource)),
-          (Sam, checkSam(samDAO)),
-          (WorkspaceManager, checkWSM(workspaceManagerDAO))
+          (Sam, checkSam(samDAO))
         ),
         futureTimeout,
         staleThreshold
@@ -319,16 +313,4 @@ object SystemChecks extends LazyLogging {
     samDAO.getStatus()
   }
 
-  def checkWSM(
-    workspaceManagerDAO: WorkspaceManagerDAO
-  )(executionContext: ExecutionContext): Future[SubsystemStatus] = {
-    implicit val ec = executionContext
-    logger.debug("Checking Workspace Manager...")
-    Future {
-      workspaceManagerDAO.throwWhenUnavailable()
-      OkStatus
-    }.recover { case ex: ApiException =>
-      failedStatus(s"WorkspaceManager: (ok: false, message: $ex)")
-    }
-  }
 }

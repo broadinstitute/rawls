@@ -14,7 +14,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
@@ -41,8 +40,8 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.util.UUID
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.Try
@@ -437,7 +436,7 @@ class SubmissionSpec(_system: ActorSystem)
 
   // WorkspaceManagerDAO is passed because some of the tests need it to set up shared state for downstream services
   def withDataAndService[T](
-    testCode: (SubmissionsService, WorkspaceManagerDAO) => T,
+    testCode: (SubmissionsService) => T,
     withDataOp: (SlickDataSource => T) => T,
     executionServiceDAO: ExecutionServiceDAO =
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName),
@@ -488,7 +487,6 @@ class SubmissionSpec(_system: ActorSystem)
         MockBigQueryServiceFactory.ioFactory(),
         testConf.getString("gcs.pathToCredentialJson"),
         servicePerimeterService,
-        mock[WorkspaceManagerDAO],
         mock[NotificationDAO]
       ) _
 
@@ -510,7 +508,6 @@ class SubmissionSpec(_system: ActorSystem)
       val requesterPaysSetupService =
         new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-      val workspaceManagerDAO = new MockWorkspaceManagerDAO
       val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
         dataSource,
@@ -567,7 +564,7 @@ class SubmissionSpec(_system: ActorSystem)
       ) _
       lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(testContext)
       try
-        testCode(submissionsService, workspaceManagerDAO)
+        testCode(submissionsService)
       finally
         // for failed tests we also need to poison pill
         submissionSupervisor ! PoisonPill
@@ -578,19 +575,19 @@ class SubmissionSpec(_system: ActorSystem)
   // In order to avoid changing the signatures of all of these to match,
   // we're just wrapping call to discard the WorkspaceManagerDAO for tests that don't need it
   def withSubmissionsService[T](testCode: SubmissionsService => T): T =
-    withDataAndService((service, _) => testCode(service), withDefaultTestDatabase[T])
+    withDataAndService(service => testCode(service), withDefaultTestDatabase[T])
 
   def withSubmissionsServiceMockExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
-    withDataAndService((service, _) => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
+    withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
   }
   def withSubmissionsServiceMockTimeoutExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO(true)
-    withDataAndService((service, _) => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
+    withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
   }
 
   def withSubmissionTestSubmissionsService[T](testCode: SubmissionsService => T): T =
-    withDataAndService((service, _) => testCode(service), withCustomTestDatabase[T](new SubmissionTestData))
+    withDataAndService(service => testCode(service), withCustomTestDatabase[T](new SubmissionTestData))
 
   private def checkSubmissionStatus(submissionsService: SubmissionsService,
                                     submissionId: String,
@@ -1337,7 +1334,7 @@ class SubmissionSpec(_system: ActorSystem)
       )
     )
 
-    withDataAndService((service, _) => test(service),
+    withDataAndService(service => test(service),
                        withDefaultTestDatabase[T],
                        workspaceSettingRepository = workspaceSettingRepository
     )

@@ -5,8 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{WsmPolicyInput, WsmPolicyInputs, WsmPolicyPair}
+import bio.terra.workspace.model.{WsmPolicyInput, WsmPolicyPair}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -22,7 +21,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPassService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
@@ -143,7 +141,6 @@ class WorkspaceServiceSpec
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
@@ -199,7 +196,6 @@ class WorkspaceServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
@@ -275,7 +271,6 @@ class WorkspaceServiceSpec
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -2316,102 +2311,6 @@ class WorkspaceServiceSpec
         )
 
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
-  }
-
-  it should "clone the WSM stub workspace if it exists" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "not fail if the source workspace doesn't have a WSM stub workspace" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
-      )
-    ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "fail if cloning the WSM stub workspace fails" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
-      )
-    ).thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "kablooey"))
-
-    val thrown = intercept[ApiException] {
-      Await.result(services.workspaceService.cloneWorkspace(
-                     baseWorkspace.toWorkspaceName,
-                     workspaceRequest
-                   ),
-                   Duration.Inf
-      )
-    }
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-    thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
   }
 
   it should "fail to clone entity reference workspace attributes" in withTestDataServices { services =>

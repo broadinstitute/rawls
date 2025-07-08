@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.serviceFactory
 import akka.actor.Props
 import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 
@@ -14,7 +13,6 @@ object HealthMonitorFactory {
                                pubSubDAO: GooglePubSubDAO,
                                methodRepoDAO: MethodRepoDAO,
                                samDAO: SamDAO,
-                               workspaceManagerDAO: WorkspaceManagerDAO,
                                executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO]
   ): Props =
     appConfigManager.gcsConfig match {
@@ -26,13 +24,12 @@ object HealthMonitorFactory {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
-            workspaceManagerDAO,
             executionServiceServers,
             Seq(gcsConfig.getString("notifications.topicName")),
             Seq.empty
           )
       case None =>
         HealthMonitor
-          .propsInAzureControlPlane(slickDataSource, samDAO, workspaceManagerDAO)
+          .propsInAzureControlPlane(slickDataSource, samDAO)
     }
 }
