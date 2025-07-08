@@ -79,9 +79,15 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
   // Link the snapshot pao to the workspace pao
   private def createSnapshots(rawlsWorkspace: Workspace, snapshotIds: Set[UUID]): Future[Unit] =
     for {
+      _ <- Future(
+        logger.info(
+          s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: retrieving ${snapshotIds.size} snapshots from TDR"
+        )
+      )
       snapshotsFromDataRepo <- Future {
         snapshotIds.map(getSnapshotFromDataRepoWithId)
       }
+      _ = logger.info(s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: retrieving workspace PAO")
       workspacePaoOpt <- policyService.getPao(rawlsWorkspace.workspaceIdAsUUID, ctx)
       workspacePao = workspacePaoOpt.getOrElse(
         throw new RawlsExceptionWithErrorReport(
@@ -92,14 +98,23 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       )
 
       // filter out any snapshots that are already linked to the workspace
+      _ = logger.info(
+        s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: filtering already-linked snapshots"
+      )
       unlinkedSnapshots = snapshotsFromDataRepo.filterNot(snapshot =>
         workspacePao.getSourcesObjectIds.asScala.toSet.contains(snapshot.getId)
       )
 
+      _ = logger.info(
+        s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: retrieving ${unlinkedSnapshots.size} snapshot PAO(s)"
+      )
       snapshotPaos <- Future.traverse(unlinkedSnapshots) { snapshot =>
         policyService.getOrCreateSnapshotPao(snapshot.getId, ctx)
       }
 
+      _ = logger.info(
+        s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: dry-run linking ${unlinkedSnapshots.size} snapshot PAO(s) to workspace PAO"
+      )
       _ <- Future.traverse(unlinkedSnapshots) { snapshot =>
         policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
                                                     rawlsWorkspace.workspaceIdAsUUID,
@@ -109,6 +124,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       }
 
       // if any snapshots contain protected data, the workspace must be protected
+      _ = logger.info(s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: checking protected status")
       _ = if (
         snapshotPaos.exists(
           PolicyUtilities.containsPolicy(_, TpsPolicies.ProtectedData)
@@ -122,21 +138,34 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       // that all of the snapshot PAOs will combine together cleanly when they're all linked to
       // the same workspace. Snapshots shouldn't have region constraint policies, but throw here
       // just in case.
+      _ = logger.info(s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: checking region constraints")
       _ = if (snapshotPaos.exists(PolicyUtilities.containsPolicy(_, TpsPolicies.RegionConstraint))) {
         throw new RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest, "Unable to add snapshot with region constraint to workspace.")
         )
       }
 
+      _ = logger.info(
+        s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: getting group constraint groups for snapshots"
+      )
       snapshotGroups = snapshotPaos.flatMap { snapshotPao =>
         PolicyUtilities.getGroupConstraintGroups(snapshotPao)
       }
+      _ = logger.info(
+        s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: calculating new workspace group constraints"
+      )
       newWorkspaceGroups = snapshotGroups -- PolicyUtilities.getGroupConstraintGroups(workspacePao)
+      _ = logger.info(
+        s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: adding ${newWorkspaceGroups.size} groups to workspace auth domain"
+      )
       _ <-
         if (newWorkspaceGroups.nonEmpty) {
           workspaceServiceConstructor(ctx).addAuthDomainGroups(rawlsWorkspace.toWorkspaceName, newWorkspaceGroups, ctx)
         } else Future.unit
 
+      _ = logger.info(
+        s"createSnapshots for workspace ${rawlsWorkspace.workspaceIdAsUUID}: actual linking ${unlinkedSnapshots.size} snapshot PAO(s) to workspace PAO"
+      )
       _ <- Future.traverse(unlinkedSnapshots) { snapshot =>
         policyService.linkSnapshotPaoToWorkspacePao(snapshot.getId,
                                                     rawlsWorkspace.workspaceIdAsUUID,
