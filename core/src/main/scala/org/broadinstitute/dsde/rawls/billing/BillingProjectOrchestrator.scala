@@ -2,13 +2,11 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.ServerError
-import bio.terra.profile.client.{ApiException => BpmApiException}
 import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -42,7 +40,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * All billing projects are created following this algorithm:
  * 1. Pre-flight validation with a billing project creator. Right now, the creator is determined according
  * to the nature of the billing project creation request and is not client-configurable.
- * 2. Create the rawls internal billing project record
+ * 2. Create rawls internal billing project record
  * 3. Post-flight steps; this may include syncing of groups, reaching out to external services to sync state, etc.
  * This step is delegated to the billing project creator as well.
  */
@@ -51,10 +49,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  notificationDAO: NotificationDAO,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-                                 azureBillingProjectLifecycle: AzureBillingProjectLifecycle,
                                  billingProjectDeletion: BillingProjectDeletion,
-                                 config: MultiCloudWorkspaceConfig,
-                                 resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
+                                 config: MultiCloudWorkspaceConfig
 )(implicit val executionContext: ExecutionContext)
     extends StringValidationUtils
     with UserUtils
@@ -73,10 +69,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       throw e
     }
 
-    val billingProjectLifecycle = createProjectRequest.billingInfo match {
-      case Left(_)  => googleBillingProjectLifecycle
-      case Right(_) => azureBillingProjectLifecycle
-    }
+    val billingProjectLifecycle = googleBillingProjectLifecycle
     val billingProjectName = createProjectRequest.projectName
 
     (for {
@@ -84,7 +77,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
       _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx)
 
-      _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
+      _ = logger.info(s"Creating billing project record [name=$billingProjectName]")
       _ <- createV2BillingProjectInternal(createProjectRequest, ctx)
 
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
@@ -108,7 +101,6 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
           case _ => throw e
         }
       case wsmException: WsmApiException if wsmException.getCode >= 500 => tagAndCaptureSentryEvent(wsmException)
-      case bpmException: BpmApiException if bpmException.getCode >= 500 => tagAndCaptureSentryEvent(bpmException)
     }
   }
 
@@ -199,24 +191,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       }
       // If backed by a Google project (v1 workspaces/billing projects), delete it.
       _ <- maybeDeleteGoogleProject(projectName, ctx)
-
-      // If the billing project has a landing zone, delete it.
-      jobControlId <- maybeDeleteLandingZone(projectName, ctx)
-      _ <- jobControlId match {
-        case Some(id) =>
-          resourceMonitorRecordDao
-            .create(
-              WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
-                id,
-                projectName,
-                ctx.userInfo.userEmail,
-                azureBillingProjectLifecycle.deleteJobType
-              )
-            )
-            .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
-        case None =>
-          billingProjectDeletion.finalizeDelete(projectName, ctx)
-      }
+      // Finalize the deletion of the billing project in Rawls.
+      _ <- billingProjectDeletion.finalizeDelete(projectName, ctx)
     } yield ()
 
   /**
@@ -226,29 +202,6 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
     executionContext: ExecutionContext
   ): Future[Unit] =
     deleteGoogleProjectIfChild(projectName, ctx.userInfo, googleBillingProjectLifecycle.gcsDAO, samDAO, ctx)
-
-  /**
-    * Initiates deletion of the billing project's landing zone, if the project has a landingZoneId.
-    *
-    * @param projectName        the Rawls billing project name
-    * @param ctx                the Rawls request context
-    * @return an id of an async job the final stages of deleting are waiting on, if applicable.
-    *         If None is returned, the project can be deleted immediately via finalizeDelete
-    */
-  def maybeDeleteLandingZone(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-    executionContext: ExecutionContext
-  ): Future[Option[UUID]] =
-    for {
-      jobControlId <- billingRepository.getLandingZoneId(projectName).map {
-        case Some(landingZoneId) =>
-          val result = azureBillingProjectLifecycle.cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-          result.map(_.getJobReport.getId).map(UUID.fromString)
-        case None =>
-          logger.debug(s"Deleting billing project $projectName, but no associated landing zone to delete")
-          None
-      }
-    } yield jobControlId
-
 }
 
 object BillingProjectOrchestrator {
@@ -257,9 +210,7 @@ object BillingProjectOrchestrator {
     notificationDAO: NotificationDAO,
     billingRepository: BillingRepository,
     googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-    azureBillingProjectLifecycle: AzureBillingProjectLifecycle,
     billingProjectDeletion: BillingProjectDeletion,
-    resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
     config: MultiCloudWorkspaceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
     new BillingProjectOrchestrator(
@@ -268,10 +219,8 @@ object BillingProjectOrchestrator {
       notificationDAO,
       billingRepository,
       googleBillingProjectLifecycle,
-      azureBillingProjectLifecycle,
       billingProjectDeletion,
-      config,
-      resourceMonitorRecordDao
+      config
     )
 
   def buildBillingProjectPolicies(additionalMembers: Set[ProjectAccessUpdate],

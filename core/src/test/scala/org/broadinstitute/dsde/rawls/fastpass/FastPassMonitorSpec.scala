@@ -6,7 +6,6 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.TpsPaoGetResult
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -30,8 +29,6 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceService,
   WorkspaceSettingRepository,
@@ -55,7 +52,6 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -172,8 +168,6 @@ class FastPassMonitorSpec
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAOImpl](RETURNS_SMART_NULLS)
-
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -181,7 +175,6 @@ class FastPassMonitorSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
@@ -208,17 +201,6 @@ class FastPassMonitorSpec
       "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
-    override val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
-      MultiCloudWorkspaceService.constructor(
-        dataSource,
-        workspaceManagerDAO,
-        mock[BillingProfileManagerDAOImpl],
-        samDAO,
-        multiCloudWorkspaceConfig,
-        leonardoDAO,
-        workbenchMetricBaseName
-      )
-    lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
@@ -239,8 +221,6 @@ class FastPassMonitorSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
@@ -292,7 +272,6 @@ class FastPassMonitorSpec
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,

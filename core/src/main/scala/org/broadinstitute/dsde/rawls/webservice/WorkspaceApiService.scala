@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -24,237 +24,245 @@ trait WorkspaceApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
-  val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService
 
-  def workspaceRoutes(otelContext: Context = Context.root()): server.Route = {
-    requireUserInfo(Option(otelContext)) { userInfo =>
-      val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-      path("workspaces") {
-        post {
-          entity(as[WorkspaceRequest]) { workspace =>
-            addLocationHeader(workspace.path) {
+  def workspaceRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
+    val ctx = RawlsRequestContext(userInfo, Option(otelContext))
+    path("workspaces") {
+      post {
+        entity(as[WorkspaceRequest]) { workspace =>
+          addLocationHeader(workspace.path) {
+            complete {
+              val workspaceService = workspaceServiceConstructor(ctx)
+              workspaceService
+                .createWorkspace(workspace, ctx)
+                .map(w =>
+                  StatusCodes.Created -> WorkspaceDetails.fromWorkspaceAndOptions(
+                    w,
+                    Some(workspace.authorizationDomain.getOrElse(Set.empty)),
+                    useAttributes = true,
+                    Some(WorkspaceCloudPlatform.Gcp)
+                  )
+                )
+            }
+          }
+        }
+      } ~
+        get {
+          parameterSeq { allParams =>
+            parameter("stringAttributeMaxLength".as[Int].withDefault(-1)) { stringAttributeMaxLength =>
               complete {
-                val workspaceService = workspaceServiceConstructor(ctx)
-                val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
-                mcWorkspaceService
-                  .createMultiCloudOrRawlsWorkspace(workspace, workspaceService)
-                  .map(w => StatusCodes.Created -> w)
+                workspaceServiceConstructor(ctx).listWorkspaces(
+                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                  stringAttributeMaxLength
+                )
               }
+            }
+          }
+        }
+    } ~
+      path("workspaces" / "tags") {
+        parameters(Symbol("q").?, "limit".as[Int].optional) { (queryString, limit) =>
+          get {
+            complete {
+              workspaceServiceConstructor(ctx).getTags(queryString, limit)
+            }
+          }
+        }
+      } ~
+      path("workspaces" / "id" / Segment) { workspaceId =>
+        get {
+          parameters("userProject".optional) { userProject =>
+            parameterSeq { allParams =>
+              complete {
+                workspaceServiceConstructor(ctx).getWorkspaceById(workspaceId,
+                                                                  WorkspaceFieldSpecs.fromQueryParams(allParams,
+                                                                                                      "fields"
+                                                                  ),
+                                                                  userProject.map(GoogleProjectId)
+                )
+              }
+            }
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+        patch {
+          entity(as[Array[AttributeUpdateOperation]]) { operations =>
+            complete {
+              workspaceServiceConstructor(ctx).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                                                               operations
+              )
             }
           }
         } ~
           get {
-            parameterSeq { allParams =>
-              parameter("stringAttributeMaxLength".as[Int].withDefault(-1)) { stringAttributeMaxLength =>
+            parameters("userProject".optional) { userProject =>
+              parameterSeq { allParams =>
                 complete {
-                  workspaceServiceConstructor(ctx).listWorkspaces(
-                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
-                    stringAttributeMaxLength
+                  workspaceServiceConstructor(ctx).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                WorkspaceFieldSpecs.fromQueryParams(allParams,
+                                                                                                    "fields"
+                                                                ),
+                                                                userProject.map(GoogleProjectId)
+                  )
+                }
+              }
+            }
+          } ~
+          delete {
+            complete {
+              val workspaceService = workspaceServiceConstructor(ctx)
+              workspaceService
+                .deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(deletionResult =>
+                  StatusCodes.Accepted -> workspaceDeleteMessage(deletionResult.gcpContext.map(_.bucketName))
+                )
+            }
+          }
+      } ~
+      path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
+        get {
+          complete {
+            workspaceServiceConstructor(ctx).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName))
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
+        get {
+          parameters("userProject".optional) { userProject =>
+            complete {
+              workspaceServiceConstructor(ctx).getBucketOptions(
+                WorkspaceName(workspaceNamespace, workspaceName),
+                userProject.map(GoogleProjectId)
+              )
+            }
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "clone") { (sourceNamespace, sourceWorkspace) =>
+        post {
+          entity(as[WorkspaceRequest]) { destWorkspace =>
+            addLocationHeader(destWorkspace.toWorkspaceName.path) {
+              complete {
+                workspaceServiceConstructor(ctx)
+                  .cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace, ctx)
+                  .map(w =>
+                    StatusCodes.Created ->
+                      WorkspaceDetails.fromWorkspaceAndOptions(
+                        w,
+                        Some(destWorkspace.authorizationDomain.getOrElse(Set.empty)),
+                        useAttributes = true,
+                        Some(WorkspaceCloudPlatform.Gcp)
+                      )
+                  )
+              }
+            }
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "acl") { (workspaceNamespace, workspaceName) =>
+        get {
+          complete {
+            workspaceServiceConstructor(ctx).getACL(WorkspaceName(workspaceNamespace, workspaceName))
+          }
+        } ~
+          patch {
+            parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound: Option[String] =>
+              entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
+                val inviteUsersNotFoundValue = inviteUsersNotFound match {
+                  case Some(str) if str.isEmpty => false
+                  case Some(str)                => str.toBoolean
+                  case None                     => false
+                }
+
+                complete {
+                  workspaceServiceConstructor(ctx).updateACL(WorkspaceName(workspaceNamespace, workspaceName),
+                                                             aclUpdate,
+                                                             inviteUsersNotFoundValue
                   )
                 }
               }
             }
           }
       } ~
-        path("workspaces" / "tags") {
-          parameters(Symbol("q").?, "limit".as[Int].optional) { (queryString, limit) =>
-            get {
-              complete {
-                workspaceServiceConstructor(ctx).getTags(queryString, limit)
-              }
-            }
+      path("workspaces" / Segment / Segment / "checkBucketReadAccess") { (workspaceNamespace, workspaceName) =>
+        get {
+          complete {
+            workspaceServiceConstructor(ctx)
+              .checkWorkspaceCloudPermissions(WorkspaceName(workspaceNamespace, workspaceName))
+              .map(_ => StatusCodes.OK)
           }
-        } ~
-        path("workspaces" / "id" / Segment) { workspaceId =>
-          get {
-            parameters("userProject".optional) { userProject =>
-              parameterSeq { allParams =>
-                complete {
-                  workspaceServiceConstructor(ctx).getWorkspaceById(workspaceId,
-                                                                    WorkspaceFieldSpecs.fromQueryParams(allParams,
-                                                                                                        "fields"
-                                                                    ),
-                                                                    userProject.map(GoogleProjectId)
-                  )
-                }
-              }
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-          patch {
-            entity(as[Array[AttributeUpdateOperation]]) { operations =>
-              complete {
-                workspaceServiceConstructor(ctx).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                 operations
-                )
-              }
-            }
-          } ~
-            get {
-              parameters("userProject".optional) { userProject =>
-                parameterSeq { allParams =>
-                  complete {
-                    workspaceServiceConstructor(ctx).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                  WorkspaceFieldSpecs.fromQueryParams(allParams,
-                                                                                                      "fields"
-                                                                  ),
-                                                                  userProject.map(GoogleProjectId)
-                    )
-                  }
-                }
-              }
-            } ~
-            delete {
-              complete {
-                val workspaceService = workspaceServiceConstructor(ctx)
-                val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
-                mcWorkspaceService
-                  .deleteMultiCloudOrRawlsWorkspace(WorkspaceName(workspaceNamespace, workspaceName), workspaceService)
-                  .map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
-              }
-            }
-        } ~
-        path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName))
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
-          get {
-            parameters("userProject".optional) { userProject =>
-              complete {
-                workspaceServiceConstructor(ctx).getBucketOptions(
-                  WorkspaceName(workspaceNamespace, workspaceName),
-                  userProject.map(GoogleProjectId)
-                )
-              }
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "clone") { (sourceNamespace, sourceWorkspace) =>
-          post {
-            entity(as[WorkspaceRequest]) { destWorkspace =>
-              addLocationHeader(destWorkspace.toWorkspaceName.path) {
-                complete {
-                  multiCloudWorkspaceServiceConstructor(ctx)
-                    .cloneMultiCloudWorkspace(
-                      workspaceServiceConstructor(ctx),
-                      WorkspaceName(sourceNamespace, sourceWorkspace),
-                      destWorkspace
-                    )
-                    .map(w => StatusCodes.Created -> w)
-                }
-              }
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "acl") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).getACL(WorkspaceName(workspaceNamespace, workspaceName))
-            }
-          } ~
-            patch {
-              parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound: Option[String] =>
-                entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
-                  val inviteUsersNotFoundValue = inviteUsersNotFound match {
-                    case Some(str) if str.isEmpty => false
-                    case Some(str)                => str.toBoolean
-                    case None                     => false
-                  }
-
-                  complete {
-                    workspaceServiceConstructor(ctx).updateACL(WorkspaceName(workspaceNamespace, workspaceName),
-                                                               aclUpdate,
-                                                               inviteUsersNotFoundValue
-                    )
-                  }
-                }
-              }
-            }
-        } ~
-        path("workspaces" / Segment / Segment / "checkBucketReadAccess") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .checkWorkspaceCloudPermissions(WorkspaceName(workspaceNamespace, workspaceName))
-                .map(_ => StatusCodes.OK)
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "checkIamActionWithLock" / Segment) {
-          (workspaceNamespace, workspaceName, requiredAction) =>
-            get {
-              complete {
-                workspaceServiceConstructor(ctx)
-                  .checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName),
-                                          SamResourceAction(requiredAction)
-                  )
-                  .map {
-                    case true  => StatusCodes.NoContent
-                    case false => StatusCodes.Forbidden
-                  }
-              }
-            }
-        } ~
-        path("workspaces" / Segment / Segment / "fileTransfers") { (workspaceNamespace, workspaceName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .listPendingFileTransfersForWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
-                .map(pendingTransfers => StatusCodes.OK -> pendingTransfers)
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
-          put {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
-                .map(_ => StatusCodes.NoContent)
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "unlock") { (workspaceNamespace, workspaceName) =>
-          put {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
-                .map(_ => StatusCodes.NoContent)
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
-          post {
-            complete {
-              workspaceServiceConstructor(ctx).sendChangeNotifications(WorkspaceName(namespace, name))
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") {
-          (workspaceNamespace, workspaceName) =>
-            put {
-              complete {
-                workspaceServiceConstructor(ctx)
-                  .enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-        } ~
-        path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") {
-          (workspaceNamespace, workspaceName) =>
-            put {
-              complete {
-                workspaceServiceConstructor(ctx)
-                  .disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
         }
-    }
+      } ~
+      path("workspaces" / Segment / Segment / "checkIamActionWithLock" / Segment) {
+        (workspaceNamespace, workspaceName, requiredAction) =>
+          get {
+            complete {
+              workspaceServiceConstructor(ctx)
+                .checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName),
+                                        SamResourceAction(requiredAction)
+                )
+                .map {
+                  case true  => StatusCodes.NoContent
+                  case false => StatusCodes.Forbidden
+                }
+            }
+          }
+      } ~
+      path("workspaces" / Segment / Segment / "fileTransfers") { (workspaceNamespace, workspaceName) =>
+        get {
+          complete {
+            workspaceServiceConstructor(ctx)
+              .listPendingFileTransfersForWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+              .map(pendingTransfers => StatusCodes.OK -> pendingTransfers)
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
+        put {
+          complete {
+            workspaceServiceConstructor(ctx)
+              .lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+              .map(_ => StatusCodes.NoContent)
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "unlock") { (workspaceNamespace, workspaceName) =>
+        put {
+          complete {
+            workspaceServiceConstructor(ctx)
+              .unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+              .map(_ => StatusCodes.NoContent)
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
+        post {
+          complete {
+            workspaceServiceConstructor(ctx).sendChangeNotifications(WorkspaceName(namespace, name))
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") {
+        (workspaceNamespace, workspaceName) =>
+          put {
+            complete {
+              workspaceServiceConstructor(ctx)
+                .enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(_ => StatusCodes.NoContent)
+            }
+          }
+      } ~
+      path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") {
+        (workspaceNamespace, workspaceName) =>
+          put {
+            complete {
+              workspaceServiceConstructor(ctx)
+                .disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(_ => StatusCodes.NoContent)
+            }
+          }
+      }
   }
 
   private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): String =

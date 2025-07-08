@@ -143,7 +143,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           )
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check(assertResult(StatusCodes.NotFound)(status))
   }
 
@@ -160,7 +160,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         AgoraMethod("dsde", "three_step", 1)
       )
       Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
+        sealRoute(services.methodConfigRoutes(userInfo = userInfo)) ~>
         check(assertResult(StatusCodes.Created)(status))
       Post(
         s"${testData.wsName.path}/submissions",
@@ -176,7 +176,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           )
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check(assertResult(StatusCodes.NotFound)(status))
   }
 
@@ -189,11 +189,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   ): Submission = {
 
     Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
-      sealRoute(services.methodConfigRoutes()) ~>
+      sealRoute(services.methodConfigRoutes(userInfo = userInfo)) ~>
       check {
         if (status == StatusCodes.NotFound) {
           Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
-            sealRoute(services.methodConfigRoutes()) ~>
+            sealRoute(services.methodConfigRoutes(userInfo = userInfo)) ~>
             check {
               assertResult(StatusCodes.Created) {
                 status
@@ -218,14 +218,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         workflowFailureMode = workflowFailureMode
       )
       Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String]) {
             status
           }
           val submission = responseAs[SubmissionReport]
           Get(s"${wsName.path}/submissions/${submission.submissionId}") ~>
-            sealRoute(services.submissionRoutes()) ~>
+            sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
             check {
               assertResult(StatusCodes.OK) {
                 status
@@ -349,7 +349,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
       Get(s"${testData.wsName.path}") ~>
-        sealRoute(services.workspaceRoutes()) ~>
+        sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
         check {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
         }
@@ -437,7 +437,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
     // Listing submissions should return the correct workflow failure mode
     Get(s"${testData.wsName.path}/submissions") ~>
-      sealRoute(services.submissionRoutes()) ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -579,7 +579,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
 
       Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
-        sealRoute(services.methodConfigRoutes()) ~>
+        sealRoute(services.methodConfigRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -587,7 +587,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         }
 
       Post(s"${wsName.path}/submissions", httpJsonStr(jsonStr)) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
             status
@@ -614,7 +614,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   it should "return 200 on getting a submission" in withTestDataApiServices { services =>
     Get(s"${testData.wsName.path}/submissions/${testData.costedSubmission1.submissionId}") ~>
-      sealRoute(services.submissionRoutes()) ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
 
@@ -628,12 +628,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   it should "return 404 on getting a nonexistent submission" in withTestDataApiServices { services =>
     Get(s"${testData.wsName.path}/submissions/unrealSubmission42") ~>
-      sealRoute(services.submissionRoutes()) ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
     Get(s"${testData.wsName.path}/submissions/${UUID.randomUUID}") ~>
-      sealRoute(services.submissionRoutes()) ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.NotFound)(status)
       }
@@ -651,7 +651,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
 
     Get(s"${testData.wsName.path}/submissions") ~>
-      sealRoute(services.submissionRoutes()) ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertResult(
@@ -902,11 +902,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     )
 
     Get(s"${workspaceName.path}/methodconfigs/${methodConfigurationName.namespace}/${methodConfigurationName.name}") ~>
-      sealRoute(services.methodConfigRoutes()) ~>
+      sealRoute(services.methodConfigRoutes(userInfo = userInfo)) ~>
       check {
         if (status == StatusCodes.NotFound) {
           Post(s"${workspaceName.path}/methodconfigs", httpJson(methodConfiguration)) ~>
-            sealRoute(services.methodConfigRoutes()) ~>
+            sealRoute(services.methodConfigRoutes(userInfo = userInfo)) ~>
             check {
               assertResult(StatusCodes.Created) {
                 status
@@ -965,7 +965,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
                 ).flatten: _*
             )
           ) ~>
-            sealRoute(services.submissionRoutes()) ~>
+            sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
             check {
               val response = responseAs[String]
               status should be(StatusCodes.Created)
@@ -1002,7 +1002,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               ).flatten: _*
           )
         ) ~>
-          sealRoute(services.submissionRoutes()) ~>
+          sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
           check {
             val response = responseAs[String]
             status should be(StatusCodes.Created)
@@ -1035,7 +1035,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               ).flatten: _*
           )
         ) ~>
-          sealRoute(services.submissionRoutes()) ~>
+          sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
           check {
             val response = responseAs[String]
             status should be(StatusCodes.Created)
@@ -1058,7 +1058,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             List("memoryRetryMultiplier" -> "oh gosh, I don't know... maybe seven?".toJson): _*
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           val response = responseAs[String]
           status should be(StatusCodes.BadRequest)
@@ -1083,7 +1083,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             ): _*
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           val response = responseAs[String]
           status should be(StatusCodes.BadRequest)
@@ -1138,7 +1138,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               ).flatten: _*
           )
         ) ~>
-          sealRoute(services.submissionRoutes()) ~>
+          sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
           check {
             val response = responseAs[String]
             status should be(StatusCodes.Created)
@@ -1163,7 +1163,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             List("userComment" -> invalidUserComment.toJson): _*
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           val response = responseAs[String]
           status should be(StatusCodes.BadRequest)
@@ -1184,7 +1184,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             List("userComment" -> "user comment during submission".toJson): _*
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String])(status)
           val submission = responseAs[SubmissionReport]
@@ -1196,7 +1196,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               List("userComment" -> "user comment updated".toJson): _*
             )
           ) ~>
-            sealRoute(services.submissionRoutes()) ~>
+            sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
             check {
               assertResult(StatusCodes.NoContent, responseAs[String]) {
                 status
@@ -1204,7 +1204,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             }
 
           Get(s"${workspaceName.path}/submissions/${submission.submissionId}") ~>
-            sealRoute(services.submissionRoutes()) ~>
+            sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
             check {
               assertResult(StatusCodes.OK) {
                 status
@@ -1227,13 +1227,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           requiredSubmissionFields(methodConfigurationName, testData.sample1)
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.Created, responseAs[String])(status)
           val submission = responseAs[SubmissionReport]
 
           Get(s"${workspaceName.path}/submissions/${submission.submissionId}") ~>
-            sealRoute(services.submissionRoutes()) ~>
+            sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
             check {
               assertResult(StatusCodes.OK) {
                 status
@@ -1254,7 +1254,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           List("userComment" -> "user comment updated".toJson): _*
         )
       ) ~>
-        sealRoute(services.submissionRoutes()) ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
         check {
           val response = responseAs[String]
           status should be(StatusCodes.NotFound)

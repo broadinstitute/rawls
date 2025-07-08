@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import bio.terra.profile.model.SystemStatus
 import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.Bucket
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
@@ -14,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
 
@@ -69,10 +67,8 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
       withApiServices(dataSource, apiService)(testCode)
     }
 
-  def initializeSubsystems(apiService: TestApiService): Unit = {
-    when(apiService.billingProfileManagerDAO.getStatus()) thenReturn new SystemStatus().ok(true)
+  def initializeSubsystems(apiService: TestApiService): Unit =
     apiService.healthMonitor ! CheckAll
-  }
 
   "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices { services =>
     eventually {

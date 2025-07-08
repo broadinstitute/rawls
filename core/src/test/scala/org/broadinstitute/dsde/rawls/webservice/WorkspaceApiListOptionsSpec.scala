@@ -217,7 +217,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
   "WorkspaceApi list-workspaces with fields param" should "return full response if no fields param" in withTestWorkspacesApiServices {
     services =>
       Get("/workspaces") ~>
-        sealRoute(services.workspaceRoutes()) ~>
+        sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -266,7 +266,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
   it should "return full response if querystring exists but no fields param" in withTestWorkspacesApiServices {
     services =>
       Get("/workspaces?thisisnotfields=noitsnot") ~>
-        sealRoute(services.workspaceRoutes()) ~>
+        sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -312,7 +312,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   it should "filter response to a single key" in withTestWorkspacesApiServices { services =>
     Get("/workspaces?fields=accessLevel") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson
@@ -326,7 +326,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   it should "filter response to multiple keys" in withTestWorkspacesApiServices { services =>
     Get("/workspaces?fields=accessLevel,public") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson
@@ -346,7 +346,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   it should "filter response to nested keys" in withTestWorkspacesApiServices { services =>
     Get("/workspaces?fields=workspaceSubmissionStats,workspace.workspaceId,workspace.bucketName") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson
@@ -378,7 +378,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   it should "filter response to entire subtrees" in withTestWorkspacesApiServices { services =>
     Get("/workspaces?fields=public,workspace.attributes") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson
@@ -408,7 +408,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   it should "filter response to individual attributes" in withTestWorkspacesApiServices { services =>
     Get("/workspaces?fields=public,workspace.attributes.description") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         val actual = responseAs[String].parseJson
@@ -437,7 +437,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
   it should "throw error with unrecognized field value" in withTestWorkspacesApiServices { services =>
     // NB: "workspaceType" is valid for get-workspace but not list-workspaces.
     Get("/workspaces?fields=accessLevel,workspaceType,somethingNotRecognized") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.BadRequest)(status)
         val actual = responseAs[ErrorReport]
@@ -449,7 +449,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   it should "throw error if field param specified multiple times" in withTestWorkspacesApiServices { services =>
     Get("/workspaces?fields=accessLevel&fields=public") ~>
-      sealRoute(services.workspaceRoutes()) ~>
+      sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.BadRequest)(status)
         val actual = responseAs[ErrorReport]

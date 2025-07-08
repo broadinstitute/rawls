@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity, EntityPointer}
-import spray.json.DefaultJsonProtocol.{jsonFormat3, jsonFormat4}
+import spray.json.DefaultJsonProtocol.{jsonFormat3, jsonFormat4, IntJsonFormat}
 import spray.json.RootJsonFormat
 
 import java.sql.Timestamp
@@ -85,4 +85,10 @@ case class EntityTypeAndAttributeKey(
 case class EntityTypeAndCount(
   entityType: String,
   count: Int
+)
+
+case class QuicksilverMigrationResult(
+  numEntitiesUpdated: Int,
+  numEntitiesDeleted: Int,
+  numAttributesDeleted: Int
 )

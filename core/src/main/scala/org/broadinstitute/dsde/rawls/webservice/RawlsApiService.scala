@@ -33,12 +33,7 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceService,
-  WorkspaceAdminService,
-  WorkspaceService,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceAdminService, WorkspaceService, WorkspaceSettingService}
 import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 
 import java.sql.{SQLException, SQLTransactionRollbackException}
@@ -134,19 +129,21 @@ trait RawlsApiService
   implicit val materializer: Materializer
 
   val baseApiRoutes: Context => Route = (otelContext: Context) =>
-    workspaceRoutesV2(otelContext) ~
-      workspaceRoutes(otelContext) ~
-      entityRoutes(otelContext) ~
-      methodConfigRoutes(otelContext) ~
-      submissionRoutes(otelContext) ~
-      adminRoutes(otelContext) ~
-      userRoutes(otelContext) ~
-      billingRoutesV2(otelContext) ~
-      billingRoutes(otelContext) ~
-      notificationsRoutes ~
-      servicePerimeterRoutes(otelContext) ~
-      snapshotRoutes(otelContext) ~
-      googleProjectRegistrationRoutes(otelContext)
+    requireUserInfo(Option(otelContext)) { userInfo =>
+      workspaceRoutesV2(otelContext, userInfo) ~
+        workspaceRoutes(otelContext, userInfo) ~
+        entityRoutes(otelContext, userInfo) ~
+        methodConfigRoutes(otelContext, userInfo) ~
+        submissionRoutes(otelContext, userInfo) ~
+        adminRoutes(otelContext, userInfo) ~
+        userRoutes(otelContext, userInfo) ~
+        billingRoutesV2(otelContext, userInfo) ~
+        billingRoutes(otelContext, userInfo) ~
+        notificationsRoutes ~
+        servicePerimeterRoutes(otelContext, userInfo) ~
+        snapshotRoutes(otelContext, userInfo) ~
+        googleProjectRegistrationRoutes(otelContext, userInfo)
+    }
 
   def apiRoutes =
     options(complete(OK)) ~
@@ -221,7 +218,6 @@ trait VersionApiService {
 }
 
 class RawlsApiServiceImpl(
-  val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService,
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService,
   val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService,
   val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,

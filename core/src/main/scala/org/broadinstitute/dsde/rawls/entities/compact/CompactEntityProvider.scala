@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   UnsupportedEntityOperationException
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityUtils}
+import org.broadinstitute.dsde.rawls.expressions.CompactExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
@@ -73,6 +74,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 ) extends EntityProvider
     with BatchHandling {
   override def entityStoreId: Option[String] = None // unused
+
+  private val expressionEvaluator = new CompactExpressionEvaluator(repository)
 
   val workspaceId: UUID = requestArguments.workspace.workspaceIdAsUUID // shorthand for methods below
   val workspaceContext: Workspace = requestArguments.workspace
@@ -370,14 +373,20 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                   entityName: String,
                                   expression: String,
                                   parentContext: RawlsRequestContext
-  ): Future[Seq[AttributeValue]] = ???
+  ): Future[Seq[AttributeValue]] =
+    expressionEvaluator.evaluateExpression(workspaceId, expression, entityType, entityName)
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: MethodConfigResolver.GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[LazyList[SubmissionValidationEntityInputs]] = ???
+  ): Future[LazyList[SubmissionValidationEntityInputs]] =
+    expressionEvaluator.evaluateExpressions(workspaceId,
+                                            expressionEvaluationContext,
+                                            gatherInputsResult,
+                                            workspaceExpressionResults
+    )
 
-  override def expressionValidator: ExpressionValidator = ???
+  override def expressionValidator: ExpressionValidator = new ExpressionValidator
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
     val queryResult = repository.dataSource.inTransaction(ReadOnly) { _ =>

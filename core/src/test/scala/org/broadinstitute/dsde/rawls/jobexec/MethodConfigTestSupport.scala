@@ -654,7 +654,7 @@ trait MethodConfigTestSupport {
   val configRawJsonTripleArray = MethodConfiguration(
     "config_namespace",
     "configSample",
-    Some("Sample"),
+    Some("SampleSet"),
     None,
     Map(tripleIntArrayNameWithWfName -> AttributeString("this.samples.rawJsonDoubleArray")),
     Map.empty,
@@ -757,6 +757,59 @@ trait MethodConfigTestSupport {
     Some("SampleSet"),
     None,
     Map(strArrayNameWithWfName -> AttributeString("this.samples.blah")),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configSampleSetSingleInput = MethodConfiguration(
+    "config_namespace",
+    "configSampleSetSingleInput",
+    Some("SampleSet"),
+    None,
+    Map(stringArgNameWithWfName -> AttributeString("this.samples.blah")),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configStaticInput = MethodConfiguration(
+    "config_namespace",
+    "configStaticInput",
+    None,
+    None,
+    Map(stringArgNameWithWfName -> AttributeString("\"plain value\"")),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configEntityName = MethodConfiguration("config_namespace",
+                                             "configEntityName",
+                                             Some("Sample"),
+                                             None,
+                                             Map(stringArgNameWithWfName -> AttributeString("this.Sample_id")),
+                                             Map.empty,
+                                             dummyMethod
+  )
+
+  val configWorkspaceAttr = MethodConfiguration(
+    "config_namespace",
+    "configWorkspaceAttr",
+    Some("Sample"),
+    None,
+    Map(intOptNameWithWfName -> AttributeString("this.blah"),
+        intArgNameWithWfName -> AttributeString("workspace.att1")
+    ),
+    Map.empty,
+    dummyMethod
+  )
+
+  val configWorkspaceNoEntity = MethodConfiguration(
+    "config_namespace",
+    "configWorkspaceAttr",
+    None,
+    None,
+    Map(
+      intArgNameWithWfName -> AttributeString("workspace.att1")
+    ),
     Map.empty,
     dummyMethod
   )

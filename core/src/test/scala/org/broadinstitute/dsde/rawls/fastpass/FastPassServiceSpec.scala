@@ -4,10 +4,8 @@ import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.TpsPaoGetResult
-import cats.effect.IO
 import com.google.api.services.iam.v1.model.Role
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -33,8 +31,6 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
 import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
   RawlsWorkspaceAclManager,
   WorkspaceService,
   WorkspaceSettingRepository,
@@ -65,7 +61,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -205,8 +200,6 @@ class FastPassServiceSpec
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAOImpl](RETURNS_SMART_NULLS)
-
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -214,7 +207,6 @@ class FastPassServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      billingProfileManagerDAO,
       mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
@@ -241,17 +233,6 @@ class FastPassServiceSpec
       "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
-    override val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
-      MultiCloudWorkspaceService.constructor(
-        dataSource,
-        workspaceManagerDAO,
-        mock[BillingProfileManagerDAOImpl],
-        samDAO,
-        multiCloudWorkspaceConfig,
-        leonardoDAO,
-        workbenchMetricBaseName
-      )
-    lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
@@ -274,8 +255,6 @@ class FastPassServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
@@ -337,7 +316,6 @@ class FastPassServiceSpec
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
@@ -455,13 +433,12 @@ class FastPassServiceSpec
 
     val childWorkspace =
       Await
-        .result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                     parentWorkspace.toWorkspaceName,
-                                                                     workspaceRequest
+        .result(services.workspaceService.cloneWorkspace(
+                  parentWorkspace.toWorkspaceName,
+                  workspaceRequest
                 ),
                 Duration.Inf
         )
-        .toWorkspace
 
     verify(services.mockFastPassService)
       .setupFastPassForUserInClonedWorkspace(
@@ -1138,9 +1115,9 @@ class FastPassServiceSpec
       .when(entityManager)
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
 
-    Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                      parentWorkspace.toWorkspaceName,
-                                                                      workspaceRequest
+    Await.result(services.workspaceService.cloneWorkspace(
+                   parentWorkspace.toWorkspaceName,
+                   workspaceRequest
                  ),
                  Duration.Inf
     )
