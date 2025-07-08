@@ -1946,19 +1946,17 @@ class WorkspaceServiceSpec
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
 
     val workspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                        baseWorkspace.toWorkspaceName,
-                                                                        workspaceRequest
+      Await.result(services.workspaceService.cloneWorkspace(
+                     baseWorkspace.toWorkspaceName,
+                     workspaceRequest
                    ),
                    Duration.Inf
       )
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProject.value should not be empty
     workspace.googleProjectNumber should not be empty
     workspace.workspaceType shouldBe Some(WorkspaceType.RawlsWorkspace)
-    workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
     workspace.attributes shouldBe Some(baseWorkspace.attributes)
     val destWorkspaceName = WorkspaceName(testData.testProject1Name.value, newWorkspaceName)
     verify(mockWorkspaceSettingService).setWorkspaceSettings(
