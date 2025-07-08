@@ -1002,7 +1002,6 @@ class WorkspaceService(
         StatusCodes.BadRequest,
         """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
       )
-
     val workspaceAttributeNames =
       destWorkspaceRequest.attributes.keys
 
