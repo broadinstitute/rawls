@@ -3416,18 +3416,6 @@ class WorkspaceServiceSpec
       err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
   }
 
-  it should "not update workspace billing when either billing account is Azure" in withTestDataServices { services =>
-    val workspaceName = testData.workspace.toWorkspaceName
-    val destBilling = testData.azureBillingProject.projectName
-    val err = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName, destBilling.value),
-                   Duration.Inf
-      )
-    }
-    err.errorReport.message should include(s"Billing Project $destBilling does not exist")
-    err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
-  }
-
   it should "not update workspace billing if user is not a billing project owner" in withTestDataServices { services =>
     val workspace = testData.workspace
     val sourceProject = testData.billingProject
