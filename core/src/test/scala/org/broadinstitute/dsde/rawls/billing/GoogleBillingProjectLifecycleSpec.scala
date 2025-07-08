@@ -137,9 +137,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val gbp = new GoogleBillingProjectLifecycle(repo, samDAO, mock[GoogleServicesDAO])
 
-    when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId))
-      .thenReturn(Future.successful(1))
-
     assertResult(CreationStatuses.Ready) {
       Await.result(gbp.postCreationSteps(createRequest,
                                          mock[MultiCloudWorkspaceConfig],
@@ -185,9 +182,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
         SamBillingProjectPolicyNames.owner
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-
-    when(repo.setBillingProfileId(createRequestWithMembers.projectName, profileModel.getId))
-      .thenReturn(Future.successful(1))
 
     doReturn(Future.successful())
       .when(wsmResourceRecordDao)
