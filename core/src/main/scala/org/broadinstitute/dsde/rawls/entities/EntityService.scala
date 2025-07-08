@@ -417,6 +417,22 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
     }
 
+  def cloneEntities(sourceWorkspaceContext: Workspace,
+                    destWorkspaceContext: Workspace,
+                    parentContext: RawlsRequestContext
+  ): DBIOAction[Unit, NoStream, Effect with Effect.Write] =
+    for {
+      entityProvider <- DBIO.from(getProviderWithTracing(sourceWorkspaceContext, parentContext))
+      res <- traceDBIOWithParent("clone entities", ctx) { s =>
+        entityProvider
+          .clone(sourceWorkspaceContext, destWorkspaceContext, s)
+          .map { case (clonedEntityCount, clonedAttrCount) =>
+            clonedWorkspaceEntityHistogram += clonedEntityCount
+            clonedWorkspaceAttributeHistogram += clonedAttrCount
+          }
+      }
+    } yield res
+
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
                                   entityUpdates: Source[EntityUpdateDefinition, _],
                                   upsert: Boolean,
@@ -527,7 +543,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
   /**
    * Helper to get the appropriate EntityProvider for the workspace while also adding tracing info
    */
-  def getProviderWithTracing(workspaceContext: Workspace, localContext: RawlsRequestContext): Future[EntityProvider] =
+  private def getProviderWithTracing(workspaceContext: Workspace,
+                                     localContext: RawlsRequestContext
+  ): Future[EntityProvider] =
     for {
       entityProvider <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
         entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, s))

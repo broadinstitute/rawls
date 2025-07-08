@@ -1076,17 +1076,7 @@ class WorkspaceService(
               )
             }
 
-            entityProvider <- DBIO.from(
-              entityServiceConstructor(ctx).getProviderWithTracing(sourceWorkspaceContext, ctx)
-            )
-            _ <- traceDBIOWithParent("clone entities", ctx) { s =>
-              entityProvider
-                .clone(sourceWorkspaceContext, destWorkspaceContext, s)
-                .map { case (clonedEntityCount, clonedAttrCount) =>
-                  clonedWorkspaceEntityHistogram += clonedEntityCount
-                  clonedWorkspaceAttributeHistogram += clonedAttrCount
-                }
-            }
+            _ = entityServiceConstructor(ctx).cloneEntities(sourceWorkspaceContext, destWorkspaceContext, ctx)
 
             methodConfigShorts <- dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext)
             _ <- DBIO.sequence(methodConfigShorts.map { methodConfigShort =>
