@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.ProfileModel
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
@@ -48,8 +47,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     None,
     None
   )
-  val profileModel: ProfileModel = new ProfileModel().id(UUID.randomUUID())
-
   behavior of "validateBillingProjectCreationRequest"
 
   it should "fail when creating a billing project against an billing account with no access" in {
@@ -137,9 +134,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val gbp = new GoogleBillingProjectLifecycle(repo, samDAO, mock[GoogleServicesDAO])
 
-    when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId))
-      .thenReturn(Future.successful(1))
-
     assertResult(CreationStatuses.Ready) {
       Await.result(gbp.postCreationSteps(createRequest,
                                          mock[MultiCloudWorkspaceConfig],
@@ -185,9 +179,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
         SamBillingProjectPolicyNames.owner
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-
-    when(repo.setBillingProfileId(createRequestWithMembers.projectName, profileModel.getId))
-      .thenReturn(Future.successful(1))
 
     doReturn(Future.successful())
       .when(wsmResourceRecordDao)

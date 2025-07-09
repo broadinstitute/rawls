@@ -3,13 +3,6 @@ package org.broadinstitute.dsde.rawls.spendreporting
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
-import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
-import bio.terra.profile.model.{
-  SpendReport => SpendReportBPM,
-  SpendReportingAggregation => SpendReportingAggregationBPM,
-  SpendReportingForDateRange => SpendReportingForDateRangeBPM
-}
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
@@ -265,43 +258,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
 
       val tableResult: TableResult = createTableResult(table)
-    }
-
-    object BpmSpendReport {
-      def spendData(from: DateTime,
-                    to: DateTime,
-                    currency: String,
-                    costData: Map[String, BigDecimal]
-      ): SpendReportBPM = {
-        // create spend reporting items based on costData
-        val spendDataList = costData
-          .map(costKvp =>
-            new SpendReportingForDateRangeBPM()
-              .cost(costKvp._2.toString())
-              .credits("0") /*credits is always 0 in case of Azure*/
-              .category(CategoryEnum.fromValue(costKvp._1))
-              .currency(currency)
-              .startTime(from.toString(ISODateTimeFormat.date()))
-              .endTime(to.toString(ISODateTimeFormat.date()))
-          )
-          .asJavaCollection
-          .stream()
-          .toList
-        val spendReportingAggregation =
-          new SpendReportingAggregationBPM()
-            .aggregationKey(AggregationKeyEnum.CATEGORY)
-            .spendData(spendDataList)
-        val spendSummary = new SpendReportingForDateRangeBPM()
-          .cost(costData.values.sum.toString())
-          .credits("0")
-          .currency("USD")
-          .startTime(from.toString(ISODateTimeFormat.date()))
-          .endTime(to.toString(ISODateTimeFormat.date()))
-
-        new SpendReportBPM()
-          .spendDetails(java.util.List.of(spendReportingAggregation))
-          .spendSummary(spendSummary)
-      }
     }
   }
 

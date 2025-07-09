@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.ProfileModel
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.BpmBillingProjectDelete
@@ -52,13 +51,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   )
 
   val billingProfileId: UUID = UUID.randomUUID()
-  val azureBillingProfile: ProfileModel = new ProfileModel()
-    .id(billingProfileId)
-    .tenantId(UUID.randomUUID())
-    .subscriptionId(UUID.randomUUID())
-    .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
-    .managedResourceGroupId("fake-mrg")
-    .createdDate("2023-09-12T22:20:48.949Z")
 
   val userInfo: UserInfo =
     UserInfo(RawlsUserEmail("fake@example.com"), OAuth2BearerToken("fake_token"), 0, RawlsUserSubjectId("sub"), None)
