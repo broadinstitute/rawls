@@ -156,6 +156,14 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
     copyResult
   }
 
+  override def clone(sourceWorkspaceContext: Workspace,
+                     destWorkspaceContext: Workspace,
+                     parentContext: RawlsRequestContext
+  ): WriteAction[(Int, Int)] =
+    repository.queries
+      .copyAllEntities(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID)
+      .map { copyActionResults: Int => (copyActionResults, 0) }
+
   /**
    * Copy all entities from sourceWorkspaceId to destWorkspaceId, excluding any entities that
    * are in the set of soft conflicts. Return an EntityCopyResponse containing a Seq of entities

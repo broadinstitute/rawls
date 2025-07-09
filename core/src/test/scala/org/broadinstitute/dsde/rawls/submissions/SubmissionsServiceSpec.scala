@@ -34,7 +34,8 @@ import org.broadinstitute.dsde.rawls.workspace.{
   RawlsWorkspaceAclManager,
   WorkspaceRepository,
   WorkspaceService,
-  WorkspaceSettingRepository
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
 }
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
@@ -198,7 +199,6 @@ class SubmissionsServiceSpec
       "fc-",
       "us-central1"
     )
-    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
@@ -245,7 +245,8 @@ class SubmissionsServiceSpec
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-
+    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -267,7 +268,9 @@ class SubmissionsServiceSpec
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(

@@ -240,8 +240,6 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterService =
         ServicePerimeterServiceFactory.createServicePerimeter(appConfigManager, slickDataSource, gcsDAO)
 
-      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(appConfigManager.conf)
-
       val tpsDAO = new HttpTpsDAO(appConfigManager.conf.getString("policyService.baseUrl"),
                                   RawlsCredential.getCredential(appConfigManager)
       )
@@ -363,6 +361,28 @@ object Boot extends IOApp with LazyLogging {
           samDAO
         )
 
+      val workspaceRepository = new WorkspaceRepository(slickDataSource)
+
+      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+
+      val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
+        new WorkspaceSettingService(_,
+                                    workspaceSettingRepository,
+                                    workspaceRepository,
+                                    gcsDAO,
+                                    samDAO,
+                                    appDependencies.googleStorageService
+        )(implicitly, IORuntime.global)
+
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix,
+        entityManager,
+        appConfigManager.conf.getInt("entities.pageSizeLimit"),
+        Option(workspaceSettingServiceConstructor)
+      )
+
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         shardedExecutionServiceCluster,
@@ -389,7 +409,9 @@ object Boot extends IOApp with LazyLogging {
           appConfigManager.gcsConfig.map(_.getString("terraBucketWriterRole")).getOrElse("unsupported"),
         new RawlsWorkspaceAclManager(samDAO),
         fastPassServiceConstructor,
-        policyService
+        policyService,
+        workspaceSettingServiceConstructor,
+        entityServiceConstructor
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
@@ -410,27 +432,6 @@ object Boot extends IOApp with LazyLogging {
           new WorkspaceRepository(slickDataSource),
           workbenchMetricBaseName = metricsPrefix
         )
-
-      val workspaceRepository = new WorkspaceRepository(slickDataSource)
-
-      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-      val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-        new WorkspaceSettingService(_,
-                                    workspaceSettingRepository,
-                                    workspaceRepository,
-                                    gcsDAO,
-                                    samDAO,
-                                    appDependencies.googleStorageService
-        )(implicitly, IORuntime.global)
-
-      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
-        slickDataSource,
-        samDAO,
-        workbenchMetricBaseName = metricsPrefix,
-        entityManager,
-        appConfigManager.conf.getInt("entities.pageSizeLimit"),
-        Option(workspaceSettingServiceConstructor)
-      )
 
       val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = SubmissionsService.constructor(
         slickDataSource,
@@ -485,8 +486,7 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           billingRepository,
           new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
-          billingProjectDeletion,
-          multiCloudWorkspaceConfig
+          billingProjectDeletion
         )
 
       val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =

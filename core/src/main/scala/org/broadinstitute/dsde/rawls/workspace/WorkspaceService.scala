@@ -18,6 +18,7 @@ import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
@@ -25,10 +26,11 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, GcpBucketRequesterPays}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -89,7 +91,9 @@ object WorkspaceService {
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
-                  policyService: PolicyService
+                  policyService: PolicyService,
+                  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+                  entityServiceConstructor: RawlsRequestContext => EntityService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -119,7 +123,9 @@ object WorkspaceService {
       new BillingRepository(dataSource),
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
       new WorkspaceSettingRepository(dataSource),
-      policyService
+      policyService,
+      (context: RawlsRequestContext) => workspaceSettingServiceConstructor(context),
+      (context: RawlsRequestContext) => entityServiceConstructor(context)
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -167,7 +173,9 @@ class WorkspaceService(
   val billingRepository: BillingRepository,
   val submissionsRepository: SubmissionsRepository,
   val workspaceSettingsRepository: WorkspaceSettingRepository,
-  policyService: PolicyService
+  policyService: PolicyService,
+  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+  entityServiceConstructor: RawlsRequestContext => EntityService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with UserWiths
@@ -1017,6 +1025,10 @@ class WorkspaceService(
         case None    => Option(sourceWorkspace.bucketName)
       }
 
+      compactDataTablesEnabled <- entityServiceConstructor(ctx).isCompactDataTableSettingEnabled(
+        sourceWorkspace.toWorkspaceName
+      )
+
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
         Set(AttributeTempTableType.Workspace)
       )(
@@ -1053,13 +1065,7 @@ class WorkspaceService(
               )
             }
 
-            (clonedEntityCount, clonedAttrCount) <- dataAccess.entityQuery.copyEntitiesToNewWorkspace(
-              sourceWorkspaceContext.workspaceIdAsUUID,
-              destWorkspaceContext.workspaceIdAsUUID
-            )
-
-            _ = clonedWorkspaceEntityHistogram += clonedEntityCount
-            _ = clonedWorkspaceAttributeHistogram += clonedAttrCount
+            _ <- entityServiceConstructor(ctx).cloneEntities(sourceWorkspaceContext, destWorkspaceContext, ctx)
 
             methodConfigShorts <- dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext)
             _ <- DBIO.sequence(methodConfigShorts.map { methodConfigShort =>
@@ -1086,6 +1092,17 @@ class WorkspaceService(
         fastPassServiceConstructor(childContext)
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
       )
+
+      _ <-
+        if (compactDataTablesEnabled) {
+          logger.info("enabling compact data tables on new workspace")
+          workspaceSettingServiceConstructor(ctx).setWorkspaceSettings(
+            destWorkspaceContext.toWorkspaceName,
+            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+          )
+        } else {
+          Future.successful()
+        }
 
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user

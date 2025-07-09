@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   GoogleBillingProjectDelete,
   JobType
@@ -53,7 +52,6 @@ class GoogleBillingProjectLifecycle(
     } yield {}
 
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-                                 config: MultiCloudWorkspaceConfig,
                                  _billingProjectDeletion: BillingProjectDeletion,
                                  ctx: RawlsRequestContext
   ): Future[CreationStatus] =

@@ -202,8 +202,7 @@ trait ApiServiceSpec
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      billingProjectDeletion,
-      mock[MultiCloudWorkspaceConfig]
+      billingProjectDeletion
     )
 
     override val userServiceConstructor = UserService.constructor(
@@ -341,7 +340,9 @@ trait ApiServiceSpec
       terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
