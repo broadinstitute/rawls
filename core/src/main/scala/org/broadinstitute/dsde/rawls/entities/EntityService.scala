@@ -423,7 +423,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   ): DBIOAction[Unit, NoStream, Effect with Effect.Write] =
     for {
       entityProvider <- DBIO.from(getProviderWithTracing(sourceWorkspaceContext, parentContext))
-      res <- traceDBIOWithParent("clone entities", ctx) { s =>
+      res <- traceDBIOWithParent("clone entities", parentContext) { s =>
         entityProvider
           .clone(sourceWorkspaceContext, destWorkspaceContext, s)
           .map { case (clonedEntityCount, clonedAttrCount) =>
