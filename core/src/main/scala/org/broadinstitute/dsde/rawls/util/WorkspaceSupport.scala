@@ -96,7 +96,7 @@ trait WorkspaceSupport {
 
   // WorkspaceContext helpers
 
-  def getWorkspaceContext(
+  private def getWorkspaceContext(
     workspaceName: WorkspaceName,
     attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
@@ -128,8 +128,8 @@ trait WorkspaceSupport {
       _ <- checkLock(workspace, requiredAction)
     } yield workspace
 
-  def getV2WorkspaceContextByWorkspaceId(workspaceId: String,
-                                         attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  private def getV2WorkspaceContextByWorkspaceId(workspaceId: String,
+                                                 attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] = for {
     _ <- userEnabledCheck
     workspaceUuid = Try(UUID.fromString(workspaceId)) match {
