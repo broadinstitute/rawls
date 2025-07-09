@@ -105,20 +105,6 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     }
   }
 
-  behavior of "setBillingProfileId"
-
-  it should "set a billing profile ID" in withDefaultTestDatabase {
-    val repo = new BillingRepository(slickDataSource)
-    val billingProject = makeBillingProject()
-    val billingProfileId = UUID.randomUUID()
-    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
-
-    Await.result(repo.setBillingProfileId(billingProject.projectName, billingProfileId), Duration.Inf)
-    val updated = Await.result(repo.getBillingProject(billingProject.projectName), Duration.Inf)
-
-    assertResult(billingProfileId.toString)(updated.get.billingProfileId.get)
-  }
-
   behavior of "deleteBillingProject"
 
   it should "delete a billing project record" in withDefaultTestDatabase {
@@ -207,30 +193,4 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     }
   }
 
-  behavior of "getBillingProjectsWithProfile"
-
-  it should "return billing projects with the specified profile ID" in withDefaultTestDatabase {
-    val repo = new BillingRepository(slickDataSource)
-    val firstProject = makeBillingProject()
-    val secondProject = makeBillingProject()
-    val projectWithDifferentBP = makeBillingProject()
-    val billingProfileId = UUID.fromString(firstProject.billingProfileId.get)
-
-    Await.result(repo.createBillingProject(firstProject), Duration.Inf)
-    Await.result(repo.createBillingProject(secondProject), Duration.Inf)
-    Await.result(repo.setBillingProfileId(secondProject.projectName, billingProfileId), Duration.Inf)
-    Await.result(repo.createBillingProject(projectWithDifferentBP), Duration.Inf)
-
-    val projectNames = Await.result(repo.getBillingProjectsWithProfile(Some(billingProfileId)), Duration.Inf).map {
-      _.projectName
-    }
-    assertResult(2)(projectNames.length)
-    projectNames should contain theSameElementsAs Seq(firstProject.projectName, secondProject.projectName)
-  }
-
-  it should "return return an empty Seq if no billing profile ID specified" in withDefaultTestDatabase {
-    val repo = new BillingRepository(slickDataSource)
-    val projects = Await.result(repo.getBillingProjectsWithProfile(None), Duration.Inf)
-    assertResult(0)(projects.length)
-  }
 }

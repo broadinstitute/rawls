@@ -4,7 +4,7 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import net.logstash.logback.argument.StructuredArguments
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
@@ -127,6 +127,14 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
                           linkExistingEntities,
                           parentContext
     )
+  }
+
+  override def clone(sourceWorkspaceContext: Workspace,
+                     destWorkspaceContext: Workspace,
+                     parentContext: RawlsRequestContext
+  ): WriteAction[(Int, Int)] = {
+    logAudit("clone")
+    delegate.clone(sourceWorkspaceContext, destWorkspaceContext, parentContext)
   }
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {

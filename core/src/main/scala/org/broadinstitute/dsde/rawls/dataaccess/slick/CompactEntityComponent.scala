@@ -287,7 +287,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                  destWs: UUID,
                                  entityRefs: Set[EntityPointer] = Set(),
                                  batchSize: Int = driverComponent.batchSize
-  ): ReadWriteAction[Int] = {
+  ): WriteAction[Int] = {
 
     def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
       for {
@@ -297,7 +297,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
-
     allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum }
   }
 
@@ -393,23 +392,32 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *
    * `query execution plan (for select): index range scan on idx_entity_type_name.`
    */
-  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): ReadWriteAction[Int] =
+  def copyEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID, refs: Set[EntityPointer]): WriteAction[Int] =
     if (refs.isEmpty) {
       DBIO.successful(0)
     } else {
       val typeNameClauses = generateTypeNameSql(refs)
       val sql = concatSqlActions(
         sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
+               select name, entity_type, $destWorkspaceId, record_version, 0, attributes
+               from ENTITY e
+               where e.workspace_id = $sourceWorkspaceId
+               and deleted = 0"""
+      )
+      val entityTypeNameTuples = reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or ")
+      concatSqlActions(sql, sql" and (", entityTypeNameTuples, sql")").as[Int].head
+    }
+
+  def copyAllEntities(sourceWorkspaceId: UUID, destWorkspaceId: UUID): WriteAction[Int] = {
+    val sql = concatSqlActions(
+      sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes)
              select name, entity_type, $destWorkspaceId, record_version, 0, attributes
              from ENTITY e
              where e.workspace_id = $sourceWorkspaceId
-             and deleted = 0
-             and ( """,
-        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" or "),
-        sql""" );"""
-      )
-      sql.asUpdate
-    }
+             and deleted = 0"""
+    )
+    sql.as[Int].head
+  }
 
   /** Given a set of entity type/name pairs, return the count of those entities that exist.
     *

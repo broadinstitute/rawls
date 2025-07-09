@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import bio.terra.policy.model.TpsPaoGetResult
-import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -12,24 +11,26 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, _}
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
+import org.broadinstitute.dsde.rawls._
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, GcpBucketRequesterPays}
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -72,7 +73,6 @@ import scala.util.{Failure, Success, Try}
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   executionServiceCluster: ExecutionServiceCluster,
-                  workspaceManagerDAO: WorkspaceManagerDAO,
                   leonardoService: LeonardoService,
                   gcsDAO: GoogleServicesDAO,
                   samDAO: SamDAO,
@@ -90,9 +90,10 @@ object WorkspaceService {
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
-                  policyService: PolicyService
+                  policyService: PolicyService,
+                  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+                  entityServiceConstructor: RawlsRequestContext => EntityService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -100,7 +101,6 @@ object WorkspaceService {
       ctx,
       dataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -118,13 +118,14 @@ object WorkspaceService {
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       (context: RawlsRequestContext) => fastPassServiceConstructor(context, dataSource),
       new WorkspaceRepository(dataSource),
       new BillingRepository(dataSource),
       new SubmissionsRepository(dataSource, config.trackDetailedSubmissionMetrics, workbenchMetricBaseName),
       new WorkspaceSettingRepository(dataSource),
-      policyService
+      policyService,
+      (context: RawlsRequestContext) => workspaceSettingServiceConstructor(context),
+      (context: RawlsRequestContext) => entityServiceConstructor(context)
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -150,7 +151,6 @@ class WorkspaceService(
   val ctx: RawlsRequestContext,
   val dataSource: SlickDataSource,
   executionServiceCluster: ExecutionServiceCluster,
-  val workspaceManagerDAO: WorkspaceManagerDAO,
   val leonardoService: LeonardoService,
   val gcsDAO: GoogleServicesDAO,
   val samDAO: SamDAO,
@@ -168,13 +168,14 @@ class WorkspaceService(
   val terraBucketReaderRole: String,
   val terraBucketWriterRole: String,
   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
   val fastPassServiceConstructor: RawlsRequestContext => FastPassService,
   val workspaceRepository: WorkspaceRepository,
   val billingRepository: BillingRepository,
   val submissionsRepository: SubmissionsRepository,
   val workspaceSettingsRepository: WorkspaceSettingRepository,
-  policyService: PolicyService
+  policyService: PolicyService,
+  workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
+  entityServiceConstructor: RawlsRequestContext => EntityService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with UserWiths
@@ -218,6 +219,7 @@ class WorkspaceService(
           ErrorReport(StatusCodes.BadRequest, "Unsupported billing project: Azure billing projects are not supported")
         )
       }
+      _ = validateNoEntityReferences(workspaceRequest.attributes)
       // ensure the user has the create_workspace permission on the billing project
       _ <- traceFutureWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
         requireCreateWorkspaceAction(billingProject.projectName, childContext)
@@ -578,11 +580,6 @@ class WorkspaceService(
     _ <- traceFutureWithParent("deleteGoogleProject", ctx)(innerCtx =>
       deleteGoogleProject(workspace.googleProjectId, innerCtx)
     )
-    // attempt to delete workspace in WSM, in case thsi is a TDR snapshot - but don't fail on it
-    _ = Try(workspaceManagerDAO.deleteWorkspace(workspace.workspaceIdAsUUID, ctx)).recover {
-      case e: ApiException if e.getCode != StatusCodes.NotFound.intValue =>
-        logger.warn(s"Unexpected failure deleting workspace in WSM for workspace `${workspace.toWorkspaceName}]", e)
-    }
     // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
     _ <- traceFutureWithParent("deleteWorkspaceTransaction", ctx)(_ =>
       workspaceRepository.deleteRawlsWorkspace(workspace)
@@ -687,6 +684,7 @@ class WorkspaceService(
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        _ = validateNoEntityReferences(operations)
         workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
           dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
           TransactionIsolation.ReadCommitted
@@ -1010,6 +1008,7 @@ class WorkspaceService(
     for {
       sourceWorkspace <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
+      _ = validateNoEntityReferences(destWorkspaceRequest.attributes)
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
       _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
@@ -1025,6 +1024,10 @@ class WorkspaceService(
         case Some(_) => None
         case None    => Option(sourceWorkspace.bucketName)
       }
+
+      compactDataTablesEnabled <- entityServiceConstructor(ctx).isCompactDataTableSettingEnabled(
+        sourceWorkspace.toWorkspaceName
+      )
 
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
         Set(AttributeTempTableType.Workspace)
@@ -1062,13 +1065,7 @@ class WorkspaceService(
               )
             }
 
-            (clonedEntityCount, clonedAttrCount) <- dataAccess.entityQuery.copyEntitiesToNewWorkspace(
-              sourceWorkspaceContext.workspaceIdAsUUID,
-              destWorkspaceContext.workspaceIdAsUUID
-            )
-
-            _ = clonedWorkspaceEntityHistogram += clonedEntityCount
-            _ = clonedWorkspaceAttributeHistogram += clonedAttrCount
+            _ <- entityServiceConstructor(ctx).cloneEntities(sourceWorkspaceContext, destWorkspaceContext, ctx)
 
             methodConfigShorts <- dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext)
             _ <- DBIO.sequence(methodConfigShorts.map { methodConfigShort =>
@@ -1096,28 +1093,17 @@ class WorkspaceService(
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
       )
 
-      _ <- traceFutureWithParent("cloneWsmWorkspace", parentContext)(context =>
-        Future {
-          workspaceManagerDAO.cloneWorkspace(
-            sourceWorkspaceId = sourceWorkspaceContext.workspaceIdAsUUID,
-            workspaceId = destWorkspaceContext.workspaceIdAsUUID,
-            displayName = destWorkspaceContext.name,
-            spendProfile = None,
-            billingProjectNamespace = destWorkspaceContext.namespace,
-            context
+      _ <-
+        if (compactDataTablesEnabled) {
+          logger.info("enabling compact data tables on new workspace")
+          workspaceSettingServiceConstructor(ctx).setWorkspaceSettings(
+            destWorkspaceContext.toWorkspaceName,
+            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
           )
-        }.recoverWith { case e: ApiException =>
-          if (e.getCode != StatusCodes.NotFound.intValue) {
-            logger.warn(
-              s"Unexpected failure cloning workspace (while cloning Rawls-stage workspace in Workspace Manager) [sourceWorkspaceId=${sourceWorkspaceContext.workspaceId}, destWorkspaceId=${destWorkspaceContext.workspaceId}]. Received ${e.getCode}: [${e.getResponseBody}]"
-            )
-            throw e
-          } else {
-            // 404 == workspace manager does not know about this workspace, move on
-            Future.successful()
-          }
+        } else {
+          Future.successful()
         }
-      )
+
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
       // we also don't want to block returning a response on this call because it's already a slow endpoint
@@ -1156,11 +1142,7 @@ class WorkspaceService(
   def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] =
     for {
       workspace <- getV2WorkspaceContext(workspaceName)
-      workspaceAclManager = workspace.workspaceType match {
-        case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
-        case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
-      }
-      workspaceACL <- workspaceAclManager.getAcl(workspace.workspaceIdAsUUID, ctx)
+      workspaceACL <- rawlsWorkspaceAclManager.getAcl(workspace.workspaceIdAsUUID, ctx)
     } yield workspaceACL
 
   private def loadV2WorkspaceId(workspaceName: WorkspaceName): Future[String] =
@@ -1311,11 +1293,7 @@ class WorkspaceService(
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         for {
           workspace <- getV2WorkspaceContext(workspaceName)
-          workspaceAclManager = workspace.workspaceType match {
-            case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
-            case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
-          }
-          existingPoliciesWithMembers <- workspaceAclManager.getWorkspacePolicies(workspace.workspaceIdAsUUID, ctx)
+          existingPoliciesWithMembers <- rawlsWorkspaceAclManager.getWorkspacePolicies(workspace.workspaceIdAsUUID, ctx)
 
           // convert all the existing policy memberships into WorkspaceAclUpdate objects
           existingAcls = existingPoliciesWithMembers
@@ -1370,11 +1348,11 @@ class WorkspaceService(
           // do additions before removals so users are not left unable to access the workspace in case of errors that
           // lead to incomplete application of these changes, remember: this is not transactional
           _ <- Future.traverse(policyAdditions) { case (policyName, email) =>
-            workspaceAclManager.addUserToPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
+            rawlsWorkspaceAclManager.addUserToPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
           }
 
           _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
-            workspaceAclManager.removeUserFromPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
+            rawlsWorkspaceAclManager.removeUserFromPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
           }
 
           // only revoke requester pays if there's a Google project to revoke it for
@@ -1383,7 +1361,7 @@ class WorkspaceService(
               revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
             } else Future.successful()
 
-          _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
+          _ <- rawlsWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
 
           // Sync FastPass grants once ACLs are updated
           _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { email =>
@@ -2548,6 +2526,31 @@ class WorkspaceService(
 
   def isBucketSecure(workspace: Workspace): Boolean =
     workspace.bucketName.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+
+  private def validateNoEntityReferences(operations: Seq[AttributeUpdateOperation]): Unit =
+    operations.foreach { operation =>
+      operation match {
+        case AddUpdateAttribute(_, value) => checkAttributeValue(value)
+        case AddListMember(_, value)      => checkAttributeValue(value)
+        case CreateAttributeEntityReferenceList(_) =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Workspace attributes cannot reference entities")
+          )
+        case _ => // RemoveAttribute, RemoveListMember don't add new values
+      }
+    }
+
+  private def validateNoEntityReferences(attributeMap: AttributeMap): Unit =
+    attributeMap.map { case (_, value) => checkAttributeValue(value) }
+
+  private def checkAttributeValue(value: Attribute): Unit =
+    value match {
+      case _: AttributeEntityReference | _: AttributeEntityReferenceList | AttributeEntityReferenceEmptyList =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Workspace attributes cannot reference entities")
+        )
+      case _ => // allowed attribute types
+    }
 }
 
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

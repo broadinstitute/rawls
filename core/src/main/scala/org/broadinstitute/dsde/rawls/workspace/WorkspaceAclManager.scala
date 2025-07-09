@@ -35,12 +35,6 @@ trait WorkspaceAclManager {
                            ctx: RawlsRequestContext
   ): Future[Unit]
 
-  def maybeShareWorkspaceNamespaceCompute(
-    policyAdditions: Set[(SamResourcePolicyName, String)],
-    workspaceName: WorkspaceName,
-    ctx: RawlsRequestContext
-  ): Future[Unit]
-
   def isUserPending(userEmail: String, ctx: RawlsRequestContext): Future[Boolean] =
     samDAO.getUserIdInfo(userEmail, ctx).map {
       case SamDAO.User(x)  => x.googleSubjectId.isEmpty

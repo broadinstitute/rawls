@@ -19,16 +19,7 @@ case class StatusCheckResponse(
 
 object Subsystems {
   val AllSubsystems =
-    Set(Agora,
-        Cromwell,
-        Database,
-        GoogleBilling,
-        GoogleBuckets,
-        GooglePubSub,
-        Sam,
-        BillingProfileManager,
-        WorkspaceManager
-    )
+    Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GooglePubSub, Sam)
   // CriticalSubsystems are those that will trigger rawls to report down
   val CriticalSubsystems = Set(Database, Sam)
   val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GooglePubSub)
@@ -41,17 +32,15 @@ object Subsystems {
 
   def withName(name: String): Subsystem =
     name match {
-      case "Agora"                 => Agora
-      case "Cromwell"              => Cromwell
-      case "Database"              => Database
-      case "GoogleBilling"         => GoogleBilling
-      case "GoogleBuckets"         => GoogleBuckets
-      case "GooglePubSub"          => GooglePubSub
-      case "Mongo"                 => Mongo
-      case "Sam"                   => Sam
-      case "BillingProfileManager" => BillingProfileManager
-      case "WorkspaceManager"      => WorkspaceManager
-      case _                       => throw new RawlsException(s"invalid Subsystem [$name]")
+      case "Agora"         => Agora
+      case "Cromwell"      => Cromwell
+      case "Database"      => Database
+      case "GoogleBilling" => GoogleBilling
+      case "GoogleBuckets" => GoogleBuckets
+      case "GooglePubSub"  => GooglePubSub
+      case "Mongo"         => Mongo
+      case "Sam"           => Sam
+      case _               => throw new RawlsException(s"invalid Subsystem [$name]")
     }
 
   case object Agora extends Subsystem
@@ -62,8 +51,6 @@ object Subsystems {
   case object GooglePubSub extends Subsystem
   case object Mongo extends Subsystem
   case object Sam extends Subsystem
-  case object BillingProfileManager extends Subsystem
-  case object WorkspaceManager extends Subsystem
 }
 
 object StatusJsonSupport extends JsonSupport {

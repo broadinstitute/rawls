@@ -26,7 +26,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
@@ -39,14 +38,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, Submissio
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
-import org.broadinstitute.dsde.rawls.model.{
-  Agora,
-  ApplicationVersion,
-  Dockstore,
-  GoogleProjectId,
-  RawlsRequestContext,
-  RawlsUser
-}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, GoogleProjectId, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -57,15 +49,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  RawlsWorkspaceAclManager,
-  WorkspaceAdminService,
-  WorkspaceRepository,
-  WorkspaceService,
-  WorkspaceSettingRepository,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace._
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
@@ -81,7 +65,6 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
@@ -163,8 +146,6 @@ trait ApiServiceSpec
 
     val samDAO: SamDAO = new MockSamDAO(dataSource)
 
-    val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
-
     val leonardoService: LeonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
@@ -212,21 +193,16 @@ trait ApiServiceSpec
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf.getConfig("gcs"))
     val servicePerimeterService = new ServicePerimeterServiceImpl(slickDataSource, gcsDAO, servicePerimeterConfig)
     val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val billingRepository = spy(new BillingRepository(slickDataSource))
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
-    val azureBillingProjectLifecycle = mock[AzureBillingProjectLifecycle]
-    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository, billingProfileManagerDAO)
+    val billingProjectDeletion = new BillingProjectDeletion(samDAO, billingRepository)
     val googleProjectRegRepo = mock[GoogleProjectRegistrationRepository]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      azureBillingProjectLifecycle,
-      billingProjectDeletion,
-      workspaceManagerResourceMonitorRecordDao,
-      mock[MultiCloudWorkspaceConfig]
+      billingProjectDeletion
     )
 
     override val userServiceConstructor = UserService.constructor(
@@ -236,15 +212,12 @@ trait ApiServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      billingProfileManagerDAO,
-      mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
       new WorkspaceRepository(slickDataSource),
       samDAO,
-      workspaceManagerDAO,
       mockServer.mockServerBaseUrl,
       dataRepoDAO,
       _ => mock[WorkspaceService](RETURNS_SMART_NULLS),
@@ -277,8 +250,6 @@ trait ApiServiceSpec
         gpsDAO,
         methodRepoDAO,
         samDAO,
-        billingProfileManagerDAO,
-        workspaceManagerDAO,
         executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
         Seq.empty,
         Seq("my-favorite-bucket")
@@ -333,8 +304,6 @@ trait ApiServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val fastPassConfig = FastPassConfig.apply(testConf)
     val fastPassServiceConstructor = FastPassServiceImpl.constructor(
@@ -353,7 +322,6 @@ trait ApiServiceSpec
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -371,9 +339,10 @@ trait ApiServiceSpec
       terraBucketReaderRole = "fakeTerraBucketReaderRole",
       terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
@@ -391,7 +360,6 @@ trait ApiServiceSpec
       slickDataSource,
       spendReportingBigQueryService,
       mock[BillingRepository],
-      mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig,
       workspaceServiceConstructor,

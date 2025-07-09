@@ -4,12 +4,8 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
-import bio.terra.profile.model.{SystemStatus, SystemStatusSystems}
-import bio.terra.workspace.client.ApiException
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
@@ -25,7 +21,6 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 class HealthMonitorSpec
@@ -135,34 +130,6 @@ class HealthMonitorSpec
       errorMessages = { case (Sam, Some(messages)) =>
         messages.size should be(1)
         messages(0) should equal("""{"some": "json"}""")
-      }
-    )
-  }
-
-  it should "return a non-ok for BillingProfileManager" in {
-    val actor = newHealthMonitorActor(billingProfileManagerDAO = failingBillingProfileManagerDAO)
-    actor ! CheckAll
-    checkCurrentStatus(
-      actor,
-      false,
-      successes = AllSubsystems.filterNot(_ == BillingProfileManager),
-      failures = Set(BillingProfileManager),
-      errorMessages = { case (BillingProfileManager, Some(messages)) =>
-        messages.size should be(1)
-      }
-    )
-  }
-
-  it should "return a non-ok for WorkspaceManager" in {
-    val actor = newHealthMonitorActor(workspaceManagerDAO = failingWorkspaceManagerDAO)
-    actor ! CheckAll
-    checkCurrentStatus(
-      actor,
-      false,
-      successes = AllSubsystems.filterNot(_ == WorkspaceManager),
-      failures = Set(WorkspaceManager),
-      errorMessages = { case (WorkspaceManager, Some(messages)) =>
-        messages.size should be(1)
       }
     )
   }
@@ -282,8 +249,6 @@ class HealthMonitorSpec
                             googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
                             methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO,
                             samDAO: SamDAO = mockSamDAO,
-                            billingProfileManagerDAO: BillingProfileManagerDAO = mockBillingProfileManagerDAO,
-                            workspaceManagerDAO: WorkspaceManagerDAO = mockWorkspaceManagerDAO,
                             executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] =
                               mockExecutionServiceServers
   ): ActorRef =
@@ -294,8 +259,6 @@ class HealthMonitorSpec
         googlePubSubDAO,
         methodRepoDAO,
         samDAO,
-        billingProfileManagerDAO,
-        workspaceManagerDAO,
         executionServiceServers,
         Seq("topic1", "topic2"),
         Seq("bucket1", "bucket2"),
@@ -388,37 +351,6 @@ class HealthMonitorSpec
     when {
       dao.getStatus()
     } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
-    dao
-  }
-
-  def mockBillingProfileManagerDAO: BillingProfileManagerDAO = {
-    val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when {
-      dao.getStatus()
-    } thenReturn new SystemStatus().ok(true)
-    dao
-  }
-
-  def failingBillingProfileManagerDAO: BillingProfileManagerDAO = {
-    val failingSubsystems = Map(
-      "exampleSystem" -> new SystemStatusSystems().ok(false).messages(List("messages").asJava)
-    ).asJava
-    val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when {
-      dao.getStatus()
-    } thenReturn new SystemStatus().ok(false).systems(failingSubsystems)
-    dao
-  }
-
-  def mockWorkspaceManagerDAO: WorkspaceManagerDAO = {
-    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    doNothing.when(dao).throwWhenUnavailable()
-    dao
-  }
-
-  def failingWorkspaceManagerDAO: WorkspaceManagerDAO = {
-    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(dao.throwWhenUnavailable()).thenThrow(new ApiException())
     dao
   }
 

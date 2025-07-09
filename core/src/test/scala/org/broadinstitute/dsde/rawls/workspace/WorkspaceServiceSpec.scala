@@ -5,17 +5,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
-import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{
-  AzureContext,
-  GcpContext,
-  WorkspaceDescription,
-  WorkspaceStageModel,
-  WsmPolicyInput,
-  WsmPolicyInputs,
-  WsmPolicyPair
-}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -24,7 +13,6 @@ import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -32,9 +20,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.tps.TpsDAO
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPassService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
@@ -45,7 +33,10 @@ import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSetting
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.policy.PolicyService
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
@@ -74,7 +65,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
@@ -85,9 +76,12 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
-import scala.util.Success
+
+// WsmPolicyPair and WsmPolicyInput were originally defined in the WSM client library. They are replicated here
+// for ease of use in tests below.
+case class WsmPolicyPair(key: String, value: String)
+case class WsmPolicyInput(namespace: String, name: String, additionalData: List[WsmPolicyPair])
 
 class WorkspaceServiceSpec
     extends AnyFlatSpec
@@ -100,7 +94,8 @@ class WorkspaceServiceSpec
     with RawlsStatsDTestUtils
     with BeforeAndAfterAll
     with TableDrivenPropertyChecks
-    with OptionValues {
+    with OptionValues
+    with BeforeAndAfterEach {
   import driver.api._
 
   val workspace: Workspace = Workspace(
@@ -119,6 +114,14 @@ class WorkspaceServiceSpec
 
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
+  val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
+
+  val mockLocalProvider: LocalEntityProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
+
+  val mockCompactEntityProvider: CompactEntityProvider = mock[CompactEntityProvider](RETURNS_SMART_NULLS)
+
+  var entityManager: EntityManager = _
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     mockServer.startServer()
@@ -127,6 +130,16 @@ class WorkspaceServiceSpec
   override def afterAll(): Unit = {
     mockServer.stopServer
     super.afterAll()
+  }
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    when(
+      mockWorkspaceSettingService.getWorkspaceSettingOfType(
+        any[WorkspaceName],
+        any[WorkspaceSettingType]
+      )
+    ).thenReturn(Future.successful(None))
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
@@ -144,7 +157,7 @@ class WorkspaceServiceSpec
     lazy val methodConfigurationService: MethodConfigurationService = methodConfigurationServiceConstructor(ctx1)
     lazy val submissionsService: SubmissionsService = submissionsServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
-    val slickDataSource: SlickDataSource = dataSource
+    val slickDataSource: SlickDataSource = Mockito.spy(dataSource)
 
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
@@ -156,7 +169,6 @@ class WorkspaceServiceSpec
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
@@ -205,8 +217,6 @@ class WorkspaceServiceSpec
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess]))
       .thenReturn(DBIO.successful(()))
 
-    val billingProfileManagerDAO = mock[BillingProfileManagerDAOImpl](RETURNS_SMART_NULLS)
-
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -214,8 +224,6 @@ class WorkspaceServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
-      billingProfileManagerDAO,
-      mock[WorkspaceManagerDAO],
       mock[NotificationDAO]
     ) _
 
@@ -240,23 +248,12 @@ class WorkspaceServiceSpec
       "fc-",
       "us-central1"
     )
-    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
       new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
-    val entityManager = EntityManager.defaultEntityManager(
-      dataSource,
-      new WorkspaceSettingRepository(dataSource),
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
-      workbenchMetricBaseName
-    )
-
-    val entityServiceConstructor =
-      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000) _
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
@@ -264,8 +261,6 @@ class WorkspaceServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
     val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
@@ -289,11 +284,35 @@ class WorkspaceServiceSpec
 
     val workspaceRepository = new WorkspaceRepository(slickDataSource)
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mockWorkspaceSettingService
+
+    entityManager = Mockito.spy(
+      EntityManager.defaultEntityManager(
+        dataSource,
+        new WorkspaceSettingRepository(dataSource),
+        testConf.getBoolean("entityStatisticsCache.enabled"),
+        testConf.getDuration("entities.queryTimeout"),
+        workbenchMetricBaseName
+      )
+    )
+    when(mockLocalProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
+    doReturn(Future.successful(mockLocalProvider))
+      .when(entityManager)
+      .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
+
+    val entityServiceConstructor =
+      EntityService.constructor(slickDataSource,
+                                samDAO,
+                                workbenchMetricBaseName = "test",
+                                entityManager,
+                                1000,
+                                Some(workspaceSettingServiceConstructor)
+      ) _
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
-      workspaceManagerDAO,
       leonardoService,
       gcsDAO,
       samDAO,
@@ -311,9 +330,10 @@ class WorkspaceServiceSpec
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(
@@ -364,8 +384,6 @@ class WorkspaceServiceSpec
 
     // these need to be overridden to use the new samDAO
     override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    override val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
   }
 
   class TestApiServiceWithMockFastPassService(dataSource: SlickDataSource, override val user: RawlsUser)
@@ -1797,6 +1815,42 @@ class WorkspaceServiceSpec
     verify(services.policyService, never()).mergeWorkspacePao(any(), any(), any())
   }
 
+  it should "fail to add entity references as workspace attributes" in withTestDataServices { services =>
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      val workspaceName = WorkspaceName(testData.testProject1Name.value, s"${UUID.randomUUID()}")
+      val workspaceRequest = WorkspaceRequest(workspaceName.namespace,
+                                              workspaceName.name,
+                                              Map(
+                                                AttributeName.withDefaultNS("referenceAttribute") ->
+                                                  AttributeEntityReference("sample", "sample1")
+                                              )
+      )
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("Workspace attributes cannot reference entities")
+
+    val error2 = intercept[RawlsExceptionWithErrorReport] {
+      val workspaceName = WorkspaceName(testData.testProject1Name.value, s"${UUID.randomUUID()}")
+      val workspaceRequest = WorkspaceRequest(
+        workspaceName.namespace,
+        workspaceName.name,
+        Map(
+          AttributeName.withDefaultNS("referenceListAttribute") ->
+            AttributeEntityReferenceList(
+              Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+            )
+        )
+      )
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("Workspace attributes cannot reference entities")
+
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {
@@ -1868,6 +1922,45 @@ class WorkspaceServiceSpec
     workspace.googleProjectNumber should not be empty
     workspace.workspaceType shouldBe WorkspaceType.RawlsWorkspace
     workspace.attributes shouldBe baseWorkspace.attributes
+  }
+
+  "cloneWorkspace" should "create a V2 Workspace using compact data tables" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    when(
+      mockWorkspaceSettingService.getWorkspaceSettingOfType(
+        baseWorkspace.toWorkspaceName,
+        CompactDataTables
+      )
+    ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+
+    when(mockWorkspaceSettingService.setWorkspaceSettings(any[WorkspaceName], any[List[WorkspaceSetting]]))
+      .thenReturn(Future.successful(mock[WorkspaceSettingResponse]))
+
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    when(mockCompactEntityProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
+    doReturn(Future.successful(mockCompactEntityProvider))
+      .when(entityManager)
+      .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
+
+    val workspace =
+      Await.result(services.workspaceService.cloneWorkspace(
+                     baseWorkspace.toWorkspaceName,
+                     workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectNumber should not be empty
+    workspace.workspaceType shouldBe WorkspaceType.RawlsWorkspace
+    workspace.attributes shouldBe baseWorkspace.attributes
+    val destWorkspaceName = WorkspaceName(testData.testProject1Name.value, newWorkspaceName)
+    verify(mockWorkspaceSettingService).setWorkspaceSettings(
+      destWorkspaceName,
+      List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+    )
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
@@ -2303,82 +2396,19 @@ class WorkspaceServiceSpec
       workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
   }
 
-  it should "clone the WSM stub workspace if it exists" in withTestDataServices { services =>
+  it should "fail to clone entity reference workspace attributes" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
-    )
-
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "not fail if the source workspace doesn't have a WSM stub workspace" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
+    val workspaceRequest = WorkspaceRequest(
+      testData.testProject1Name.value,
+      newWorkspaceName,
+      Map(
+        AttributeName.withDefaultNS("referenceAttribute") ->
+          AttributeEntityReference("sample", "sample1")
       )
-    ).thenThrow(new ApiException(StatusCodes.NotFound.intValue, "Rawls stage workspace not found"))
-
-    Await.result(
-      services.workspaceService.cloneWorkspace(
-        baseWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-      Duration.Inf
     )
 
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
-    )
-  }
-
-  it should "fail if cloning the WSM stub workspace fails" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(
-      services.workspaceService.workspaceManagerDAO.cloneWorkspace(
-        ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-        any[UUID],
-        any[String],
-        ArgumentMatchers.eq(None),
-        any[String],
-        any[RawlsRequestContext],
-        any[Option[WsmPolicyInputs]]
-      )
-    ).thenThrow(new ApiException(StatusCodes.InternalServerError.intValue, "kablooey"))
-
-    val thrown = intercept[ApiException] {
+    val error = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.workspaceService.cloneWorkspace(
                      baseWorkspace.toWorkspaceName,
                      workspaceRequest
@@ -2387,16 +2417,32 @@ class WorkspaceServiceSpec
       )
     }
 
-    verify(services.workspaceService.workspaceManagerDAO).cloneWorkspace(
-      ArgumentMatchers.eq(baseWorkspace.workspaceIdAsUUID),
-      any[UUID],
-      any[String],
-      ArgumentMatchers.eq(None),
-      any[String],
-      any[RawlsRequestContext],
-      any[Option[WsmPolicyInputs]]
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("Workspace attributes cannot reference entities")
+
+    val workspaceRequest2 = WorkspaceRequest(
+      testData.testProject1Name.value,
+      newWorkspaceName,
+      Map(
+        AttributeName.withDefaultNS("referenceListAttribute") ->
+          AttributeEntityReferenceList(
+            Seq(AttributeEntityReference("sample", "sample1"), AttributeEntityReference("sample", "sample2"))
+          )
+      )
     )
-    thrown.getCode shouldBe StatusCodes.InternalServerError.intValue
+
+    val error2 = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(
+                     baseWorkspace.toWorkspaceName,
+                     workspaceRequest2
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    error2.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error2.errorReport.message should include("Workspace attributes cannot reference entities")
+
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
@@ -2569,11 +2615,11 @@ class WorkspaceServiceSpec
           policies
             .map(p =>
               new TpsPolicyInput()
-                .name(p.getName)
-                .namespace(p.getNamespace)
+                .name(p.name)
+                .namespace(p.namespace)
                 .additionalData(
-                  p.getAdditionalData.asScala
-                    .map(pair => new TpsPolicyPair().key(pair.getKey).value(pair.getValue))
+                  p.additionalData
+                    .map(pair => new TpsPolicyPair().key(pair.key).value(pair.value))
                     .asJava
                 )
             )
@@ -2608,15 +2654,14 @@ class WorkspaceServiceSpec
 
   it should "return the policies of a GCP workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val wsmPolicyInput = new WsmPolicyInput()
-      .name("test_name")
-      .namespace("test_namespace")
-      .additionalData(
-        List(
-          new WsmPolicyPair().value("pair1Val").key("pair1Key"),
-          new WsmPolicyPair().value("pair2Val").key("pair2Key")
-        ).asJava
+    val wsmPolicyInput = new WsmPolicyInput(
+      name = "test_name",
+      namespace = "test_namespace",
+      additionalData = List(
+        WsmPolicyPair(value = "pair1Val", key = "pair1Key"),
+        WsmPolicyPair(value = "pair2Val", key = "pair2Key")
       )
+    )
     val workspace = createGcpWorkspacePolicy(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
     val readWorkspace = Await.result(services.workspaceService.getWorkspace(
                                        WorkspaceName(workspace.namespace, workspace.name),
@@ -2634,8 +2679,8 @@ class WorkspaceServiceSpec
     val policies: List[WorkspacePolicy] = response.policies.get
     policies should not be empty
     val policy: WorkspacePolicy = policies.head
-    policy.name shouldBe wsmPolicyInput.getName
-    policy.namespace shouldBe wsmPolicyInput.getNamespace
+    policy.name shouldBe wsmPolicyInput.name
+    policy.namespace shouldBe wsmPolicyInput.namespace
     val additionalData = policy.additionalData
     additionalData.length shouldEqual 2
     additionalData.head.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
@@ -2945,16 +2990,14 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "return policy information for GCP workspaces with a stub workspace" in withTestDataServices { services =>
+  it should "return policy information for GCP workspaces with a PAO" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val wsmPolicyInput = new WsmPolicyInput()
-      .name("gcp_test_name")
-      .namespace("gcp_test_namespace")
-      .additionalData(
-        List(
-          new WsmPolicyPair().value("pair1Val").key("pair1Key")
-        ).asJava
-      )
+    val wsmPolicyInput = new WsmPolicyInput(name = "gcp_test_name",
+                                            namespace = "gcp_test_namespace",
+                                            additionalData = List(
+                                              new WsmPolicyPair(value = "pair1Val", key = "pair1Key")
+                                            )
+    )
     createGcpWorkspacePolicy(services, workspaceName, List(wsmPolicyInput), services.workspaceService)
 
     val result = Await
@@ -2966,8 +3009,8 @@ class WorkspaceServiceSpec
         val policies: List[WorkspacePolicy] = ws.policies.get
         policies should not be empty
         val policy: WorkspacePolicy = policies.head
-        policy.name shouldBe wsmPolicyInput.getName
-        policy.namespace shouldBe wsmPolicyInput.getNamespace
+        policy.name shouldBe wsmPolicyInput.name
+        policy.namespace shouldBe wsmPolicyInput.namespace
         true
       } else {
         false
@@ -3452,18 +3495,6 @@ class WorkspaceServiceSpec
       err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
   }
 
-  it should "not update workspace billing when either billing account is Azure" in withTestDataServices { services =>
-    val workspaceName = testData.workspace.toWorkspaceName
-    val destBilling = testData.azureBillingProject.projectName
-    val err = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.validateBillingProjectUpdate(workspaceName, destBilling.value),
-                   Duration.Inf
-      )
-    }
-    err.errorReport.message should include(s"Billing Project $destBilling does not exist")
-    err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
-  }
-
   it should "not update workspace billing if user is not a billing project owner" in withTestDataServices { services =>
     val workspace = testData.workspace
     val sourceProject = testData.billingProject
@@ -3825,6 +3856,57 @@ class WorkspaceServiceSpec
 
     verifySamUpdate(oldBillingProjectOwnerPolicyEmail, newBillingProjectOwnerPolicyEmail, services)
     verifySamUpdate(newBillingProjectOwnerPolicyEmail, oldBillingProjectOwnerPolicyEmail, services)
+
+  }
+
+  behavior of "updateWorkspace"
+
+  it should "fail to add entity references to workspace attributes" in withTestDataServices { services =>
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.updateWorkspace(
+          testData.wsName,
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS("referenceAttribute"),
+                               AttributeEntityReference("sample", "sample1")
+            )
+          )
+        ),
+        Duration.Inf
+      )
+    }
+    err.errorReport.message should include("Workspace attributes cannot reference entities")
+    err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    val err2 = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.updateWorkspace(
+          testData.wsName,
+          Seq(
+            CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("referenceListAttribute"))
+          )
+        ),
+        Duration.Inf
+      )
+    }
+    err2.errorReport.message should include("Workspace attributes cannot reference entities")
+    err2.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+
+    val err3 = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.updateWorkspace(
+          testData.wsName,
+          Seq(
+            AddListMember(AttributeName.withDefaultNS("referenceAttribute"),
+                          AttributeEntityReference("sample", "sample1")
+            )
+          )
+        ),
+        Duration.Inf
+      )
+    }
+    err3.errorReport.message should include("Workspace attributes cannot reference entities")
+    err3.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
 
   }
 

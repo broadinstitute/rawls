@@ -15,19 +15,14 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{
-  MockDataRepoDAO,
-  MockSamDAO,
-  MockWorkspaceManagerDAO,
-  RemoteServicesMockServer
-}
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddUpdateAttribute,
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeString,

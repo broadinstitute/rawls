@@ -3,13 +3,11 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAO,
   BillingProjectDeletion,
   BillingProjectOrchestrator,
   GoogleBillingAccountAccessException,
   GoogleBillingProjectLifecycle
 }
-import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -38,10 +36,23 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       with MockUserInfoDirectives {
     override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
+    override val billingProjectDeletion: BillingProjectDeletion = {
+      val mockDeletion = mock[BillingProjectDeletion](RETURNS_SMART_NULLS)
+      when(mockDeletion.finalizeDelete(any[RawlsBillingProjectName], any[RawlsRequestContext])(any[ExecutionContext]))
+        .thenReturn(Future.successful(()))
+      when(
+        mockDeletion.unregisterBillingProject(any[RawlsBillingProjectName], any[RawlsRequestContext])(
+          any[ExecutionContext]
+        )
+      )
+        .thenReturn(Future.successful(()))
+      mockDeletion
+    }
+
     when(workspaceManagerResourceMonitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
 
     override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
-      new GoogleBillingProjectLifecycle(billingRepository, mock[BillingProfileManagerDAO], samDAO, gcsDAO)(
+      new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO)(
         executionContext
       )
     )
@@ -75,7 +86,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     doReturn(Future.successful(CreationStatuses.Ready))
       .when(googleBillingProjectLifecycle)
       .postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
-                         any[MultiCloudWorkspaceConfig],
                          any[BillingProjectDeletion],
                          any[RawlsRequestContext]
       )
@@ -528,7 +538,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       .thenReturn(Future.successful())
     when(
       services.googleBillingProjectLifecycle.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
-                                                               any[MultiCloudWorkspaceConfig],
                                                                any[BillingProjectDeletion],
                                                                any[RawlsRequestContext]
       )
@@ -1219,8 +1228,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     val possibleRoles =
       List(Option(SamBillingProjectRoles.workspaceCreator), Option(SamBillingProjectRoles.owner), None)
 
-    when(services.billingProfileManagerDAO.getAllBillingProfiles(any[RawlsRequestContext])(any[ExecutionContext]))
-      .thenReturn(Future.successful(Seq.empty))
     val samUserResources = projects.flatMap { p =>
       // randomly select a subset of possible roles
       val roles = Random.shuffle(possibleRoles).take(Random.nextInt(possibleRoles.size)).flatten.toSet

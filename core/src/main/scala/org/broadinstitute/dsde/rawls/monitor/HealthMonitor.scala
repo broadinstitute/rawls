@@ -2,25 +2,20 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.{Actor, Props}
 import akka.pattern.{after, pipe}
-import bio.terra.workspace.client.ApiException
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 
 import java.util.concurrent.TimeoutException
-import scala.Option
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.control.NonFatal
-import scala.jdk.CollectionConverters._
 
 /**
   * Created by rtitle on 5/17/17.
@@ -52,8 +47,6 @@ object HealthMonitor {
                                 googlePubSubDAO: GooglePubSubDAO,
                                 methodRepoDAO: MethodRepoDAO,
                                 samDAO: SamDAO,
-                                billingProfileManagerDAO: BillingProfileManagerDAO,
-                                workspaceManagerDAO: WorkspaceManagerDAO,
                                 executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
                                 topicsToCheck: Seq[String],
                                 bucketsToCheck: Seq[String],
@@ -69,9 +62,7 @@ object HealthMonitor {
           (GoogleBilling, checkGoogleBilling(googleServicesDAO)),
           (GoogleBuckets, checkGoogleBuckets(googleServicesDAO, bucketsToCheck)),
           (GooglePubSub, checkGooglePubsub(googlePubSubDAO, topicsToCheck)),
-          (Sam, checkSam(samDAO)),
-          (BillingProfileManager, checkBPM(billingProfileManagerDAO)),
-          (WorkspaceManager, checkWSM(workspaceManagerDAO))
+          (Sam, checkSam(samDAO))
         ),
         futureTimeout,
         staleThreshold
@@ -80,8 +71,6 @@ object HealthMonitor {
 
   def propsInAzureControlPlane(slickDataSource: SlickDataSource,
                                samDAO: SamDAO,
-                               billingProfileManagerDAO: BillingProfileManagerDAO,
-                               workspaceManagerDAO: WorkspaceManagerDAO,
                                futureTimeout: FiniteDuration = DefaultFutureTimeout,
                                staleThreshold: FiniteDuration = DefaultStaleThreshold
   ): Props =
@@ -89,9 +78,7 @@ object HealthMonitor {
       new HealthMonitor(
         List(
           (Database, checkDB(slickDataSource)),
-          (Sam, checkSam(samDAO)),
-          (BillingProfileManager, checkBPM(billingProfileManagerDAO)),
-          (WorkspaceManager, checkWSM(workspaceManagerDAO))
+          (Sam, checkSam(samDAO))
         ),
         futureTimeout,
         staleThreshold
@@ -326,36 +313,4 @@ object SystemChecks extends LazyLogging {
     samDAO.getStatus()
   }
 
-  def checkBPM(
-    billingProfileManagerDAO: BillingProfileManagerDAO
-  )(executionContext: ExecutionContext): Future[SubsystemStatus] = {
-    implicit val ec = executionContext
-    logger.debug("Checking Billing Profile Manager...")
-    val status = billingProfileManagerDAO.getStatus()
-
-    Future(
-      SubsystemStatus(
-        status.isOk,
-        Option(status.getSystems).map { subSystemStatuses =>
-          for {
-            (subSystem, subSystemStatus) <- subSystemStatuses.asScala.toList
-            message <- Option(subSystemStatus.getMessages).map(_.asScala).getOrElse(Seq("none"))
-          } yield s"$subSystem: (ok: ${subSystemStatus.isOk}, message: $message)"
-        }
-      )
-    )
-  }
-
-  def checkWSM(
-    workspaceManagerDAO: WorkspaceManagerDAO
-  )(executionContext: ExecutionContext): Future[SubsystemStatus] = {
-    implicit val ec = executionContext
-    logger.debug("Checking Workspace Manager...")
-    Future {
-      workspaceManagerDAO.throwWhenUnavailable()
-      OkStatus
-    }.recover { case ex: ApiException =>
-      failedStatus(s"WorkspaceManager: (ok: false, message: $ex)")
-    }
-  }
 }
