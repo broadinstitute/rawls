@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.ProfileModel
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
@@ -39,7 +38,6 @@ class BillingProjectDeletionSpec extends AnyFlatSpec {
     None,
     None
   )
-  val profileModel: ProfileModel = new ProfileModel().id(UUID.randomUUID())
 
   behavior of "unregisterBillingProject"
 
