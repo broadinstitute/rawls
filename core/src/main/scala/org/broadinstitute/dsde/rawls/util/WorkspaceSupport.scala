@@ -43,21 +43,6 @@ trait WorkspaceSupport {
         }
     }
 
-  def accessCheck(workspaceId: String, requiredAction: SamResourceAction): Future[Unit] =
-    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, requiredAction, ctx) flatMap { hasRequiredLevel =>
-      if (hasRequiredLevel) {
-        Future.successful(())
-      } else if (requiredAction == SamWorkspaceActions.read) {
-        Future.failed(NoSuchWorkspaceException(workspaceId))
-      } else {
-        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.read, ctx) flatMap {
-          canRead =>
-            if (canRead) Future.failed(WorkspaceAccessDeniedException(workspaceId))
-            else Future.failed(NoSuchWorkspaceException(workspaceId))
-        }
-      }
-    }
-
   def checkLock(workspace: Workspace, requiredAction: SamResourceAction): Future[Unit] = {
     val actionsBlockedByLock =
       Set(SamWorkspaceActions.write, SamWorkspaceActions.compute, SamWorkspaceActions.delete)
@@ -121,6 +106,21 @@ trait WorkspaceSupport {
   }
 
   // private internal methods
+
+  private def accessCheck(workspaceId: String, requiredAction: SamResourceAction): Future[Unit] =
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, requiredAction, ctx) flatMap { hasRequiredLevel =>
+      if (hasRequiredLevel) {
+        Future.successful(())
+      } else if (requiredAction == SamWorkspaceActions.read) {
+        Future.failed(NoSuchWorkspaceException(workspaceId))
+      } else {
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.read, ctx) flatMap {
+          canRead =>
+            if (canRead) Future.failed(WorkspaceAccessDeniedException(workspaceId))
+            else Future.failed(NoSuchWorkspaceException(workspaceId))
+        }
+      }
+    }
 
   private def userEnabledCheck: Future[Unit] =
     samDAO.getUserStatus(ctx) flatMap {
