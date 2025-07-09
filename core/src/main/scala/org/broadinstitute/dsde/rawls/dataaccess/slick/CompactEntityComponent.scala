@@ -287,7 +287,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                                  destWs: UUID,
                                  entityRefs: Set[EntityPointer] = Set(),
                                  batchSize: Int = driverComponent.batchSize
-  ): WriteAction[(Int, Int)] = {
+  ): WriteAction[Int] = {
 
     def copyChunkOfEntitiesOrAllEntities(chunk: Set[EntityPointer] = Set()) =
       for {
@@ -297,7 +297,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     val chunks: Iterator[Set[EntityPointer]] = entityRefs.grouped(batchSize)
 
     val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
-    allCopies.map { copyActionResults: Iterator[Int] => (copyActionResults.sum, 0) }
+    allCopies.map { copyActionResults: Iterator[Int] => copyActionResults.sum }
   }
 
   /**
