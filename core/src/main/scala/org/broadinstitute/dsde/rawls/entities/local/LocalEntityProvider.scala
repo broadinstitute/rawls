@@ -660,6 +660,13 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       }
     )
 
+  override def clone(sourceWorkspaceContext: Workspace,
+                     destWorkspaceContext: Workspace,
+                     parentContext: RawlsRequestContext
+  ): WriteAction[(Int, Int)] =
+    dataSource.dataAccess.entityQuery
+      .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID)
+
   override def renameAttribute(entityType: EntityName,
                                oldAttributeName: AttributeName,
                                attributeRenameRequest: AttributeRename,

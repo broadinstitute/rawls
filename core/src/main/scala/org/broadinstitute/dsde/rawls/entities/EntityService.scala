@@ -417,6 +417,22 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
     }
 
+  def cloneEntities(sourceWorkspaceContext: Workspace,
+                    destWorkspaceContext: Workspace,
+                    parentContext: RawlsRequestContext
+  ): DBIOAction[Unit, NoStream, Effect with Effect.Write] =
+    for {
+      entityProvider <- DBIO.from(getProviderWithTracing(sourceWorkspaceContext, parentContext))
+      res <- traceDBIOWithParent("clone entities", parentContext) { s =>
+        entityProvider
+          .clone(sourceWorkspaceContext, destWorkspaceContext, s)
+          .map { case (clonedEntityCount, clonedAttrCount) =>
+            clonedWorkspaceEntityHistogram += clonedEntityCount
+            clonedWorkspaceAttributeHistogram += clonedAttrCount
+          }
+      }
+    } yield res
+
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName,
                                   entityUpdates: Source[EntityUpdateDefinition, _],
                                   upsert: Boolean,
@@ -545,7 +561,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   /**
    * Determine if a workspace has the CompactDataTables setting enabled.
    */
-  private def isCompactDataTableSettingEnabled(workspaceName: WorkspaceName): Future[Boolean] =
+  def isCompactDataTableSettingEnabled(workspaceName: WorkspaceName): Future[Boolean] =
     workspaceSettingServiceConstructor match {
       case Some(serviceConstructor) =>
         val workspaceSettingService = serviceConstructor(ctx)

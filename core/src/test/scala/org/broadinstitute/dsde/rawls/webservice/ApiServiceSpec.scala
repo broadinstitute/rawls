@@ -341,7 +341,9 @@ trait ApiServiceSpec
       terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
       fastPassServiceConstructor,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     ) _
 
     override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =

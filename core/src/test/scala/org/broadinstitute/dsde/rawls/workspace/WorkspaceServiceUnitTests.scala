@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
@@ -103,7 +104,10 @@ class WorkspaceServiceUnitTests
     billingRepository: BillingRepository = mock[BillingRepository](RETURNS_SMART_NULLS),
     submissionsRepository: SubmissionsRepository = mock[SubmissionsRepository](RETURNS_SMART_NULLS),
     workspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS),
-    policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS)
+    policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS),
+    workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
+      mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
+    entityServiceConstructor: RawlsRequestContext => EntityService = _ => mock[EntityService](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -131,7 +135,9 @@ class WorkspaceServiceUnitTests
       billingRepository,
       submissionsRepository,
       workspaceSettingRepository,
-      policyService
+      policyService,
+      workspaceSettingServiceConstructor,
+      entityServiceConstructor
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"
