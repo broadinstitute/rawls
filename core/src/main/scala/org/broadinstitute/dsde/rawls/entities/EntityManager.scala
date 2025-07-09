@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.entities
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.workspace.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider, EntityProviderBuilder}
@@ -10,7 +9,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
-import org.broadinstitute.dsde.rawls.model.{CompactDataTablesSetting, ErrorReport, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{CloudPlatform, CompactDataTablesSetting, ErrorReport, WorkspaceType}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 
 import java.time.Duration

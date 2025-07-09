@@ -5,20 +5,9 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
-import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{
-  NamedDataRepoSnapshot,
-  RawlsRequestContext,
-  UserInfo,
-  Workspace,
-  WorkspaceFieldSpecs,
-  WorkspaceName,
-  WorkspaceResponse
-}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 
 import java.util.UUID
