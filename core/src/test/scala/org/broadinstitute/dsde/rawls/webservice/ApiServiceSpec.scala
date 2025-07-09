@@ -202,8 +202,7 @@ trait ApiServiceSpec
       mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
-      billingProjectDeletion,
-      mock[MultiCloudWorkspaceConfig]
+      billingProjectDeletion
     )
 
     override val userServiceConstructor = UserService.constructor(

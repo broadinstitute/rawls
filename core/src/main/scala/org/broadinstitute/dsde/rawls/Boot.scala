@@ -240,8 +240,6 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterService =
         ServicePerimeterServiceFactory.createServicePerimeter(appConfigManager, slickDataSource, gcsDAO)
 
-      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(appConfigManager.conf)
-
       val tpsDAO = new HttpTpsDAO(appConfigManager.conf.getString("policyService.baseUrl"),
                                   RawlsCredential.getCredential(appConfigManager)
       )
@@ -488,8 +486,7 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           billingRepository,
           new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
-          billingProjectDeletion,
-          multiCloudWorkspaceConfig
+          billingProjectDeletion
         )
 
       val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =

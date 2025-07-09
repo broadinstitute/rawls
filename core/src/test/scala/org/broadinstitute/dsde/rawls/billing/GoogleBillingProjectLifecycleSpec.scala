@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
@@ -135,13 +134,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     val gbp = new GoogleBillingProjectLifecycle(repo, samDAO, mock[GoogleServicesDAO])
 
     assertResult(CreationStatuses.Ready) {
-      Await.result(gbp.postCreationSteps(createRequest,
-                                         mock[MultiCloudWorkspaceConfig],
-                                         mock[BillingProjectDeletion],
-                                         testContext
-                   ),
-                   Duration.Inf
-      )
+      Await.result(gbp.postCreationSteps(createRequest, mock[BillingProjectDeletion], testContext), Duration.Inf)
     }
 
     verify(samDAO)
@@ -186,7 +179,6 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     Await.result(bp.postCreationSteps(
                    createRequestWithMembers,
-                   mock[MultiCloudWorkspaceConfig],
                    mock[BillingProjectDeletion],
                    testContext
                  ),
