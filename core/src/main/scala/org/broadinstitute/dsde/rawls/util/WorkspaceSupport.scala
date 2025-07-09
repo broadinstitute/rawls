@@ -96,20 +96,6 @@ trait WorkspaceSupport {
 
   // WorkspaceContext helpers
 
-  // function name may be misleading. This returns the workspace context and checks the user's permission,
-  // but does not return the permissions.
-  // TODO CORE-501: this is only used by MultiCloudWorkspaceService. Can this be removed?
-  def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName,
-                                        requiredAction: SamResourceAction,
-                                        attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] =
-    for {
-      _ <- userEnabledCheck
-      workspace <- getWorkspaceContext(workspaceName, attributeSpecs)
-      _ <- accessCheck(workspace, requiredAction)
-      _ <- checkLock(workspace, requiredAction)
-    } yield workspace
-
   def getWorkspaceContext(
     workspaceName: WorkspaceName,
     attributeSpecs: Option[WorkspaceAttributeSpecs] = None
