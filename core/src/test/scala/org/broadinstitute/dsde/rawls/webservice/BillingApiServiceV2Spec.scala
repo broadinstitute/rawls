@@ -8,7 +8,6 @@ import org.broadinstitute.dsde.rawls.billing.{
   GoogleBillingAccountAccessException,
   GoogleBillingProjectLifecycle
 }
-import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -87,7 +86,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     doReturn(Future.successful(CreationStatuses.Ready))
       .when(googleBillingProjectLifecycle)
       .postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
-                         any[MultiCloudWorkspaceConfig],
                          any[BillingProjectDeletion],
                          any[RawlsRequestContext]
       )
@@ -540,7 +538,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       .thenReturn(Future.successful())
     when(
       services.googleBillingProjectLifecycle.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
-                                                               any[MultiCloudWorkspaceConfig],
                                                                any[BillingProjectDeletion],
                                                                any[RawlsRequestContext]
       )

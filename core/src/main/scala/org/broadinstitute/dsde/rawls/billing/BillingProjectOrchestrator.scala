@@ -4,7 +4,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.ServerError
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Sentry, SentryEvent}
-import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
@@ -48,8 +47,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  notificationDAO: NotificationDAO,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-                                 billingProjectDeletion: BillingProjectDeletion,
-                                 config: MultiCloudWorkspaceConfig
+                                 billingProjectDeletion: BillingProjectDeletion
 )(implicit val executionContext: ExecutionContext)
     extends StringValidationUtils
     with UserUtils
@@ -81,7 +79,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
 
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
       creationStatus <- billingProjectLifecycle
-        .postCreationSteps(createProjectRequest, config, billingProjectDeletion, ctx)
+        .postCreationSteps(createProjectRequest, billingProjectDeletion, ctx)
         .recoverWith { case t: Throwable =>
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
           billingProjectDeletion.unregisterBillingProject(createProjectRequest.projectName, ctx).map(throw t)
@@ -207,8 +205,7 @@ object BillingProjectOrchestrator {
     notificationDAO: NotificationDAO,
     billingRepository: BillingRepository,
     googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-    billingProjectDeletion: BillingProjectDeletion,
-    config: MultiCloudWorkspaceConfig
+    billingProjectDeletion: BillingProjectDeletion
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
     new BillingProjectOrchestrator(
       ctx,
@@ -216,8 +213,7 @@ object BillingProjectOrchestrator {
       notificationDAO,
       billingRepository,
       googleBillingProjectLifecycle,
-      billingProjectDeletion,
-      config
+      billingProjectDeletion
     )
 
   def buildBillingProjectPolicies(additionalMembers: Set[ProjectAccessUpdate],

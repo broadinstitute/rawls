@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.billing
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
@@ -32,7 +31,6 @@ trait BillingProjectLifecycle extends LazyLogging {
 
   def postCreationSteps(
     createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-    config: MultiCloudWorkspaceConfig,
     billingProjectDeletion: BillingProjectDeletion,
     ctx: RawlsRequestContext
   ): Future[CreationStatus]
