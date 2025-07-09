@@ -1065,7 +1065,7 @@ class WorkspaceService(
               )
             }
 
-            _ = entityServiceConstructor(ctx).cloneEntities(sourceWorkspaceContext, destWorkspaceContext, ctx)
+            _ <- entityServiceConstructor(ctx).cloneEntities(sourceWorkspaceContext, destWorkspaceContext, ctx)
 
             methodConfigShorts <- dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext)
             _ <- DBIO.sequence(methodConfigShorts.map { methodConfigShort =>
