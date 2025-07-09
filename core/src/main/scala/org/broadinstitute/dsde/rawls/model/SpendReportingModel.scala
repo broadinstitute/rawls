@@ -38,66 +38,10 @@ case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation],
       )
     )
 }
-object SpendReportingResults {
-  def apply(spendReport: bio.terra.profile.model.SpendReport): SpendReportingResults = {
-
-    val spendDetails = spendReport.getSpendDetails.asScala
-      .map(sd =>
-        SpendReportingAggregation(
-          aggregationKey = SpendReportingAggregationKeys.withName(sd.getAggregationKey.name()),
-          spendData = sd.getSpendData.asScala
-            .map(srRange =>
-              SpendReportingForDateRange(
-                srRange.getCost,
-                srRange.getCredits,
-                srRange.getCurrency,
-                Option(srRange.getStartTime).map(DateTime.parse),
-                Option(srRange.getEndTime).map(DateTime.parse),
-                category = Option(srRange.getCategory).map(v => TerraSpendCategories.withName(v.toString))
-              )
-            )
-            .toSeq
-        )
-      )
-      .toList
-
-    val spendSummary = SpendReportingForDateRange(
-      spendReport.getSpendSummary.getCost,
-      spendReport.getSpendSummary.getCredits,
-      spendReport.getSpendSummary.getCurrency,
-      Option(spendReport.getSpendSummary.getStartTime).map(DateTime.parse),
-      Option(spendReport.getSpendSummary.getEndTime).map(DateTime.parse)
-    )
-
-    SpendReportingResults(spendDetails, spendSummary)
-  }
-}
 
 case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey,
                                      spendData: Seq[SpendReportingForDateRange]
 )
-object SpendReportingAggregation {
-  def apply(spendReportingAggregation: bio.terra.profile.model.SpendReportingAggregation): SpendReportingAggregation = {
-
-    val spendData = spendReportingAggregation.getSpendData.asScala
-      .map(srRange =>
-        SpendReportingForDateRange(
-          srRange.getCost,
-          srRange.getCredits,
-          srRange.getCurrency,
-          Option(srRange.getStartTime).map(DateTime.parse),
-          Option(srRange.getEndTime).map(DateTime.parse),
-          category = Option(srRange.getCategory).map(v => TerraSpendCategories.withName(v.toString))
-        )
-      )
-      .toList
-
-    SpendReportingAggregation(
-      SpendReportingAggregationKeys.withName(spendReportingAggregation.getAggregationKey.name()),
-      spendData
-    )
-  }
-}
 
 case class SpendReportingForDateRange(
   cost: String,
@@ -110,19 +54,6 @@ case class SpendReportingForDateRange(
   category: Option[TerraSpendCategory] = None,
   subAggregation: Option[SpendReportingAggregation] = None
 )
-object SpendReportingForDateRange {
-  def apply(
-    spendReportingForDateRange: bio.terra.profile.model.SpendReportingForDateRange
-  ): SpendReportingForDateRange =
-    SpendReportingForDateRange(
-      spendReportingForDateRange.getCost,
-      spendReportingForDateRange.getCredits,
-      spendReportingForDateRange.getCurrency,
-      Option(spendReportingForDateRange.getStartTime).map(DateTime.parse),
-      Option(spendReportingForDateRange.getEndTime).map(DateTime.parse),
-      category = Option(spendReportingForDateRange.getCategory).map(v => TerraSpendCategories.withName(v.toString))
-    )
-}
 
 // Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
 object SpendReportingAggregationKeys {
