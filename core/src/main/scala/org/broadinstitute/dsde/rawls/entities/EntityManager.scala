@@ -115,7 +115,7 @@ object EntityManager {
     new EntityManager(
       Set(defaultEntityProviderBuilder, compactEntityProviderBuilder),
       workspaceSettingRepository,
-      metricsPrefix: String
+      metricsPrefix
     )
   }
 }
