@@ -4,30 +4,18 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import net.logstash.logback.argument.StructuredArguments
+import nl.grons.metrics4.scala.Timer
+import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeName,
-  AttributeRename,
-  AttributeValue,
-  Entity,
-  EntityCopyResponse,
-  EntityPointer,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  EntityTypeRename,
-  JsonSupport,
-  RawlsRequestContext,
-  SubmissionValidationEntityInputs,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeRename, AttributeValue, Entity, EntityCopyResponse, EntityPointer, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, JsonSupport, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
 import spray.json._
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.util.Try
 
@@ -52,7 +40,8 @@ object AuditJsonSupport extends JsonSupport {
  */
 class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArguments: EntityRequestArguments)
     extends EntityProvider
-    with LazyLogging {
+    with LazyLogging
+    with RawlsInstrumented {
   override def entityStoreId: Option[String] = delegate.entityStoreId
 
   /**
@@ -81,12 +70,30 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     logger.info("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
   }
 
+  override protected val workbenchMetricBaseName: LookupExpression = "something"
+
+  private def entityProviderMetrics: ExpandedMetricBuilder =
+    ExpandedMetricBuilder.expand(WorkspaceDataMetricKey, "entityProvider")
+
+  private def requestLatency(functionName: String): Timer =
+    entityProviderMetrics.expand("function", functionName).asTimer("latency")
+
+  private def instrument[T](functionName: String)(op: Unit => T): T = {
+    logAudit(functionName)
+    val stopwatch = StopWatch.createStarted()
+    val result = op(())
+    stopwatch.stop()
+    requestLatency(functionName)
+      .update(stopwatch.getDuration.toMillis, TimeUnit.MILLISECONDS)
+    result
+  }
+
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    logAudit("batchUpdateEntities")
-    delegate.batchUpdateEntities(entityUpdates, parentContext)
-  }
+  ): Future[Int] =
+    instrument("batchUpdateEntities") { _ =>
+      delegate.batchUpdateEntities(entityUpdates, parentContext)
+    }
 
   override def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
@@ -246,4 +253,5 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     logAudit("updateEntity")
     delegate.updateEntity(entityType, entityName, operations, parentContext)
   }
+
 }
