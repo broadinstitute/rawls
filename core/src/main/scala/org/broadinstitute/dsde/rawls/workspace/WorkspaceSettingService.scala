@@ -11,6 +11,7 @@ import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
 import com.google.cloud.storage.Storage
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model.{
@@ -34,7 +35,6 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import java.time.Duration
@@ -47,7 +47,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                               val workspaceRepository: WorkspaceRepository,
                               gcsDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              googleStorageService: GoogleStorageService[IO]
+                              googleStorageService: GoogleStorageService[IO],
+                              entityService: EntityService
 )(implicit protected val executionContext: ExecutionContext, ioRuntime: IORuntime)
     extends WorkspaceSupport
     with LazyLogging {
@@ -126,7 +127,12 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
           case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
-          case CompactDataTablesSetting(CompactDataTablesConfig(_))                           => None
+          case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
+            if (!enabled) {
+              Some(validationErrorReport(setting.settingType, "this setting cannot be disabled once enabled"))
+            } else {
+              None
+            }
         }
       }
 
@@ -142,7 +148,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
       * and return None. If the setting fails to apply, remove the failed setting from the database
       * and return the setting type with an error report. If the setting is not supported, throw an
       * exception. We make more trips to the database here than necessary, but we support a small
-      * number of setting types and it's easier to reason about this way.
+      * number of setting types, and it's easier to reason about this way.
       */
     def applySetting(workspace: Workspace,
                      setting: WorkspaceSetting
@@ -198,11 +204,11 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
+        case CompactDataTablesSetting(CompactDataTablesConfig(_)) =>
+          applyCompactDataTablesSetting(workspace)
+
         // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting
         // are not bucket settings, so we do not need to apply anything here
-
-        case CompactDataTablesSetting(CompactDataTablesConfig(_)) =>
-          Future.successful(())
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
           Future.successful(())
@@ -232,7 +238,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
   }
 
   /**
-   * Calls sam to update the reader policy then update the buckets IAM to add or remove the allUsers group
+   * Calls sam to update the reader policy then update the bucket's IAM to add or remove the allUsers group
    */
   private def applyPublicReadableSetting(workspace: Workspace, enabled: Boolean): Future[Unit] =
     for {
@@ -270,4 +276,17 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         }
       _ <- iamPolicyAction.compile.drain.unsafeToFuture()
     } yield ()
+
+  /**
+   * Call to handle entity attributes migration when compact data tables setting enabled.
+   */
+  private def applyCompactDataTablesSetting(workspace: Workspace): Future[Unit] =
+    entityService
+      .quicksilverMigration(workspaceName = WorkspaceName(workspace.namespace, workspace.name), updateSettings = false)
+      .map(_ => ())
+      .recover { case e: Exception =>
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.InternalServerError, s"Quicksilver migration failed: ${e.getMessage}")
+        )
+      }
 }

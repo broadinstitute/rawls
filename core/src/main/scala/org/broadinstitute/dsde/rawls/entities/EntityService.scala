@@ -585,7 +585,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
     */
   def quicksilverMigration(workspaceName: WorkspaceName,
                            cleanup: Boolean = false,
-                           batchSize: Int = 50000
+                           batchSize: Int = 50000,
+                           updateSettings: Boolean = true
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
@@ -664,10 +665,15 @@ class EntityService(protected val ctx: RawlsRequestContext,
 
         // finally, change the workspace to be quicksilver-enabled
         _ <- traceFutureWithParent("setWorkspaceSettings", s) { _ =>
-          workspaceSettingService.setWorkspaceSettings(
-            workspaceName,
-            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-          )
+          if (!updateSettings) {
+            // if this is a settings migration, we don't want to set the setting again
+            Future.successful(())
+          } else
+            // otherwise, set the CompactDataTablesSetting to enabled
+            workspaceSettingService.setWorkspaceSettings(
+              workspaceName,
+              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+            )
         }
 
         // return a count of entities updated
