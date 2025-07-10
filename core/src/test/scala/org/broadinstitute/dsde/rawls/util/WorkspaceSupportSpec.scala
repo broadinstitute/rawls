@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.util
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.{
   NoSuchWorkspaceException,
@@ -64,10 +65,7 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // workspace exists
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user is enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus)))
-    // user has permission
+    // user has permission and is enabled
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
       .thenReturn(Future.successful(true))
 
@@ -87,11 +85,8 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
     // user does not exist
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(None))
-    // user has permission
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
+      .thenAnswer(_ => Future.failed(new ApiException(StatusCodes.Forbidden.intValue, "Azure Id 123 not found in sam")))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
@@ -107,11 +102,8 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
     // user is NOT enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus.copy(enabled = false))))
-    // user has permission
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
+      .thenAnswer(_ => Future.failed(new ApiException(StatusCodes.Unauthorized.intValue, "Message: User is disabled.")))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
@@ -146,9 +138,6 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // workspace exist
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user is enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus)))
     // user DOES NOT have permission
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
       .thenReturn(Future.successful(false))
@@ -166,9 +155,6 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // workspace exist
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user is enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus)))
     // user DOES NOT have write permission
     when(
       samDAO.userHasAction(any[SamResourceTypeName],
@@ -205,9 +191,9 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // user is NOT enabled
     when(samDAO.getUserStatus(any[RawlsRequestContext]))
       .thenReturn(Future.successful(Option(defaultUserStatus.copy(enabled = false))))
-    // user has permission
+    // user is NOT enabled
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
+      .thenAnswer(_ => Future.failed(new ApiException(StatusCodes.Unauthorized.intValue, "Message: User is disabled.")))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
@@ -251,9 +237,9 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // user is NOT enabled
     when(samDAO.getUserStatus(any[RawlsRequestContext]))
       .thenReturn(Future.successful(Option(defaultUserStatus.copy(enabled = false))))
-    // user DOES NOT have permission
+    // user is NOT enabled
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(false))
+      .thenAnswer(_ => Future.failed(new ApiException(StatusCodes.Unauthorized.intValue, "Message: User is disabled.")))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
@@ -263,26 +249,6 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
   }
 
   // error cases where a Sam API call fails
-  it should "propagate Sam's ApiException if Sam user-enabled API call fails" in {
-    val samDAO = mock[SamDAO]
-    val workspaceRepository = mock[WorkspaceRepository]
-    // workspace exists
-    when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
-      .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user status API call fails
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenAnswer(_ => Future.failed(new ApiException(555, "Unit test mock error")))
-    // user has permission
-    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
-
-    val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
-
-    intercept[ApiException] {
-      Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
-    }
-  }
-
   it should "propagate Sam's ApiException if the initial permission check API call fails" in {
     val samDAO = mock[SamDAO]
     val workspaceRepository = mock[WorkspaceRepository]

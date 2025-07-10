@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
+import org.broadinstitute.dsde.workbench.client.sam.ApiException
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -41,6 +42,15 @@ trait WorkspaceSupport {
             else Future.failed(NoSuchWorkspaceException(workspace.toWorkspaceName))
           }
         }
+    } recoverWith {
+      // samDAO.userHasAction will throw ApiExceptions in cases where the user is disabled or missing;
+      // handle those here.
+      case apiException: ApiException
+          if apiException.getCode == StatusCodes.Unauthorized.intValue
+            && apiException.getMessage.contains("Message: User is disabled.") =>
+        Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
+      case apiException: ApiException if apiException.getCode == StatusCodes.Forbidden.intValue =>
+        Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
     }
 
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
@@ -63,8 +73,18 @@ trait WorkspaceSupport {
     ignoreLock: Boolean = false
   ): Future[Workspace] =
     for {
-      workspace <- getV2WorkspaceContext(workspaceName, attributeSpecs)
+      // Does the workspace exist?
+      maybeWorkspace <- workspaceRepository.getWorkspace(workspaceName, attributeSpecs)
+      workspace <- maybeWorkspace match {
+        case Some(workspace) => Future(workspace)
+        case None            =>
+          // The workspace does not exist. Check if the current user is enabled;
+          // throw UserDisabledException if not, otherwise throw NoSuchWorkspaceException.
+          userEnabledCheck map (_ => throw NoSuchWorkspaceException(workspaceName))
+      }
+      // Does the user have the required permissions?
       _ <- accessCheck(workspace, requiredAction)
+      // Is the workspace locked, and is the action blocked by the lock?
       _ <- if (ignoreLock) Future.successful() else checkLock(workspace, requiredAction)
     } yield workspace
 
@@ -74,8 +94,25 @@ trait WorkspaceSupport {
     attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
-      workspace <- getV2WorkspaceContextByWorkspaceId(workspaceId, attributeSpecs)
+      // Validate input UUID
+      maybeUuid <- Future(Try(UUID.fromString(workspaceId)))
+      workspaceUuid = maybeUuid match {
+        case Success(uid) => uid
+        case Failure(_) =>
+          throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "invalid UUID"))
+      }
+      // Does the workspace exist?
+      maybeWorkspace <- workspaceRepository.getWorkspace(workspaceUuid, attributeSpecs)
+      workspace <- maybeWorkspace match {
+        case Some(workspace) => Future(workspace)
+        case None            =>
+          // The workspace does not exist. Check if the current user is enabled;
+          // throw UserDisabledException if not, otherwise throw NoSuchWorkspaceException.
+          userEnabledCheck map (_ => throw NoSuchWorkspaceException(workspaceUuid.toString))
+      }
+      // Does the user have the required permissions?
       _ <- accessCheck(workspaceId, requiredAction)
+      // Is the workspace locked, and is the action blocked by the lock?
       _ <- checkLock(workspace, requiredAction)
     } yield workspace
 
@@ -120,20 +157,5 @@ trait WorkspaceSupport {
       case Some(user) if user.enabled => Future.successful()
       case _ => Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
     }
-
-  private def getV2WorkspaceContextByWorkspaceId(workspaceId: String,
-                                                 attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] = for {
-    _ <- userEnabledCheck
-    workspaceUuid = Try(UUID.fromString(workspaceId)) match {
-      case Success(uid) => uid
-      case Failure(_) =>
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "invalid UUID"))
-    }
-    workspaceContext <- workspaceRepository.getWorkspace(workspaceUuid, attributeSpecs)
-  } yield workspaceContext match {
-    case Some(workspace) => workspace
-    case None            => throw NoSuchWorkspaceException(workspaceId)
-  }
 
 }
