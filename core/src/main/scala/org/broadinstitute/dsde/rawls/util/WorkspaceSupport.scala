@@ -52,13 +52,6 @@ trait WorkspaceSupport {
       Future.successful(())
   }
 
-  def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] =
-    for {
-      _ <- userEnabledCheck
-      workspace <- getWorkspaceContext(workspaceName)
-      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
-    } yield ()
-
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
   def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): Boolean =
     // if the source has any auth domains, the dest must also *at least* have those auth domains
@@ -142,14 +135,5 @@ trait WorkspaceSupport {
     case Some(workspace) => workspace
     case None            => throw NoSuchWorkspaceException(workspaceId)
   }
-
-  private def getWorkspaceContext(
-    workspaceName: WorkspaceName,
-    attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] =
-    workspaceRepository.getWorkspace(workspaceName, attributeSpecs).map {
-      case Some(workspace) => workspace
-      case None            => throw NoSuchWorkspaceException(workspaceName)
-    }
 
 }
