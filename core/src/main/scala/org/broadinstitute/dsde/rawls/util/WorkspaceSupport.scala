@@ -136,13 +136,4 @@ trait WorkspaceSupport {
     case None            => throw NoSuchWorkspaceException(workspaceId)
   }
 
-  private def getWorkspaceContext(
-    workspaceName: WorkspaceName,
-    attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] =
-    workspaceRepository.getWorkspace(workspaceName, attributeSpecs).map {
-      case Some(workspace) => workspace
-      case None            => throw NoSuchWorkspaceException(workspaceName)
-    }
-
 }
