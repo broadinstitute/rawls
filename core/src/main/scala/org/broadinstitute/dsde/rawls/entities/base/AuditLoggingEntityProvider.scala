@@ -54,8 +54,10 @@ object AuditJsonSupport extends JsonSupport {
  * @param delegate The EntityProvider implementation to delegate to after logging
  * @param requestArguments The request arguments containing workspace and context information
  */
-class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArguments: EntityRequestArguments)
-    extends EntityProvider
+class AuditLoggingEntityProvider(val delegate: EntityProvider,
+                                 val requestArguments: EntityRequestArguments,
+                                 metricsPrefix: String
+) extends EntityProvider
     with LazyLogging
     with RawlsInstrumented {
   override def entityStoreId: Option[String] = delegate.entityStoreId
@@ -86,7 +88,7 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     logger.info("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
   }
 
-  override protected val workbenchMetricBaseName: LookupExpression = "something"
+  override protected val workbenchMetricBaseName: String = metricsPrefix
 
   private def entityProviderMetrics: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(WorkspaceDataMetricKey, "entityProvider")
@@ -94,7 +96,7 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
   private def requestLatency(functionName: String, providerName: String): Timer =
     entityProviderMetrics
       .expand("function", functionName)
-      .expand("provider", providerName)
+      .expand("providerName", providerName)
       .asTimer("latency")
 
   private def instrument[T](functionName: String)(op: Unit => T): T = {
