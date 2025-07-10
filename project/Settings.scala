@@ -1,4 +1,3 @@
-import Artifactory._
 import CodeGeneration._
 import Compiling._
 import Dependencies._
@@ -11,8 +10,11 @@ import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
 import org.scalafmt.sbt.ScalafmtPlugin.autoImport.scalafmtFilter
 
+
 //noinspection TypeAnnotation
 object Settings {
+  val googleArtifactoryRegistry = "https://us-central1-maven.pkg.dev/dsp-artifact-registry/"
+
   val proxyResolvers = List(
     "internal-maven-proxy" at googleArtifactoryRegistry + "maven-central"
   )
