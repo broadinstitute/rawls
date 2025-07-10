@@ -3,7 +3,6 @@
 HELP_TEXT="$(cat <<EOF
  Build jar and docker images.
    jar: build jar
-   publish: push jar to artifactory
    -d | --docker : (default: no action) provide either "build" or "push" to
            build or push a docker image.  "push" will also perform build.
    -g | --gcr-registry: If this flag is set, will push to the specified GCR repository.
@@ -13,7 +12,7 @@ HELP_TEXT="$(cat <<EOF
    -h | --help: print help text.
  Examples:
    Jenkins build job should run with all options, for example,
-     ./docker/build.sh jar publish -d push -g "my-gcr-registry" -k "path-to-my-keyfile"
+     ./docker/build.sh jar -d push -g "my-gcr-registry" -k "path-to-my-keyfile"
 \t
 EOF
 )"
@@ -31,7 +30,6 @@ ENV=${ENV:-""}
 SERVICE_ACCT_KEY_FILE=""
 
 MAKE_JAR=false
-PUSH_ARTIFACTORY=false
 RUN_DOCKER=false
 PRINT_HELP=false
 
@@ -44,9 +42,6 @@ while [ "$1" != "" ]; do
     case $1 in
         jar)
             MAKE_JAR=true
-            ;;
-        publish)
-            PUSH_ARTIFACTORY=true
             ;;
         -d | --docker)
             shift
@@ -110,15 +105,6 @@ function make_jar()
     fi
 }
 
-function artifactory_push()
-{
-    VAULT_TOKEN=${VAULT_TOKEN:-$(cat /etc/vault-token-dsde)}
-    ARTIFACTORY_USERNAME=dsdejenkins
-    ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins)
-    echo "Publishing to artifactory..."
-    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD sbtscala/scala-sbt:eclipse-temurin-17.0.15_6_1.11.1_2.13.16 /$PROJECT/core/src/bin/publishSnapshot.sh
-}
-
 function docker_cmd()
 {
     if [ $DOCKER_CMD = "build" ] || [ $DOCKER_CMD = "push" ]; then
@@ -149,10 +135,6 @@ function cleanup()
 
 if $MAKE_JAR; then
     make_jar
-fi
-
-if $PUSH_ARTIFACTORY; then
-    artifactory_push
 fi
 
 if $RUN_DOCKER; then

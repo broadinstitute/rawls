@@ -22,7 +22,7 @@ jobs:
           inputs: '{
             "run-name": "workflows-simple-canary-prod-test-${{ github.run_id }}-${{ github.run_attempt }}",
             "workspace-namespace": "broad-firecloud-dsde",
-            "workspace-name": "CanaryTest",
+            "workspace-name": "CanaryTest2025",
             "method-namespace": "wdl-testing",
             "method-name": "hello-world",
             "entity-type": "participant",
