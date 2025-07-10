@@ -129,7 +129,7 @@ Build Rawls jar and docker image
 
 Supported Scala versions: 2.13
 
-Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory.
+Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Google Artifact Registry.
 You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 
 Note: We have started just using the automatically generated `-SNAP` versions published by [`rawls-build` GitHub action](https://github.com/broadinstitute/terra-github-workflows/actions/workflows/rawls-build.yaml) on every dev build. Here are detailed instructions for finding the name of the jar file:
@@ -142,16 +142,25 @@ Note: We have started just using the automatically generated `-SNAP` versions pu
 To publish a temporary or test version, use `publishSnapshot.sh` like so:
 
 ```sh
-VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox:dev vault read -field=password secret/dsp/accts/artifactory/dsdejenkins) core/src/bin/publishSnapshot.sh
+export GOOGLE_CLOUD_PROJECT=dsp-artifact-registry
+export GAR_LOCATION=us-central1
+export GAR_REPOSITORY_ID=libs-snapshot-standard
+gcloud auth login <you>@broadinstitute.org
+core/src/bin/publishSnapshot.sh
 ```
 
 To publish an official release, you can run the following command:
 
 ```sh
-VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox:dev vault read -field=password secret/dsp/accts/artifactory/dsdejenkins) core/src/bin/publishRelease.sh
-```
+export GOOGLE_CLOUD_PROJECT=dsp-artifact-registry
+export GAR_LOCATION=us-central1
+export GAR_REPOSITORY_ID=libs-release-standard
+gcloud auth login <you>@broadinstitute.org
+core/src/bin/publishRelease.sh```
 
-You can view what is in the artifactory here: https://broadinstitute.jfrog.io/broadinstitute/webapp/#/home
+You can view what is in the artifact registry here: 
+- releases: https://console.cloud.google.com/artifacts/maven/dsp-artifact-registry/us-central1/libs-release-standard
+- snapshots: https://console.cloud.google.com/artifacts/maven/dsp-artifact-registry/us-central1/libs-snapshot-standard
 
 After publishing:
 * Update [model/CHANGELOG.md](model/CHANGELOG.md) properly
