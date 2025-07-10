@@ -273,12 +273,14 @@ trait ApiServiceSpec
       new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-      new WorkspaceSettingService(_,
-                                  new WorkspaceSettingRepository(slickDataSource),
-                                  new WorkspaceRepository(slickDataSource),
-                                  gcsDAO,
-                                  samDAO,
-                                  mock[GoogleStorageService[IO]]
+      new WorkspaceSettingService(
+        _,
+        new WorkspaceSettingRepository(slickDataSource),
+        new WorkspaceRepository(slickDataSource),
+        gcsDAO,
+        samDAO,
+        mock[GoogleStorageService[IO]],
+        mock[EntityService]
       )
 
     val entityManager = EntityManager.defaultEntityManager(
