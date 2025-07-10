@@ -1756,15 +1756,7 @@ class WorkspaceService(
 
   def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit] =
     for {
-      maybeWorkspace <- dataSource.inTransaction(dataAccess =>
-        dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName)
-      )
-      workspace <- maybeWorkspace match {
-        case None            => Future.failed(NoSuchWorkspaceException(workspaceName))
-        case Some(workspace) => Future.successful(workspace)
-      }
-      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
-      _ <- checkLock(workspace, SamWorkspaceActions.compute)
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.compute)
       _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(ctx.userInfo, workspace)
     } yield {}
 
