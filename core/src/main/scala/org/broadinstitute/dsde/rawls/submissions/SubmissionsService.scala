@@ -603,8 +603,8 @@ class SubmissionsService(
     val submissionId: UUID = UUID.randomUUID()
 
     for {
-      _ <- requireComputePermission(workspaceName)
       workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+      _ <- accessCheck(workspaceContext, SamWorkspaceActions.compute)
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext,
                                                 submissionRequest.methodConfigurationNamespace,
