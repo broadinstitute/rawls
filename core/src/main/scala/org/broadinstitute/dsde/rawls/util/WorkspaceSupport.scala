@@ -79,13 +79,7 @@ trait WorkspaceSupport {
     for {
       // Does the workspace exist?
       maybeWorkspace <- workspaceRepository.getWorkspace(workspaceName, attributeSpecs)
-      workspace <- maybeWorkspace match {
-        case Some(workspace) => Future(workspace)
-        case None            =>
-          // The workspace does not exist. Check if the current user is enabled;
-          // throw UserDisabledException if not, otherwise throw NoSuchWorkspaceException.
-          userEnabledCheck map (_ => throw NoSuchWorkspaceException(workspaceName))
-      }
+      workspace <- checkWorkspace(maybeWorkspace, workspaceName.toString)
       // Does the user have the required permissions?
       _ <- accessCheck(workspace, requiredAction)
       // Is the workspace locked, and is the action blocked by the lock?
@@ -107,13 +101,7 @@ trait WorkspaceSupport {
       }
       // Does the workspace exist?
       maybeWorkspace <- workspaceRepository.getWorkspace(workspaceUuid, attributeSpecs)
-      workspace <- maybeWorkspace match {
-        case Some(workspace) => Future(workspace)
-        case None            =>
-          // The workspace does not exist. Check if the current user is enabled;
-          // throw UserDisabledException if not, otherwise throw NoSuchWorkspaceException.
-          userEnabledCheck map (_ => throw NoSuchWorkspaceException(workspaceUuid.toString))
-      }
+      workspace <- checkWorkspace(maybeWorkspace, workspaceUuid.toString)
       // Does the user have the required permissions?
       _ <- accessCheck(workspaceId, requiredAction)
       // Is the workspace locked, and is the action blocked by the lock?
@@ -155,6 +143,15 @@ trait WorkspaceSupport {
     else
       Future.successful(())
   }
+
+  private def checkWorkspace(maybeWorkspace: Option[Workspace], errorIdentifier: String): Future[Workspace] =
+    maybeWorkspace match {
+      case Some(workspace) => Future(workspace)
+      case None            =>
+        // The workspace does not exist. Check if the current user is enabled;
+        // throw UserDisabledException if not, otherwise throw NoSuchWorkspaceException.
+        userEnabledCheck map (_ => throw NoSuchWorkspaceException(errorIdentifier))
+    }
 
   private def userEnabledCheck: Future[Unit] =
     samDAO.getUserStatus(ctx) flatMap {
