@@ -281,12 +281,16 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
    * Call to handle entity attributes migration when compact data tables setting enabled.
    */
   private def applyCompactDataTablesSetting(workspace: Workspace): Future[Unit] =
-    entityService
-      .quicksilverMigration(workspaceName = WorkspaceName(workspace.namespace, workspace.name), updateSettings = false)
-      .map(_ => ())
-      .recover { case e: Exception =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.InternalServerError, s"Quicksilver migration failed: ${e.getMessage}")
+    Future {
+      entityService
+        .quicksilverMigration(workspaceName = WorkspaceName(workspace.namespace, workspace.name),
+                              updateSettings = false
         )
-      }
+        .map(_ => ())
+        .recover { case e: Exception =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.InternalServerError, s"Quicksilver migration failed: ${e.getMessage}")
+          )
+        }
+    }.flatten
 }
