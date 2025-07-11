@@ -4,13 +4,11 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import net.logstash.logback.argument.StructuredArguments
-import nl.grons.metrics4.scala.{Counter, Timer}
 import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
@@ -31,7 +29,6 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import spray.json._
 
-import java.sql.SQLTransactionRollbackException
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
@@ -60,7 +57,7 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
                                  metricsPrefix: String
 ) extends EntityProvider
     with LazyLogging
-    with RawlsInstrumented {
+    with EntityProviderMetrics {
   override def entityStoreId: Option[String] = delegate.entityStoreId
 
   /**
@@ -91,34 +88,24 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
 
   override protected val workbenchMetricBaseName: String = metricsPrefix
 
-  private def entityProviderMetrics: ExpandedMetricBuilder =
-    ExpandedMetricBuilder.expand(WorkspaceDataMetricKey, "entityProvider")
-
-  private def requestLatency(functionName: String, providerName: String): Timer =
-    entityProviderMetrics
-      .expand("function", functionName)
-      .expand("providerName", providerName)
-      .asTimer("latency")
-
-  private def errorCount(functionName: String, providerName: String, errorType: String): Counter =
-    entityProviderMetrics
-      .expand("function", functionName)
-      .expand("providerName", providerName)
-      .expand("errorType", errorType)
-      .asCounter("errors")
-
   private def instrument[T](functionName: String)(op: Unit => T): T = {
-    logAudit(functionName)
-    val stopwatch = StopWatch.createStarted()
-    val tryResult: Try[T] = Try(op(()))
-    stopwatch.stop()
-    requestLatency(functionName, delegate.getClass.getSimpleName)
-      .update(stopwatch.getDuration.toMillis, TimeUnit.MILLISECONDS)
+    logAudit(functionName) // log the action
+    val stopwatch = StopWatch.createStarted() // start a timer
+    val tryResult: Try[T] = Try(op(())) // execute the function being wrapped
+    stopwatch.stop() // stop the timer
+    val providerName = delegate.getClass.getSimpleName // provider name for metrics
     tryResult match {
-      case Success(result) => result
+      // on success, capture latency and count metrics for the wrapped function
+      // then return the wrapped function's result
+      case Success(result) =>
+        requestCount(functionName, providerName).inc()
+        requestLatency(functionName, providerName)
+          .update(stopwatch.getDuration.toMillis, TimeUnit.MILLISECONDS)
+        result
+      // on error, increment the error count metric and rethrow the exception
       case Failure(exception) =>
-        errorCount(functionName, delegate.getClass.getSimpleName, exception.getClass.getSimpleName).inc()
-        throw exception // rethrow the exception after recording metrics
+        errorCount(functionName, providerName, exception.getClass.getSimpleName).inc()
+        throw exception
     }
   }
 
