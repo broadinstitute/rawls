@@ -293,7 +293,7 @@ trait EntityApiService extends UserInfoDirectives {
                       )
                     )
                   case Some(atts) =>
-                    atts.toSet.map((value: String) => AttributeName.fromDelimitedName(value.trim))
+                    atts.map((value: String) => AttributeName.fromDelimitedName(value.trim))
                 }
               }
 
