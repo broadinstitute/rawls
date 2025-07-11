@@ -4,7 +4,7 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import net.logstash.logback.argument.StructuredArguments
-import nl.grons.metrics4.scala.Timer
+import nl.grons.metrics4.scala.{Counter, Timer}
 import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
@@ -31,9 +31,10 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import spray.json._
 
+import java.sql.SQLTransactionRollbackException
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 // Case classes for structured audit logging
 case class WorkspaceInfo(id: String, namespace: String, name: String)
@@ -99,14 +100,26 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
       .expand("providerName", providerName)
       .asTimer("latency")
 
+  private def errorCount(functionName: String, providerName: String, errorType: String): Counter =
+    entityProviderMetrics
+      .expand("function", functionName)
+      .expand("providerName", providerName)
+      .expand("errorType", errorType)
+      .asCounter("errors")
+
   private def instrument[T](functionName: String)(op: Unit => T): T = {
     logAudit(functionName)
     val stopwatch = StopWatch.createStarted()
-    val result = op(())
+    val tryResult: Try[T] = Try(op(()))
     stopwatch.stop()
     requestLatency(functionName, delegate.getClass.getSimpleName)
       .update(stopwatch.getDuration.toMillis, TimeUnit.MILLISECONDS)
-    result
+    tryResult match {
+      case Success(result) => result
+      case Failure(exception) =>
+        errorCount(functionName, delegate.getClass.getSimpleName, exception.getClass.getSimpleName).inc()
+        throw exception // rethrow the exception after recording metrics
+    }
   }
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
