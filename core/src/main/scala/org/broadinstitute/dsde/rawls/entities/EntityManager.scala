@@ -41,7 +41,8 @@ import scala.util.{Failure, Success}
  *
  */
 class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]],
-                    workspaceSettingRepository: WorkspaceSettingRepository
+                    workspaceSettingRepository: WorkspaceSettingRepository,
+                    metricsPrefix: String
 ) {
 
   /**
@@ -82,7 +83,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
           builder.build(requestArguments) match {
             case Success(provider) =>
               // Wrap the provider with AuditLoggingEntityProvider
-              new AuditLoggingEntityProvider(provider, requestArguments)
+              new AuditLoggingEntityProvider(provider, requestArguments, metricsPrefix)
             case Failure(regrets: DataEntityException) =>
               throw new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage))
             case Failure(ex: Throwable) =>
@@ -113,7 +114,8 @@ object EntityManager {
 
     new EntityManager(
       Set(defaultEntityProviderBuilder, compactEntityProviderBuilder),
-      workspaceSettingRepository
+      workspaceSettingRepository,
+      metricsPrefix
     )
   }
 }

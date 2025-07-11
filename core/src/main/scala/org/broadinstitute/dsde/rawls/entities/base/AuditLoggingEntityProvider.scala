@@ -4,10 +4,13 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import net.logstash.logback.argument.StructuredArguments
+import nl.grons.metrics4.scala.Timer
+import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
@@ -28,6 +31,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import spray.json._
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.Future
 import scala.util.Try
 
@@ -50,9 +54,12 @@ object AuditJsonSupport extends JsonSupport {
  * @param delegate The EntityProvider implementation to delegate to after logging
  * @param requestArguments The request arguments containing workspace and context information
  */
-class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArguments: EntityRequestArguments)
-    extends EntityProvider
-    with LazyLogging {
+class AuditLoggingEntityProvider(val delegate: EntityProvider,
+                                 val requestArguments: EntityRequestArguments,
+                                 metricsPrefix: String
+) extends EntityProvider
+    with LazyLogging
+    with RawlsInstrumented {
   override def entityStoreId: Option[String] = delegate.entityStoreId
 
   /**
@@ -81,36 +88,57 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
     logger.info("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
   }
 
+  override protected val workbenchMetricBaseName: String = metricsPrefix
+
+  private def entityProviderMetrics: ExpandedMetricBuilder =
+    ExpandedMetricBuilder.expand(WorkspaceDataMetricKey, "entityProvider")
+
+  private def requestLatency(functionName: String, providerName: String): Timer =
+    entityProviderMetrics
+      .expand("function", functionName)
+      .expand("providerName", providerName)
+      .asTimer("latency")
+
+  private def instrument[T](functionName: String)(op: Unit => T): T = {
+    logAudit(functionName)
+    val stopwatch = StopWatch.createStarted()
+    val result = op(())
+    stopwatch.stop()
+    requestLatency(functionName, delegate.getClass.getSimpleName)
+      .update(stopwatch.getDuration.toMillis, TimeUnit.MILLISECONDS)
+    result
+  }
+
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    logAudit("batchUpdateEntities")
-    delegate.batchUpdateEntities(entityUpdates, parentContext)
-  }
+  ): Future[Int] =
+    instrument("batchUpdateEntities") { _ =>
+      delegate.batchUpdateEntities(entityUpdates, parentContext)
+    }
 
   override def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    logAudit("batchUpsertEntities")
-    delegate.batchUpsertEntities(entityUpdates, parentContext)
-  }
+  ): Future[Int] =
+    instrument("batchUpsertEntities") { _ =>
+      delegate.batchUpsertEntities(entityUpdates, parentContext)
+    }
 
   override def saveWorkflowOutputEntities(
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Int] = {
-    logAudit("saveWorkflowOutputEntities")
-    delegate.saveWorkflowOutputEntities(dataAccess, workspace, updatedEntities)
-  }
+  ): ReadWriteAction[Int] =
+    instrument("saveWorkflowOutputEntities") { _ =>
+      delegate.saveWorkflowOutputEntities(dataAccess, workspace, updatedEntities)
+    }
 
   override def listWorkflowEntities(dataAccess: DataAccess,
                                     workspace: Workspace,
                                     entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] = {
-    logAudit("listWorkflowEntities")
-    delegate.listWorkflowEntities(dataAccess, workspace, entityIds)
-  }
+  ): ReadAction[Map[Long, Entity]] =
+    instrument("listWorkflowEntities") { _ =>
+      delegate.listWorkflowEntities(dataAccess, workspace, entityIds)
+    }
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
@@ -118,132 +146,133 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider, val requestArgume
                             entityNames: Seq[String],
                             linkExistingEntities: Boolean,
                             parentContext: RawlsRequestContext
-  ): Future[EntityCopyResponse] = {
-    logAudit("copyEntities")
-    delegate.copyEntities(sourceWorkspaceContext,
-                          destWorkspaceContext,
-                          entityType,
-                          entityNames,
-                          linkExistingEntities,
-                          parentContext
-    )
-  }
+  ): Future[EntityCopyResponse] =
+    instrument("copyEntities") { _ =>
+      delegate.copyEntities(sourceWorkspaceContext,
+                            destWorkspaceContext,
+                            entityType,
+                            entityNames,
+                            linkExistingEntities,
+                            parentContext
+      )
+    }
 
   override def clone(sourceWorkspaceContext: Workspace,
                      destWorkspaceContext: Workspace,
                      parentContext: RawlsRequestContext
-  ): WriteAction[(Int, Int)] = {
-    logAudit("clone")
-    delegate.clone(sourceWorkspaceContext, destWorkspaceContext, parentContext)
-  }
+  ): WriteAction[(Int, Int)] =
+    instrument("clone") { _ =>
+      delegate.clone(sourceWorkspaceContext, destWorkspaceContext, parentContext)
+    }
 
-  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
-    logAudit("createEntity")
-    delegate.createEntity(entity, parentContext)
-  }
+  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] =
+    instrument("createEntity") { _ =>
+      delegate.createEntity(entity, parentContext)
+    }
 
-  override def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int] = {
-    logAudit("deleteEntities")
-    delegate.deleteEntities(pointers, parentContext)
-  }
+  override def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int] =
+    instrument("deleteEntities") { _ =>
+      delegate.deleteEntities(pointers, parentContext)
+    }
 
-  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] = {
-    logAudit("deleteEntitiesOfType")
-    delegate.deleteEntitiesOfType(entityType, parentContext)
-  }
+  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] =
+    instrument("deleteEntitiesOfType") { _ =>
+      delegate.deleteEntitiesOfType(entityType, parentContext)
+    }
 
   override def deleteEntityAttributes(entityType: String,
                                       attributeNames: Set[AttributeName],
                                       parentContext: RawlsRequestContext
-  ): Future[Unit] = {
-    logAudit("deleteEntityAttributes")
-    delegate.deleteEntityAttributes(entityType, attributeNames, parentContext)
-  }
+  ): Future[Unit] =
+    instrument("deleteEntityAttributes") { _ =>
+      delegate.deleteEntityAttributes(entityType, attributeNames, parentContext)
+    }
 
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext
-  ): Future[Map[String, EntityTypeMetadata]] = {
-    logAudit("entityTypeMetadata")
-    delegate.entityTypeMetadata(useCache, parentContext)
-  }
+  ): Future[Map[String, EntityTypeMetadata]] =
+    instrument("entityTypeMetadata") { _ =>
+      delegate.entityTypeMetadata(useCache, parentContext)
+    }
 
   override def evaluateExpression(entityType: String,
                                   entityName: String,
                                   expression: String,
                                   parentContext: RawlsRequestContext
-  ): Future[Seq[AttributeValue]] = {
-    logAudit("evaluateExpression")
-    delegate.evaluateExpression(entityType, entityName, expression, parentContext)
-  }
+  ): Future[Seq[AttributeValue]] =
+    instrument("evaluateExpression") { _ =>
+      delegate.evaluateExpression(entityType, entityName, expression, parentContext)
+    }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[LazyList[SubmissionValidationEntityInputs]] = {
-    logAudit("evaluateExpressions")
-    delegate.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, workspaceExpressionResults)
-  }
+  ): Future[LazyList[SubmissionValidationEntityInputs]] =
+    instrument("evaluateExpressions") { _ =>
+      delegate.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, workspaceExpressionResults)
+    }
 
   override def expressionValidator: ExpressionValidator = delegate.expressionValidator
 
-  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] = {
-    logAudit("getEntity")
-    delegate.getEntity(entityType, entityName, parentContext)
-  }
+  override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
+    instrument("getEntity") { _ =>
+      delegate.getEntity(entityType, entityName, parentContext)
+    }
 
-  override def listEntities(entityType: String): Source[Entity, NotUsed] = {
-    logAudit("listEntities")
-    delegate.listEntities(entityType)
-  }
+  override def listEntities(entityType: String): Source[Entity, NotUsed] =
+    instrument("listEntities") { _ =>
+      delegate.listEntities(entityType)
+    }
 
   override def queryEntities(entityType: String,
                              query: EntityQuery,
                              parentContext: RawlsRequestContext
-  ): Future[EntityQueryResponse] = {
-    logAudit("queryEntities")
-    delegate.queryEntities(entityType, query, parentContext)
-  }
+  ): Future[EntityQueryResponse] =
+    instrument("queryEntities") { _ =>
+      delegate.queryEntities(entityType, query, parentContext)
+    }
 
   override def queryEntitiesSource(entityType: String,
                                    query: EntityQuery,
                                    parentContext: RawlsRequestContext
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
-    logAudit("queryEntitiesSource")
-    delegate.queryEntitiesSource(entityType, query, parentContext)
-  }
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] =
+    instrument("queryEntitiesSource") { _ =>
+      delegate.queryEntitiesSource(entityType, query, parentContext)
+    }
 
   override def renameAttribute(entityType: String,
                                oldAttributeName: AttributeName,
                                attributeRenameRequest: AttributeRename,
                                parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    logAudit("renameAttribute")
-    delegate.renameAttribute(entityType, oldAttributeName, attributeRenameRequest, parentContext)
-  }
+  ): Future[Int] =
+    instrument("renameAttribute") { _ =>
+      delegate.renameAttribute(entityType, oldAttributeName, attributeRenameRequest, parentContext)
+    }
 
   override def renameEntity(entityType: String,
                             entityName: String,
                             newName: String,
                             parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    logAudit("renameEntity")
-    delegate.renameEntity(entityType, entityName, newName, parentContext)
-  }
+  ): Future[Int] =
+    instrument("renameEntity") { _ =>
+      delegate.renameEntity(entityType, entityName, newName, parentContext)
+    }
 
   override def renameEntityType(oldName: String,
                                 renameInfo: EntityTypeRename,
                                 parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    logAudit("renameEntityType")
-    delegate.renameEntityType(oldName, renameInfo, parentContext)
-  }
+  ): Future[Int] =
+    instrument("renameEntityType") { _ =>
+      delegate.renameEntityType(oldName, renameInfo, parentContext)
+    }
 
   override def updateEntity(entityType: String,
                             entityName: String,
                             operations: Seq[AttributeUpdateOperation],
                             parentContext: RawlsRequestContext
-  ): Future[Entity] = {
-    logAudit("updateEntity")
-    delegate.updateEntity(entityType, entityName, operations, parentContext)
-  }
+  ): Future[Entity] =
+    instrument("updateEntity") { _ =>
+      delegate.updateEntity(entityType, entityName, operations, parentContext)
+    }
+
 }
