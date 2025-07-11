@@ -30,18 +30,17 @@ trait WorkspaceSupport {
   def accessCheck(workspace: Workspace, requiredAction: SamResourceAction): Future[Unit] =
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, ctx) flatMap {
       hasRequiredLevel =>
-        // If this access check is for any action other than read, check if the user has read
-        // so we know what exception to throw. If this access check is for read, we already
-        // know the answer
-        val canReadFuture = if (requiredAction == SamWorkspaceActions.read) {
-          Future(hasRequiredLevel)
-        } else {
-          samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx)
-        }
-
         if (hasRequiredLevel) {
           Future.successful(())
         } else {
+          // If this access check is for any action other than read, check if the user has read
+          // so we know what exception to throw. If this access check is for read, we already
+          // know the answer
+          val canReadFuture = if (requiredAction == SamWorkspaceActions.read) {
+            Future(hasRequiredLevel)
+          } else {
+            samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx)
+          }
           canReadFuture flatMap { canRead =>
             if (canRead) Future.failed(WorkspaceAccessDeniedException(workspace.toWorkspaceName))
             else Future.failed(NoSuchWorkspaceException(workspace.toWorkspaceName))
