@@ -54,6 +54,10 @@ trait WorkspaceSupport {
             && apiException.getMessage.contains("Message: User is disabled.") =>
         Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
       case apiException: ApiException if apiException.getCode == StatusCodes.Forbidden.intValue =>
+        // David An 2025-07-11: throwing UserDisabledException here preserves existing behavior
+        // given the changes in https://github.com/broadinstitute/rawls/pull/3401. However,
+        // we may want to throw a different exception at some point; returning UserDisabledException
+        // when the user is forbidden or does not exist is not semantically correct.
         Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
     }
 
