@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.broadinstitute.dsde.workbench.client.sam.ApiException
 import org.joda.time.DateTime
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{times, verify, verifyNoMoreInteractions, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.mockito.ArgumentMatchers._
@@ -75,6 +75,17 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
 
     actual shouldBe defaultWorkspace
+
+    // successful case should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // successful case should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   // error cases where only one check fails
@@ -93,6 +104,16 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     intercept[UserDisabledException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw UserDisabledException if user is not enabled" in {
@@ -110,6 +131,16 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     intercept[UserDisabledException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw NoSuchWorkspaceException if workspace does not exist" in {
@@ -121,15 +152,19 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // user is enabled
     when(samDAO.getUserStatus(any[RawlsRequestContext]))
       .thenReturn(Future.successful(Option(defaultUserStatus)))
-    // user has permission
-    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
     intercept[NoSuchWorkspaceException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once, to check if the user is enabled once we discover the
+    // workspace is missing
+    verify(samDAO, times(1)).getUserStatus(any[RawlsRequestContext])
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw NoSuchWorkspaceException if user cannot read" in {
@@ -147,6 +182,16 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     intercept[NoSuchWorkspaceException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw WorkspaceAccessDeniedException if user can read but doesn't have requested permission" in {
