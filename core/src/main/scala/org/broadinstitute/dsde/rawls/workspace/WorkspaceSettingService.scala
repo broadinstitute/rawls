@@ -127,7 +127,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
           case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
-          case CompactDataTablesSetting(CompactDataTablesConfig(_))                           => None
+          case CompactDataTablesSetting(CompactDataTablesConfig(_, _))                        => None
         }
       }
 
@@ -199,7 +199,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
-        case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
+        case CompactDataTablesSetting(CompactDataTablesConfig(enabled, _)) =>
           applyCompactDataTablesSetting(WorkspaceName(workspace.namespace, workspace.name), enabled)
 
         // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting

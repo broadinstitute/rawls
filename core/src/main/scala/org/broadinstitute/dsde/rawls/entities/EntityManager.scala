@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, 
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
+import org.broadinstitute.dsde.rawls.model.CompactDataTablesState.DONE
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model.{CloudPlatform, CompactDataTablesSetting, ErrorReport, WorkspaceType}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
@@ -64,7 +65,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
       workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
                                                            CompactDataTables
       ) map {
-        case Some(qs: CompactDataTablesSetting) => qs.config.enabled
+        case Some(qs: CompactDataTablesSetting) => qs.config.enabled || qs.config.state == DONE
         case _                                  => false
       }
     val targetTagFuture = compactDataTables map {

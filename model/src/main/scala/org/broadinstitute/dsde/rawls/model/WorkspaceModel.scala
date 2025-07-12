@@ -671,7 +671,24 @@ object WorkspaceSettingConfig {
 
   case class PubliclyReadableConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
-  case class CompactDataTablesConfig(enabled: Boolean) extends WorkspaceSettingConfig
+  case class CompactDataTablesConfig(enabled: Boolean, state: CompactDataTablesState = CompactDataTablesState.NONE)
+      extends WorkspaceSettingConfig
+}
+
+sealed trait CompactDataTablesState
+object CompactDataTablesState {
+  case object NONE extends CompactDataTablesState
+  case object MIGRATING extends CompactDataTablesState
+  case object DONE extends CompactDataTablesState
+  case object ERROR extends CompactDataTablesState
+
+  def withName(name: String): CompactDataTablesState = name.toUpperCase match {
+    case "NONE"      => NONE
+    case "MIGRATING" => MIGRATING
+    case "DONE"      => DONE
+    case "ERROR"     => ERROR
+    case _           => throw new RawlsException(s"invalid CompactDataTablesState [$name]")
+  }
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1298,7 +1315,16 @@ class WorkspaceJsonSupport extends JsonSupport {
     PubliclyReadableConfig.apply
   )
 
-  implicit val CompactDataTablesConfigFormat: RootJsonFormat[CompactDataTablesConfig] = jsonFormat1(
+  implicit object CompactDataTablesStateFormat extends RootJsonFormat[CompactDataTablesState] {
+    override def write(state: CompactDataTablesState): JsValue = JsString(state.toString)
+
+    override def read(json: JsValue): CompactDataTablesState = json match {
+      case JsString(name) => CompactDataTablesState.withName(name)
+      case _              => throw DeserializationException("unexpected CompactDataTablesState")
+    }
+  }
+
+  implicit val CompactDataTablesConfigFormat: RootJsonFormat[CompactDataTablesConfig] = jsonFormat2(
     CompactDataTablesConfig.apply
   )
 

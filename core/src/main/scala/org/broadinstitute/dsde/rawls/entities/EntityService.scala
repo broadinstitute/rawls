@@ -35,8 +35,6 @@ import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, Json
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
-import spray.json.DefaultJsonProtocol.jsonFormat3
-import spray.json.RootJsonFormat
 
 import java.sql.SQLException
 import java.util.UUID
@@ -581,7 +579,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * The migration relies on temp tables; the batchSize setting ensures the temp tables do not grow too large.
     *
     * @param workspaceName the name of the workspace to migrate
+    * @param cleanup if true, legacy attributes and entities will be hard-deleted after migration;
     * @param batchSize the number of entities to migrate in a single batch; defaults to 50,000
+    * @param enableSetting if true, the CompactDataTables setting will be enabled after migration;
+    * @param updateSettings if true, ensure to update setting after migration;
     */
   def quicksilverMigration(workspaceName: WorkspaceName,
                            cleanup: Boolean = false,
@@ -591,7 +592,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
-        // verify owner of workspace.
+        // verify the owner of the workspace
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", s) { _ =>
           getV2WorkspaceContextAndPermissions(workspaceName,
                                               SamWorkspaceActions.own,
@@ -600,92 +601,170 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
         workspaceId = workspaceContext.workspaceIdAsUUID
 
-        // confirm if this is already a quicksilver workspace by checking settings
+        // check workspace settings and validate migration state
         workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
         settings <- traceFutureWithParent("getWorkspaceSettings", s) { _ =>
           workspaceSettingService.getWorkspaceSettings(workspaceName)
         }
-        alreadyEnabled = settings
-          .find(_.isInstanceOf[CompactDataTablesSetting])
-          .asInstanceOf[Option[CompactDataTablesSetting]]
-          .exists(_.config.enabled)
+        alreadyEnabled = isQuicksilverEnabled(settings)
+        isMigrating = isQuicksilverMigrating(settings)
 
-        _ = if (alreadyEnabled && enableSetting) {
-          throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
-        }
+        // validate current state
+        _ <- validateMigrationState(enableSetting, alreadyEnabled, isMigrating)
 
-        _ = if (alreadyEnabled && !enableSetting) {
-          throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver cannot be disabled for this workspace"))
-        }
-
-        // start a transaction; here's where we do a bunch of writes
+        // perform migration if needed
+        shouldMigrate = !alreadyEnabled && enableSetting && !isMigrating
         userResult <-
-          if (!alreadyEnabled && enableSetting) {
-            dataSource.inTransaction { dataAccess =>
-              val shardId: String = dataAccess.determineShard(workspaceId)
-
-              val stopwatch = StopWatch.createStarted()
-
-              logger.info(
-                s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
-              )
-
-              withIncreasedSortMemory(dataAccess) {
-                for {
-                  // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
-                  // for each batch. later queries will use those boundaries to migrate entities in batches, which
-                  // prevents the temp tables from growing too large.
-                  batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
-                  // niceties for logging
-                  indexedBoundaries = batchBoundaries.zipWithIndex
-
-                  // for each batch, migrate the entities in that batch
-                  updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
-                    quicksilverMigrateBatch(workspaceId,
-                                            shardId,
-                                            boundary,
-                                            dataAccess,
-                                            idx,
-                                            indexedBoundaries.size,
-                                            stopwatch,
-                                            s
-                    )
-                  })
-                  numEntitiesUpdated = updateCounts.sum
-
-                  (numAttributesDeleted, numEntitiesDeleted) <-
-                    if (cleanup) {
-                      // hard delete legacy data if requested
-                      hardDeleteLegacyData(workspaceId, shardId, dataAccess)
-                    } else {
-                      // otherwise, just log that we did not delete legacy data
-                      DBIO.successful((0, 0))
-                    }
-
-                  _ = logger.info(
-                    s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
-                  )
-                } yield QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted)
-              }
-            }
-          } else
+          if (shouldMigrate) {
+            performActualMigration(workspaceName, workspaceId, enableSetting, cleanup, batchSize, s)
+          } else {
             Future.successful(QuicksilverMigrationResult(0, 0, 0))
+          }
 
-        // finally, change the workspace to be quicksilver-enabled
-        _ <- traceFutureWithParent("setWorkspaceSettings", s) { _ =>
-          if (!updateSettings)
-            // if this is a settings migration, we don't want to set the setting again
+        // update settings
+        _ <-
+          if (updateSettings) {
+            val targetState = if (enableSetting) CompactDataTablesState.DONE else CompactDataTablesState.NONE
+            setCompactDataTablesState(workspaceName, enableSetting, targetState, s)
+          } else {
             Future.successful(())
-          else
-            // otherwise, set the CompactDataTablesSetting
-            workspaceSettingService.setWorkspaceSettings(
-              workspaceName,
-              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = enableSetting)))
-            )
-        }
+          }
 
-        // return a count of entities updated
       } yield userResult
+    }
+
+  /**
+   * Check if Quicksilver (CompactDataTables) is enabled for the workspace.
+   * @param settings the list of workspace settings to check
+   * @return
+   */
+  private def isQuicksilverEnabled(settings: List[WorkspaceSetting]): Boolean =
+    settings.exists {
+      case setting: CompactDataTablesSetting =>
+        setting.config.enabled || setting.config.state == CompactDataTablesState.DONE
+      case _ => false
+    }
+
+  /**
+   * Check if Quicksilver (CompactDataTables) is currently migrating for the workspace.
+   * @param settings the list of workspace settings to check
+   * @return
+   */
+  private def isQuicksilverMigrating(settings: List[WorkspaceSetting]): Boolean =
+    settings.exists {
+      case setting: CompactDataTablesSetting => setting.config.state == CompactDataTablesState.MIGRATING
+      case _                                 => false
+    }
+
+  /**
+   * Validate the current migration state of the workspace.
+   * @param enableSetting if true, the migration is being enabled; if false, it is being disabled.
+   * @param alreadyEnabled if true, CompactDataTablesSetting is already enabled for the workspace.
+   * @param isMigrating if true, CompactDataTablesSetting is currently migrating for the workspace.
+   * @return
+   */
+  private def validateMigrationState(enableSetting: Boolean,
+                                     alreadyEnabled: Boolean,
+                                     isMigrating: Boolean
+  ): Future[Unit] =
+    if (alreadyEnabled && enableSetting) {
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace")))
+    } else if (alreadyEnabled && !enableSetting) {
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver cannot be disabled for this workspace")))
+    } else if (isMigrating) {
+      Future.failed(
+        new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, "Quicksilver migration already in progress for this workspace")
+        )
+      )
+    } else {
+      Future.successful(())
+    }
+
+  /**
+     * Perform the actual migration of entity data from legacy to compact format.
+     * This method handles the migration in batches, updates the workspace settings,
+     * and performs cleanup if requested.
+     */
+  private def performActualMigration(workspaceName: WorkspaceName,
+                                     workspaceId: UUID,
+                                     enableSetting: Boolean,
+                                     cleanup: Boolean,
+                                     batchSize: Int,
+                                     parentContext: RawlsRequestContext
+  ): Future[QuicksilverMigrationResult] =
+
+    setCompactDataTablesState(workspaceName, enableSetting, CompactDataTablesState.MIGRATING, parentContext)
+      .flatMap { _ =>
+        dataSource.inTransaction { dataAccess =>
+          val shardId: String = dataAccess.determineShard(workspaceId)
+          val stopwatch = StopWatch.createStarted()
+
+          logger.info(s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ...")
+
+          withIncreasedSortMemory(dataAccess) {
+            for {
+              batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
+              indexedBoundaries = batchBoundaries.zipWithIndex
+
+              updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
+                quicksilverMigrateBatch(workspaceId,
+                                        shardId,
+                                        boundary,
+                                        dataAccess,
+                                        idx,
+                                        indexedBoundaries.size,
+                                        stopwatch,
+                                        parentContext
+                )
+              })
+              numEntitiesUpdated = updateCounts.sum
+
+              (numAttributesDeleted, numEntitiesDeleted) <-
+                if (cleanup) {
+                  hardDeleteLegacyData(workspaceId, shardId, dataAccess)
+                } else {
+                  DBIO.successful((0, 0))
+                }
+
+              _ = logger.info(
+                s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+              )
+            } yield QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted)
+          }
+        }
+      }
+      .recoverWith { case ex =>
+        setCompactDataTablesState(workspaceName, !enableSetting, CompactDataTablesState.ERROR, parentContext)
+          .flatMap(_ => Future.failed(ex))
+      }
+
+  /**
+   * Set the CompactDataTables setting for a workspace.
+   * This method is used to enable or disable the CompactDataTables feature and set its state.
+   */
+  private def setCompactDataTablesState(workspaceName: WorkspaceName,
+                                        enabled: Boolean,
+                                        state: CompactDataTablesState,
+                                        parentContext: RawlsRequestContext
+  ): Future[Unit] =
+    workspaceSettingServiceConstructor match {
+      case Some(serviceConstructor) =>
+        val workspaceSettingService = serviceConstructor(ctx)
+        traceFutureWithParent("setWorkspaceSettings", parentContext) { _ =>
+          workspaceSettingService
+            .setWorkspaceSettings(
+              workspaceName,
+              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = enabled, state = state)))
+            )
+            .map(_ => ())
+        }
+      case None =>
+        Future.failed(
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.InternalServerError, "Workspace setting service not available")
+          )
+        )
     }
 
   private def hardDeleteLegacyData(workspaceId: UUID,
@@ -810,5 +889,4 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
       }
   }
-
 }
