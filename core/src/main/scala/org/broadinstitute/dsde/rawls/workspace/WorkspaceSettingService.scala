@@ -127,12 +127,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
           case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
-          case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
-            if (!enabled) {
-              Some(validationErrorReport(setting.settingType, "this setting cannot be disabled once enabled"))
-            } else {
-              None
-            }
+          case CompactDataTablesSetting(CompactDataTablesConfig(_))                           => None
         }
       }
 
@@ -204,8 +199,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
-        case CompactDataTablesSetting(CompactDataTablesConfig(_)) =>
-          applyCompactDataTablesSetting(workspace)
+        case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
+          applyCompactDataTablesSetting(WorkspaceName(workspace.namespace, workspace.name), enabled)
 
         // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting
         // are not bucket settings, so we do not need to apply anything here
@@ -280,12 +275,10 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
   /**
    * Call to handle entity attributes migration when compact data tables setting enabled.
    */
-  private def applyCompactDataTablesSetting(workspace: Workspace): Future[Unit] =
+  private def applyCompactDataTablesSetting(workspaceName: WorkspaceName, enabled: Boolean): Future[Unit] =
     Future {
       entityService
-        .quicksilverMigration(workspaceName = WorkspaceName(workspace.namespace, workspace.name),
-                              updateSettings = false
-        )
+        .quicksilverMigration(workspaceName = workspaceName, enableSetting = enabled, updateSettings = false)
         .map(_ => ())
         .recover { case e: Exception =>
           throw new RawlsExceptionWithErrorReport(

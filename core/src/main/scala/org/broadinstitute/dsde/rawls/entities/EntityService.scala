@@ -586,6 +586,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
   def quicksilverMigration(workspaceName: WorkspaceName,
                            cleanup: Boolean = false,
                            batchSize: Int = 50000,
+                           enableSetting: Boolean = true,
                            updateSettings: Boolean = true
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
@@ -604,75 +605,82 @@ class EntityService(protected val ctx: RawlsRequestContext,
         settings <- traceFutureWithParent("getWorkspaceSettings", s) { _ =>
           workspaceSettingService.getWorkspaceSettings(workspaceName)
         }
-        _ = if (
-          settings
-            .find(_.isInstanceOf[CompactDataTablesSetting])
-            .asInstanceOf[Option[CompactDataTablesSetting]]
-            .exists(_.config.enabled)
-        ) {
+        alreadyEnabled = settings
+          .find(_.isInstanceOf[CompactDataTablesSetting])
+          .asInstanceOf[Option[CompactDataTablesSetting]]
+          .exists(_.config.enabled)
+
+        _ = if (alreadyEnabled && enableSetting) {
           throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
         }
 
-        // start a transaction; here's where we do a bunch of writes
-        userResult <- dataSource.inTransaction { dataAccess =>
-          val shardId: String = dataAccess.determineShard(workspaceId)
-
-          val stopwatch = StopWatch.createStarted()
-
-          logger.info(
-            s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
-          )
-
-          withIncreasedSortMemory(dataAccess) {
-            for {
-              // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
-              // for each batch. later queries will use those boundaries to migrate entities in batches, which
-              // prevents the temp tables from growing too large.
-              batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
-              // niceties for logging
-              indexedBoundaries = batchBoundaries.zipWithIndex
-
-              // for each batch, migrate the entities in that batch
-              updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
-                quicksilverMigrateBatch(workspaceId,
-                                        shardId,
-                                        boundary,
-                                        dataAccess,
-                                        idx,
-                                        indexedBoundaries.size,
-                                        stopwatch,
-                                        s
-                )
-              })
-              numEntitiesUpdated = updateCounts.sum
-
-              (numAttributesDeleted, numEntitiesDeleted) <-
-                if (cleanup) {
-                  // hard delete legacy data if requested
-                  hardDeleteLegacyData(workspaceId, shardId, dataAccess)
-                } else {
-                  // otherwise, just log that we did not delete legacy data
-                  DBIO.successful((0, 0))
-                }
-
-              _ = logger.info(
-                s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
-              )
-            } yield QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted)
-          }
-
+        _ = if (alreadyEnabled && !enableSetting) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver cannot be disabled for this workspace"))
         }
+
+        // start a transaction; here's where we do a bunch of writes
+        userResult <-
+          if (!alreadyEnabled && enableSetting) {
+            dataSource.inTransaction { dataAccess =>
+              val shardId: String = dataAccess.determineShard(workspaceId)
+
+              val stopwatch = StopWatch.createStarted()
+
+              logger.info(
+                s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
+              )
+
+              withIncreasedSortMemory(dataAccess) {
+                for {
+                  // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
+                  // for each batch. later queries will use those boundaries to migrate entities in batches, which
+                  // prevents the temp tables from growing too large.
+                  batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
+                  // niceties for logging
+                  indexedBoundaries = batchBoundaries.zipWithIndex
+
+                  // for each batch, migrate the entities in that batch
+                  updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
+                    quicksilverMigrateBatch(workspaceId,
+                                            shardId,
+                                            boundary,
+                                            dataAccess,
+                                            idx,
+                                            indexedBoundaries.size,
+                                            stopwatch,
+                                            s
+                    )
+                  })
+                  numEntitiesUpdated = updateCounts.sum
+
+                  (numAttributesDeleted, numEntitiesDeleted) <-
+                    if (cleanup) {
+                      // hard delete legacy data if requested
+                      hardDeleteLegacyData(workspaceId, shardId, dataAccess)
+                    } else {
+                      // otherwise, just log that we did not delete legacy data
+                      DBIO.successful((0, 0))
+                    }
+
+                  _ = logger.info(
+                    s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+                  )
+                } yield QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted)
+              }
+            }
+          } else
+            Future.successful(QuicksilverMigrationResult(0, 0, 0))
 
         // finally, change the workspace to be quicksilver-enabled
         _ <- traceFutureWithParent("setWorkspaceSettings", s) { _ =>
-          if (!updateSettings) {
+          if (!updateSettings)
             // if this is a settings migration, we don't want to set the setting again
             Future.successful(())
-          } else
-            // otherwise, set the CompactDataTablesSetting to enabled
+          else
+            // otherwise, set the CompactDataTablesSetting
             workspaceSettingService.setWorkspaceSettings(
               workspaceName,
-              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = enableSetting)))
             )
         }
 

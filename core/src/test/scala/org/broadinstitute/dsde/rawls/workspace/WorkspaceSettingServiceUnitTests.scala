@@ -731,23 +731,6 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     assert(exception.errorReport.causes.exists(_.message.matches("Invalid GcpBucketSoftDelete.*retention duration.*")))
   }
 
-  it should "not allow disabling CompactDataTables setting once enabled" in {
-    val disableCompactDataTablesSetting = CompactDataTablesSetting(CompactDataTablesConfig(false))
-
-    val service = workspaceSettingServiceConstructor()
-
-    val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(disableCompactDataTablesSetting)),
-                   Duration.Inf
-      )
-    }
-    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-    exception.errorReport.message should include("Invalid settings requested.")
-    exception.errorReport.causes should contain theSameElementsAs List(
-      ErrorReport("Invalid CompactDataTables configuration: this setting cannot be disabled once enabled.")
-    )
-  }
-
   "publicly readable setting" should "set public in sam and add all users to bucket" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val workspaceName = workspace.toWorkspaceName
@@ -1036,6 +1019,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
         any[Boolean],
         any[Int],
+        ArgumentMatchers.eq(true),
         ArgumentMatchers.eq(false)
       )
     ).thenReturn(Future.successful(QuicksilverMigrationResult(2, 2, 2)))
@@ -1055,6 +1039,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
       any[Boolean],
       any[Int],
+      ArgumentMatchers.eq(true),
       ArgumentMatchers.eq(false)
     )
   }
@@ -1092,11 +1077,14 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val entityService = mock[EntityService]
     when(
-      entityService.quicksilverMigration(workspaceName = WorkspaceName(workspace.namespace, workspace.name),
-                                         updateSettings = false
+      entityService.quicksilverMigration(
+        workspaceName = ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
+        updateSettings = ArgumentMatchers.eq(false),
+        batchSize = any[Int](),
+        cleanup = any[Boolean](),
+        enableSetting = any[Boolean]()
       )
-    )
-      .thenReturn(Future.failed(new Exception("Migration failed")))
+    ).thenReturn(Future.failed(new Exception("Migration failed")))
 
     val service =
       workspaceSettingServiceConstructor(samDAO = samDAO,
