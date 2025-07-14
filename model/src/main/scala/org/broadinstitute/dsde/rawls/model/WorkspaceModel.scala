@@ -493,7 +493,7 @@ object ImportStatuses {
     case "running"   => ReadyForUpsert
     case "succeeded" => Done
     case "error"     => Error
-    case _           => throw new RawlsException(s"invalid cWDS status [$name]")
+    case _           => Unknown(name)
   }
 
   def withName(name: String): ImportStatus = name.toLowerCase match {
@@ -501,9 +501,10 @@ object ImportStatuses {
     case "upserting"      => Upserting
     case "done"           => Done
     case "error"          => Error
-    case _                => throw new RawlsException(s"invalid ImportStatus [$name]")
+    case _                => Unknown(name)
   }
 
+  case class Unknown(externalStatus: String) extends ImportStatus
   case object ReadyForUpsert extends ImportStatus
   case object Upserting extends ImportStatus
   case object Done extends ImportStatus

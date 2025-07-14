@@ -1109,20 +1109,20 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     "succeeded" -> ImportStatuses.Done,
     "SUCCEEDED" -> ImportStatuses.Done,
     "error" -> ImportStatuses.Error,
-    "ERROR" -> ImportStatuses.Error
+    "ERROR" -> ImportStatuses.Error,
+    "queued" -> ImportStatuses.Unknown("queued"),
+    "QUEUED" -> ImportStatuses.Unknown("QUEUED"),
+    "created" -> ImportStatuses.Unknown("created"),
+    "CREATED" -> ImportStatuses.Unknown("CREATED"),
+    "cancelled" -> ImportStatuses.Unknown("cancelled"),
+    "CANCELLED" -> ImportStatuses.Unknown("CANCELLED"),
+    "UNKNOWN" -> ImportStatuses.Unknown("UNKNOWN"),
+    "something-else" -> ImportStatuses.Unknown("something-else")
   )
   testCases foreach { case (input, expected) =>
     it should s"translate $input to $expected" in {
       ImportStatuses.fromCwdsStatus(input) shouldBe expected
     }
-  }
-
-  private val errorCases = List("CREATED", "QUEUED", "CANCELLED", "UNKNOWN", "something-else")
-  errorCases foreach { input =>
-    it should s"throw error trying to translate $input" in
-      intercept[RawlsException] {
-        ImportStatuses.fromCwdsStatus(input)
-      }
   }
 
 }
