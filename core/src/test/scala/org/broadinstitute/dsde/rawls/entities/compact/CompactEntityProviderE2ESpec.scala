@@ -222,6 +222,52 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
   }
 
+  it should "succeed for a noop update" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataBefore shouldBe empty
+
+    val testEntity = Entity(
+      "myName",
+      "myType",
+      Map(
+        AttributeName.withDefaultNS("one") -> AttributeNumber(1),
+        AttributeName.withDefaultNS("two") -> AttributeNumber(2)
+      )
+    )
+
+    // create the entity we'll be updating; give it two references
+    Await.result(
+      provider.createEntity(testEntity, defaultRequestContext),
+      atMost
+    )
+
+    // perform the batchUpsert, issuing a noop update
+    val updates = Source(
+      Seq(
+        EntityUpdateDefinition(
+          "myName",
+          "myType",
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS("one"), AttributeNumber(1))
+          )
+        )
+      )
+    )
+
+    val numUpdated = Await.result(provider.batchUpsertEntities(updates, defaultRequestContext), atMost)
+    numUpdated shouldBe 0
+
+    // validate the entity after our batchUpsert
+    val finalEntity =
+      runAndWait(
+        provider.repository.queries.getEntity(wsid, "myType", "myName")
+      )
+    finalEntity should not be empty
+    finalEntity.get.toEntity shouldBe testEntity
+  }
+
   it should "remove obsolete references for entities during update" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
 
