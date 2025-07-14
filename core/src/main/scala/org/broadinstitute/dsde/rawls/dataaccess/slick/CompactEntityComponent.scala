@@ -105,26 +105,29 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     *
     * `execution plan: multiple-row insert`
     */
-  def batchWriteEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] = {
-    val baseSql =
-      sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
+  def batchWriteEntities(workspaceId: UUID, entities: Seq[Entity], insertOnly: Boolean): ReadWriteAction[Int] =
+    if (entities.isEmpty)
+      DBIO.successful(0)
+    else {
+      val baseSql =
+        sql"""insert into ENTITY(name, entity_type, workspace_id, record_version, deleted, attributes) values """
 
-    val values = entities.map { entity =>
-      val attributesJson: JsValue = toSql(entity.attributes)
+      val values = entities.map { entity =>
+        val attributesJson: JsValue = toSql(entity.attributes)
 
-      sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
+        sql"""(${entity.name}, ${entity.entityType}, $workspaceId, 0, 0, $attributesJson)"""
+      }
+
+      // when called with insertOnly=true, the SQL statement is a simple `insert into ...`.
+      // when called with insertOnly=false, the SQL statement is `insert into ... on duplicate key update`.
+      val upsertSql = if (insertOnly) {
+        sql""
+      } else {
+        sql""" as newvalues on duplicate key update ENTITY.record_version = ENTITY.record_version+1, ENTITY.attributes = newvalues.attributes;"""
+      }
+
+      concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql","), upsertSql).asUpdate
     }
-
-    // when called with insertOnly=true, the SQL statement is a simple `insert into ...`.
-    // when called with insertOnly=false, the SQL statement is `insert into ... on duplicate key update`.
-    val upsertSql = if (insertOnly) {
-      sql""
-    } else {
-      sql""" on duplicate key update record_version = record_version+1, attributes = VALUES(attributes);"""
-    }
-
-    concatSqlActions(baseSql, reduceSqlActionsWithDelim(values, sql","), upsertSql).asUpdate
-  }
 
   /**
     * Insert a single entity to the db.
