@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.{
   UserDisabledException,
   WorkspaceAccessDeniedException
 }
+import org.broadinstitute.dsde.workbench.client.sam.ApiException
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -242,11 +243,17 @@ class WorkspaceServiceUnitTests
   }
 
   it should "return an unauthorized error if the user is disabled" in {
+    // workspace exists
+    val repository = mock[WorkspaceRepository]
+    when(repository.getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]]))
+      .thenReturn(Future(Some(workspace)))
+    // user is disabled
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserStatus(ctx)).thenReturn(Future(Some(enabledUser.copy(enabled = false))))
+    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], ArgumentMatchers.eq(ctx)))
+      .thenAnswer(_ => Future.failed(new ApiException(StatusCodes.Unauthorized.intValue, "Message: User is disabled.")))
 
     val exception = intercept[UserDisabledException] {
-      val service = workspaceServiceConstructor(samDAO = samDAO)(ctx)
+      val service = workspaceServiceConstructor(workspaceRepository = repository, samDAO = samDAO)(ctx)
       Await.result(service.getWorkspace(WorkspaceName("fake_namespace", "fake_name"), WorkspaceFieldSpecs()),
                    Duration.Inf
       )

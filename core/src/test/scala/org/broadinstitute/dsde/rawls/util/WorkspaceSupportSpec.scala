@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.util
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.{
   NoSuchWorkspaceException,
@@ -24,11 +25,12 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceRepository
 import org.broadinstitute.dsde.workbench.client.sam.ApiException
 import org.joda.time.DateTime
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{times, verify, verifyNoMoreInteractions, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.mockito.ArgumentMatchers._
 import org.mockito.ArgumentMatchers.{eq => mockeq}
+import org.mockito.Mockito
 import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
@@ -64,10 +66,7 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // workspace exists
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user is enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus)))
-    // user has permission
+    // user has permission and is enabled
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
       .thenReturn(Future.successful(true))
 
@@ -77,6 +76,17 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
 
     actual shouldBe defaultWorkspace
+
+    // successful case should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // successful case should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   // error cases where only one check fails
@@ -87,17 +97,24 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
     // user does not exist
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(None))
-    // user has permission
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
+      .thenAnswer(_ => Future.failed(new ApiException(StatusCodes.Forbidden.intValue, "Azure Id 123 not found in sam")))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
     intercept[UserDisabledException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw UserDisabledException if user is not enabled" in {
@@ -107,17 +124,24 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
     // user is NOT enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus.copy(enabled = false))))
-    // user has permission
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
+      .thenAnswer(_ => Future.failed(new ApiException(StatusCodes.Unauthorized.intValue, "Message: User is disabled.")))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
     intercept[UserDisabledException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw NoSuchWorkspaceException if workspace does not exist" in {
@@ -129,15 +153,19 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // user is enabled
     when(samDAO.getUserStatus(any[RawlsRequestContext]))
       .thenReturn(Future.successful(Option(defaultUserStatus)))
-    // user has permission
-    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
     intercept[NoSuchWorkspaceException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once, to check if the user is enabled once we discover the
+    // workspace is missing
+    verify(samDAO, times(1)).getUserStatus(any[RawlsRequestContext])
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw NoSuchWorkspaceException if user cannot read" in {
@@ -146,9 +174,6 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // workspace exist
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user is enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus)))
     // user DOES NOT have permission
     when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
       .thenReturn(Future.successful(false))
@@ -158,6 +183,16 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     intercept[NoSuchWorkspaceException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw WorkspaceAccessDeniedException if user can read but doesn't have requested permission" in {
@@ -166,9 +201,6 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // workspace exist
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user is enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus)))
     // user DOES NOT have write permission
     when(
       samDAO.userHasAction(any[SamResourceTypeName],
@@ -193,6 +225,19 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     intercept[WorkspaceAccessDeniedException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.write), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should call Sam twice - first to see if the user has write (which returns false),
+    // then again to see if the user has read
+    val inOrder = Mockito.inOrder(samDAO)
+    inOrder
+      .verify(samDAO, times(1))
+      .userHasAction(any[SamResourceTypeName], any[String], mockeq(SamWorkspaceActions.write), any[RawlsRequestContext])
+    inOrder
+      .verify(samDAO, times(1))
+      .userHasAction(any[SamResourceTypeName], any[String], mockeq(SamWorkspaceActions.read), any[RawlsRequestContext])
+    inOrder.verifyNoMoreInteractions()
   }
 
   // error cases where multiple checks fail
@@ -205,15 +250,19 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // user is NOT enabled
     when(samDAO.getUserStatus(any[RawlsRequestContext]))
       .thenReturn(Future.successful(Option(defaultUserStatus.copy(enabled = false))))
-    // user has permission
-    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
     intercept[UserDisabledException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once, to check if the user is enabled once we discover the
+    // workspace is missing
+    verify(samDAO, times(1)).getUserStatus(any[RawlsRequestContext])
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw NoSuchWorkspaceException if workspace does not exist and user doesn't have permission" in {
@@ -228,15 +277,19 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // user is enabled
     when(samDAO.getUserStatus(any[RawlsRequestContext]))
       .thenReturn(Future.successful(Option(defaultUserStatus)))
-    // user DOES NOT have permission
-    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(false))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
     intercept[NoSuchWorkspaceException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once, to check if the user is enabled once we discover the
+    // workspace is missing
+    verify(samDAO, times(1)).getUserStatus(any[RawlsRequestContext])
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "throw NoSuchWorkspaceException if user is not enabled, workspace does not exist, and user doesn't have permission" in {
@@ -251,38 +304,22 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // user is NOT enabled
     when(samDAO.getUserStatus(any[RawlsRequestContext]))
       .thenReturn(Future.successful(Option(defaultUserStatus.copy(enabled = false))))
-    // user DOES NOT have permission
-    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(false))
 
     val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
 
     intercept[UserDisabledException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once, to check if the user is enabled once we discover the
+    // workspace is missing
+    verify(samDAO, times(1)).getUserStatus(any[RawlsRequestContext])
+    verifyNoMoreInteractions(samDAO)
   }
 
   // error cases where a Sam API call fails
-  it should "propagate Sam's ApiException if Sam user-enabled API call fails" in {
-    val samDAO = mock[SamDAO]
-    val workspaceRepository = mock[WorkspaceRepository]
-    // workspace exists
-    when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
-      .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user status API call fails
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenAnswer(_ => Future.failed(new ApiException(555, "Unit test mock error")))
-    // user has permission
-    when(samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
-      .thenReturn(Future.successful(true))
-
-    val support = new WorkspaceSupportFixture(samDAO, workspaceRepository)
-
-    intercept[ApiException] {
-      Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
-    }
-  }
-
   it should "propagate Sam's ApiException if the initial permission check API call fails" in {
     val samDAO = mock[SamDAO]
     val workspaceRepository = mock[WorkspaceRepository]
@@ -301,6 +338,16 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     intercept[ApiException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.read), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should only call Sam once
+    verify(samDAO, times(1)).userHasAction(any[SamResourceTypeName],
+                                           any[String],
+                                           any[SamResourceAction],
+                                           any[RawlsRequestContext]
+    )
+    verifyNoMoreInteractions(samDAO)
   }
 
   it should "propagate Sam's ApiException if the fallback permission check API call fails" in {
@@ -309,9 +356,6 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     // workspace exist
     when(workspaceRepository.getWorkspace(mockeq(defaultWorkspaceName), any[Option[WorkspaceAttributeSpecs]]))
       .thenReturn(Future.successful(Option(defaultWorkspace)))
-    // user is enabled
-    when(samDAO.getUserStatus(any[RawlsRequestContext]))
-      .thenReturn(Future.successful(Option(defaultUserStatus)))
     // user DOES have write permission
     when(
       samDAO.userHasAction(any[SamResourceTypeName],
@@ -337,6 +381,19 @@ class WorkspaceSupportSpec extends AnyFlatSpec with Matchers {
     intercept[ApiException] {
       Await.result(support.getV2WorkspaceContextAndPermissions(defaultWorkspaceName, SamWorkspaceActions.write), atMost)
     }
+    // should only call workspaceRepository once
+    verify(workspaceRepository, times(1)).getWorkspace(any[WorkspaceName], any[Option[WorkspaceAttributeSpecs]])
+    verifyNoMoreInteractions(workspaceRepository)
+    // should call Sam twice - first to see if the user has write (which throws an ApiException),
+    // then again to see if the user has read
+    val inOrder = Mockito.inOrder(samDAO)
+    inOrder
+      .verify(samDAO, times(1))
+      .userHasAction(any[SamResourceTypeName], any[String], mockeq(SamWorkspaceActions.write), any[RawlsRequestContext])
+    inOrder
+      .verify(samDAO, times(1))
+      .userHasAction(any[SamResourceTypeName], any[String], mockeq(SamWorkspaceActions.read), any[RawlsRequestContext])
+    inOrder.verifyNoMoreInteractions()
   }
 }
 
