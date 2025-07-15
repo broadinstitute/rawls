@@ -35,6 +35,14 @@ class WorkspaceSettingRepository(dataSource: SlickDataSource) {
       access.workspaceSettingQuery.getAppliedSettingForWorkspaceByType(workspaceId, settingType)
     }
 
+  // Return if the workspace has any pending settings. Applied and deleted settings are not returned.
+  def hasPendingSettings(workspaceId: UUID)(implicit ec: ExecutionContext): Future[Boolean] =
+    dataSource.inTransaction { access =>
+      access.workspaceSettingQuery
+        .listSettingsForWorkspaceByStatus(workspaceId, WorkspaceSettingRecord.SettingStatus.Pending)
+        .map(_.nonEmpty)
+    }
+
   // Create new settings for a workspace as pending. If there are any existing pending settings, throw an exception.
   def createWorkspaceSettingsRecords(workspaceId: UUID,
                                      workspaceSettings: List[WorkspaceSetting],
