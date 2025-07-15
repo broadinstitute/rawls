@@ -631,6 +631,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
           )
         }
 
+        // If there are no pending settings, we can set the workspace settings to enable Quicksilver migration
+        // This is done before the migration starts to ensure that the workspace setting marked as "Pending"
+        _ = if (!hasPendingSettings) {
+          traceFutureWithParent("setWorkspaceSettings", s) { _ =>
+            workspaceSettingService.setWorkspaceSettings(
+              workspaceName,
+              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+            )
+          }
+        }
+
         // start a transaction; here's where we do a bunch of writes
         userResult <- dataSource.inTransaction { dataAccess =>
           val shardId: String = dataAccess.determineShard(workspaceId)
@@ -680,19 +691,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
           }
 
         }
-
-        // finally, change the workspace to be quicksilver-enabled
-        _ <-
-          if (!hasPendingSettings) {
-            traceFutureWithParent("setWorkspaceSettings", s) { _ =>
-              workspaceSettingService.setWorkspaceSettings(
-                workspaceName,
-                List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-              )
-            }
-          } else {
-            Future.successful(())
-          }
 
         // return a count of entities updated
       } yield userResult
