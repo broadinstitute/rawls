@@ -221,6 +221,55 @@ class WorkspaceSettingRepositorySpec
     assertResult(result)(None)
   }
 
+  behavior of "hasPendingSettings"
+
+  it should "return true if there are pending settings" in {
+    val repo = new WorkspaceSettingRepository(slickDataSource)
+    val workspaceRepo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
+    val pendingSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(123))
+
+    Await.result(
+      slickDataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID, List(pendingSetting), userInfo.userSubjectId)
+      },
+      Duration.Inf
+    )
+
+    val result = Await.result(repo.hasPendingSettings(ws.workspaceIdAsUUID), Duration.Inf)
+    result shouldBe true
+  }
+
+  it should "return false if there are no pending settings" in {
+    val repo = new WorkspaceSettingRepository(slickDataSource)
+    val workspaceRepo = new WorkspaceRepository(slickDataSource)
+    val ws: Workspace = makeWorkspace()
+    Await.result(workspaceRepo.createWorkspace(ws), Duration.Inf)
+    val appliedSetting = GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(456))
+
+    Await.result(
+      slickDataSource.inTransaction { dataAccess =>
+        for {
+          _ <- dataAccess.workspaceSettingQuery.saveAll(ws.workspaceIdAsUUID,
+                                                        List(appliedSetting),
+                                                        userInfo.userSubjectId
+          )
+          _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
+            ws.workspaceIdAsUUID,
+            WorkspaceSettingTypes.GcpBucketSoftDelete,
+            WorkspaceSettingRecord.SettingStatus.Pending,
+            WorkspaceSettingRecord.SettingStatus.Applied
+          )
+        } yield ()
+      },
+      Duration.Inf
+    )
+
+    val result = Await.result(repo.hasPendingSettings(ws.workspaceIdAsUUID), Duration.Inf)
+    result shouldBe false
+  }
+
   behavior of "createWorkspaceSettingsRecords"
 
   it should "create pending workspace settings" in {
