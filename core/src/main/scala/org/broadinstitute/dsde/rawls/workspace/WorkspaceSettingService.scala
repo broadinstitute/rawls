@@ -30,7 +30,8 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
-  WorkspaceSettingResponse
+  WorkspaceSettingResponse,
+  WorkspaceSettingTypes
 }
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -283,8 +284,17 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
    */
   private def applyCompactDataTablesSetting(workspaceName: WorkspaceName, enabled: Boolean): Future[Unit] =
     if (!enabled) {
-      // If compact data tables setting is disabled, we do not need to do anything.
-      Future.successful(())
+      // Check if the setting is already enabled in the database
+      getWorkspaceSettingOfType(workspaceName, WorkspaceSettingTypes.CompactDataTables).flatMap {
+        case Some(CompactDataTablesSetting(CompactDataTablesConfig(true))) =>
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, "Cannot disable compact data tables setting once enabled.")
+            )
+          )
+        case _ =>
+          Future.successful(())
+      }
     } else {
       // If compact data tables setting is enabled, we need to migrate the entity attributes.
       Future {
