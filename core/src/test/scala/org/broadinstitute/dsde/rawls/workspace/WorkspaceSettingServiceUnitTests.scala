@@ -58,6 +58,7 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.must.Matchers.{contain, include}
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
@@ -1068,5 +1069,67 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         any()
       )
     ).thenReturn(Future.successful(true))
+  }
+
+  it should "not allow disabling if already enabled" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val enabledSetting = CompactDataTablesSetting(CompactDataTablesConfig(true))
+    val disableSetting = CompactDataTablesSetting(CompactDataTablesConfig(false))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.readSettings),
+        any()
+      )
+    ).thenReturn(Future.successful(true))
+    when(
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, WorkspaceSettingTypes.CompactDataTables))
+      .thenReturn(Future.successful(Some(enabledSetting)))
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId))
+      .thenReturn(Future.successful(List(enabledSetting)))
+    when(
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List(disableSetting),
+                                                                defaultRequestContext.userInfo.userSubjectId
+      )
+    ).thenReturn(Future.successful(List(disableSetting)))
+    when(workspaceSettingRepository.removePendingSetting(workspaceId, enabledSetting.settingType))
+      .thenReturn(Future.successful(1))
+
+    val entityService = mock[EntityService]
+
+    val service =
+      workspaceSettingServiceConstructor(
+        samDAO = samDAO,
+        workspaceRepository = workspaceRepository,
+        workspaceSettingRepository = workspaceSettingRepository,
+        entityService = entityService
+      )
+
+    val future = service.setWorkspaceSettings(workspaceName, List(disableSetting))
+    val result = Await.result(future, Duration.Inf)
+    result.successes shouldBe Matchers.empty
+    result.failures.keySet should contain(WorkspaceSettingTypes.CompactDataTables)
+    val error = result.failures(WorkspaceSettingTypes.CompactDataTables)
+    error.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.message should include("Cannot disable compact data tables setting once enabled.")
   }
 }
