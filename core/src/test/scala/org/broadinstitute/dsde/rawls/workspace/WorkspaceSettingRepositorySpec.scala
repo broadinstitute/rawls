@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketSoftDelete
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, GcpBucketSoftDelete}
 import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
@@ -237,7 +237,7 @@ class WorkspaceSettingRepositorySpec
       Duration.Inf
     )
 
-    val result = Await.result(repo.hasPendingSettings(ws.workspaceIdAsUUID), Duration.Inf)
+    val result = Await.result(repo.hasPendingSettings(ws.workspaceIdAsUUID, GcpBucketSoftDelete), Duration.Inf)
     result shouldBe true
   }
 
@@ -257,7 +257,7 @@ class WorkspaceSettingRepositorySpec
           )
           _ <- dataAccess.workspaceSettingQuery.updateSettingStatus(
             ws.workspaceIdAsUUID,
-            WorkspaceSettingTypes.GcpBucketSoftDelete,
+            GcpBucketSoftDelete,
             WorkspaceSettingRecord.SettingStatus.Pending,
             WorkspaceSettingRecord.SettingStatus.Applied
           )
@@ -266,7 +266,7 @@ class WorkspaceSettingRepositorySpec
       Duration.Inf
     )
 
-    val result = Await.result(repo.hasPendingSettings(ws.workspaceIdAsUUID), Duration.Inf)
+    val result = Await.result(repo.hasPendingSettings(ws.workspaceIdAsUUID, GcpBucketSoftDelete), Duration.Inf)
     result shouldBe false
   }
 
