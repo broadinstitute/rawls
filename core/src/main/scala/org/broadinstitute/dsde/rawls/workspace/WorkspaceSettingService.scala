@@ -11,6 +11,7 @@ import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
 import com.google.cloud.storage.Storage
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model.{
@@ -47,7 +48,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                               val workspaceRepository: WorkspaceRepository,
                               gcsDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              googleStorageService: GoogleStorageService[IO]
+                              googleStorageService: GoogleStorageService[IO],
+                              entityService: EntityService
 )(implicit protected val executionContext: ExecutionContext, ioRuntime: IORuntime)
     extends WorkspaceSupport
     with LazyLogging {
@@ -74,6 +76,11 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
       workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
     }
 
+  // Returns true if the workspace has any pending settings.
+  def workspaceHasPendingSettings(workspaceName: WorkspaceName): Future[Boolean] =
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.readSettings).flatMap { workspace =>
+      workspaceSettingRepository.hasPendingSettings(workspace.workspaceIdAsUUID)
+    }
   def setWorkspaceSettings(workspaceName: WorkspaceName,
                            workspaceSettings: List[WorkspaceSetting]
   ): Future[WorkspaceSettingResponse] = {
@@ -201,8 +208,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting
         // are not bucket settings, so we do not need to apply anything here
 
-        case CompactDataTablesSetting(CompactDataTablesConfig(_)) =>
-          Future.successful(())
+        case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
+          applyCompactDataTablesSetting(WorkspaceName(workspace.namespace, workspace.name), enabled)
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
           Future.successful(())
@@ -270,4 +277,25 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         }
       _ <- iamPolicyAction.compile.drain.unsafeToFuture()
     } yield ()
+
+  /**
+   * Call to handle entity attributes migration when compact data tables setting enabled.
+   */
+  private def applyCompactDataTablesSetting(workspaceName: WorkspaceName, enabled: Boolean): Future[Unit] =
+    if (!enabled) {
+      // If compact data tables setting is disabled, we do not need to do anything.
+      Future.successful(())
+    } else {
+      // If compact data tables setting is enabled, we need to migrate the entity attributes.
+      Future {
+        entityService
+          .quicksilverMigration(workspaceName = workspaceName)
+          .map(_ => ())
+          .recover { case e: Exception =>
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError, s"Quicksilver migration failed: ${e.getMessage}")
+            )
+          }
+      }.flatten
+    }
 }
