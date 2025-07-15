@@ -612,6 +612,25 @@ class EntityService(protected val ctx: RawlsRequestContext,
           throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
         }
 
+        // Check if there are any pending settings for this workspace
+        // Pending settings indicate that this originated from a workspace setting request
+        hasPendingSettings <- traceFutureWithParent("workspaceHasPendingSettings", s) { _ =>
+          workspaceSettingService.workspaceHasPendingSettings(workspaceName)
+        }
+
+        // If there are pending settings, we need to ensure that the Quicksilver migration is not already in progress.
+        _ = if (
+          hasPendingSettings &&
+          settings
+            .find(_.isInstanceOf[CompactDataTablesSetting])
+            .asInstanceOf[Option[CompactDataTablesSetting]]
+            .exists(!_.config.enabled)
+        ) {
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "Quicksilver migration is already in progress for this workspace")
+          )
+        }
+
         // start a transaction; here's where we do a bunch of writes
         userResult <- dataSource.inTransaction { dataAccess =>
           val shardId: String = dataAccess.determineShard(workspaceId)
@@ -663,12 +682,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
 
         // finally, change the workspace to be quicksilver-enabled
-        _ <- traceFutureWithParent("setWorkspaceSettings", s) { _ =>
-          workspaceSettingService.setWorkspaceSettings(
-            workspaceName,
-            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
-          )
-        }
+        _ <-
+          if (!hasPendingSettings) {
+            traceFutureWithParent("setWorkspaceSettings", s) { _ =>
+              workspaceSettingService.setWorkspaceSettings(
+                workspaceName,
+                List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+              )
+            }
+          } else {
+            Future.successful(())
+          }
 
         // return a count of entities updated
       } yield userResult
