@@ -287,10 +287,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
       // Check if the setting is already enabled in the database
       getWorkspaceSettingOfType(workspaceName, WorkspaceSettingTypes.CompactDataTables).flatMap {
         case Some(CompactDataTablesSetting(CompactDataTablesConfig(true))) =>
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest, "Cannot disable compact data tables setting once enabled.")
-            )
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "Cannot disable compact data tables setting once enabled.")
           )
         case _ =>
           Future.successful(())
