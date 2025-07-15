@@ -78,9 +78,9 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
     }
 
   // Returns true if the workspace has any pending settings.
-  def workspaceHasPendingSettings(workspaceName: WorkspaceName): Future[Boolean] =
+  def workspaceHasPendingSettings(workspaceName: WorkspaceName, settingType: WorkspaceSettingType): Future[Boolean] =
     getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.readSettings).flatMap { workspace =>
-      workspaceSettingRepository.hasPendingSettings(workspace.workspaceIdAsUUID)
+      workspaceSettingRepository.hasPendingSettings(workspace.workspaceIdAsUUID, settingType)
     }
   def setWorkspaceSettings(workspaceName: WorkspaceName,
                            workspaceSettings: List[WorkspaceSetting]
