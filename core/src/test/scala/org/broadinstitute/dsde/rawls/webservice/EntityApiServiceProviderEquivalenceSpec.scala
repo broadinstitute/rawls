@@ -46,9 +46,10 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
-    try
+    try {
+      setupProviders(apiService) // tweaks to minimalTestData for this test suite
       testCode(apiService)
-    finally
+    } finally
       apiService.cleanupSupervisor
   }
 
@@ -269,6 +270,18 @@ class EntityApiServiceProviderEquivalenceSpec extends ApiServiceSpec with SprayJ
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================
+
+  private def setupProviders(services: TestApiService): Unit = {
+    // configure compactWs to use compact ("Quicksilver") data tables
+    // no changes to legacyWs, so that will use legacy data tables
+    val compactDataTablesSetting = CompactDataTablesSetting(CompactDataTablesConfig(enabled = true))
+    val workspaceSettingService = services.workspaceSettingServiceConstructor(testContext)
+    val workspaceSettingResponse = Await.result(
+      workspaceSettingService.setWorkspaceSettings(compactWs.toWorkspaceName, List(compactDataTablesSetting)),
+      atMost
+    )
+    workspaceSettingResponse.successes should have size 1
+  }
 
   private def withHandlers(route: server.Route): server.Route =
     (handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
