@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.AuditLoggingEntityProvider
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
@@ -99,31 +100,15 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
     val afterUpdateAuditProvider = afterUpdate.asInstanceOf[AuditLoggingEntityProvider]
     afterUpdateAuditProvider.delegate shouldBe a[LocalEntityProvider]
 
-    // Mock workspace has pending compact data tables setting
+    // check the EntityManager behavior when there are pending compact data tables settings
     when(workspaceSettingRepository.hasPendingSettings(workspaceId, CompactDataTables))
       .thenReturn(Future.successful(true))
-
-    // check the EntityManager behavior when compact data tables is enabled but there are pending settings
     when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
       .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-    val afterSettingEnabledPending =
+    val afterSettingPending = intercept[DataEntityException] {
       Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
-
-    // Provider should be an AuditLoggingEntityProvider with a LocalEntityProvider delegate
-    afterSettingEnabledPending shouldBe a[AuditLoggingEntityProvider]
-    val afterSettingEnabledPendingAuditProvider = afterSettingEnabledPending.asInstanceOf[AuditLoggingEntityProvider]
-    afterSettingEnabledPendingAuditProvider.delegate shouldBe a[LocalEntityProvider]
-
-    // check the EntityManager behavior when compact data tables is disabled but there are pending settings
-    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
-      .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-    val afterSettingDisabledPending =
-      Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
-
-    // Provider should be an AuditLoggingEntityProvider with a LocalEntityProvider delegate
-    afterSettingDisabledPending shouldBe a[AuditLoggingEntityProvider]
-    val afterSettingDisabledPendingAuditProvider = afterSettingDisabledPending.asInstanceOf[AuditLoggingEntityProvider]
-    afterSettingDisabledPendingAuditProvider.delegate shouldBe a[LocalEntityProvider]
+    }
+    afterSettingPending.getMessage should include("migration is in progress")
   }
 
 }
