@@ -618,15 +618,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           workspaceSettingService.workspaceHasPendingSettings(workspaceName, CompactDataTables)
         }
 
-        // If there are pending settings and the CompactDataTables setting exists but is not yet enabled,
-        // it means a Quicksilver migration has already been requested and is currently in progress.
-        // Prevent starting another migration to avoid conflicts or inconsistent state.
-        _ = if (
-          hasPendingSettings && settings
-            .find(_.isInstanceOf[CompactDataTablesSetting])
-            .asInstanceOf[Option[CompactDataTablesSetting]]
-            .exists(!_.config.enabled)
-        ) {
+        // If there are pending settings, it means migration has already been requested and is currently in progress.
+        // Prevent starting another migration to avoid conflicts or an inconsistent state.
+        _ = if (hasPendingSettings) {
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest, "Quicksilver migration is already in progress for this workspace")
           )
