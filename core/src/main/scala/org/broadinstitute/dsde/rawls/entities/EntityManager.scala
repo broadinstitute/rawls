@@ -60,28 +60,14 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
       )
     }
 
-    // If the workspace has the CompactDataTables setting enabled and no pending CompactDataTables Settings,
-    // use CompactEntityProvider; else use LocalEntityProvider.
-    val compactDataTables = for {
-      settingOpt <- workspaceSettingRepository.getWorkspaceSettingOfType(
-        requestArguments.workspace.workspaceIdAsUUID,
-        CompactDataTables
-      )
-      hasPending <- workspaceSettingRepository.hasPendingSettings(
-        requestArguments.workspace.workspaceIdAsUUID,
-        CompactDataTables
-      )
-    } yield {
-      if (hasPending) {
-        throw new DataEntityException(
-          s"CompactDataTable migration is in progress for workspace ${requestArguments.workspace.toWorkspaceName}. Writes are temporarily disabled."
-        )
+    // If the workspace has the CompactDataTables setting enabled, use CompactEntityProvider; else use LocalEntityProvider.
+    val compactDataTables =
+      workspaceSettingRepository.getWorkspaceSettingOfType(requestArguments.workspace.workspaceIdAsUUID,
+                                                           CompactDataTables
+      ) map {
+        case Some(qs: CompactDataTablesSetting) => qs.config.enabled
+        case _                                  => false
       }
-      settingOpt match {
-        case Some(qs: CompactDataTablesSetting) if qs.config.enabled => true
-        case _                                                       => false
-      }
-    }
     val targetTagFuture = compactDataTables map {
       case true  => typeTag[CompactEntityProvider]
       case false => typeTag[LocalEntityProvider]
