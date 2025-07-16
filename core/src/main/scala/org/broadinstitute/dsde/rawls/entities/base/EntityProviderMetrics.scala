@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.base
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.common.{AttributeKey, Attributes}
 import io.opentelemetry.api.metrics.{DoubleHistogram, LongCounter}
+import io.opentelemetry.instrumentation.api.semconv.http.HttpClientMetrics
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 
 import scala.jdk.CollectionConverters._
@@ -15,6 +16,9 @@ trait EntityProviderMetrics extends RawlsInstrumented {
   private val ProviderNameKey = AttributeKey.stringKey("providerName")
   private val ErrorClassKey = AttributeKey.stringKey("errorType")
 
+  private val BucketBoundaries =
+    List[java.lang.Double](0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0).asJava
+
   private def meter = GlobalOpenTelemetry.get().getMeter("RawlsMetrics")
 
   private def entityProviderFunctionLatency: DoubleHistogram =
@@ -22,7 +26,7 @@ trait EntityProviderMetrics extends RawlsInstrumented {
       .histogramBuilder(s"${workbenchMetricBaseName}_provider_function_latency")
       .setDescription("Latency of entity provider function calls")
       .setUnit("ms")
-      .setExplicitBucketBoundariesAdvice(List[java.lang.Double](50, 95, 99).asJava)
+      .setExplicitBucketBoundariesAdvice(BucketBoundaries)
       .build()
 
   private def entityProviderErrorCount: LongCounter =
