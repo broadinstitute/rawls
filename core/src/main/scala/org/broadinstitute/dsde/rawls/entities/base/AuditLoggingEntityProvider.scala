@@ -93,18 +93,15 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
     val stopwatch = StopWatch.createStarted() // start a timer
     val tryResult: Try[T] = Try(op(())) // execute the function being wrapped
     stopwatch.stop() // stop the timer
-    val providerName = delegate.getClass.getSimpleName // provider name for metrics
     tryResult match {
       // on success, capture latency and count metrics for the wrapped function
       // then return the wrapped function's result
       case Success(result) =>
-        requestCount(functionName, providerName).inc()
-        requestLatency(functionName, providerName)
-          .update(stopwatch.getDuration.toMillis, TimeUnit.MILLISECONDS)
+        recordFunctionLatency(functionName, delegate, stopwatch.getDuration.toMillis)
         result
       // on error, increment the error count metric and rethrow the exception
       case Failure(exception) =>
-        errorCount(functionName, providerName, exception.getClass.getSimpleName).inc()
+        recordError(functionName, delegate, exception)
         throw exception
     }
   }
