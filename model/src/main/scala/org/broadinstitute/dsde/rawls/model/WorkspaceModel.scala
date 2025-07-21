@@ -1101,7 +1101,7 @@ case class BucketMetricsResponse(
 //I believe the options for storageclass are STANDARD, NEARLINE, COLDLINE, ARCHIVE, REGIONAL, MULTI-REGIONAL and DRA.
 //I've seen REGIONAL and MULTI_REGIONAL in practice; I have not seen DRA so I don't know exactly how it would be coded
 //Hence I'm afraid to make an enumeration until I can verify what's possible to see.
-case class BucketMetric(storageClass: String, valueInBytes: Double)
+case class BucketMetric(storageClass: String, storageState: String, valueInBytes: Double)
 
 case class ErrorReport(source: String,
                        message: String,
@@ -1391,7 +1391,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceStatusFormat: RootJsonFormat[WorkspaceStatus] = jsonFormat2(WorkspaceStatus)
 
-  implicit val BucketMetricsFormat: RootJsonFormat[BucketMetric] = jsonFormat2(BucketMetric)
+  implicit val BucketMetricsFormat: RootJsonFormat[BucketMetric] = jsonFormat3(BucketMetric)
 
   implicit val BucketMetricsResponseFormat: RootJsonFormat[BucketMetricsResponse] = jsonFormat1(BucketMetricsResponse)
 
