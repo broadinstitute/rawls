@@ -20,11 +20,6 @@ import java.lang.annotation.Target;
 @TagAnnotation
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.TYPE})
-@interface DataRepoSnapshotsTest {}
-
-@TagAnnotation
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.TYPE})
 @interface MethodsTest {}
 
 @TagAnnotation
