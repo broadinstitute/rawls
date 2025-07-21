@@ -68,7 +68,7 @@ object Dependencies {
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.3"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.13.3"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
-  val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
+  // val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.18"
   val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "8.1"
@@ -76,8 +76,8 @@ object Dependencies {
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
-  val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
+//  val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
+  // val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.19.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
@@ -239,7 +239,7 @@ object Dependencies {
     akkaStream,
     webjarsLocator,
     circeYAML,
-    commonsJEXL,
+//    commonsJEXL,
     cromwellClient,
     cats,
     mysqlConnector,
@@ -251,14 +251,14 @@ object Dependencies {
     akkaHttpTestKit,
     mockserverNetty,
     mockito,
-    breeze,
+    // breeze,
     workbenchModel,
     workbenchNotifications,
     workbenchGoogle,
     googleStorageLocal,
     workbenchGoogleMocks,
     workbenchUtil,
-    ficus,
+//    ficus,
     apacheCommonsIO,
     dataRepo,
     antlrParser,
