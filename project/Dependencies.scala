@@ -76,8 +76,8 @@ object Dependencies {
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
-//  val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  // val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
+  val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
+  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.19.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
@@ -251,14 +251,14 @@ object Dependencies {
     akkaHttpTestKit,
     mockserverNetty,
     mockito,
-    // breeze,
+    breeze,
     workbenchModel,
     workbenchNotifications,
     workbenchGoogle,
     googleStorageLocal,
     workbenchGoogleMocks,
     workbenchUtil,
-//    ficus,
+    ficus,
     apacheCommonsIO,
     dataRepo,
     antlrParser,
