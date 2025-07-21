@@ -8,7 +8,8 @@ object Settings {
   val artifactory = "https://us-central1-maven.pkg.dev/dsp-artifact-registry/"
   val commonResolvers = List(
     "artifactory-releases" at artifactory + "libs-release",
-    "artifactory-snapshots" at artifactory + "libs-snapshot"
+    "artifactory-snapshots" at artifactory + "libs-snapshot",
+    "Akka library repository" at "https://repo.akka.io/maven"
   )
 
   //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings
