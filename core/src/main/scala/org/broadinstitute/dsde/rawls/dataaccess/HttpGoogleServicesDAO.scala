@@ -1146,7 +1146,10 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   ): BucketMetricsResponse = {
     val metrics = ltspResponse.iterateAll().asScala.toSeq.flatMap { timeSeries =>
       timeSeries.getPointsList.asScala.map { point =>
-        BucketMetric(timeSeries.getMetric.getLabelsMap.get("storage_class"), Math.round(point.getValue.getDoubleValue))
+        BucketMetric(timeSeries.getMetric.getLabelsMap.get("storage_class"),
+                     timeSeries.getMetric.getLabelsMap.get("type"),
+                     Math.round(point.getValue.getDoubleValue)
+        )
       }
     }
     BucketMetricsResponse(metrics)

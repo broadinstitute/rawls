@@ -6125,6 +6125,9 @@ components:
         storageClass:
           type: string
           description: The storage class of data in bucket
+        storageState:
+          type: string
+          description: The storage class of data in bucket
       description: ""
     PendingCloneWorkspaceFileTransfer:
       required:
