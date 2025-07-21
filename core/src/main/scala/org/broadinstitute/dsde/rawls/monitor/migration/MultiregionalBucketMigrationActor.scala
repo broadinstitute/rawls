@@ -762,9 +762,7 @@ object MultiregionalBucketMigrationActor {
               bucketName = destBucketName,
               labels = Option(sourceBucket.getLabels).map(_.asScala.toMap).getOrElse(Map.empty),
               bucketPolicyOnlyEnabled = true,
-              logBucket = GcsBucketName(
-                GoogleServicesDAO.getStorageLogsBucketName(workspace.googleProjectId)
-              ).some,
+              logBucket = None,
               location = env.defaultBucketLocation.some,
               autoclassEnabled = true,
               autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE)

@@ -14,7 +14,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
+import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException}
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.gax.core.FixedCredentialsProvider
 import com.google.api.services.cloudbilling.Cloudbilling
@@ -210,26 +210,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                               requestContext: RawlsRequestContext,
                               bucketLocation: Option[String]
   ): Future[GoogleWorkspaceInfo] = {
-    def insertInitialStorageLog: Future[Unit] = {
-      implicit val service = GoogleInstrumentedService.Storage
-      retryWhen500orGoogleError { () =>
-        // manually insert an initial storage log
-        val stream: InputStreamContent =
-          new InputStreamContent(
-            "text/plain",
-            new ByteArrayInputStream(s""""bucket","storage_byte_hours"
-                                        |"$bucketName","0"
-                                        |""".stripMargin.getBytes)
-          )
-        // use an object name that will always be superseded by a real storage log
-        val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
-        val objectInserter = getStorage(getBucketServiceAccountCredential)
-          .objects()
-          .insert(GoogleServicesDAO.getStorageLogsBucketName(googleProject), storageObject, stream)
-        executeGoogleRequest(objectInserter)
-      }
-    }
-
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
     val cors = List(
@@ -252,7 +232,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
             labels = labels,
             traceId = Option(traceId),
             bucketPolicyOnlyEnabled = true,
-            logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
+            logBucket = None,
             location = bucketLocation,
             autoclassEnabled = true,
             autoclassTerminalStorageClass = Option(StorageClass.ARCHIVE),
@@ -273,11 +253,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       updateBucketIamFuture = traceFutureWithParent("updateBucketIam", requestContext)(_ =>
         updateBucketIam(bucketName, policyGroupsByAccessLevel)
       )
-      insertInitialStorageLogFuture = traceFutureWithParent("insertInitialStorageLog", requestContext)(_ =>
-        insertInitialStorageLog
-      )
       _ <- updateBucketIamFuture
-      _ <- insertInitialStorageLogFuture
     } yield GoogleWorkspaceInfo(bucketName.value, policyGroupsByAccessLevel)
   }
 

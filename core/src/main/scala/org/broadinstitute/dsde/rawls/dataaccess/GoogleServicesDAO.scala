@@ -20,10 +20,6 @@ import spray.json.JsObject
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-object GoogleServicesDAO {
-  def getStorageLogsBucketName(googleProject: GoogleProjectId) = s"storage-logs-${googleProject.value}"
-}
-
 trait GoogleServicesDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
   val terraBucketReaderRole: String
