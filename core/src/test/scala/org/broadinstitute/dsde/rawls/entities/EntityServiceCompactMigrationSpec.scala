@@ -103,8 +103,7 @@ class EntityServiceCompactMigrationSpec
         new WorkspaceRepository(dataSource),
         new MockGoogleServicesDAO("groupsPrefix"),
         samDAO,
-        googleStorageService,
-        entityService
+        googleStorageService
       )(executionContext, global)
     }
 

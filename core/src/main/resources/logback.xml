@@ -1,5 +1,9 @@
 <configuration>
 
+    <!-- Quiet down logback during startup. If you are trying to change or debug logging setup,
+         you may want to comment out this line during your development efforts. -->
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
+
     <if condition='!isDefined("RAWLS_LOG_APPENDER")'>
         <then>
             <variable name="RAWLS_LOG_APPENDER" value="console" />

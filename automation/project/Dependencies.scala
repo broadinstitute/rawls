@@ -49,9 +49,7 @@ object Dependencies {
     "com.typesafe.akka"   %%  "akka-http"           % akkaHttpV,
     "com.typesafe.akka"   %%  "akka-testkit"        % akkaV     % Test,
     "com.typesafe.akka"   %%  "akka-slf4j"          % akkaV,
-    "org.specs2"          %%  "specs2-core"   % "4.15.0"  % Test,
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
-    "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
     "org.broadinstitute.dsde"       %% "rawls-model"         % "v0.0.470-SNAP"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
