@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.http.scaladsl.model._
-import cats.effect.unsafe.implicits.global
 import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -18,13 +17,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTab
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.workspace.{
-  WorkspaceRepository,
-  WorkspaceSettingRepository,
-  WorkspaceSettingService
-}
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
-import org.mockito.{ArgumentMatchers, Mockito}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
@@ -85,7 +79,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       testConf.getBoolean("entityStatisticsCache.enabled"),
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
-    )
+    )(executionContext, system)
 
   }
 
