@@ -276,17 +276,18 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return workspace ID for a valid workspace" in {
     val workspaceAdminService = mock[WorkspaceAdminService]
-    when(workspaceAdminService.getWorkspaceId(constantData.workspace.toWorkspaceName))
-      .thenReturn(Future.successful(Option(constantData.workspace.workspaceId)))
+    when(workspaceAdminService.getWorkspaceId(compactConstantData.workspace.toWorkspaceName))
+      .thenReturn(Future.successful(Option(compactConstantData.workspace.workspaceId)))
     val service = new MockApiService(workspaceAdminServiceConstructor = _ => workspaceAdminService)
 
-    val idApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/id"
+    val idApiUrl =
+      s"/admin/workspaces/${compactConstantData.workspace.namespace}/${compactConstantData.workspace.name}/id"
     Get(idApiUrl) ~>
       sealRoute(service.adminRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String])(status)
         println(responseAs[String])
-        assertResult(s"\"${constantData.workspace.workspaceId}\"")(responseAs[String])
+        assertResult(s"\"${compactConstantData.workspace.workspaceId}\"")(responseAs[String])
       }
   }
 
@@ -296,7 +297,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val service = new MockApiService(workspaceAdminServiceConstructor = _ => workspaceAdminService)
 
     val nonExistentWorkspace = "nonexistent-workspace"
-    val idApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/$nonExistentWorkspace/id"
+    val idApiUrl = s"/admin/workspaces/${compactConstantData.workspace.namespace}/$nonExistentWorkspace/id"
 
     Get(idApiUrl) ~>
       sealRoute(service.adminRoutes(userInfo = userInfo)) ~>
@@ -312,7 +313,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     when(workspaceAdminService.getWorkspaceById(workspaceId)).thenReturn(
       Future.successful(
         WorkspaceAdminResponse(
-          WorkspaceDetails.fromWorkspaceAndOptions(constantData.workspace, None, useAttributes = false),
+          WorkspaceDetails.fromWorkspaceAndOptions(compactConstantData.workspace, None, useAttributes = false),
           List.empty
         )
       )

@@ -4119,7 +4119,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   // *********** END entityQuery field-selection tests
 
   "Entity type metadata API" should "pass true by default to useCache argument" in withMockedEntityService { services =>
-    Get(s"${constantData.workspace.path}/entities") ~>
+    Get(s"${compactConstantData.workspace.path}/entities") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -4132,7 +4132,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "respect useCache parameter if set to false" in withMockedEntityService { services =>
-    Get(s"${constantData.workspace.path}/entities?useCache=false") ~>
+    Get(s"${compactConstantData.workspace.path}/entities?useCache=false") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -4145,7 +4145,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "default to true if useCache set to some value other than 'false'" in withMockedEntityService { services =>
-    Get(s"${constantData.workspace.path}/entities?useCache=mysterious") ~>
+    Get(s"${compactConstantData.workspace.path}/entities?useCache=mysterious") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
