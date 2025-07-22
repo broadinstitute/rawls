@@ -1,20 +1,30 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.http.scaladsl.model._
+import cats.effect.unsafe.implicits.global
 import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
-import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.workspace.{
+  WorkspaceRepository,
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
+}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
@@ -59,6 +69,62 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       )
 
   }
+
+  case class TestApiServiceWithMockedWorkspaceSettings(
+    dataSource: SlickDataSource,
+    gcsDAO: MockGoogleServicesDAO,
+    gpsDAO: MockGooglePubSubDAO,
+    mockWorkspaceSettingRepository: WorkspaceSettingRepository
+  )(implicit override val executionContext: ExecutionContext)
+      extends ApiServices
+      with MockUserInfoDirectives {
+
+    override val entityManager = EntityManager.defaultEntityManager(
+      slickDataSource,
+      mockWorkspaceSettingRepository,
+      testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
+      workbenchMetricBaseName
+    )
+
+  }
+
+  def withCompactConstantTestDataApiServicesAndMockedSettings[T](
+    dataSource: SlickDataSource,
+    mockWorkspaceSettingRepository: WorkspaceSettingRepository
+  )(testCode: TestApiServiceWithMockedWorkspaceSettings => T): T = {
+
+    val apiService = TestApiServiceWithMockedWorkspaceSettings(
+      dataSource,
+      new MockGoogleServicesDAO("test"),
+      new MockGooglePubSubDAO,
+      mockWorkspaceSettingRepository
+    )
+    try
+      testCode(apiService)
+    finally
+      apiService.cleanupSupervisor
+  }
+
+  def withCompactConstantTestDataApiServices[T](testCode: TestApiServiceWithMockedWorkspaceSettings => T): T =
+    withCompactConstantTestDatabase { dataSource: SlickDataSource =>
+      val mockWorkspaceSettingRepository = mock[WorkspaceSettingRepository]
+
+      when(
+        mockWorkspaceSettingRepository.getWorkspaceSettingOfType(
+          ArgumentMatchers.any[UUID](),
+          ArgumentMatchers.any[WorkspaceSettingType]()
+        )
+      ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+
+      when(
+        mockWorkspaceSettingRepository.hasPendingSettings(
+          ArgumentMatchers.any[UUID](),
+          ArgumentMatchers.any[WorkspaceSettingType]()
+        )(ArgumentMatchers.any[ExecutionContext]())
+      ).thenReturn(Future.successful(false))
+      withCompactConstantTestDataApiServicesAndMockedSettings(dataSource, mockWorkspaceSettingRepository)(testCode)
+    }
 
   class MockSamDAOForAuthDomains(slickDataSource: SlickDataSource) extends MockSamDAO(slickDataSource) {
     val authDomains = new TrieMap[(SamResourceTypeName, String), Set[String]]()
@@ -117,11 +183,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   def withEmptyDatabaseApiServicesForAuthDomains[T](testCode: TestApiServiceForAuthDomains => T): T =
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       withApiServicesForAuthDomains(dataSource)(testCode)
-    }
-
-  def withConstantTestDataApiServices[T](testCode: TestApiService => T): T =
-    withConstantTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource)(testCode)
     }
 
   def withMockedEntityService[T](testCode: TestApiServiceForMockedEntityService => T): T =
@@ -1451,8 +1512,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     "PairSet" -> EntityTypeMetadata(1, "PairSet_id", Seq("pairs")),
     "Individual" -> EntityTypeMetadata(2, "Individual_id", Seq("sset"))
   )
-  it should "return 200 on list entity types" in withConstantTestDataApiServices { services =>
-    Get(s"${constantData.workspace.path}/entities") ~>
+
+  it should "return 200 on list entity types" in withCompactConstantTestDataApiServices { services =>
+    Get(s"${compactConstantData.workspace.path}/entities") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1463,10 +1525,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not include deleted entities in EntityTypeMetadata" in withConstantTestDataApiServices { services =>
+  it should "not include deleted entities in EntityTypeMetadata" in withCompactConstantTestDataApiServices { services =>
     val newSample = Entity("foo", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
 
-    Post(s"${constantData.workspace.path}/entities", httpJson(newSample)) ~>
+    Post(s"${compactConstantData.workspace.path}/entities", httpJson(newSample)) ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -1482,7 +1544,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Get(s"${constantData.workspace.path}/entities") ~>
+    Get(s"${compactConstantData.workspace.path}/entities") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1493,19 +1555,19 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 on list all samples" in withConstantTestDataApiServices { services =>
+  it should "return 200 on list all samples" in withCompactConstantTestDataApiServices { services =>
     val expected = Seq(
-      constantData.sample1,
-      constantData.sample2,
-      constantData.sample3,
-      constantData.sample4,
-      constantData.sample5,
-      constantData.sample6,
-      constantData.sample7,
-      constantData.sample8
+      compactConstantData.sample1,
+      compactConstantData.sample2,
+      compactConstantData.sample3,
+      compactConstantData.sample4,
+      compactConstantData.sample5,
+      compactConstantData.sample6,
+      compactConstantData.sample7,
+      compactConstantData.sample8
     )
 
-    Get(s"${constantData.workspace.path}/entities/Sample") ~>
+    Get(s"${compactConstantData.workspace.path}/entities/Sample") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1513,27 +1575,29 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         val dbSamples =
-          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+          runAndWait(
+            compactEntityQuery.listActiveEntitiesOfType(compactConstantData.workspace.workspaceIdAsUUID, "Sample")
+          )
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }
   }
 
-  it should "not list deleted samples" in withConstantTestDataApiServices { services =>
+  it should "not list deleted samples" in withCompactConstantTestDataApiServices { services =>
     val expected = Seq(
-      constantData.sample1,
-      constantData.sample2,
-      constantData.sample3,
-      constantData.sample4,
-      constantData.sample5,
-      constantData.sample6,
-      constantData.sample7,
-      constantData.sample8
+      compactConstantData.sample1,
+      compactConstantData.sample2,
+      compactConstantData.sample3,
+      compactConstantData.sample4,
+      compactConstantData.sample5,
+      compactConstantData.sample6,
+      compactConstantData.sample7,
+      compactConstantData.sample8
     )
 
     val newSample = Entity("foo", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
 
-    Post(s"${constantData.workspace.path}/entities", httpJson(newSample)) ~>
+    Post(s"${compactConstantData.workspace.path}/entities", httpJson(newSample)) ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -1541,7 +1605,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Get(s"${constantData.workspace.path}/entities/Sample") ~>
+    Get(s"${compactConstantData.workspace.path}/entities/Sample") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1549,7 +1613,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         val dbSamples =
-          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+          runAndWait(
+            compactEntityQuery.listActiveEntitiesOfType(compactConstantData.workspace.workspaceIdAsUUID, "Sample")
+          )
         assertSameElements(responseAs[Array[Entity]], expected :+ newSample)
         assertSameElements(dbSamples, expected :+ newSample)
       }
@@ -1562,7 +1628,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Get(s"${constantData.workspace.path}/entities/Sample") ~>
+    Get(s"${compactConstantData.workspace.path}/entities/Sample") ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1570,7 +1636,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         val dbSamples =
-          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+          runAndWait(
+            compactEntityQuery.listActiveEntitiesOfType(compactConstantData.workspace.workspaceIdAsUUID, "Sample")
+          )
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }

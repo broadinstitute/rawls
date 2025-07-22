@@ -45,12 +45,12 @@ class CompactExpressionEvaluatorSpec
     with TestDriverComponent
     with MethodConfigTestSupport {
 
-  val compactEntityRepository: CompactEntityRepository = mock[CompactEntityRepository]
+  val compactEntityRepositoryMock: CompactEntityRepository = mock[CompactEntityRepository]
   val mockQueries: CompactEntityQuery = mock[CompactEntityQuery]
-  when(compactEntityRepository.queries).thenReturn(mockQueries)
-  when(compactEntityRepository.dataSource).thenReturn(slickDataSource)
+  when(compactEntityRepositoryMock.queries).thenReturn(mockQueries)
+  when(compactEntityRepositoryMock.dataSource).thenReturn(slickDataSource)
 
-  val compactExpressionEvaluator = new CompactExpressionEvaluator(compactEntityRepository)
+  val compactExpressionEvaluator = new CompactExpressionEvaluator(compactEntityRepositoryMock)
 
   override def beforeEach(): Unit = {
     super.beforeEach()

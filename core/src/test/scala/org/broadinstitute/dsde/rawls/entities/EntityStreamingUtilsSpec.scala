@@ -78,13 +78,13 @@ class EntityStreamingUtilsSpec extends AnyFlatSpec with Matchers with ScalaFutur
   }
 
   it should "serialize when one entity" in {
-    val constantTestData = new ConstantTestData()
+    val constantTestData = new CompactConstantTestData()
     val entities: Seq[Entity] = Seq(constantTestData.aliquot1)
     assertSourceStreamFor(entities)
   }
 
   it should "serialize when multiple entities" in {
-    val constantTestData = new ConstantTestData()
+    val constantTestData = new CompactConstantTestData()
     val entities: Seq[Entity] = Seq(constantTestData.aliquot1, constantTestData.aliquot2, constantTestData.sample1)
     assertSourceStreamFor(entities)
   }

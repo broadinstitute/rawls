@@ -99,7 +99,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   private val fromEntityWhereNotDeleted = "from ENTITY e where e.deleted = 0"
 
   /**
-    * Insert a single entity to the db.
+    * Insert multiple entities to the db.
     *
     * Note this does NOT handle persisting refs. See CompactEntityProvider.createEntity if you need to persist refs.
     *
@@ -1228,4 +1228,13 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
+
+  def listActiveEntitiesOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[Entity]] =
+    sql"""select name, entity_type, attributes
+        from ENTITY
+        where workspace_id = $workspaceId
+        and entity_type = $entityType
+        and deleted = false"""
+      .as[Entity]
+
 }

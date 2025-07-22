@@ -45,19 +45,25 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       withApiServices(dataSource)(testCode)
     }
 
-  def withConstantTestDataApiServices[T](testCode: TestApiService => T): T =
-    withConstantTestDatabase { dataSource: SlickDataSource =>
+  def withCompactConstantTestDataApiServices[T](testCode: TestApiService => T): T =
+    withCompactConstantTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
 
-  "AdminApi" should "return 200 when listing active submissions" in withConstantTestDataApiServices { services =>
+  "AdminApi" should "return 200 when listing active submissions" in withCompactConstantTestDataApiServices { services =>
     val expected = Seq(
-      ActiveSubmission(constantData.workspace.namespace,
-                       constantData.workspace.name,
-                       constantData.submissionNoWorkflows
+      ActiveSubmission(compactConstantData.workspace.namespace,
+                       compactConstantData.workspace.name,
+                       compactConstantData.submissionNoWorkflows
       ),
-      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
-      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2)
+      ActiveSubmission(compactConstantData.workspace.namespace,
+                       compactConstantData.workspace.name,
+                       compactConstantData.submission1
+      ),
+      ActiveSubmission(compactConstantData.workspace.namespace,
+                       compactConstantData.workspace.name,
+                       compactConstantData.submission2
+      )
     )
 
     withStatsD {
@@ -78,9 +84,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   val project = "some-project"
   val bucket = "some-bucket"
 
-  it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices {
+  it should "return 200 when listing active submissions on deleted entities" in withCompactConstantTestDataApiServices {
     services =>
-      Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>
+      Post(s"${compactConstantData.workspace.path}/entities/delete",
+           httpJson(EntityDeleteRequest(compactConstantData.indiv1))
+      ) ~>
         sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
         check {
           assertResult(StatusCodes.NoContent) {
@@ -101,17 +109,23 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
           val responseEntityNames = resp.map(_.submission).map(_.submissionEntity).map(_.get.entityName).toSet
           assertResult(1)(responseEntityNames.size)
-          assert(responseEntityNames.head.contains(constantData.indiv1.name + "_"))
+          assert(responseEntityNames.head.contains(compactConstantData.indiv1.name + "_"))
 
           // check that the response contains the same submissions, with only entity names changed
 
           val expected = Seq(
-            ActiveSubmission(constantData.workspace.namespace,
-                             constantData.workspace.name,
-                             constantData.submissionNoWorkflows
+            ActiveSubmission(compactConstantData.workspace.namespace,
+                             compactConstantData.workspace.name,
+                             compactConstantData.submissionNoWorkflows
             ),
-            ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
-            ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2)
+            ActiveSubmission(compactConstantData.workspace.namespace,
+                             compactConstantData.workspace.name,
+                             compactConstantData.submission1
+            ),
+            ActiveSubmission(compactConstantData.workspace.namespace,
+                             compactConstantData.workspace.name,
+                             compactConstantData.submission2
+            )
           )
 
           def withNewEntityNames(in: Seq[ActiveSubmission]): Seq[ActiveSubmission] =
@@ -145,7 +159,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "get queue status by user" in withConstantTestDataApiServices { services =>
+  it should "get queue status by user" in withCompactConstantTestDataApiServices { services =>
     import driver.api._
 
     // Create a new test user and some new submissions
@@ -153,7 +167,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val testSubjectId = "0001"
     val testUserStatusCounts =
       Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
-    withWorkspaceContext(constantData.workspace) { ctx =>
+    withWorkspaceContext(compactConstantData.workspace) { ctx =>
       val testUser = RawlsUser(
         UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testSubjectId))
       )
@@ -168,12 +182,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         .flatMap { case (st, count) =>
           for (_ <- 0 until count)
             yield createTestSubmission(
-              constantData.workspace,
-              constantData.methodConfig,
-              constantData.sset1,
+              compactConstantData.workspace,
+              compactConstantData.methodConfig,
+              compactConstantData.sset1,
               WorkbenchEmail(testUser.userEmail.value),
-              Seq(constantData.sset1),
-              Map(constantData.sset1 -> inputResolutionsList),
+              Seq(compactConstantData.sset1),
+              Map(compactConstantData.sset1 -> inputResolutionsList),
               Seq.empty,
               Map.empty,
               st
@@ -200,7 +214,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         val testUserWorkflows = testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v }
 
         // userOwner workflow counts should be equal to all workflows in the system except for testUser's workflows.
-        val userOwnerWorkflows = constantData.userOwner.userEmail.value ->
+        val userOwnerWorkflows = compactConstantData.userOwner.userEmail.value ->
           groupedWorkflowRecs
             .map { case (k, v) =>
               k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
@@ -219,8 +233,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "get and set feature flags for a workspace" in withConstantTestDataApiServices { services =>
-    val flagApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/flags"
+  it should "get and set feature flags for a workspace" in withCompactConstantTestDataApiServices { services =>
+    val flagApiUrl =
+      s"/admin/workspaces/${compactConstantData.workspace.namespace}/${compactConstantData.workspace.name}/flags"
     // workspace should start with zero flags
     Get(flagApiUrl) ~>
       sealRoute(services.adminRoutes(userInfo = userInfo)) ~>

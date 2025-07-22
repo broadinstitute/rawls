@@ -32,9 +32,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  it should "list method configs" in withConstantTestDatabase {
-    val workspaceContext = constantData.workspace
-    assertSameElements(constantData.allMCs.map(_.toShort),
+  it should "list method configs" in withCompactConstantTestDatabase {
+    val workspaceContext = compactConstantData.workspace
+    assertSameElements(compactConstantData.allMCs.map(_.toShort),
                        runAndWait(methodConfigurationQuery.listActive(workspaceContext))
     )
   }
