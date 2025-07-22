@@ -582,10 +582,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
     *
     * @param workspaceName the name of the workspace to migrate
     * @param batchSize the number of entities to migrate in a single batch; defaults to 50,000
+    * @param updateWorkspaceSettings if true, updates the workspace settings to enable Quicksilver migration
     */
   def quicksilverMigration(workspaceName: WorkspaceName,
                            cleanup: Boolean = false,
-                           batchSize: Int = 50000
+                           batchSize: Int = 50000,
+                           updateWorkspaceSettings: Boolean = true
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
@@ -613,14 +615,15 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
 
         // Check if there are any pending compactDataTables settings for this workspace
-        // Pending settings indicate that this originated from a workspace setting request
+        // If Migration is triggered from Settings, there will be "Pending" settings
+        // If Migration is triggered from the Migration API, there will be no "Pending" settings unless already requested
         hasPendingSettings <- traceFutureWithParent("workspaceHasPendingSettings", s) { _ =>
           workspaceSettingService.workspaceHasPendingSettings(workspaceName, CompactDataTables)
         }
 
         // If there are pending settings, it means migration has already been requested and is currently in progress.
         // Prevent starting another migration to avoid conflicts or an inconsistent state.
-        _ = if (hasPendingSettings) {
+        _ = if (hasPendingSettings && updateWorkspaceSettings) {
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest, "Quicksilver migration is already in progress for this workspace")
           )
@@ -628,7 +631,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
 
         // If there are no pending settings, we can set the workspace settings to enable Quicksilver migration
         // This is done before the migration starts to ensure that the workspace setting marked as "Pending"
-        _ = if (!hasPendingSettings) {
+        _ = if (!hasPendingSettings && updateWorkspaceSettings) {
           traceFutureWithParent("setWorkspaceSettings", s) { _ =>
             workspaceSettingService.setWorkspaceSettings(
               workspaceName,

@@ -13,7 +13,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
 import org.broadinstitute.dsde.rawls.model.{
   CompactDataTablesSetting,
   ErrorReport,
@@ -30,8 +30,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
-  WorkspaceSettingResponse,
-  WorkspaceSettingTypes
+  WorkspaceSettingResponse
 }
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -285,7 +284,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
   private def applyCompactDataTablesSetting(workspaceName: WorkspaceName, enabled: Boolean): Future[Unit] =
     if (!enabled) {
       // Check if the setting is already enabled in the database
-      getWorkspaceSettingOfType(workspaceName, WorkspaceSettingTypes.CompactDataTables).flatMap {
+      getWorkspaceSettingOfType(workspaceName, CompactDataTables).flatMap {
         case Some(CompactDataTablesSetting(CompactDataTablesConfig(true))) =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest, "Cannot disable compact data tables setting once enabled.")
@@ -297,7 +296,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
       // If compact data tables setting is enabled, we need to migrate the entity attributes.
       Future {
         entityService
-          .quicksilverMigration(workspaceName = workspaceName)
+          .quicksilverMigration(workspaceName = workspaceName, updateWorkspaceSettings = false)
           .map(_ => ())
           .recover { case e: Exception =>
             throw new RawlsExceptionWithErrorReport(

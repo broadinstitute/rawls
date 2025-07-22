@@ -1017,7 +1017,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       entityService.quicksilverMigration(
         ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
         any[Boolean],
-        any[Int]
+        any[Int],
+        any[Boolean]
       )
     ).thenReturn(Future.successful(QuicksilverMigrationResult(2, 2, 2)))
 
@@ -1035,7 +1036,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     verify(entityService).quicksilverMigration(
       ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
       any[Boolean],
-      any[Int]
+      any[Int],
+      any[Boolean]
     )
   }
 
