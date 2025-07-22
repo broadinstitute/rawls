@@ -111,12 +111,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         )
       ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
 
-      when(
-        mockWorkspaceSettingRepository.hasPendingSettings(
-          ArgumentMatchers.any[UUID](),
-          ArgumentMatchers.any[WorkspaceSettingType]()
-        )(ArgumentMatchers.any[ExecutionContext]())
-      ).thenReturn(Future.successful(false))
       withCompactConstantTestDataApiServicesAndMockedSettings(dataSource, mockWorkspaceSettingRepository)(testCode)
     }
 
