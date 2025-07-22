@@ -1,33 +1,64 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
-import nl.grons.metrics4.scala.{Counter, Timer}
+import io.opentelemetry.api.GlobalOpenTelemetry
+import io.opentelemetry.api.common.{AttributeKey, Attributes}
+import io.opentelemetry.api.metrics.{DoubleHistogram, LongCounter}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+
+import scala.jdk.CollectionConverters._
 
 trait EntityProviderMetrics extends RawlsInstrumented {
 
-  private val FunctionKey = "function"
-  private val ProviderNameKey = "providerName"
+  private val PREFIX = "rawls_entityprovider"
 
-  private def entityProviderMetrics: ExpandedMetricBuilder =
-    ExpandedMetricBuilder.expand(WorkspaceDataMetricKey, "entityProvider")
+  private val FunctionKey = AttributeKey.stringKey("function")
+  private val ProviderNameKey = AttributeKey.stringKey("providername")
+  private val ErrorClassKey = AttributeKey.stringKey("errortype")
 
-  def requestLatency(functionName: String, providerName: String): Timer =
-    entityProviderMetrics
-      .expand(FunctionKey, functionName)
-      .expand(ProviderNameKey, providerName)
-      .asTimer("latency")
+  private val BucketBoundaries =
+    List[java.lang.Double](0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0).asJava
 
-  def requestCount(functionName: String, providerName: String): Counter =
-    entityProviderMetrics
-      .expand(FunctionKey, functionName)
-      .expand(ProviderNameKey, providerName)
-      .asCounter("count")
+  private def meter = GlobalOpenTelemetry.get().getMeter("RawlsMetrics")
 
-  def errorCount(functionName: String, providerName: String, errorType: String): Counter =
-    entityProviderMetrics
-      .expand(FunctionKey, functionName)
-      .expand(ProviderNameKey, providerName)
-      .expand("errorType", errorType)
-      .asCounter("errors")
+  private def entityProviderFunctionLatency: DoubleHistogram =
+    meter
+      .histogramBuilder(s"${PREFIX}_function_latency")
+      .setDescription("Latency of entity provider function calls")
+      .setUnit("ms")
+      .setExplicitBucketBoundariesAdvice(BucketBoundaries)
+      .build()
+
+  private def entityProviderErrorCount: LongCounter =
+    meter
+      .counterBuilder(s"${PREFIX}_error_count")
+      .setDescription("Count of errors in entity provider functions")
+      .setUnit("error")
+      .build()
+
+  private def nameOf(provider: EntityProvider): String = provider.getClass.getSimpleName
+
+  private def nameOf(error: Throwable): String = error.getClass.getSimpleName
+
+  def recordFunctionLatency(functionName: String, provider: EntityProvider, durationMs: Double): Unit = {
+    val attrs = Attributes.of(
+      FunctionKey,
+      functionName,
+      ProviderNameKey,
+      nameOf(provider)
+    )
+    entityProviderFunctionLatency.record(durationMs, attrs)
+  }
+
+  def recordError(functionName: String, provider: EntityProvider, error: Throwable): Unit = {
+    val attrs = Attributes.of(
+      FunctionKey,
+      functionName,
+      ProviderNameKey,
+      nameOf(provider),
+      ErrorClassKey,
+      nameOf(error)
+    )
+    entityProviderErrorCount.add(1, attrs)
+  }
 
 }

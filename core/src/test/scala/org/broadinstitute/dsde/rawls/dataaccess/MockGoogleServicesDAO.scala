@@ -182,7 +182,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(Some(new Group))
 
   override def getBucketMetrics(googleProject: GoogleProjectId): BucketMetricsResponse =
-    BucketMetricsResponse(Seq(BucketMetric("REGIONAL", 12345), BucketMetric("MULTI_REGIONAL", 54321)))
+    BucketMetricsResponse(
+      Seq(BucketMetric("REGIONAL", "live-object", 12345), BucketMetric("MULTI_REGIONAL", "live-object", 54321))
+    )
 
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     googleGroups(groupEmail) += emailToAdd
