@@ -1010,10 +1010,6 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
 
     val entityService = mock[EntityService]
     when(
-      entityService.quicksilverMigration(workspaceName = WorkspaceName(workspace.namespace, workspace.name))
-    )
-      .thenReturn(Future.successful(QuicksilverMigrationResult(2, 2, 2)))
-    when(
       entityService.quicksilverMigration(
         ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
         any[Boolean],
