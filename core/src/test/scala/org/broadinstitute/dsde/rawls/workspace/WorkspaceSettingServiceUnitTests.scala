@@ -1067,6 +1067,32 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         any()
       )
     ).thenReturn(Future.successful(true))
+
+    val entityService = mock[EntityService]
+    when(
+      entityService.quicksilverMigration(
+        ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
+        any[Boolean],
+        any[Int],
+        any[Boolean]
+      )
+    ).thenReturn(Future.failed(new Exception("migration failed")))
+
+    val service =
+      workspaceSettingServiceConstructor(
+        samDAO = samDAO,
+        workspaceRepository = workspaceRepository,
+        workspaceSettingRepository = workspaceSettingRepository,
+        entityService = entityService
+      )
+
+    val result =
+      Await.result(service.setWorkspaceSettings(workspaceName, List(enableCompactDataTablesSetting)), Duration.Inf)
+    result.successes shouldBe List.empty
+    result.failures.keySet should contain(WorkspaceSettingTypes.CompactDataTables)
+    val error = result.failures(WorkspaceSettingTypes.CompactDataTables)
+    error.statusCode shouldBe Some(StatusCodes.InternalServerError)
+    error.message should include("Quicksilver migration failed: migration failed")
   }
 
   it should "not allow disabling if already enabled" in {
