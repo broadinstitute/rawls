@@ -146,10 +146,21 @@ trait WorkspaceSettingComponent {
     def getAppliedSettingForWorkspaceByType(workspaceId: UUID,
                                             settingType: WorkspaceSettingType
     ): ReadAction[Option[WorkspaceSetting]] =
+      getSettingForWorkspaceByTypeAndStatus(workspaceId, settingType, WorkspaceSettingRecord.SettingStatus.Applied)
+
+    def getPendingSettingForWorkspaceByType(workspaceId: UUID,
+                                            settingType: WorkspaceSettingType
+    ): ReadAction[Option[WorkspaceSetting]] =
+      getSettingForWorkspaceByTypeAndStatus(workspaceId, settingType, WorkspaceSettingRecord.SettingStatus.Pending)
+
+    private def getSettingForWorkspaceByTypeAndStatus(workspaceId: UUID,
+                                                      settingType: WorkspaceSettingType,
+                                                      status: WorkspaceSettingRecord.SettingStatus.SettingStatus
+    ): ReadAction[Option[WorkspaceSetting]] =
       uniqueResult(
         filter(rec =>
           rec.workspaceId === workspaceId
-            && rec.status === WorkspaceSettingRecord.SettingStatus.Applied.toString
+            && rec.status === status.toString
             && rec.settingType === settingType.toString
         ).take(1).result.map(_.map(WorkspaceSettingRecord.toWorkspaceSetting).toList)
       )
