@@ -74,7 +74,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     } yield {
       if (hasPending) {
         throw new DataEntityException(
-          s"CompactDataTable migration is in progress for workspace ${requestArguments.workspace.toWorkspaceName}. Writes are temporarily disabled."
+          s"CompactDataTable migration is in progress for workspace ${requestArguments.workspace.toWorkspaceName}. Access is temporarily disabled."
         )
       }
       settingOpt match {
