@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import breeze.linalg.any
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
@@ -20,7 +21,10 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryAborted
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.SeparateSubmissionFinalOutputsConfig
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  CompactDataTablesConfig,
+  SeparateSubmissionFinalOutputsConfig
+}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferServiceImpl
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImpl
@@ -32,6 +36,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -511,7 +516,7 @@ class SubmissionSpec(_system: ActorSystem)
       val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
         dataSource,
-        new WorkspaceSettingRepository(dataSource),
+        workspaceSettingRepository,
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -577,6 +582,40 @@ class SubmissionSpec(_system: ActorSystem)
   def withSubmissionsService[T](testCode: SubmissionsService => T): T =
     withDataAndService(service => testCode(service), withDefaultTestDatabase[T])
 
+//  def withCompactSubmissionsService[T](testCode: SubmissionsService => T): T =
+//    withDataAndService(service => testCode(service), withCompactDefaultTestDatabase[T])
+
+  def withCompactSubmissionsService[T](testCode: SubmissionsService => T) = {
+
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+//    when(
+//      spyWorkspaceSettingRepository.getWorkspaceSettingOfType(
+//        ArgumentMatchers.any[UUID](),
+//        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+//      )
+//    ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+
+    doReturn(Future.successful(List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettings(
+        ArgumentMatchers.any[UUID]()
+      )
+
+    withDataAndService(service => testCode(service),
+                       withCompactDefaultTestDatabase[T],
+                       workspaceSettingRepository = spyWorkspaceSettingRepository
+    )
+  }
+
   def withSubmissionsServiceMockExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
     withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
@@ -604,7 +643,7 @@ class SubmissionSpec(_system: ActorSystem)
     }
   }
 
-  "Submission requests" should "400 when given an unparseable entity expression" in withSubmissionsService {
+  "Submission requests" should "400 when given an unparseable entity expression" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -616,7 +655,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
@@ -885,11 +924,11 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
-  it should "not fail if deleteEntity is present but there is no root entity" in withSubmissionsService {
+  it should "not fail if deleteEntity is present but there is no root entity" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = testData.methodConfigEntityless.namespace,
-        methodConfigurationName = testData.methodConfigEntityless.name,
+        methodConfigurationNamespace = compactTestData.methodConfigEntityless.namespace,
+        methodConfigurationName = compactTestData.methodConfigEntityless.name,
         entityType = None,
         entityName = None,
         expression = None,
@@ -898,14 +937,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteEntity = Some("entityType/entityName")
       )
       val newSubmissionReport =
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
       assert(newSubmissionReport.workflows.size == 1)
 
       val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
       assert(submissionData.workflows.size == 1)
 
-      val subList = Await.result(submissionsService.listSubmissions(testData.wsName, testContext), Duration.Inf)
+      val subList = Await.result(submissionsService.listSubmissions(compactTestData.wsName, testContext), Duration.Inf)
 
       val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
       assert(oneSub.nonEmpty)
@@ -1053,7 +1092,7 @@ class SubmissionSpec(_system: ActorSystem)
       assertSameElements(expectedInputResolutions, actualInputResolutions)
   }
 
-  it should "400 when given an entity expression that evaluates to an empty set of entities" in withSubmissionsService {
+  it should "400 when given an entity expression that evaluates to an empty set of entities" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1065,14 +1104,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
   }
 
-  it should "400 when given a method configuration with unparseable inputs" in withSubmissionsService {
+  it should "400 when given a method configuration with unparseable inputs" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1084,7 +1123,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
 
       assertResult(StatusCodes.BadRequest) {
@@ -1096,7 +1135,7 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
-  it should "400 when given a method configuration with unparseable outputs" in withSubmissionsService {
+  it should "400 when given a method configuration with unparseable outputs" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1108,7 +1147,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
 
       assertResult(StatusCodes.BadRequest) {
@@ -1120,7 +1159,7 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
-  it should "400 when given a method configuration with unparseable inputs and outputs" in withSubmissionsService {
+  it should "400 when given a method configuration with unparseable inputs and outputs" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1132,7 +1171,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
 
       assertResult(StatusCodes.BadRequest) {
@@ -1147,7 +1186,7 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
-  it should "return a successful Submission when given a method configuration with empty outputs" in withSubmissionsService {
+  it should "return a successful Submission when given a method configuration with empty outputs" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1159,14 +1198,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val newSubmissionReport =
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
       assert(newSubmissionReport.workflows.size == 3)
 
       checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
   }
 
-  it should "return a successful Submission with unstarted workflows where method configuration inputs are missing on some entities" in withSubmissionsService {
+  it should "return a successful Submission with unstarted workflows where method configuration inputs are missing on some entities" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1178,14 +1217,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val newSubmissionReport =
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
       assert(newSubmissionReport.workflows.size == 2)
 
       checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
   }
 
-  it should "400 when given an entity expression that evaluates to an entity of the wrong type" in withSubmissionsService {
+  it should "400 when given an entity expression that evaluates to an entity of the wrong type" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1197,14 +1236,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
   }
 
-  it should "400 when given no entity expression and an entity of the wrong type" in withSubmissionsService {
+  it should "400 when given no entity expression and an entity of the wrong type" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1216,7 +1255,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
@@ -1250,11 +1289,11 @@ class SubmissionSpec(_system: ActorSystem)
       assert(submissionStatusResponse.workflows.count(_.status == WorkflowStatuses.Queued) == 2)
   }
 
-  it should "run a submission fine with no root entity" in withSubmissionsService { submissionsService =>
+  it should "run a submission fine with no root entity" in withCompactSubmissionsService { submissionsService =>
     // Entityless has (duh) no entities and only literals in its outputs
     val submissionRq = SubmissionRequest(
-      methodConfigurationNamespace = testData.methodConfigEntityless.namespace,
-      methodConfigurationName = testData.methodConfigEntityless.name,
+      methodConfigurationNamespace = compactTestData.methodConfigEntityless.namespace,
+      methodConfigurationName = compactTestData.methodConfigEntityless.name,
       entityType = None,
       entityName = None,
       expression = None,
@@ -1262,20 +1301,20 @@ class SubmissionSpec(_system: ActorSystem)
       deleteIntermediateOutputFiles = false
     )
     val newSubmissionReport =
-      Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+      Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
     assert(newSubmissionReport.workflows.size == 1)
 
     val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
     assert(submissionData.workflows.size == 1)
 
-    val subList = Await.result(submissionsService.listSubmissions(testData.wsName, testContext), Duration.Inf)
+    val subList = Await.result(submissionsService.listSubmissions(compactTestData.wsName, testContext), Duration.Inf)
 
     val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
     assert(oneSub.nonEmpty)
   }
 
-  it should "return BadRequest when running an MC with a root entity without providing one" in withSubmissionsService {
+  it should "return BadRequest when running an MC with a root entity without providing one" in withCompactSubmissionsService {
     submissionsService =>
       // This method config has a root entity, but we've failed to provide one
       val submissionRq = SubmissionRequest(
@@ -1288,19 +1327,19 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
   }
 
-  it should "return BadRequest when running against an MC with no root entity and providing one anyway" in withSubmissionsService {
+  it should "return BadRequest when running against an MC with no root entity and providing one anyway" in withCompactSubmissionsService {
     submissionsService =>
       // Entityless has (duh) no entities and only literals in its outputs
       val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = testData.methodConfigEntityless.namespace,
-        methodConfigurationName = testData.methodConfigEntityless.name,
+        methodConfigurationNamespace = compactTestData.methodConfigEntityless.namespace,
+        methodConfigurationName = compactTestData.methodConfigEntityless.name,
         entityType = Option("Individual"),
         entityName = Option("indiv1"),
         expression = Option("this.sset.samples"),
@@ -1308,7 +1347,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.createSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
 
       assertResult(StatusCodes.BadRequest) {
@@ -1380,7 +1419,7 @@ class SubmissionSpec(_system: ActorSystem)
       submissionData.submissionRoot should not include "intermediates"
     }
 
-  "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withSubmissionsService {
+  "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1392,14 +1431,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
   }
 
-  it should "report a validated input and runnable workflow when given an entity expression that evaluates to a single entity" in withSubmissionsService {
+  it should "report a validated input and runnable workflow when given an entity expression that evaluates to a single entity" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1410,13 +1449,14 @@ class SubmissionSpec(_system: ActorSystem)
         useCallCache = false,
         deleteIntermediateOutputFiles = false
       )
-      val vData = Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+      val vData =
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
       assertResult(1)(vData.validEntities.length)
       assert(vData.invalidEntities.isEmpty)
   }
 
-  it should "report validated inputs and runnable workflows when given an entity expression that evaluates to a set of entities" in withSubmissionsService {
+  it should "report validated inputs and runnable workflows when given an entity expression that evaluates to a set of entities" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1427,10 +1467,11 @@ class SubmissionSpec(_system: ActorSystem)
         useCallCache = false,
         deleteIntermediateOutputFiles = false
       )
-      val vData = Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+      val vData =
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
       assertResult(
-        testData.sset1
+        compactTestData.sset1
           .attributes(AttributeName.withDefaultNS("samples"))
           .asInstanceOf[AttributeEntityReferenceList]
           .list
@@ -1439,7 +1480,7 @@ class SubmissionSpec(_system: ActorSystem)
       assert(vData.invalidEntities.isEmpty)
   }
 
-  it should "400 when given an entity expression that evaluates to an empty set of entities" in withSubmissionsService {
+  it should "400 when given an entity expression that evaluates to an empty set of entities" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1451,14 +1492,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
   }
 
-  it should "400 when given a method configuration with unparseable inputs" in withSubmissionsService {
+  it should "400 when given a method configuration with unparseable inputs" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1470,7 +1511,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
 
       assertResult(StatusCodes.BadRequest) {
@@ -1482,7 +1523,7 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
-  it should "400 when given a method configuration with unparseable outputs" in withSubmissionsService {
+  it should "400 when given a method configuration with unparseable outputs" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1494,7 +1535,7 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
 
       assertResult(StatusCodes.BadRequest) {
@@ -1506,7 +1547,7 @@ class SubmissionSpec(_system: ActorSystem)
       }
   }
 
-  it should "report a successful validation when given a method configuration with empty outputs" in withSubmissionsService {
+  it should "report a successful validation when given a method configuration with empty outputs" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1517,13 +1558,14 @@ class SubmissionSpec(_system: ActorSystem)
         useCallCache = false,
         deleteIntermediateOutputFiles = false
       )
-      val validation = Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+      val validation =
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
       assertResult(3)(validation.validEntities.size)
       assert(validation.invalidEntities.isEmpty)
   }
 
-  it should "report validated inputs and a mixture of started and unstarted workflows where method configuration inputs are missing on some entities" in withSubmissionsService {
+  it should "report validated inputs and a mixture of started and unstarted workflows where method configuration inputs are missing on some entities" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1534,10 +1576,11 @@ class SubmissionSpec(_system: ActorSystem)
         useCallCache = false,
         deleteIntermediateOutputFiles = false
       )
-      val vData = Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+      val vData =
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
 
       assertResult(
-        testData.sset1
+        compactTestData.sset1
           .attributes(AttributeName.withDefaultNS("samples"))
           .asInstanceOf[AttributeEntityReferenceList]
           .list
@@ -1546,7 +1589,7 @@ class SubmissionSpec(_system: ActorSystem)
       assertResult(1)(vData.invalidEntities.length)
   }
 
-  it should "report errors for an entity expression that evaluates to an entity of the wrong type" in withSubmissionsService {
+  it should "report errors for an entity expression that evaluates to an entity of the wrong type" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1558,14 +1601,14 @@ class SubmissionSpec(_system: ActorSystem)
         deleteIntermediateOutputFiles = false
       )
       val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
+        Await.result(submissionsService.validateSubmission(compactTestData.wsName, submissionRq), Duration.Inf)
       }
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
   }
 
-  it should "report an error when given no entity expression and the entity is of the wrong type" in withSubmissionsService {
+  it should "report an error when given no entity expression and the entity is of the wrong type" in withCompactSubmissionsService {
     submissionsService =>
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
