@@ -150,6 +150,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                 }
               }
           }
+        // invalidate the cache for the destination workspace
+        _ <- repository.queries.invalidateCache(destWorkspaceContext.workspaceIdAsUUID, entityType)
       } yield result
     }
     withWorkspaceLastModified(copyResult)

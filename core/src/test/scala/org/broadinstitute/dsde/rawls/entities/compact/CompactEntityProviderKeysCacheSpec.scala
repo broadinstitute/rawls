@@ -264,7 +264,7 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
   it should "invalidate after deleteEntities" in withMinimalTestDatabase { _ =>
     val provider = defaultProvider()
 
-    // insert entities to be updated
+    // insert entities to be deleted
     val entityA1 = Entity("name1", "typeA", Map())
     val entityA2 = Entity("name2", "typeA", Map())
     val entityB1 = Entity("name3", "typeB", Map())
@@ -290,7 +290,82 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryC)
   }
 
-  it should "invalidate after copyEntities" is pending
+  it should "invalidate after copyEntities" ignore withMinimalTestDatabase { _ =>
+    val sourceWorkspace = minimalTestData.workspace2
+    val destinationWorkspace = minimalTestData.workspace
+
+    val sourceProvider = new CompactEntityProvider(
+      defaultEntityRequestArguments.copy(workspace = sourceWorkspace),
+      new CompactEntityRepository(slickDataSource)
+    )(ec, system)
+
+    val destinationProvider = new CompactEntityProvider(
+      defaultEntityRequestArguments.copy(workspace = destinationWorkspace),
+      new CompactEntityRepository(slickDataSource)
+    )(ec, system)
+
+    // insert entities to be copied to source workspace
+    val entityA1 = Entity("name1", "typeA", Map())
+    val entityA2 = Entity("name2", "typeA", Map())
+    val entityB1 = Entity("name3", "typeB", Map())
+    Await.result(sourceProvider.createEntity(entityA1, defaultRequestContext), atMost) shouldBe entityA1
+    Await.result(sourceProvider.createEntity(entityA2, defaultRequestContext), atMost) shouldBe entityA2
+    Await.result(sourceProvider.createEntity(entityB1, defaultRequestContext), atMost) shouldBe entityB1
+
+    // validate results of creations
+    val metadataAfter = Await.result(sourceProvider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataAfter.size shouldBe 2
+    metadataAfter.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataAfter("typeA").count shouldBe 2
+    metadataAfter("typeB").count shouldBe 1
+
+    // insert valid cache entries for typeA, typeB, and typeC to workspace 1
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(AttributeName.withDefaultNS("attr1")))
+    val cacheEntryB = EntityTypeAndAttributeKeys("typeB", Set(AttributeName.withDefaultNS("attr2")))
+    val cacheEntryC = EntityTypeAndAttributeKeys("typeC", Set(AttributeName.withDefaultNS("attr3")))
+    // save the cache
+    runAndWait(
+      q.saveCache(destinationWorkspace.workspaceIdAsUUID, Set(cacheEntryA, cacheEntryB, cacheEntryC))
+    ) shouldBe 3
+    // validate cache entries
+    runAndWait(q.getCachedKeys(destinationWorkspace.workspaceIdAsUUID)) should contain theSameElementsAs Seq(
+      cacheEntryA,
+      cacheEntryB,
+      cacheEntryC
+    )
+
+    // copy entities from workspace 2 to workspace 1
+    val copyResult =
+      Await.result(
+        sourceProvider.copyEntities(
+          sourceWorkspace,
+          destinationWorkspace,
+          entityA1.entityType,
+          Seq(entityA1.name, entityA2.name),
+          linkExistingEntities = false,
+          defaultRequestContext
+        ),
+        atMost
+      )
+
+    // validate results of copying
+    val metadataDestination =
+      Await.result(destinationProvider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataDestination.size shouldBe 1
+    metadataDestination.keys should contain theSameElementsAs Seq("typeA")
+    metadataDestination("typeA").count shouldBe 2
+
+    copyResult.hardConflicts shouldBe empty
+    copyResult.softConflicts shouldBe empty
+    copyResult.entitiesCopied should contain theSameElementsAs Seq(entityA1.toReference, entityA2.toReference)
+
+    // validate that typeA cache entry is invalidated
+    runAndWait(q.getCachedKeys(destinationWorkspace.workspaceIdAsUUID)) should contain theSameElementsAs Seq(
+      cacheEntryB,
+      cacheEntryC
+    )
+  }
+
   it should "invalidate after saveWorkflowOutputEntities" is pending
 
   behavior of "clone"
