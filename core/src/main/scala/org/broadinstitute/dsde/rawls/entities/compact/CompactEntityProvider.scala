@@ -334,6 +334,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
             entityType,
             attributeNames
           )
+          // Invalidate the cache for this entity type
+          _ <- repository.queries.invalidateCache(workspaceId, entityType)
         } yield ()
       }
     }
@@ -517,6 +519,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                   oldName,
                                                                   attributeRenameRequest
         )
+        // invalidate the cache for this entity type
+        // we could optimize this to rename the attribute inside the cache instead of invalidating,
+        // but that would add complexity
+        _ <- repository.queries.invalidateCache(workspaceId, entityType)
       } yield numEntitiesAffected
     }
 

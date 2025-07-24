@@ -97,8 +97,7 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     // create entity
     val provider = defaultProvider()
     val entity = Entity("name", entityType, Map())
-    val createResult =
-      Await.result(provider.createEntity(entity, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entity, defaultRequestContext), atMost)
     // insert valid cache entry
     val cacheEntry = EntityTypeAndAttributeKeys(entityType, Set(AttributeName.withDefaultNS("attr1")))
     // save the cache
@@ -116,8 +115,66 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     runAndWait(q.getCachedKeys(wsid)) shouldBe empty
   }
 
-  it should "invalidate after renameAttribute" is pending
-  it should "invalidate after deleteEntityAttributes" is pending
+  it should "invalidate after renameAttribute" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // insert the entities to be updated
+    val entityA1 = Entity("name1", "typeA", Map(AttributeName.withDefaultNS("old") -> AttributeNumber(42)))
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+
+    // insert valid cache entries for typeA
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(AttributeName.withDefaultNS("attr1")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryA))) shouldBe 1
+    // validate cache entries
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryA)
+
+    // perform the attribute rename
+    val numUpdated = Await.result(
+      provider.renameAttribute(entityA1.entityType,
+                               AttributeName.withDefaultNS("old"),
+                               AttributeRename(AttributeName.withDefaultNS("new")),
+                               defaultRequestContext
+      ),
+      atMost
+    )
+    numUpdated shouldBe 1
+
+    // validate that typeA and typeB cache entries are invalidated
+    runAndWait(q.getCachedKeys(wsid)) shouldBe empty
+  }
+
+  it should "invalidate after deleteEntityAttributes" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // insert the entities to be updated
+    val entityA1 = Entity("name1", "typeA", Map(AttributeName.withDefaultNS("deleteme1") -> AttributeNumber(42)))
+    val entityA2 = Entity("name2", "typeA", Map(AttributeName.withDefaultNS("deleteme2") -> AttributeNumber(123)))
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityA2, defaultRequestContext), atMost)
+
+    // insert valid cache entries for typeA
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(AttributeName.withDefaultNS("attr1")))
+
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryA))) shouldBe 1
+    // validate cache entries
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryA)
+
+    // perform the attribute delete
+    Await.result(
+      provider.deleteEntityAttributes(entityA1.entityType,
+                                      Set(AttributeName.withDefaultNS("deleteme1"),
+                                          AttributeName.withDefaultNS("deleteme2")
+                                      ),
+                                      defaultRequestContext
+      ),
+      atMost
+    )
+
+    // validate that typeA and typeB cache entries are invalidated
+    runAndWait(q.getCachedKeys(wsid)) shouldBe empty
+  }
 
   behavior of "multiple entity-type cache invalidation"
 
