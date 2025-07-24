@@ -169,13 +169,15 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
 
             val allLookups = inputExpressionData.flatMap { case (_, _, lookups) => lookups }
 
-            // If we have an entitylookup, prepend it to the relation chain of the query
+            // If we have an entitylookup, prepend its chain to the relation chain of the query
             val queryPlans = if (entityType != rootEntityType && entityLookups.nonEmpty) {
-              val entityRelationChain = entityLookups.flatMap(_.attributeName).toList
+              val entityRelationChain: List[String] =
+                entityLookups.flatMap(_.relations.map(_.attributeName()).map(_.getText)).toList
+              val updatedRelationChain = entityRelationChain ++ entityLookups.flatMap(_.attributeName).toList
               val baseQueryPlans = buildQueryPlans(allLookups)
 
               baseQueryPlans.map { plan =>
-                plan.copy(relationChain = entityRelationChain ++ plan.relationChain)
+                plan.copy(relationChain = updatedRelationChain ++ plan.relationChain)
               }
             } else {
               buildQueryPlans(allLookups)
