@@ -246,6 +246,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new RawlsConcurrentModificationException(
             s"Detected concurrent modifications to entity ${savedEntityRecord.toPointer}."
           )
+        // invalidate cache for this entity type
+        _ <- repository.queries.invalidateCache(workspaceId, savedEntityRecord.entityType)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
