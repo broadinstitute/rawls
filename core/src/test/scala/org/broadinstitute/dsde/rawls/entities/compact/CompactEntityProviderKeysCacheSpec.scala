@@ -261,7 +261,35 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryC)
   }
 
-  it should "invalidate after deleteEntities" is pending
+  it should "invalidate after deleteEntities" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // insert entities to be updated
+    val entityA1 = Entity("name1", "typeA", Map())
+    val entityA2 = Entity("name2", "typeA", Map())
+    val entityB1 = Entity("name3", "typeB", Map())
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityA2, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityB1, defaultRequestContext), atMost)
+
+    // insert valid cache entries for typeA, typeB, and typeC
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(AttributeName.withDefaultNS("attr1")))
+    val cacheEntryB = EntityTypeAndAttributeKeys("typeB", Set(AttributeName.withDefaultNS("attr2")))
+    val cacheEntryC = EntityTypeAndAttributeKeys("typeC", Set(AttributeName.withDefaultNS("attr3")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryA, cacheEntryB, cacheEntryC))) shouldBe 3
+    // validate cache entries
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryA, cacheEntryB, cacheEntryC)
+
+    // delete some of the entities from typeA and typeB
+    val numDeleted =
+      Await.result(provider.deleteEntities(Seq(entityA1.toPointer, entityB1.toPointer), defaultRequestContext), atMost)
+    numDeleted shouldBe 2
+
+    // validate that typeA and typeB cache entries are invalidated
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryC)
+  }
+
   it should "invalidate after copyEntities" is pending
   it should "invalidate after saveWorkflowOutputEntities" is pending
 
