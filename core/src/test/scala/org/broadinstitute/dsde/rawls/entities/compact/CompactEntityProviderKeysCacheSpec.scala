@@ -176,6 +176,26 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     runAndWait(q.getCachedKeys(wsid)) shouldBe empty
   }
 
+  it should "invalidate after deleteEntitiesOfType" in withMinimalTestDatabase { _ =>
+    val entityType = "entityType1"
+    // create entity
+    val provider = defaultProvider()
+    val entity = Entity("name", entityType, Map())
+    Await.result(provider.createEntity(entity, defaultRequestContext), atMost)
+    // insert valid cache entry
+    val cacheEntry = EntityTypeAndAttributeKeys(entityType, Set(AttributeName.withDefaultNS("attr1")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntry))) shouldBe 1
+    // validate cache entry
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntry)
+    // delete entities of this type
+    val deleteResult =
+      Await.result(provider.deleteEntitiesOfType(entity.entityType, defaultRequestContext), atMost)
+    deleteResult shouldBe 1
+    // validate cache entry invalidated
+    runAndWait(q.getCachedKeys(wsid)) shouldBe empty
+  }
+
   behavior of "multiple entity-type cache invalidation"
 
   it should "invalidate after batchUpsertEntities" in withMinimalTestDatabase { _ =>
@@ -394,15 +414,13 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
 
   behavior of "clone"
 
+  // this is an optimization; it would be correct but slower without this
   it should "also clone cache entries" is pending
 
   behavior of "renameEntityType"
 
+  // this is an optimization; it would be correct but slower without this
   it should "also rename the cache entry" is pending
-
-  behavior of "deleteEntitiesOfType"
-
-  it should "also delete the cache entry" is pending
 
   // ====================================================================================================
   //  helper methods

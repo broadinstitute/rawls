@@ -306,7 +306,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                   java.lang.Long.valueOf(numHardDeletes)
         )
         _ = setTraceSpanAttribute(parentContext, AttributeKey.longKey("softDeletes"), java.lang.Long.valueOf(res))
-      } yield res
+        // invalidate the cache for this entity type
+        _ <- repository.queries.invalidateCache(workspaceId, entityType)
+      } yield res + numHardDeletes
     }
 
   override def deleteEntityAttributes(entityType: String,

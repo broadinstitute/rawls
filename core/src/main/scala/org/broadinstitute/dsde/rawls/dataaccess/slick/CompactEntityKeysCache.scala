@@ -90,31 +90,4 @@ trait CompactEntityKeysCache {
       ).asUpdate
     }
 
-  // ========== delete from cache ==========
-
-  /** delete all cache entries for this workspace */
-  def deleteCache(workspaceId: UUID): ReadWriteAction[Int] =
-    sqlu"""delete from ENTITY_KEYS_CACHE
-            where workspace_id = $workspaceId;"""
-
-  /** delete the cache entry for the given entity type and workspace */
-  def deleteCache(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
-    deleteCache(workspaceId, Set(entityType))
-
-  /** delete the cache entries for the given entity types and workspace */
-  def deleteCache(workspaceId: UUID, entityTypes: Set[String]): ReadWriteAction[Int] =
-    // short-circuit
-    if (entityTypes.isEmpty) {
-      DBIO.successful(0)
-    } else {
-      val inClause = reduceSqlActionsWithDelim(entityTypes.map(t => sql"$t").toSeq, sql", ")
-      concatSqlActions(
-        sql"""delete from ENTITY_KEYS_CACHE
-              where workspace_id = $workspaceId
-              and entity_type in (""",
-        inClause,
-        sql");"
-      ).asUpdate
-    }
-
 }
