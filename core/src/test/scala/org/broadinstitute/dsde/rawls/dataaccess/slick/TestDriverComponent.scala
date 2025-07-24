@@ -416,7 +416,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   // noinspection TypeAnnotation,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
-  class DefaultTestData() extends TestData {
+  class DefaultTestData(useCompact: Boolean = true) extends TestData {
     // setup workspace objects
     val userProjectOwner = RawlsUser(
       UserInfo(RawlsUserEmail("project-owner-access"),
@@ -1661,30 +1661,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         saveAllWorkspacesAction,
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             methodConfigurationQuery.create(context, agoraMethodConfigMaxWorkspaceAttributes),
             methodConfigurationQuery.create(context, agoraMethodConfigMaxEntityAttributes),
@@ -1728,12 +1756,26 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceWithRealm) { context =>
           DBIO.seq(
-            entityQuery.save(context, extraSample)
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                                 Seq(extraSample),
+                                                                 true
+              )
+            } else {
+              entityQuery.save(context, extraSample)
+            }
           )
         },
         withWorkspaceContext(workspaceWithMultiGroupAD) { context =>
           DBIO.seq(
-            entityQuery.save(context, extraSample)
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                                 Seq(extraSample),
+                                                                 true
+              )
+            } else {
+              entityQuery.save(context, extraSample)
+            }
           )
         },
         withWorkspaceContext(workspaceNoSubmissions) { context =>
@@ -1743,30 +1785,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceSuccessfulSubmission) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             methodConfigurationQuery.create(context, methodConfig2),
             submissionQuery.create(context, submissionSuccessful1),
@@ -1775,30 +1845,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceFailedSubmission) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionFailed),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -1806,30 +1904,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceSubmittedSubmission) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionSubmitted),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -1837,30 +1963,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceTerminatedSubmissions) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionAborted2),
             submissionQuery.create(context, submissionSuccessful2),
@@ -1869,30 +2023,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceMixedSubmissions) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionAborted1),
             submissionQuery.create(context, submissionMixed),
@@ -1901,30 +2083,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceInterleavedSubmissions) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, outerSubmission),
             submissionQuery.create(context, innerSubmission),
@@ -1966,1560 +2176,1560 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     }
   }
 
-  class CompactDefaultTestData() extends TestData {
-    // setup workspace objects
-    val userProjectOwner = RawlsUser(
-      UserInfo(RawlsUserEmail("project-owner-access"),
-               OAuth2BearerToken("token"),
-               123,
-               RawlsUserSubjectId("123456789876543210101")
-      )
-    )
-    val userOwner = RawlsUser(userInfo)
-    val userWriter = RawlsUser(
-      UserInfo(RawlsUserEmail("writer-access"),
-               OAuth2BearerToken("token"),
-               123,
-               RawlsUserSubjectId("123456789876543212346")
-      )
-    )
-    val userReader = RawlsUser(
-      UserInfo(RawlsUserEmail("reader-access"),
-               OAuth2BearerToken("token"),
-               123,
-               RawlsUserSubjectId("123456789876543212347")
-      )
-    )
-    val userReaderViaGroup = RawlsUser(
-      UserInfo(RawlsUserEmail("reader-access-via-group"),
-               OAuth2BearerToken("token"),
-               123,
-               RawlsUserSubjectId("123456789876543212349")
-      )
-    )
-    val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
-    val wsName3 = WorkspaceName("myNamespace", "myWSwithADsMethodConfigs")
-    val wsName4 = WorkspaceName("myNamespace", "myWSwithADsMCSuccessfulSubmission")
-    val wsName5 = WorkspaceName("myNamespace", "myWSwithADsMCFailedSubmission")
-    val wsName6 = WorkspaceName("myNamespace", "myWSwithADsMCSubmittedSubmission")
-    val wsName7 = WorkspaceName("myNamespace", "myWSwithADsMCAbortedSubmission")
-    val wsName8 = WorkspaceName("myNamespace", "myWSwithADsMCAbortedSuccessfulSub")
-    val wsName9 = WorkspaceName("myNamespace", "myWSToTestGrantPermissions")
-    val wsName10 = WorkspaceName("myNamespace", "myMultiGroupADWorkspace")
-    val wsNameConfigCopyDestination = WorkspaceName("myNamespace", "configCopyDestinationWS")
-    val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
-    val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
-    val wsRegionalName = WorkspaceName("myNamespace", "myRegionalWorkspace")
-    val workspaceToTestGrantId = UUID.randomUUID()
-
-    val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
-    val dbGapAuthorizedUsersGroup = ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers"))
-
-    val billingAccountName = RawlsBillingAccountName("fakeBillingAcct")
-
-    val billingProject = RawlsBillingProject(UUID.randomUUID(),
-                                             RawlsBillingProjectName(wsName.namespace),
-                                             CreationStatuses.Ready,
-                                             Option(billingAccountName),
-                                             None
-    )
-
-    val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 =
-      RawlsBillingProject(UUID.randomUUID(), testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
-
-    val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2 =
-      RawlsBillingProject(UUID.randomUUID(), testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
-
-    val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3 =
-      RawlsBillingProject(UUID.randomUUID(), testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
-
-    val azureBillingProjectName = RawlsBillingProjectName("azure-billing-project")
-
-    val wsAttrs = Map(
-      AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
-      AttributeName.withDefaultNS("number") -> AttributeNumber(10),
-      AttributeName.withDefaultNS("empty") -> AttributeValueEmptyList,
-      AttributeName.withDefaultNS("values") -> AttributeValueList(
-        Seq(AttributeString("another string"), AttributeString("true"))
-      )
-    )
-
-    val workspaceNoGroups = Workspace(wsName.namespace,
-                                      wsName.name + "3",
-                                      UUID.randomUUID().toString,
-                                      "aBucket2",
-                                      Some("workflow-collection"),
-                                      currentTime(),
-                                      currentTime(),
-                                      "testUser",
-                                      wsAttrs
-    )
-
-    val workspace = makeWorkspaceWithUsers(billingProject,
-                                           wsName.name,
-                                           UUID.randomUUID().toString,
-                                           "aBucket",
-                                           Some("workflow-collection"),
-                                           currentTime(),
-                                           currentTime(),
-                                           "testUser",
-                                           wsAttrs,
-                                           false
-    )
-
-    val workspaceLocked = makeWorkspaceWithUsers(
-      billingProject,
-      wsName.name + "_locked",
-      UUID.randomUUID().toString,
-      "aBucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs,
-      true
-    )
-
-    val regionalWorkspace = makeWorkspaceWithUsers(
-      billingProject,
-      wsRegionalName.name,
-      UUID.randomUUID().toString,
-      "fc-regional-bucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs,
-      false
-    )
-
-    val workspacePublished = Workspace(
-      wsName.namespace,
-      wsName.name + "_published",
-      UUID.randomUUID().toString,
-      "aBucket3",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true))
-    )
-    val workspaceNoAttrs = Workspace(
-      wsName.namespace,
-      wsName.name + "_noattrs",
-      UUID.randomUUID().toString,
-      "aBucket4",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      Map.empty
-    )
-
-    val realm = ManagedGroupRef(RawlsGroupName("Test-Realm"))
-    val realmWsName = wsName.name + "withRealm"
-
-    val realm2 = ManagedGroupRef(RawlsGroupName("Test-Realm2"))
-    val realmWs2Name = wsName2.name + "withRealm"
-
-    val workspaceWithRealm = makeWorkspaceWithUsers(billingProject,
-                                                    realmWsName,
-                                                    UUID.randomUUID().toString,
-                                                    "aBucket",
-                                                    Some("workflow-collection"),
-                                                    currentTime(),
-                                                    currentTime(),
-                                                    "testUser",
-                                                    wsAttrs,
-                                                    false
-    )
-
-    val workspaceWithMultiGroupAD = makeWorkspaceWithUsers(billingProject,
-                                                           wsName10.name,
-                                                           UUID.randomUUID().toString,
-                                                           "aBucket",
-                                                           Some("workflow-collection"),
-                                                           currentTime(),
-                                                           currentTime(),
-                                                           "testUser",
-                                                           wsAttrs,
-                                                           false
-    )
-
-    val controlledWorkspace = makeWorkspaceWithUsers(billingProject,
-                                                     "test-tcga",
-                                                     UUID.randomUUID().toString,
-                                                     "aBucket",
-                                                     Some("workflow-collection"),
-                                                     currentTime(),
-                                                     currentTime(),
-                                                     "testUser",
-                                                     wsAttrs,
-                                                     false
-    )
-
-    val otherWorkspaceWithRealm = makeWorkspaceWithUsers(billingProject,
-                                                         realmWs2Name,
-                                                         UUID.randomUUID().toString,
-                                                         "aBucket",
-                                                         Some("workflow-collection"),
-                                                         currentTime(),
-                                                         currentTime(),
-                                                         "testUser",
-                                                         wsAttrs,
-                                                         false
-    )
-
-    // Workspace with realms, without submissions
-    val workspaceNoSubmissions = makeWorkspaceWithUsers(billingProject,
-                                                        wsName3.name,
-                                                        UUID.randomUUID().toString,
-                                                        "aBucket",
-                                                        Some("workflow-collection"),
-                                                        currentTime(),
-                                                        currentTime(),
-                                                        "testUser",
-                                                        wsAttrs,
-                                                        false
-    )
-
-    // Workspace with no entities
-    val workspaceNoEntities = makeWorkspaceWithUsers(billingProject,
-                                                     "no-entities",
-                                                     UUID.randomUUID().toString,
-                                                     "aBucket",
-                                                     Some("workflow-collection"),
-                                                     currentTime(),
-                                                     currentTime(),
-                                                     "testUser",
-                                                     wsAttrs,
-                                                     false
-    )
-
-    // Workspace with realms, with successful submission
-    val workspaceSuccessfulSubmission = makeWorkspaceWithUsers(billingProject,
-                                                               wsName4.name,
-                                                               UUID.randomUUID().toString,
-                                                               "aBucket",
-                                                               Some("workflow-collection"),
-                                                               currentTime(),
-                                                               currentTime(),
-                                                               "testUser",
-                                                               wsAttrs,
-                                                               false
-    )
-
-    // Workspace with realms, with failed submission
-    val workspaceFailedSubmission = makeWorkspaceWithUsers(billingProject,
-                                                           wsName5.name,
-                                                           UUID.randomUUID().toString,
-                                                           "aBucket",
-                                                           Some("workflow-collection"),
-                                                           currentTime(),
-                                                           currentTime(),
-                                                           "testUser",
-                                                           wsAttrs,
-                                                           false
-    )
-
-    // Workspace with realms, with submitted submission
-    val workspaceSubmittedSubmission = makeWorkspaceWithUsers(billingProject,
-                                                              wsName6.name,
-                                                              UUID.randomUUID().toString,
-                                                              "aBucket",
-                                                              Some("workflow-collection"),
-                                                              currentTime(),
-                                                              currentTime(),
-                                                              "testUser",
-                                                              wsAttrs,
-                                                              false
-    )
-
-    // Workspace with realms with mixed workflows
-    val workspaceMixedSubmissions = makeWorkspaceWithUsers(billingProject,
-                                                           wsName7.name,
-                                                           UUID.randomUUID().toString,
-                                                           "aBucket",
-                                                           Some("workflow-collection"),
-                                                           currentTime(),
-                                                           currentTime(),
-                                                           "testUser",
-                                                           wsAttrs,
-                                                           false
-    )
-
-    // Workspace with realms, with aborted and successful submissions
-    val workspaceTerminatedSubmissions = makeWorkspaceWithUsers(billingProject,
-                                                                wsName8.name,
-                                                                UUID.randomUUID().toString,
-                                                                "aBucket",
-                                                                Some("workflow-collection"),
-                                                                currentTime(),
-                                                                currentTime(),
-                                                                "testUser",
-                                                                wsAttrs,
-                                                                false
-    )
-
-    // Workspace with a successful submission that had another submission run and fail while it was running
-    val workspaceInterleavedSubmissions = makeWorkspaceWithUsers(
-      billingProject,
-      wsInterleaved.name,
-      UUID.randomUUID().toString,
-      "aBucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs,
-      false
-    )
-
-    // Workspace with a custom workflow failure mode
-    val workspaceWorkflowFailureMode = makeWorkspaceWithUsers(
-      billingProject,
-      wsWorkflowFailureMode.name,
-      UUID.randomUUID().toString,
-      "aBucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs,
-      false
-    )
-
-    // Standard workspace to test grant permissions
-    val workspaceToTestGrant = makeWorkspaceWithUsers(
-      billingProject,
-      wsName9.name,
-      workspaceToTestGrantId.toString,
-      "aBucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs,
-      false
-    )
-
-    // Test copying configs between workspaces
-    val workspaceConfigCopyDestination = makeWorkspaceWithUsers(
-      billingProject,
-      wsNameConfigCopyDestination.name,
-      UUID.randomUUID().toString,
-      "aBucket",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      wsAttrs,
-      false
-    )
-
-    val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
-    val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
-
-    val sample1 = Entity(
-      "sample1",
-      "Sample",
-      Map(
-        AttributeName.withDefaultNS("type") -> AttributeString("normal"),
-        AttributeName.withDefaultNS("whatsit") -> AttributeNumber(100),
-        AttributeName.withDefaultNS("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
-        AttributeName.withDefaultNS("quot") -> aliquot1.toReference,
-        AttributeName.withDefaultNS("somefoo") -> AttributeString("itsfoo")
-      )
-    )
-
-    val sample2 = Entity(
-      "sample2",
-      "Sample",
-      Map(
-        AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
-        AttributeName.withDefaultNS("tumortype") -> AttributeString("LUSC"),
-        AttributeName.withDefaultNS("confused") -> AttributeString("huh?")
-      )
-    )
-    val sample3 = Entity(
-      "sample3",
-      "Sample",
-      Map(
-        AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
-        AttributeName.withDefaultNS("tumortype") -> AttributeString("LUSC"),
-        AttributeName.withDefaultNS("confused") -> sample1.toReference
-      )
-    )
-    val sample4 = Entity("sample4", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
-    val sample5 = Entity("sample5", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
-    val sample6 = Entity("sample6", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
-    val sample7 = Entity("sample7",
-                         "Sample",
-                         Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
-                             AttributeName.withDefaultNS("cycle") -> sample6.toReference
-                         )
-    )
-    val sample8 = Entity(
-      "sample8",
-      "Sample",
-      Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
-          AttributeName.withDefaultNS("foo_id") -> AttributeString("1029384756")
-      )
-    )
-    val extraSample = Entity("extraSample", "Sample", Map.empty)
-
-    val pair1 = Entity(
-      "pair1",
-      "Pair",
-      Map(
-        AttributeName.withDefaultNS("case") -> sample2.toReference,
-        AttributeName.withDefaultNS("control") -> sample1.toReference,
-        AttributeName.withDefaultNS("whatsit") -> AttributeString("occurs in sample too! oh no!")
-      )
-    )
-    val pair2 = Entity("pair2",
-                       "Pair",
-                       Map(AttributeName.withDefaultNS("case") -> sample3.toReference,
-                           AttributeName.withDefaultNS("control") -> sample1.toReference
-                       )
-    )
-
-    val sset1 = Entity(
-      "sset1",
-      "SampleSet",
-      Map(
-        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
-          Seq(sample1.toReference, sample2.toReference, sample3.toReference)
-        )
-      )
-    )
-    val sset2 = Entity(
-      "sset2",
-      "SampleSet",
-      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample2.toReference)))
-    )
-
-    val sset3 = Entity("sset3",
-                       "SampleSet",
-                       Map(
-                         AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(
-                           Seq(sample5.toReference, sample6.toReference)
-                         )
-                       )
-    )
-
-    val sset4 = Entity(
-      "sset4",
-      "SampleSet",
-      Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(Seq(sample7.toReference)))
-    )
-
-    val sset_empty =
-      Entity("sset_empty", "SampleSet", Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList))
-
-    val ps1 = Entity(
-      "ps1",
-      "PairSet",
-      Map(
-        AttributeName.withDefaultNS("pairs") -> AttributeEntityReferenceList(Seq(pair1.toReference, pair2.toReference))
-      )
-    )
-
-    val indiv1 = Entity("indiv1", "Individual", Map(AttributeName.withDefaultNS("sset") -> sset1.toReference))
-
-    val indiv2 = Entity("indiv2", "Individual", Map(AttributeName.withDefaultNS("sset") -> sset2.toReference))
-
-    val agoraMethod = AgoraMethod("ns-config", "meth1", 1)
-
-    val agoraMethodConfig = MethodConfiguration(
-      "ns",
-      "testConfig1",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("output")),
-      agoraMethod
-    )
-
-    val agoraMethodConfigMaxWorkspaceAttributes = MethodConfiguration(
-      "ns",
-      "testConfigMaxWorkspaceAttributes",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("workspace.long_attributes")),
-      agoraMethod
-    )
-
-    val agoraMethodConfigMaxEntityAttributes = MethodConfiguration(
-      "ns",
-      "testConfigMaxEntityAttributes",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("this.long_attributes")),
-      agoraMethod
-    )
-
-    val goodAndBadMethod = AgoraMethod("dsde", "good_and_bad", 1)
-
-    val goodAndBadMethodConfig = MethodConfiguration(
-      "dsde",
-      "good_and_bad",
-      Some("samples"),
-      Some(Map.empty[String, AttributeString]),
-      Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"),
-          "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse")
-      ),
-      Map(
-        "goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),
-        "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"),
-        "empty_out" -> AttributeString("")
-      ),
-      goodAndBadMethod
-    )
-
-    val dockstoreMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
-
-    val dockstoreMethodConfig = MethodConfiguration(
-      "dockstore-config-namespace",
-      "dockstore-config-name",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("output")),
-      dockstoreMethod
-    )
-
-    val methodConfigDockstore = MethodConfiguration(
-      "dsde",
-      "DockstoreConfig",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map("param1" -> AttributeString("foo"), "param2" -> AttributeString("foo2")),
-      Map("out" -> AttributeString("bar")),
-      DockstoreMethod("dockstore-path", "dockstore-version")
-    )
-    val methodConfig2 = MethodConfiguration(
-      "dsde",
-      "testConfig2",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map("param1" -> AttributeString("foo")),
-      Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")),
-      AgoraMethod(wsName.namespace, "method-a", 1)
-    )
-    val methodConfig3 = MethodConfiguration(
-      "dsde",
-      "testConfig",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map("param1" -> AttributeString("foo"), "param2" -> AttributeString("foo2")),
-      Map("out" -> AttributeString("bar")),
-      AgoraMethod("ns-config", "meth1", 1)
-    )
-
-    val methodConfigEntityUpdate = MethodConfiguration(
-      "ns",
-      "testConfig11",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map(),
-      Map("o1" -> AttributeString("this.foo")),
-      AgoraMethod("ns-config", "meth1", 1)
-    )
-    val methodConfigWorkspaceUpdate = MethodConfiguration(
-      "ns",
-      "testConfig1",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map(),
-      Map("o1" -> AttributeString("workspace.foo")),
-      AgoraMethod("ns-config", "meth1", 1)
-    )
-
-    val methodConfigWorkspaceMaxAttributes = MethodConfiguration(
-      "ns",
-      "testConfigMaxWorkspaceAttributes",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map(),
-      Map("o1" -> AttributeString("this.foo")),
-      AgoraMethod("ns-config", "meth1", 1)
-    )
-    val methodConfigEntityMaxAttributes = MethodConfiguration(
-      "ns",
-      "testConfigMaxEntityAttributes",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map(),
-      Map("o1" -> AttributeString("workspace.foo")),
-      AgoraMethod("ns-config", "meth1", 1)
-    )
-
-    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration(
-      "ns",
-      "testConfigLib",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map(),
-      Map("o1" -> AttributeString("workspace.library:foo")),
-      AgoraMethod("ns-config", "meth1", 1)
-    )
-    val methodConfigMissingOutputs = MethodConfiguration(
-      "ns",
-      "testConfigMissingOutputs",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map(),
-      Map("some.workflow.output" -> AttributeString("this.might_not_be_here")),
-      AgoraMethod("ns-config", "meth1", 1)
-    )
-
-    val methodConfigValid = MethodConfiguration(
-      "dsde",
-      "GoodMethodConfig",
-      Some("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
-      outputs = Map.empty,
-      AgoraMethod("dsde", "three_step", 1)
-    )
-    val methodConfigUnparseableInputs = MethodConfiguration(
-      "dsde",
-      "UnparseableInputsMethodConfig",
-      Some("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")),
-      outputs = Map.empty,
-      AgoraMethod("dsde", "three_step", 1)
-    )
-    val methodConfigUnparseableOutputs = MethodConfiguration(
-      "dsde",
-      "UnparseableOutputsMethodConfig",
-      Some("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
-      outputs = Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")),
-      AgoraMethod("dsde", "three_step", 1)
-    )
-    val methodConfigUnparseableBoth = MethodConfiguration(
-      "dsde",
-      "UnparseableBothMethodConfig",
-      Some("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")),
-      outputs = Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")),
-      AgoraMethod("dsde", "three_step", 1)
-    )
-    val methodConfigEmptyOutputs = MethodConfiguration(
-      "dsde",
-      "EmptyOutputsMethodConfig",
-      Some("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
-      outputs = Map("three_step.cgrep.count" -> AttributeString("")),
-      AgoraMethod("dsde", "three_step", 1)
-    )
-    val methodConfigNotAllSamples = MethodConfiguration(
-      "dsde",
-      "NotAllSamplesMethodConfig",
-      Some("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")),
-      outputs = Map.empty,
-      AgoraMethod("dsde", "three_step", 1)
-    )
-    val methodConfigAttrTypeMixup = MethodConfiguration(
-      "dsde",
-      "AttrTypeMixupMethodConfig",
-      Some("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.confused")),
-      outputs = Map.empty,
-      AgoraMethod("dsde", "three_step", 1)
-    )
-
-    val methodConfigArrayType = MethodConfiguration(
-      "dsde",
-      "ArrayMethodConfig",
-      Some("SampleSet"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("aggregate_data_workflow.aggregate_data.input_array" -> AttributeString("this.samples.type")),
-      outputs = Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
-      AgoraMethod("dsde", "array_task", 1)
-    )
-
-    val methodConfigEntityless = MethodConfiguration(
-      "ns",
-      "Entityless",
-      None,
-      Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("\"bees\"")),
-      outputs = Map.empty,
-      AgoraMethod("dsde", "three_step", 1)
-    )
-
-    val agoraMethodConfigName = MethodConfigurationName(agoraMethodConfig.name, agoraMethodConfig.namespace, wsName)
-    val dockstoreMethodConfigName =
-      MethodConfigurationName(dockstoreMethodConfig.name, dockstoreMethodConfig.namespace, wsName)
-    val methodConfigName2 = agoraMethodConfigName.copy(name = "novelName")
-    val methodConfigName3 = agoraMethodConfigName.copy(name = "noSuchName")
-    val methodConfigName4 = agoraMethodConfigName.copy(name = methodConfigWorkspaceLibraryUpdate.name)
-    val methodConfigNamePairCreated = MethodConfigurationNamePair(agoraMethodConfigName, methodConfigName2)
-    // Copy from "myNamespace/myWorkspace" to "myNamespace/configCopyDestinationWS"
-    val methodConfigNamePairCreatedDockstore = MethodConfigurationNamePair(
-      dockstoreMethodConfigName,
-      dockstoreMethodConfigName.copy(workspaceName = wsNameConfigCopyDestination)
-    )
-    val methodConfigNamePairConflict = MethodConfigurationNamePair(agoraMethodConfigName, agoraMethodConfigName)
-    val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3, methodConfigName2)
-    val methodConfigNamePairFromLibrary = MethodConfigurationNamePair(methodConfigName4, methodConfigName2)
-    val uniqueMethodConfigName = UUID.randomUUID.toString
-    val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, agoraMethodConfig.namespace, wsName)
-    val methodRepoGood = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, newMethodConfigName)
-    val methodRepoMissing =
-      MethodRepoConfigurationImport("workspace_test", "rawls_test_missing", 1, agoraMethodConfigName)
-    val methodRepoEmptyPayload =
-      MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, agoraMethodConfigName)
-    val methodRepoBadPayload =
-      MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, agoraMethodConfigName)
-    val methodRepoLibrary =
-      MethodRepoConfigurationImport("workspace_test", "rawls_test_library", 1, newMethodConfigName)
-
-    val methodConfigForWdlStruct = MethodConfiguration(
-      "dsde",
-      "WdlStructConfig",
-      Some("Sample"),
-      Some(Map.empty[String, AttributeString]),
-      Map(
-        "wdl_struct_wf.struct_obj" -> AttributeString("""{"id":this.participant_id,"sample_name":this.sample_name}""")
-      ),
-      Map.empty,
-      AgoraMethod("dsde", "wdl_struct_wf", 1)
-    )
-
-    val methodConfigEntityUpdateReservedOutput = MethodConfiguration(
-      namespace = "ns",
-      name = "testConfigWithReservedOutput",
-      rootEntityType = Option("Sample"),
-      prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map(),
-      /*
-      this.individual_id is a reserved and will always throw an exception when trying to attach an output to an
-      individual.
-
-      - https://broadinstitute.atlassian.net/browse/GAWB-3386
-      - https://broadworkbench.atlassian.net/browse/WA-223
-       */
-      outputs = Map("o1" -> AttributeString("this.individual_id")),
-      methodRepoMethod = AgoraMethod("ns-config", "meth1", 1)
-    )
-
-    val inputResolutions = Seq(
-      SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name")
-    )
-    val inputResolutions2 = Seq(
-      SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2")
-    )
-    val missingOutputResolutions = Seq(
-      SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name")
-    )
-
-    val submissionNoWorkflows = createTestSubmission(
-      workspace,
-      agoraMethodConfig,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq.empty,
-      Map.empty,
-      Seq(sample4, sample5, sample6),
-      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
-    )
-    val submission1 = createTestSubmission(
-      workspace,
-      agoraMethodConfig,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq(sample1, sample2, sample3),
-      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
-      Seq(sample4, sample5, sample6),
-      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
-    )
-    val regionalSubmission = createTestSubmission(
-      regionalWorkspace,
-      agoraMethodConfig,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq(sample1, sample2, sample3),
-      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
-      Seq(sample4, sample5, sample6),
-      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
-    )
-    val costedSubmission1 = createTestSubmission(
-      workspace,
-      agoraMethodConfig,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq(sample1, sample2, sample3),
-      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
-      Seq(sample4, sample5, sample6),
-      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2),
-      // the constant value we set in MockSubmissionCostService
-      individualWorkflowCost = Some(1.23f)
-    )
-    val submission2 = createTestSubmission(
-      workspace,
-      methodConfig2,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq(sample1, sample2, sample3),
-      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
-      Seq(sample4, sample5, sample6),
-      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
-    )
-
-    val submissionUpdateEntity = createTestSubmission(
-      workspace,
-      methodConfigEntityUpdate,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq(indiv1),
-      Map(indiv1 -> inputResolutions),
-      Seq(indiv2),
-      Map(indiv2 -> inputResolutions2)
-    )
-    val submissionUpdateWorkspace = createTestSubmission(
-      workspace,
-      methodConfigWorkspaceUpdate,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq(indiv1),
-      Map(indiv1 -> inputResolutions),
-      Seq(indiv2),
-      Map(indiv2 -> inputResolutions2)
-    )
-
-    // NOTE: This is deliberately not saved in the list of active submissions!
-    val submissionMissingOutputs = createTestSubmission(workspace,
-                                                        methodConfigMissingOutputs,
-                                                        indiv1,
-                                                        WorkbenchEmail(userOwner.userEmail.value),
-                                                        Seq(indiv1),
-                                                        Map(indiv1 -> missingOutputResolutions),
-                                                        Seq(),
-                                                        Map()
-    )
-
-    // NOTE: This is deliberately not saved in the list of active submissions!
-    val submissionUpdateEntityReservedOutput = createTestSubmission(
-      workspace = workspace,
-      methodConfig = methodConfigEntityUpdateReservedOutput,
-      submissionEntity = indiv1,
-      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
-      workflowEntities = Seq(indiv1),
-      inputResolutions = Map(indiv1 -> inputResolutions)
-    )
-
-    val submissionMaxWorkspaceAttributes = createTestSubmission(
-      workspace = workspace,
-      methodConfig = methodConfigWorkspaceMaxAttributes,
-      submissionEntity = indiv1,
-      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
-      workflowEntities = Seq(indiv1),
-      inputResolutions = Map(indiv1 -> inputResolutions)
-    )
-
-    val submissionMaxEntityAttributes = createTestSubmission(
-      workspace = workspace,
-      methodConfig = methodConfigEntityMaxAttributes,
-      submissionEntity = indiv1,
-      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
-      workflowEntities = Seq(indiv1),
-      inputResolutions = Map(indiv1 -> inputResolutions)
-    )
-
-    // NOTE: This is deliberately not saved in the list of active submissions!
-    val submissionNoRootEntity = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = methodConfigValid.namespace,
-      methodConfigurationName = methodConfigValid.name,
-      submissionEntity = None,
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowA"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = None,
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    val submissionTerminateTest = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowA"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("workflowB"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample2.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("workflowC"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample3.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("workflowD"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample4.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with a succeeeded workflow
-    val submissionSuccessful1 = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowSuccessful1"),
-          status = WorkflowStatuses.Succeeded,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with a succeeeded workflow
-    val submissionSuccessful2 = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowSuccessful2"),
-          status = WorkflowStatuses.Succeeded,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with a failed workflow
-    val submissionFailed = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("worklowFailed"),
-          status = WorkflowStatuses.Failed,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with a submitted workflow
-    val submissionSubmitted = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowSubmitted"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with an aborted workflow
-    val submissionAborted1 = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowAborted1"),
-          status = WorkflowStatuses.Failed,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Aborted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with an aborted workflow
-    val submissionAborted2 = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowAborted2"),
-          status = WorkflowStatuses.Failed,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Aborted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with multiple failed and succeeded workflows
-    val submissionMixed = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowSuccessful3"),
-          status = WorkflowStatuses.Succeeded,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("workflowSuccessful4"),
-          status = WorkflowStatuses.Succeeded,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample2.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("worklowFailed1"),
-          status = WorkflowStatuses.Failed,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample3.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("workflowFailed2"),
-          status = WorkflowStatuses.Failed,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample4.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("workflowSubmitted1"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample5.toReference),
-          inputResolutions = inputResolutions
-        ),
-        Workflow(
-          workflowId = Option("workflowSubmitted2"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample6.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // two submissions interleaved in time
-    val t1 = new DateTime(2017, 1, 1, 5, 10)
-    val t2 = new DateTime(2017, 1, 1, 5, 15)
-    val t3 = new DateTime(2017, 1, 1, 5, 20)
-    val t4 = new DateTime(2017, 1, 1, 5, 30)
-    val outerSubmission = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = t1,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowSuccessful1"),
-          status = WorkflowStatuses.Succeeded,
-          statusLastChangedDate = t4,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-    val innerSubmission = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = t2,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowFailed1"),
-          status = WorkflowStatuses.Failed,
-          statusLastChangedDate = t3,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Done,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false
-    )
-
-    // a submission with a submitted workflow and a custom workflow failure mode
-    val submissionWorkflowFailureMode = Submission(
-      submissionId = UUID.randomUUID().toString,
-      submissionDate = testDate,
-      submitter = WorkbenchEmail(userOwner.userEmail.value),
-      methodConfigurationNamespace = agoraMethodConfig.namespace,
-      methodConfigurationName = agoraMethodConfig.name,
-      submissionEntity = Option(indiv1.toReference),
-      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
-      workflows = Seq(
-        Workflow(
-          workflowId = Option("workflowFailureMode"),
-          status = WorkflowStatuses.Submitted,
-          statusLastChangedDate = testDate,
-          workflowEntity = Option(sample1.toReference),
-          inputResolutions = inputResolutions
-        )
-      ),
-      status = SubmissionStatuses.Submitted,
-      useCallCache = false,
-      deleteIntermediateOutputFiles = false,
-      workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
-    )
-
-    val allWorkspaces = Seq(
-      workspace,
-      workspaceLocked,
-      controlledWorkspace,
-      workspacePublished,
-      workspaceNoAttrs,
-      workspaceNoGroups,
-      workspaceWithRealm,
-      workspaceWithMultiGroupAD,
-      otherWorkspaceWithRealm,
-      workspaceNoSubmissions,
-      workspaceNoEntities,
-      workspaceSuccessfulSubmission,
-      workspaceFailedSubmission,
-      workspaceSubmittedSubmission,
-      workspaceMixedSubmissions,
-      workspaceTerminatedSubmissions,
-      workspaceInterleavedSubmissions,
-      workspaceWorkflowFailureMode,
-      workspaceToTestGrant,
-      workspaceConfigCopyDestination,
-      regionalWorkspace
-    )
-    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
-
-    override def save() = {
-      DBIO.seq(
-        rawlsBillingProjectQuery.create(billingProject),
-        rawlsBillingProjectQuery.create(testProject1),
-        rawlsBillingProjectQuery.create(testProject2),
-        rawlsBillingProjectQuery.create(testProject3),
-        saveAllWorkspacesAction,
-        withWorkspaceContext(workspace) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              entities = Seq(
-                aliquot1,
-                aliquot2,
-                sample1,
-                sample2,
-                sample3,
-                sample4,
-                sample5,
-                sample6,
-                sample7,
-                sample8,
-                pair1,
-                pair2,
-                ps1,
-                sset1,
-                sset2,
-                sset3,
-                sset4,
-                sset_empty,
-                indiv1,
-                indiv2
-              ),
-              insertOnly = true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            methodConfigurationQuery.create(context, agoraMethodConfigMaxWorkspaceAttributes),
-            methodConfigurationQuery.create(context, agoraMethodConfigMaxEntityAttributes),
-            methodConfigurationQuery.create(context, dockstoreMethodConfig),
-            methodConfigurationQuery.create(context, goodAndBadMethodConfig),
-            methodConfigurationQuery.create(context, methodConfig2),
-            methodConfigurationQuery.create(context, methodConfig3),
-            methodConfigurationQuery.create(context, methodConfigValid),
-            methodConfigurationQuery.create(context, methodConfigDockstore),
-            methodConfigurationQuery.create(context, methodConfigUnparseableInputs),
-            methodConfigurationQuery.create(context, methodConfigUnparseableOutputs),
-            methodConfigurationQuery.create(context, methodConfigUnparseableBoth),
-            methodConfigurationQuery.create(context, methodConfigEmptyOutputs),
-            methodConfigurationQuery.create(context, methodConfigNotAllSamples),
-            methodConfigurationQuery.create(context, methodConfigAttrTypeMixup),
-            methodConfigurationQuery.create(context, methodConfigArrayType),
-            methodConfigurationQuery.create(context, methodConfigEntityless),
-            methodConfigurationQuery.create(context, methodConfigEntityUpdate),
-            methodConfigurationQuery.create(context, methodConfigWorkspaceLibraryUpdate),
-            methodConfigurationQuery.create(context, methodConfigMissingOutputs),
-            methodConfigurationQuery.create(context, methodConfigForWdlStruct),
-            methodConfigurationQuery.create(context, methodConfigEntityUpdateReservedOutput),
-            // HANDY HINT: if you're adding a new method configuration, don't reuse the name!
-            // If you do, methodConfigurationQuery.create() will archive the old query and update it to point to the new one!
-
-            submissionQuery.create(context, submissionTerminateTest),
-            submissionQuery.create(context, submissionNoWorkflows),
-            submissionQuery.create(context, submission1),
-            submissionQuery.create(context, regionalSubmission),
-            submissionQuery.create(context, costedSubmission1),
-            submissionQuery.create(context, submission2),
-            submissionQuery.create(context, submissionUpdateEntity),
-            submissionQuery.create(context, submissionUpdateWorkspace),
-
-            // update exec key for all test data workflows that have been started.
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceWithRealm) { context =>
-          compactEntityRepository.queries.batchWriteEntities(context.workspaceIdAsUUID, Seq(extraSample), true)
-        },
-        withWorkspaceContext(workspaceWithMultiGroupAD) { context =>
-          compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
-                                                             Seq(extraSample),
-                                                             true
-          )
-        },
-        withWorkspaceContext(workspaceNoSubmissions) { context =>
-          DBIO.seq(
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceSuccessfulSubmission) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
-              ),
-              true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            methodConfigurationQuery.create(context, methodConfig2),
-            submissionQuery.create(context, submissionSuccessful1),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceFailedSubmission) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
-              ),
-              true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionFailed),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceSubmittedSubmission) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
-              ),
-              true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionSubmitted),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceTerminatedSubmissions) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
-              ),
-              true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionAborted2),
-            submissionQuery.create(context, submissionSuccessful2),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceMixedSubmissions) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
-              ),
-              true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionAborted1),
-            submissionQuery.create(context, submissionMixed),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceInterleavedSubmissions) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
-              ),
-              true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, outerSubmission),
-            submissionQuery.create(context, innerSubmission),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceWorkflowFailureMode) { context =>
-          DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              workspaceId = context.workspaceIdAsUUID,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
-              ),
-              true
-            ),
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionWorkflowFailureMode),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        }
-      )
-    }
-  }
+//  class CompactDefaultTestData() extends TestData {
+//    // setup workspace objects
+//    val userProjectOwner = RawlsUser(
+//      UserInfo(RawlsUserEmail("project-owner-access"),
+//               OAuth2BearerToken("token"),
+//               123,
+//               RawlsUserSubjectId("123456789876543210101")
+//      )
+//    )
+//    val userOwner = RawlsUser(userInfo)
+//    val userWriter = RawlsUser(
+//      UserInfo(RawlsUserEmail("writer-access"),
+//               OAuth2BearerToken("token"),
+//               123,
+//               RawlsUserSubjectId("123456789876543212346")
+//      )
+//    )
+//    val userReader = RawlsUser(
+//      UserInfo(RawlsUserEmail("reader-access"),
+//               OAuth2BearerToken("token"),
+//               123,
+//               RawlsUserSubjectId("123456789876543212347")
+//      )
+//    )
+//    val userReaderViaGroup = RawlsUser(
+//      UserInfo(RawlsUserEmail("reader-access-via-group"),
+//               OAuth2BearerToken("token"),
+//               123,
+//               RawlsUserSubjectId("123456789876543212349")
+//      )
+//    )
+//    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+//    val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
+//    val wsName3 = WorkspaceName("myNamespace", "myWSwithADsMethodConfigs")
+//    val wsName4 = WorkspaceName("myNamespace", "myWSwithADsMCSuccessfulSubmission")
+//    val wsName5 = WorkspaceName("myNamespace", "myWSwithADsMCFailedSubmission")
+//    val wsName6 = WorkspaceName("myNamespace", "myWSwithADsMCSubmittedSubmission")
+//    val wsName7 = WorkspaceName("myNamespace", "myWSwithADsMCAbortedSubmission")
+//    val wsName8 = WorkspaceName("myNamespace", "myWSwithADsMCAbortedSuccessfulSub")
+//    val wsName9 = WorkspaceName("myNamespace", "myWSToTestGrantPermissions")
+//    val wsName10 = WorkspaceName("myNamespace", "myMultiGroupADWorkspace")
+//    val wsNameConfigCopyDestination = WorkspaceName("myNamespace", "configCopyDestinationWS")
+//    val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
+//    val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
+//    val wsRegionalName = WorkspaceName("myNamespace", "myRegionalWorkspace")
+//    val workspaceToTestGrantId = UUID.randomUUID()
+//
+//    val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
+//    val dbGapAuthorizedUsersGroup = ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers"))
+//
+//    val billingAccountName = RawlsBillingAccountName("fakeBillingAcct")
+//
+//    val billingProject = RawlsBillingProject(UUID.randomUUID(),
+//                                             RawlsBillingProjectName(wsName.namespace),
+//                                             CreationStatuses.Ready,
+//                                             Option(billingAccountName),
+//                                             None
+//    )
+//
+//    val testProject1Name = RawlsBillingProjectName("arbitrary")
+//    val testProject1 =
+//      RawlsBillingProject(UUID.randomUUID(), testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
+//
+//    val testProject2Name = RawlsBillingProjectName("project2")
+//    val testProject2 =
+//      RawlsBillingProject(UUID.randomUUID(), testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
+//
+//    val testProject3Name = RawlsBillingProjectName("project3")
+//    val testProject3 =
+//      RawlsBillingProject(UUID.randomUUID(), testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
+//
+//    val azureBillingProjectName = RawlsBillingProjectName("azure-billing-project")
+//
+//    val wsAttrs = Map(
+//      AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
+//      AttributeName.withDefaultNS("number") -> AttributeNumber(10),
+//      AttributeName.withDefaultNS("empty") -> AttributeValueEmptyList,
+//      AttributeName.withDefaultNS("values") -> AttributeValueList(
+//        Seq(AttributeString("another string"), AttributeString("true"))
+//      )
+//    )
+//
+//    val workspaceNoGroups = Workspace(wsName.namespace,
+//                                      wsName.name + "3",
+//                                      UUID.randomUUID().toString,
+//                                      "aBucket2",
+//                                      Some("workflow-collection"),
+//                                      currentTime(),
+//                                      currentTime(),
+//                                      "testUser",
+//                                      wsAttrs
+//    )
+//
+//    val workspace = makeWorkspaceWithUsers(billingProject,
+//                                           wsName.name,
+//                                           UUID.randomUUID().toString,
+//                                           "aBucket",
+//                                           Some("workflow-collection"),
+//                                           currentTime(),
+//                                           currentTime(),
+//                                           "testUser",
+//                                           wsAttrs,
+//                                           false
+//    )
+//
+//    val workspaceLocked = makeWorkspaceWithUsers(
+//      billingProject,
+//      wsName.name + "_locked",
+//      UUID.randomUUID().toString,
+//      "aBucket",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      wsAttrs,
+//      true
+//    )
+//
+//    val regionalWorkspace = makeWorkspaceWithUsers(
+//      billingProject,
+//      wsRegionalName.name,
+//      UUID.randomUUID().toString,
+//      "fc-regional-bucket",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      wsAttrs,
+//      false
+//    )
+//
+//    val workspacePublished = Workspace(
+//      wsName.namespace,
+//      wsName.name + "_published",
+//      UUID.randomUUID().toString,
+//      "aBucket3",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true))
+//    )
+//    val workspaceNoAttrs = Workspace(
+//      wsName.namespace,
+//      wsName.name + "_noattrs",
+//      UUID.randomUUID().toString,
+//      "aBucket4",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      Map.empty
+//    )
+//
+//    val realm = ManagedGroupRef(RawlsGroupName("Test-Realm"))
+//    val realmWsName = wsName.name + "withRealm"
+//
+//    val realm2 = ManagedGroupRef(RawlsGroupName("Test-Realm2"))
+//    val realmWs2Name = wsName2.name + "withRealm"
+//
+//    val workspaceWithRealm = makeWorkspaceWithUsers(billingProject,
+//                                                    realmWsName,
+//                                                    UUID.randomUUID().toString,
+//                                                    "aBucket",
+//                                                    Some("workflow-collection"),
+//                                                    currentTime(),
+//                                                    currentTime(),
+//                                                    "testUser",
+//                                                    wsAttrs,
+//                                                    false
+//    )
+//
+//    val workspaceWithMultiGroupAD = makeWorkspaceWithUsers(billingProject,
+//                                                           wsName10.name,
+//                                                           UUID.randomUUID().toString,
+//                                                           "aBucket",
+//                                                           Some("workflow-collection"),
+//                                                           currentTime(),
+//                                                           currentTime(),
+//                                                           "testUser",
+//                                                           wsAttrs,
+//                                                           false
+//    )
+//
+//    val controlledWorkspace = makeWorkspaceWithUsers(billingProject,
+//                                                     "test-tcga",
+//                                                     UUID.randomUUID().toString,
+//                                                     "aBucket",
+//                                                     Some("workflow-collection"),
+//                                                     currentTime(),
+//                                                     currentTime(),
+//                                                     "testUser",
+//                                                     wsAttrs,
+//                                                     false
+//    )
+//
+//    val otherWorkspaceWithRealm = makeWorkspaceWithUsers(billingProject,
+//                                                         realmWs2Name,
+//                                                         UUID.randomUUID().toString,
+//                                                         "aBucket",
+//                                                         Some("workflow-collection"),
+//                                                         currentTime(),
+//                                                         currentTime(),
+//                                                         "testUser",
+//                                                         wsAttrs,
+//                                                         false
+//    )
+//
+//    // Workspace with realms, without submissions
+//    val workspaceNoSubmissions = makeWorkspaceWithUsers(billingProject,
+//                                                        wsName3.name,
+//                                                        UUID.randomUUID().toString,
+//                                                        "aBucket",
+//                                                        Some("workflow-collection"),
+//                                                        currentTime(),
+//                                                        currentTime(),
+//                                                        "testUser",
+//                                                        wsAttrs,
+//                                                        false
+//    )
+//
+//    // Workspace with no entities
+//    val workspaceNoEntities = makeWorkspaceWithUsers(billingProject,
+//                                                     "no-entities",
+//                                                     UUID.randomUUID().toString,
+//                                                     "aBucket",
+//                                                     Some("workflow-collection"),
+//                                                     currentTime(),
+//                                                     currentTime(),
+//                                                     "testUser",
+//                                                     wsAttrs,
+//                                                     false
+//    )
+//
+//    // Workspace with realms, with successful submission
+//    val workspaceSuccessfulSubmission = makeWorkspaceWithUsers(billingProject,
+//                                                               wsName4.name,
+//                                                               UUID.randomUUID().toString,
+//                                                               "aBucket",
+//                                                               Some("workflow-collection"),
+//                                                               currentTime(),
+//                                                               currentTime(),
+//                                                               "testUser",
+//                                                               wsAttrs,
+//                                                               false
+//    )
+//
+//    // Workspace with realms, with failed submission
+//    val workspaceFailedSubmission = makeWorkspaceWithUsers(billingProject,
+//                                                           wsName5.name,
+//                                                           UUID.randomUUID().toString,
+//                                                           "aBucket",
+//                                                           Some("workflow-collection"),
+//                                                           currentTime(),
+//                                                           currentTime(),
+//                                                           "testUser",
+//                                                           wsAttrs,
+//                                                           false
+//    )
+//
+//    // Workspace with realms, with submitted submission
+//    val workspaceSubmittedSubmission = makeWorkspaceWithUsers(billingProject,
+//                                                              wsName6.name,
+//                                                              UUID.randomUUID().toString,
+//                                                              "aBucket",
+//                                                              Some("workflow-collection"),
+//                                                              currentTime(),
+//                                                              currentTime(),
+//                                                              "testUser",
+//                                                              wsAttrs,
+//                                                              false
+//    )
+//
+//    // Workspace with realms with mixed workflows
+//    val workspaceMixedSubmissions = makeWorkspaceWithUsers(billingProject,
+//                                                           wsName7.name,
+//                                                           UUID.randomUUID().toString,
+//                                                           "aBucket",
+//                                                           Some("workflow-collection"),
+//                                                           currentTime(),
+//                                                           currentTime(),
+//                                                           "testUser",
+//                                                           wsAttrs,
+//                                                           false
+//    )
+//
+//    // Workspace with realms, with aborted and successful submissions
+//    val workspaceTerminatedSubmissions = makeWorkspaceWithUsers(billingProject,
+//                                                                wsName8.name,
+//                                                                UUID.randomUUID().toString,
+//                                                                "aBucket",
+//                                                                Some("workflow-collection"),
+//                                                                currentTime(),
+//                                                                currentTime(),
+//                                                                "testUser",
+//                                                                wsAttrs,
+//                                                                false
+//    )
+//
+//    // Workspace with a successful submission that had another submission run and fail while it was running
+//    val workspaceInterleavedSubmissions = makeWorkspaceWithUsers(
+//      billingProject,
+//      wsInterleaved.name,
+//      UUID.randomUUID().toString,
+//      "aBucket",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      wsAttrs,
+//      false
+//    )
+//
+//    // Workspace with a custom workflow failure mode
+//    val workspaceWorkflowFailureMode = makeWorkspaceWithUsers(
+//      billingProject,
+//      wsWorkflowFailureMode.name,
+//      UUID.randomUUID().toString,
+//      "aBucket",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      wsAttrs,
+//      false
+//    )
+//
+//    // Standard workspace to test grant permissions
+//    val workspaceToTestGrant = makeWorkspaceWithUsers(
+//      billingProject,
+//      wsName9.name,
+//      workspaceToTestGrantId.toString,
+//      "aBucket",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      wsAttrs,
+//      false
+//    )
+//
+//    // Test copying configs between workspaces
+//    val workspaceConfigCopyDestination = makeWorkspaceWithUsers(
+//      billingProject,
+//      wsNameConfigCopyDestination.name,
+//      UUID.randomUUID().toString,
+//      "aBucket",
+//      Some("workflow-collection"),
+//      currentTime(),
+//      currentTime(),
+//      "testUser",
+//      wsAttrs,
+//      false
+//    )
+//
+//    val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
+//    val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
+//
+//    val sample1 = Entity(
+//      "sample1",
+//      "Sample",
+//      Map(
+//        AttributeName.withDefaultNS("type") -> AttributeString("normal"),
+//        AttributeName.withDefaultNS("whatsit") -> AttributeNumber(100),
+//        AttributeName.withDefaultNS("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+//        AttributeName.withDefaultNS("quot") -> aliquot1.toReference,
+//        AttributeName.withDefaultNS("somefoo") -> AttributeString("itsfoo")
+//      )
+//    )
+//
+//    val sample2 = Entity(
+//      "sample2",
+//      "Sample",
+//      Map(
+//        AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
+//        AttributeName.withDefaultNS("tumortype") -> AttributeString("LUSC"),
+//        AttributeName.withDefaultNS("confused") -> AttributeString("huh?")
+//      )
+//    )
+//    val sample3 = Entity(
+//      "sample3",
+//      "Sample",
+//      Map(
+//        AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
+//        AttributeName.withDefaultNS("tumortype") -> AttributeString("LUSC"),
+//        AttributeName.withDefaultNS("confused") -> sample1.toReference
+//      )
+//    )
+//    val sample4 = Entity("sample4", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+//    val sample5 = Entity("sample5", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+//    val sample6 = Entity("sample6", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+//    val sample7 = Entity("sample7",
+//                         "Sample",
+//                         Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
+//                             AttributeName.withDefaultNS("cycle") -> sample6.toReference
+//                         )
+//    )
+//    val sample8 = Entity(
+//      "sample8",
+//      "Sample",
+//      Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
+//          AttributeName.withDefaultNS("foo_id") -> AttributeString("1029384756")
+//      )
+//    )
+//    val extraSample = Entity("extraSample", "Sample", Map.empty)
+//
+//    val pair1 = Entity(
+//      "pair1",
+//      "Pair",
+//      Map(
+//        AttributeName.withDefaultNS("case") -> sample2.toReference,
+//        AttributeName.withDefaultNS("control") -> sample1.toReference,
+//        AttributeName.withDefaultNS("whatsit") -> AttributeString("occurs in sample too! oh no!")
+//      )
+//    )
+//    val pair2 = Entity("pair2",
+//                       "Pair",
+//                       Map(AttributeName.withDefaultNS("case") -> sample3.toReference,
+//                           AttributeName.withDefaultNS("control") -> sample1.toReference
+//                       )
+//    )
+//
+//    val sset1 = Entity(
+//      "sset1",
+//      "SampleSet",
+//      Map(
+//        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+//          Seq(sample1.toReference, sample2.toReference, sample3.toReference)
+//        )
+//      )
+//    )
+//    val sset2 = Entity(
+//      "sset2",
+//      "SampleSet",
+//      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample2.toReference)))
+//    )
+//
+//    val sset3 = Entity("sset3",
+//                       "SampleSet",
+//                       Map(
+//                         AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(
+//                           Seq(sample5.toReference, sample6.toReference)
+//                         )
+//                       )
+//    )
+//
+//    val sset4 = Entity(
+//      "sset4",
+//      "SampleSet",
+//      Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(Seq(sample7.toReference)))
+//    )
+//
+//    val sset_empty =
+//      Entity("sset_empty", "SampleSet", Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList))
+//
+//    val ps1 = Entity(
+//      "ps1",
+//      "PairSet",
+//      Map(
+//        AttributeName.withDefaultNS("pairs") -> AttributeEntityReferenceList(Seq(pair1.toReference, pair2.toReference))
+//      )
+//    )
+//
+//    val indiv1 = Entity("indiv1", "Individual", Map(AttributeName.withDefaultNS("sset") -> sset1.toReference))
+//
+//    val indiv2 = Entity("indiv2", "Individual", Map(AttributeName.withDefaultNS("sset") -> sset2.toReference))
+//
+//    val agoraMethod = AgoraMethod("ns-config", "meth1", 1)
+//
+//    val agoraMethodConfig = MethodConfiguration(
+//      "ns",
+//      "testConfig1",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("i1" -> AttributeString("input")),
+//      Map("o1" -> AttributeString("output")),
+//      agoraMethod
+//    )
+//
+//    val agoraMethodConfigMaxWorkspaceAttributes = MethodConfiguration(
+//      "ns",
+//      "testConfigMaxWorkspaceAttributes",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("i1" -> AttributeString("input")),
+//      Map("o1" -> AttributeString("workspace.long_attributes")),
+//      agoraMethod
+//    )
+//
+//    val agoraMethodConfigMaxEntityAttributes = MethodConfiguration(
+//      "ns",
+//      "testConfigMaxEntityAttributes",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("i1" -> AttributeString("input")),
+//      Map("o1" -> AttributeString("this.long_attributes")),
+//      agoraMethod
+//    )
+//
+//    val goodAndBadMethod = AgoraMethod("dsde", "good_and_bad", 1)
+//
+//    val goodAndBadMethodConfig = MethodConfiguration(
+//      "dsde",
+//      "good_and_bad",
+//      Some("samples"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"),
+//          "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse")
+//      ),
+//      Map(
+//        "goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),
+//        "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"),
+//        "empty_out" -> AttributeString("")
+//      ),
+//      goodAndBadMethod
+//    )
+//
+//    val dockstoreMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
+//
+//    val dockstoreMethodConfig = MethodConfiguration(
+//      "dockstore-config-namespace",
+//      "dockstore-config-name",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("i1" -> AttributeString("input")),
+//      Map("o1" -> AttributeString("output")),
+//      dockstoreMethod
+//    )
+//
+//    val methodConfigDockstore = MethodConfiguration(
+//      "dsde",
+//      "DockstoreConfig",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("param1" -> AttributeString("foo"), "param2" -> AttributeString("foo2")),
+//      Map("out" -> AttributeString("bar")),
+//      DockstoreMethod("dockstore-path", "dockstore-version")
+//    )
+//    val methodConfig2 = MethodConfiguration(
+//      "dsde",
+//      "testConfig2",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("param1" -> AttributeString("foo")),
+//      Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")),
+//      AgoraMethod(wsName.namespace, "method-a", 1)
+//    )
+//    val methodConfig3 = MethodConfiguration(
+//      "dsde",
+//      "testConfig",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map("param1" -> AttributeString("foo"), "param2" -> AttributeString("foo2")),
+//      Map("out" -> AttributeString("bar")),
+//      AgoraMethod("ns-config", "meth1", 1)
+//    )
+//
+//    val methodConfigEntityUpdate = MethodConfiguration(
+//      "ns",
+//      "testConfig11",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map(),
+//      Map("o1" -> AttributeString("this.foo")),
+//      AgoraMethod("ns-config", "meth1", 1)
+//    )
+//    val methodConfigWorkspaceUpdate = MethodConfiguration(
+//      "ns",
+//      "testConfig1",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map(),
+//      Map("o1" -> AttributeString("workspace.foo")),
+//      AgoraMethod("ns-config", "meth1", 1)
+//    )
+//
+//    val methodConfigWorkspaceMaxAttributes = MethodConfiguration(
+//      "ns",
+//      "testConfigMaxWorkspaceAttributes",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map(),
+//      Map("o1" -> AttributeString("this.foo")),
+//      AgoraMethod("ns-config", "meth1", 1)
+//    )
+//    val methodConfigEntityMaxAttributes = MethodConfiguration(
+//      "ns",
+//      "testConfigMaxEntityAttributes",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map(),
+//      Map("o1" -> AttributeString("workspace.foo")),
+//      AgoraMethod("ns-config", "meth1", 1)
+//    )
+//
+//    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration(
+//      "ns",
+//      "testConfigLib",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map(),
+//      Map("o1" -> AttributeString("workspace.library:foo")),
+//      AgoraMethod("ns-config", "meth1", 1)
+//    )
+//    val methodConfigMissingOutputs = MethodConfiguration(
+//      "ns",
+//      "testConfigMissingOutputs",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map(),
+//      Map("some.workflow.output" -> AttributeString("this.might_not_be_here")),
+//      AgoraMethod("ns-config", "meth1", 1)
+//    )
+//
+//    val methodConfigValid = MethodConfiguration(
+//      "dsde",
+//      "GoodMethodConfig",
+//      Some("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
+//      outputs = Map.empty,
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//    val methodConfigUnparseableInputs = MethodConfiguration(
+//      "dsde",
+//      "UnparseableInputsMethodConfig",
+//      Some("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")),
+//      outputs = Map.empty,
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//    val methodConfigUnparseableOutputs = MethodConfiguration(
+//      "dsde",
+//      "UnparseableOutputsMethodConfig",
+//      Some("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
+//      outputs = Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")),
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//    val methodConfigUnparseableBoth = MethodConfiguration(
+//      "dsde",
+//      "UnparseableBothMethodConfig",
+//      Some("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")),
+//      outputs = Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")),
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//    val methodConfigEmptyOutputs = MethodConfiguration(
+//      "dsde",
+//      "EmptyOutputsMethodConfig",
+//      Some("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
+//      outputs = Map("three_step.cgrep.count" -> AttributeString("")),
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//    val methodConfigNotAllSamples = MethodConfiguration(
+//      "dsde",
+//      "NotAllSamplesMethodConfig",
+//      Some("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")),
+//      outputs = Map.empty,
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//    val methodConfigAttrTypeMixup = MethodConfiguration(
+//      "dsde",
+//      "AttrTypeMixupMethodConfig",
+//      Some("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.confused")),
+//      outputs = Map.empty,
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//
+//    val methodConfigArrayType = MethodConfiguration(
+//      "dsde",
+//      "ArrayMethodConfig",
+//      Some("SampleSet"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map("aggregate_data_workflow.aggregate_data.input_array" -> AttributeString("this.samples.type")),
+//      outputs = Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
+//      AgoraMethod("dsde", "array_task", 1)
+//    )
+//
+//    val methodConfigEntityless = MethodConfiguration(
+//      "ns",
+//      "Entityless",
+//      None,
+//      Some(Map.empty[String, AttributeString]),
+//      inputs = Map("three_step.cgrep.pattern" -> AttributeString("\"bees\"")),
+//      outputs = Map.empty,
+//      AgoraMethod("dsde", "three_step", 1)
+//    )
+//
+//    val agoraMethodConfigName = MethodConfigurationName(agoraMethodConfig.name, agoraMethodConfig.namespace, wsName)
+//    val dockstoreMethodConfigName =
+//      MethodConfigurationName(dockstoreMethodConfig.name, dockstoreMethodConfig.namespace, wsName)
+//    val methodConfigName2 = agoraMethodConfigName.copy(name = "novelName")
+//    val methodConfigName3 = agoraMethodConfigName.copy(name = "noSuchName")
+//    val methodConfigName4 = agoraMethodConfigName.copy(name = methodConfigWorkspaceLibraryUpdate.name)
+//    val methodConfigNamePairCreated = MethodConfigurationNamePair(agoraMethodConfigName, methodConfigName2)
+//    // Copy from "myNamespace/myWorkspace" to "myNamespace/configCopyDestinationWS"
+//    val methodConfigNamePairCreatedDockstore = MethodConfigurationNamePair(
+//      dockstoreMethodConfigName,
+//      dockstoreMethodConfigName.copy(workspaceName = wsNameConfigCopyDestination)
+//    )
+//    val methodConfigNamePairConflict = MethodConfigurationNamePair(agoraMethodConfigName, agoraMethodConfigName)
+//    val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3, methodConfigName2)
+//    val methodConfigNamePairFromLibrary = MethodConfigurationNamePair(methodConfigName4, methodConfigName2)
+//    val uniqueMethodConfigName = UUID.randomUUID.toString
+//    val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, agoraMethodConfig.namespace, wsName)
+//    val methodRepoGood = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, newMethodConfigName)
+//    val methodRepoMissing =
+//      MethodRepoConfigurationImport("workspace_test", "rawls_test_missing", 1, agoraMethodConfigName)
+//    val methodRepoEmptyPayload =
+//      MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, agoraMethodConfigName)
+//    val methodRepoBadPayload =
+//      MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, agoraMethodConfigName)
+//    val methodRepoLibrary =
+//      MethodRepoConfigurationImport("workspace_test", "rawls_test_library", 1, newMethodConfigName)
+//
+//    val methodConfigForWdlStruct = MethodConfiguration(
+//      "dsde",
+//      "WdlStructConfig",
+//      Some("Sample"),
+//      Some(Map.empty[String, AttributeString]),
+//      Map(
+//        "wdl_struct_wf.struct_obj" -> AttributeString("""{"id":this.participant_id,"sample_name":this.sample_name}""")
+//      ),
+//      Map.empty,
+//      AgoraMethod("dsde", "wdl_struct_wf", 1)
+//    )
+//
+//    val methodConfigEntityUpdateReservedOutput = MethodConfiguration(
+//      namespace = "ns",
+//      name = "testConfigWithReservedOutput",
+//      rootEntityType = Option("Sample"),
+//      prerequisites = Some(Map.empty[String, AttributeString]),
+//      inputs = Map(),
+//      /*
+//      this.individual_id is a reserved and will always throw an exception when trying to attach an output to an
+//      individual.
+//
+//      - https://broadinstitute.atlassian.net/browse/GAWB-3386
+//      - https://broadworkbench.atlassian.net/browse/WA-223
+//       */
+//      outputs = Map("o1" -> AttributeString("this.individual_id")),
+//      methodRepoMethod = AgoraMethod("ns-config", "meth1", 1)
+//    )
+//
+//    val inputResolutions = Seq(
+//      SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name")
+//    )
+//    val inputResolutions2 = Seq(
+//      SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2")
+//    )
+//    val missingOutputResolutions = Seq(
+//      SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name")
+//    )
+//
+//    val submissionNoWorkflows = createTestSubmission(
+//      workspace,
+//      agoraMethodConfig,
+//      indiv1,
+//      WorkbenchEmail(userOwner.userEmail.value),
+//      Seq.empty,
+//      Map.empty,
+//      Seq(sample4, sample5, sample6),
+//      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
+//    )
+//    val submission1 = createTestSubmission(
+//      workspace,
+//      agoraMethodConfig,
+//      indiv1,
+//      WorkbenchEmail(userOwner.userEmail.value),
+//      Seq(sample1, sample2, sample3),
+//      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+//      Seq(sample4, sample5, sample6),
+//      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
+//    )
+//    val regionalSubmission = createTestSubmission(
+//      regionalWorkspace,
+//      agoraMethodConfig,
+//      indiv1,
+//      WorkbenchEmail(userOwner.userEmail.value),
+//      Seq(sample1, sample2, sample3),
+//      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+//      Seq(sample4, sample5, sample6),
+//      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
+//    )
+//    val costedSubmission1 = createTestSubmission(
+//      workspace,
+//      agoraMethodConfig,
+//      indiv1,
+//      WorkbenchEmail(userOwner.userEmail.value),
+//      Seq(sample1, sample2, sample3),
+//      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+//      Seq(sample4, sample5, sample6),
+//      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2),
+//      // the constant value we set in MockSubmissionCostService
+//      individualWorkflowCost = Some(1.23f)
+//    )
+//    val submission2 = createTestSubmission(
+//      workspace,
+//      methodConfig2,
+//      indiv1,
+//      WorkbenchEmail(userOwner.userEmail.value),
+//      Seq(sample1, sample2, sample3),
+//      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+//      Seq(sample4, sample5, sample6),
+//      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
+//    )
+//
+//    val submissionUpdateEntity = createTestSubmission(
+//      workspace,
+//      methodConfigEntityUpdate,
+//      indiv1,
+//      WorkbenchEmail(userOwner.userEmail.value),
+//      Seq(indiv1),
+//      Map(indiv1 -> inputResolutions),
+//      Seq(indiv2),
+//      Map(indiv2 -> inputResolutions2)
+//    )
+//    val submissionUpdateWorkspace = createTestSubmission(
+//      workspace,
+//      methodConfigWorkspaceUpdate,
+//      indiv1,
+//      WorkbenchEmail(userOwner.userEmail.value),
+//      Seq(indiv1),
+//      Map(indiv1 -> inputResolutions),
+//      Seq(indiv2),
+//      Map(indiv2 -> inputResolutions2)
+//    )
+//
+//    // NOTE: This is deliberately not saved in the list of active submissions!
+//    val submissionMissingOutputs = createTestSubmission(workspace,
+//                                                        methodConfigMissingOutputs,
+//                                                        indiv1,
+//                                                        WorkbenchEmail(userOwner.userEmail.value),
+//                                                        Seq(indiv1),
+//                                                        Map(indiv1 -> missingOutputResolutions),
+//                                                        Seq(),
+//                                                        Map()
+//    )
+//
+//    // NOTE: This is deliberately not saved in the list of active submissions!
+//    val submissionUpdateEntityReservedOutput = createTestSubmission(
+//      workspace = workspace,
+//      methodConfig = methodConfigEntityUpdateReservedOutput,
+//      submissionEntity = indiv1,
+//      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+//      workflowEntities = Seq(indiv1),
+//      inputResolutions = Map(indiv1 -> inputResolutions)
+//    )
+//
+//    val submissionMaxWorkspaceAttributes = createTestSubmission(
+//      workspace = workspace,
+//      methodConfig = methodConfigWorkspaceMaxAttributes,
+//      submissionEntity = indiv1,
+//      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+//      workflowEntities = Seq(indiv1),
+//      inputResolutions = Map(indiv1 -> inputResolutions)
+//    )
+//
+//    val submissionMaxEntityAttributes = createTestSubmission(
+//      workspace = workspace,
+//      methodConfig = methodConfigEntityMaxAttributes,
+//      submissionEntity = indiv1,
+//      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+//      workflowEntities = Seq(indiv1),
+//      inputResolutions = Map(indiv1 -> inputResolutions)
+//    )
+//
+//    // NOTE: This is deliberately not saved in the list of active submissions!
+//    val submissionNoRootEntity = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = methodConfigValid.namespace,
+//      methodConfigurationName = methodConfigValid.name,
+//      submissionEntity = None,
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowA"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = None,
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Submitted,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    val submissionTerminateTest = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowA"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("workflowB"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample2.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("workflowC"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample3.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("workflowD"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample4.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Submitted,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with a succeeeded workflow
+//    val submissionSuccessful1 = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowSuccessful1"),
+//          status = WorkflowStatuses.Succeeded,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Done,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with a succeeeded workflow
+//    val submissionSuccessful2 = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowSuccessful2"),
+//          status = WorkflowStatuses.Succeeded,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Done,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with a failed workflow
+//    val submissionFailed = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("worklowFailed"),
+//          status = WorkflowStatuses.Failed,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Done,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with a submitted workflow
+//    val submissionSubmitted = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowSubmitted"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Submitted,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with an aborted workflow
+//    val submissionAborted1 = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowAborted1"),
+//          status = WorkflowStatuses.Failed,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Aborted,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with an aborted workflow
+//    val submissionAborted2 = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowAborted2"),
+//          status = WorkflowStatuses.Failed,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Aborted,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with multiple failed and succeeded workflows
+//    val submissionMixed = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowSuccessful3"),
+//          status = WorkflowStatuses.Succeeded,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("workflowSuccessful4"),
+//          status = WorkflowStatuses.Succeeded,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample2.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("worklowFailed1"),
+//          status = WorkflowStatuses.Failed,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample3.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("workflowFailed2"),
+//          status = WorkflowStatuses.Failed,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample4.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("workflowSubmitted1"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample5.toReference),
+//          inputResolutions = inputResolutions
+//        ),
+//        Workflow(
+//          workflowId = Option("workflowSubmitted2"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample6.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Submitted,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // two submissions interleaved in time
+//    val t1 = new DateTime(2017, 1, 1, 5, 10)
+//    val t2 = new DateTime(2017, 1, 1, 5, 15)
+//    val t3 = new DateTime(2017, 1, 1, 5, 20)
+//    val t4 = new DateTime(2017, 1, 1, 5, 30)
+//    val outerSubmission = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = t1,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowSuccessful1"),
+//          status = WorkflowStatuses.Succeeded,
+//          statusLastChangedDate = t4,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Done,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//    val innerSubmission = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = t2,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowFailed1"),
+//          status = WorkflowStatuses.Failed,
+//          statusLastChangedDate = t3,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Done,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false
+//    )
+//
+//    // a submission with a submitted workflow and a custom workflow failure mode
+//    val submissionWorkflowFailureMode = Submission(
+//      submissionId = UUID.randomUUID().toString,
+//      submissionDate = testDate,
+//      submitter = WorkbenchEmail(userOwner.userEmail.value),
+//      methodConfigurationNamespace = agoraMethodConfig.namespace,
+//      methodConfigurationName = agoraMethodConfig.name,
+//      submissionEntity = Option(indiv1.toReference),
+//      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+//      workflows = Seq(
+//        Workflow(
+//          workflowId = Option("workflowFailureMode"),
+//          status = WorkflowStatuses.Submitted,
+//          statusLastChangedDate = testDate,
+//          workflowEntity = Option(sample1.toReference),
+//          inputResolutions = inputResolutions
+//        )
+//      ),
+//      status = SubmissionStatuses.Submitted,
+//      useCallCache = false,
+//      deleteIntermediateOutputFiles = false,
+//      workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
+//    )
+//
+//    val allWorkspaces = Seq(
+//      workspace,
+//      workspaceLocked,
+//      controlledWorkspace,
+//      workspacePublished,
+//      workspaceNoAttrs,
+//      workspaceNoGroups,
+//      workspaceWithRealm,
+//      workspaceWithMultiGroupAD,
+//      otherWorkspaceWithRealm,
+//      workspaceNoSubmissions,
+//      workspaceNoEntities,
+//      workspaceSuccessfulSubmission,
+//      workspaceFailedSubmission,
+//      workspaceSubmittedSubmission,
+//      workspaceMixedSubmissions,
+//      workspaceTerminatedSubmissions,
+//      workspaceInterleavedSubmissions,
+//      workspaceWorkflowFailureMode,
+//      workspaceToTestGrant,
+//      workspaceConfigCopyDestination,
+//      regionalWorkspace
+//    )
+//    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
+//
+//    override def save() = {
+//      DBIO.seq(
+//        rawlsBillingProjectQuery.create(billingProject),
+//        rawlsBillingProjectQuery.create(testProject1),
+//        rawlsBillingProjectQuery.create(testProject2),
+//        rawlsBillingProjectQuery.create(testProject3),
+//        saveAllWorkspacesAction,
+//        withWorkspaceContext(workspace) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              entities = Seq(
+//                aliquot1,
+//                aliquot2,
+//                sample1,
+//                sample2,
+//                sample3,
+//                sample4,
+//                sample5,
+//                sample6,
+//                sample7,
+//                sample8,
+//                pair1,
+//                pair2,
+//                ps1,
+//                sset1,
+//                sset2,
+//                sset3,
+//                sset4,
+//                sset_empty,
+//                indiv1,
+//                indiv2
+//              ),
+//              insertOnly = true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            methodConfigurationQuery.create(context, agoraMethodConfigMaxWorkspaceAttributes),
+//            methodConfigurationQuery.create(context, agoraMethodConfigMaxEntityAttributes),
+//            methodConfigurationQuery.create(context, dockstoreMethodConfig),
+//            methodConfigurationQuery.create(context, goodAndBadMethodConfig),
+//            methodConfigurationQuery.create(context, methodConfig2),
+//            methodConfigurationQuery.create(context, methodConfig3),
+//            methodConfigurationQuery.create(context, methodConfigValid),
+//            methodConfigurationQuery.create(context, methodConfigDockstore),
+//            methodConfigurationQuery.create(context, methodConfigUnparseableInputs),
+//            methodConfigurationQuery.create(context, methodConfigUnparseableOutputs),
+//            methodConfigurationQuery.create(context, methodConfigUnparseableBoth),
+//            methodConfigurationQuery.create(context, methodConfigEmptyOutputs),
+//            methodConfigurationQuery.create(context, methodConfigNotAllSamples),
+//            methodConfigurationQuery.create(context, methodConfigAttrTypeMixup),
+//            methodConfigurationQuery.create(context, methodConfigArrayType),
+//            methodConfigurationQuery.create(context, methodConfigEntityless),
+//            methodConfigurationQuery.create(context, methodConfigEntityUpdate),
+//            methodConfigurationQuery.create(context, methodConfigWorkspaceLibraryUpdate),
+//            methodConfigurationQuery.create(context, methodConfigMissingOutputs),
+//            methodConfigurationQuery.create(context, methodConfigForWdlStruct),
+//            methodConfigurationQuery.create(context, methodConfigEntityUpdateReservedOutput),
+//            // HANDY HINT: if you're adding a new method configuration, don't reuse the name!
+//            // If you do, methodConfigurationQuery.create() will archive the old query and update it to point to the new one!
+//
+//            submissionQuery.create(context, submissionTerminateTest),
+//            submissionQuery.create(context, submissionNoWorkflows),
+//            submissionQuery.create(context, submission1),
+//            submissionQuery.create(context, regionalSubmission),
+//            submissionQuery.create(context, costedSubmission1),
+//            submissionQuery.create(context, submission2),
+//            submissionQuery.create(context, submissionUpdateEntity),
+//            submissionQuery.create(context, submissionUpdateWorkspace),
+//
+//            // update exec key for all test data workflows that have been started.
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceWithRealm) { context =>
+//          compactEntityRepository.queries.batchWriteEntities(context.workspaceIdAsUUID, Seq(extraSample), true)
+//        },
+//        withWorkspaceContext(workspaceWithMultiGroupAD) { context =>
+//          compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+//                                                             Seq(extraSample),
+//                                                             true
+//          )
+//        },
+//        withWorkspaceContext(workspaceNoSubmissions) { context =>
+//          DBIO.seq(
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceSuccessfulSubmission) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              Seq(aliquot1,
+//                  aliquot2,
+//                  sample1,
+//                  sample2,
+//                  sample3,
+//                  sample4,
+//                  sample5,
+//                  sample6,
+//                  sample7,
+//                  sample8,
+//                  pair1,
+//                  pair2,
+//                  ps1,
+//                  sset1,
+//                  sset2,
+//                  sset3,
+//                  sset4,
+//                  sset_empty,
+//                  indiv1,
+//                  indiv2
+//              ),
+//              true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            methodConfigurationQuery.create(context, methodConfig2),
+//            submissionQuery.create(context, submissionSuccessful1),
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceFailedSubmission) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              Seq(aliquot1,
+//                  aliquot2,
+//                  sample1,
+//                  sample2,
+//                  sample3,
+//                  sample4,
+//                  sample5,
+//                  sample6,
+//                  sample7,
+//                  sample8,
+//                  pair1,
+//                  pair2,
+//                  ps1,
+//                  sset1,
+//                  sset2,
+//                  sset3,
+//                  sset4,
+//                  sset_empty,
+//                  indiv1,
+//                  indiv2
+//              ),
+//              true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            submissionQuery.create(context, submissionFailed),
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceSubmittedSubmission) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              Seq(aliquot1,
+//                  aliquot2,
+//                  sample1,
+//                  sample2,
+//                  sample3,
+//                  sample4,
+//                  sample5,
+//                  sample6,
+//                  sample7,
+//                  sample8,
+//                  pair1,
+//                  pair2,
+//                  ps1,
+//                  sset1,
+//                  sset2,
+//                  sset3,
+//                  sset4,
+//                  sset_empty,
+//                  indiv1,
+//                  indiv2
+//              ),
+//              true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            submissionQuery.create(context, submissionSubmitted),
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceTerminatedSubmissions) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              Seq(aliquot1,
+//                  aliquot2,
+//                  sample1,
+//                  sample2,
+//                  sample3,
+//                  sample4,
+//                  sample5,
+//                  sample6,
+//                  sample7,
+//                  sample8,
+//                  pair1,
+//                  pair2,
+//                  ps1,
+//                  sset1,
+//                  sset2,
+//                  sset3,
+//                  sset4,
+//                  sset_empty,
+//                  indiv1,
+//                  indiv2
+//              ),
+//              true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            submissionQuery.create(context, submissionAborted2),
+//            submissionQuery.create(context, submissionSuccessful2),
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceMixedSubmissions) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              Seq(aliquot1,
+//                  aliquot2,
+//                  sample1,
+//                  sample2,
+//                  sample3,
+//                  sample4,
+//                  sample5,
+//                  sample6,
+//                  sample7,
+//                  sample8,
+//                  pair1,
+//                  pair2,
+//                  ps1,
+//                  sset1,
+//                  sset2,
+//                  sset3,
+//                  sset4,
+//                  sset_empty,
+//                  indiv1,
+//                  indiv2
+//              ),
+//              true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            submissionQuery.create(context, submissionAborted1),
+//            submissionQuery.create(context, submissionMixed),
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceInterleavedSubmissions) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              Seq(aliquot1,
+//                  aliquot2,
+//                  sample1,
+//                  sample2,
+//                  sample3,
+//                  sample4,
+//                  sample5,
+//                  sample6,
+//                  sample7,
+//                  sample8,
+//                  pair1,
+//                  pair2,
+//                  ps1,
+//                  sset1,
+//                  sset2,
+//                  sset3,
+//                  sset4,
+//                  sset_empty,
+//                  indiv1,
+//                  indiv2
+//              ),
+//              true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            submissionQuery.create(context, outerSubmission),
+//            submissionQuery.create(context, innerSubmission),
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        },
+//        withWorkspaceContext(workspaceWorkflowFailureMode) { context =>
+//          DBIO.seq(
+//            compactEntityRepository.queries.batchWriteEntities(
+//              workspaceId = context.workspaceIdAsUUID,
+//              Seq(aliquot1,
+//                  aliquot2,
+//                  sample1,
+//                  sample2,
+//                  sample3,
+//                  sample4,
+//                  sample5,
+//                  sample6,
+//                  sample7,
+//                  sample8,
+//                  pair1,
+//                  pair2,
+//                  ps1,
+//                  sset1,
+//                  sset2,
+//                  sset3,
+//                  sset4,
+//                  sset_empty,
+//                  indiv1,
+//                  indiv2
+//              ),
+//              true
+//            ),
+//            methodConfigurationQuery.create(context, agoraMethodConfig),
+//            submissionQuery.create(context, submissionWorkflowFailureMode),
+//            updateWorkflowExecutionServiceKey("unittestdefault")
+//          )
+//        }
+//      )
+//    }
+//  }
 
   class MinimalTestData() extends TestData {
     val billingProject = RawlsBillingProject(
@@ -4402,7 +4612,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     withCustomTestDatabaseInternal(emptyData)(testCode(slickDataSource))
 
   val testData = new DefaultTestData()
-  val compactTestData = new CompactDefaultTestData()
+  val legacyTestData = new DefaultTestData(false)
   val constantData = new ConstantTestData()
   val compactConstantData = new CompactConstantTestData()
   val minimalTestData = new MinimalTestData()
@@ -4415,11 +4625,17 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def withDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
 
-  def withCompactDefaultTestDatabase[T](testCode: => T): T =
-    withCustomTestDatabaseInternal(compactTestData)(testCode)
+  def withLegacyDefaultTestDatabase[T](testCode: => T): T =
+    withCustomTestDatabaseInternal(legacyTestData)(testCode)
 
-  def withCompactDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
-    withCustomTestDatabaseInternal(compactTestData)(testCode(slickDataSource))
+  def withLegacyDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
+    withCustomTestDatabaseInternal(legacyTestData)(testCode(slickDataSource))
+
+//  def withCompactDefaultTestDatabase[T](testCode: => T): T =
+//    withCustomTestDatabaseInternal(compactTestData)(testCode)
+//
+//  def withCompactDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
+//    withCustomTestDatabaseInternal(compactTestData)(testCode(slickDataSource))
 
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))

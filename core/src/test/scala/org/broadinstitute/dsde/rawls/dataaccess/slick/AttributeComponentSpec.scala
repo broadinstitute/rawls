@@ -781,7 +781,7 @@ class AttributeComponentSpec
 
   it should "return false from doesAttributeNameAlreadyExist if the attribute name does not exist" in withMinimalTestDatabase {
     _ =>
-      withWorkspaceContext(testData.workspace) { context =>
+      withWorkspaceContext(legacyTestData.workspace) { context =>
         val exists = runAndWait(
           entityAttributeShardQuery(context).doesAttributeNameAlreadyExist(context,
                                                                            "Pair",
@@ -792,8 +792,8 @@ class AttributeComponentSpec
       }
   }
 
-  it should "change the attribute name when renameAttribute is called with valid arguments" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "change the attribute name when renameAttribute is called with valid arguments" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val rowsUpdated = runAndWait(
         entityAttributeShardQuery(context).renameAttribute(context,
                                                            "Pair",
@@ -812,8 +812,8 @@ class AttributeComponentSpec
     }
   }
 
-  it should "change the attribute name and namespace when renameAttribute is called with an attribute with a new namespace" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "change the attribute name and namespace when renameAttribute is called with an attribute with a new namespace" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val rowsUpdated = runAndWait(
         entityAttributeShardQuery(context).renameAttribute(context,
                                                            "Pair",
@@ -1781,35 +1781,37 @@ class AttributeComponentSpec
   }
 
   private def runWorkspaceSaveNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit =
-    withDefaultTestDatabase {
-      withWorkspaceContext(testData.workspace) { context =>
+    withLegacyDefaultTestDatabase {
+      withWorkspaceContext(legacyTestData.workspace) { context =>
         // Try to insert new attribute
         val inserts = Map(AttributeName.withDefaultNS("newWorkspaceAttribute") -> insertAttribute)
 
-        val expectedAfterInsertion = testData.workspace.attributes ++ inserts
+        val expectedAfterInsertion = legacyTestData.workspace.attributes ++ inserts
 
         runAndWait(
           workspaceQuery.createOrUpdate(
-            testData.workspace.copy(attributes = expectedAfterInsertion)
+            legacyTestData.workspace.copy(attributes = expectedAfterInsertion)
           )
         )
 
-        val resultAfterInsert = runAndWait(workspaceQuery.findById(testData.workspace.workspaceId)).head.attributes
+        val resultAfterInsert =
+          runAndWait(workspaceQuery.findById(legacyTestData.workspace.workspaceId)).head.attributes
 
         assertSameElements(expectedAfterInsertion, resultAfterInsert)
 
         // Try to update the new attribute
         val updates: AttributeMap = Map(AttributeName.withDefaultNS("newWorkspaceAttribute") -> updateAttribute)
 
-        val expectedAfterUpdate = testData.workspace.attributes ++ updates
+        val expectedAfterUpdate = legacyTestData.workspace.attributes ++ updates
 
         runAndWait(
           workspaceQuery.createOrUpdate(
-            testData.workspace.copy(attributes = expectedAfterUpdate)
+            legacyTestData.workspace.copy(attributes = expectedAfterUpdate)
           )
         )
 
-        val resultAfterUpdate = runAndWait(workspaceQuery.findById(testData.workspace.workspaceId)).head.attributes
+        val resultAfterUpdate =
+          runAndWait(workspaceQuery.findById(legacyTestData.workspace.workspaceId)).head.attributes
 
         // check that the new attribute has been updated
         assertSameElements(expectedAfterUpdate, resultAfterUpdate)
@@ -1817,17 +1819,17 @@ class AttributeComponentSpec
     }
 
   private def runEntitySaveNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit =
-    withDefaultTestDatabase {
-      withWorkspaceContext(testData.workspace) { context =>
+    withLegacyDefaultTestDatabase {
+      withWorkspaceContext(legacyTestData.workspace) { context =>
         // Try to insert new attribute
         val inserts = Map(AttributeName.withDefaultNS("newEntityAttribute") -> insertAttribute)
 
-        val expectedAfterInsertion = testData.sample1.attributes ++ inserts
+        val expectedAfterInsertion = legacyTestData.sample1.attributes ++ inserts
 
         runAndWait(
           entityQuery.save(
             context,
-            // testData.sample1.copy(attributes = expectedAfterInsertion),
+            // legacyTestData.sample1.copy(attributes = expectedAfterInsertion),
             // We could just use the above... but why not instead use the wonderful constructor that uses
             // (name: String, type: String) instead of (type: String, name:String) like the lookup methods.
             // No. I did not spend a long time debugging after copy/paste/swapping the name and type by accident.
@@ -1844,12 +1846,12 @@ class AttributeComponentSpec
         // Try to update the new attribute
         val updates: AttributeMap = Map(AttributeName.withDefaultNS("newEntityAttribute") -> updateAttribute)
 
-        val expectedAfterUpdate = testData.sample1.attributes ++ updates
+        val expectedAfterUpdate = legacyTestData.sample1.attributes ++ updates
 
         runAndWait(
           entityQuery.save(
             context,
-            testData.sample1.copy(attributes = expectedAfterUpdate)
+            legacyTestData.sample1.copy(attributes = expectedAfterUpdate)
           )
         )
 
