@@ -49,10 +49,10 @@ trait CompactEntityKeysCache {
         sql"($workspaceId, $entityType, $sortedKeys, CURRENT_TIMESTAMP(6))"
       }.toSeq
 
-      val values = reduceSqlActionsWithDelim(valueClauses, sql"")
+      val values = reduceSqlActionsWithDelim(valueClauses, sql", ")
 
       concatSqlActions(
-        sql"insert into ENTITY_KEYS_CACHE (workspace_id, entity_type, attribute_keys, cached_at) values",
+        sql"insert into ENTITY_KEYS_CACHE (workspace_id, entity_type, attribute_keys, cached_at) values ",
         values,
         sql""" as vals
                on duplicate key update

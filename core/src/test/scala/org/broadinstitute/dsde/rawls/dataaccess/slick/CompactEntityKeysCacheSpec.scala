@@ -1,37 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization.{SqlEntityData, SqlEntityReference}
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeBoolean,
-  AttributeEntityReference,
-  AttributeEntityReferenceList,
-  AttributeName,
-  AttributeNull,
-  AttributeNumber,
-  AttributeRename,
-  AttributeString,
-  AttributeValueList,
-  Entity,
-  EntityColumnFilter,
-  EntityPointer,
-  EntityQuery,
-  FilterOperators,
-  SortDirections,
-  WorkspaceFieldSpecs
-}
-import org.scalatest.Inspectors.forEvery
-import slick.dbio.Effect.Read
-import slick.jdbc.GetResult
-import slick.sql.SqlStreamingAction
-import spray.json.DefaultJsonProtocol._
-import spray.json._
-
-import java.sql.SQLIntegrityConstraintViolationException
-import java.util.UUID
-import scala.util.Random
+import org.broadinstitute.dsde.rawls.model.AttributeName
 
 class CompactEntityKeysCacheSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
@@ -51,127 +20,103 @@ class CompactEntityKeysCacheSpec extends TestDriverComponentWithFlatSpecAndMatch
   behavior of "entity keys cache"
 
   it should "save and retrieve entity keys cache" in withMinimalTestDatabase { _ =>
-    val entityType = "entityType"
-    val keys = Set(attr1, attr2, attr3, attr4, attr5, attr6)
+    val cacheEntry1 = EntityTypeAndAttributeKeys("entityType1", Set(attr1, attr2))
+    val cacheEntry2 = EntityTypeAndAttributeKeys("entityType2", Set(attr3, attr4))
+    val cacheEntry3 = EntityTypeAndAttributeKeys("entityType3", Set(attr5, attr6))
 
     // save the cache
-    runAndWait(q.saveCache(wsid, entityType, keys)) shouldBe 1
+    runAndWait(q.saveCache(wsid, Set(cacheEntry1, cacheEntry2, cacheEntry3))) shouldBe 3
 
     // retrieve the cache
     val actual = runAndWait(q.getCachedKeys(wsid))
-    actual should contain only EntityTypeAndAttributeKeys(entityType, keys)
+    actual should contain theSameElementsAs Seq(cacheEntry1, cacheEntry2, cacheEntry3)
   }
 
-  it should "save, update, and retrieve" is pending
+  it should "update existing cache entries" in withMinimalTestDatabase { _ =>
+    val cacheEntry1 = EntityTypeAndAttributeKeys("entityType1", Set(attr1, attr2))
+    val cacheEntry2 = EntityTypeAndAttributeKeys("entityType2", Set(attr3, attr4))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntry1, cacheEntry2))) shouldBe 2
 
-  it should "save, invalidate, and retrieve" is pending
+    // validate first save
+    val actual = runAndWait(q.getCachedKeys(wsid))
+    actual should contain theSameElementsAs Seq(cacheEntry1, cacheEntry2)
 
-  it should "respect workspace boundaries" is pending
+    // update the cache for entityType1
+    val updatedCacheEntry = EntityTypeAndAttributeKeys("entityType1", Set(attr5, attr6))
+    // note this returns 2, not 1. When MySQL updates an existing row in
+    // an "insert ... on duplicate key update" statement, it counts that as 2 rows affected.
+    runAndWait(q.saveCache(wsid, Set(updatedCacheEntry))) shouldBe 2
 
-  it should "respect entityType criteria when one is supplied" is pending
-
-  it should "respect entityType criteria when multiple are supplied" is pending
-
-  // ====================================================================================================
-  //  helpers for tests
-  // ====================================================================================================
-
-  // This does NOT delegate to insertAndGetAll. This helper uses createEntity.
-  private def insertAndGet(entity: Entity, workspaceId: UUID = wsid): CompactEntityRecord = {
-    // row should not exist before inserting
-    runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name)) shouldBe empty
-
-    // insert the entities
-    runAndWait(q.createEntity(workspaceId, entity)) shouldBe 1
-    // retrieve the entities; retrieved value includes its id
-
-    val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
-    actual should not be empty
-    val rec = actual.get
-    // check entityType, name, and attributes
-    rec.toEntity shouldBe entity
-    // check other db columns which are not present in the Entity object
-    rec.deleted shouldBe false
-    rec.recordVersion shouldBe 0
-
-    rec
+    // validate the update
+    val update = runAndWait(q.getCachedKeys(wsid))
+    update should contain theSameElementsAs Seq(updatedCacheEntry, cacheEntry2)
   }
 
-  // This helper uses batchCreateEntities.
-  private def insertAndGetAll(entities: Seq[Entity], workspaceId: UUID = wsid): Seq[CompactEntityRecord] = {
-    // rows should not exist before inserting
-    entities.foreach { entity =>
-      runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name)) shouldBe empty
+  it should "support invalidation of cache entries" in withMinimalTestDatabase { _ =>
+    val cacheEntry1 = EntityTypeAndAttributeKeys("entityType1", Set(attr1, attr2))
+    val cacheEntry2 = EntityTypeAndAttributeKeys("entityType2", Set(attr3, attr4))
+    val cacheEntry3 = EntityTypeAndAttributeKeys("entityType3", Set(attr5, attr6))
+
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntry1, cacheEntry2, cacheEntry3))) shouldBe 3
+
+    // retrieve the cache
+    val actual = runAndWait(q.getCachedKeys(wsid))
+    actual should contain theSameElementsAs Seq(cacheEntry1, cacheEntry2, cacheEntry3)
+
+    // invalidate the cache for entityType2
+    runAndWait(q.invalidateCache(wsid, Set(cacheEntry2.entityType))) shouldBe 1
+
+    // retrieve the cache
+    val afterInvalidation = runAndWait(q.getCachedKeys(wsid))
+    afterInvalidation should contain theSameElementsAs Seq(cacheEntry1, cacheEntry3)
+
+  }
+
+  it should "respect workspace boundaries for reads" in withMinimalTestDatabase { _ =>
+    val cacheEntry1 = EntityTypeAndAttributeKeys("entityType1", Set(attr1, attr2))
+    val cacheEntry2 = EntityTypeAndAttributeKeys("entityType2", Set(attr3, attr4))
+    val cacheEntry3 = EntityTypeAndAttributeKeys("entityType3", Set(attr5, attr6))
+
+    // save cacheEntry1 and cacheEntry2 to workspace 1
+    runAndWait(q.saveCache(wsid, Set(cacheEntry1, cacheEntry2))) shouldBe 2
+
+    // save cacheEntry3 to workspace 2
+    runAndWait(q.saveCache(ws2id, Set(cacheEntry3))) shouldBe 1
+
+    // retrieve the cache for workspace 1
+    val actual1 = runAndWait(q.getCachedKeys(wsid))
+    actual1 should contain theSameElementsAs Seq(cacheEntry1, cacheEntry2)
+
+    // retrieve the cache for workspace 2
+    val actual2 = runAndWait(q.getCachedKeys(ws2id))
+    actual2 should contain theSameElementsAs Seq(cacheEntry3)
+  }
+
+  it should "respect workspace boundaries for invalidations" in withMinimalTestDatabase { _ =>
+    val cacheEntry1 = EntityTypeAndAttributeKeys("entityType1", Set(attr1, attr2))
+    val cacheEntry2 = EntityTypeAndAttributeKeys("entityType2", Set(attr3, attr4))
+    val cacheEntry3 = EntityTypeAndAttributeKeys("entityType3", Set(attr5, attr6))
+
+    // save all cache entries to both workspace 1 and workspace 2
+    Seq(wsid, ws2id).foreach { workspaceId =>
+      runAndWait(q.saveCache(workspaceId, Set(cacheEntry1, cacheEntry2, cacheEntry3))) shouldBe 3
+      runAndWait(q.getCachedKeys(workspaceId)) should contain theSameElementsAs Seq(cacheEntry1,
+                                                                                    cacheEntry2,
+                                                                                    cacheEntry3
+      )
     }
+    // invalidate cacheEntry2 in workspace 1
+    runAndWait(q.invalidateCache(wsid, cacheEntry2.entityType)) shouldBe 1
 
-    // insert the entities
-    runAndWait(q.batchWriteEntities(workspaceId, entities, insertOnly = true)) shouldBe entities.size
-    // retrieve the entities; retrieved value includes its id
-    entities.map { entity =>
-      val actual = runAndWait(q.getEntity(workspaceId, entity.entityType, entity.name))
-      actual should not be empty
-      val rec = actual.get
-      // check entityType, name, and attributes
-      rec.toEntity shouldBe entity
-      // check other db columns which are not present in the Entity object
-      rec.deleted shouldBe false
-      rec.recordVersion shouldBe 0
+    // retrieve the cache for workspace 1
+    val actual1 = runAndWait(q.getCachedKeys(wsid))
+    actual1 should contain theSameElementsAs Seq(cacheEntry1, cacheEntry3)
 
-      rec
-    }
+    // retrieve the cache for workspace 2
+    val actual2 = runAndWait(q.getCachedKeys(ws2id))
+    actual2 should contain theSameElementsAs Seq(cacheEntry1, cacheEntry2, cacheEntry3)
   }
 
-  def testDesiredFields(filterTerms: Option[String], columnFilter: Option[EntityColumnFilter])(
-    testQuery: (String, EntityQuery) => SqlStreamingAction[Seq[Entity], Entity, Read]
-  ): Unit = {
-    val entityType = "entityType"
-    val columnFilterAttr = AttributeName.withDefaultNS("foo")
-    val desiredColumnAttr1 = AttributeName.withDefaultNS("bar")
-    val desiredColumnAttr2 = AttributeName.withDefaultNS("baz")
-    val entity1 =
-      Entity(UUID.randomUUID().toString,
-             entityType,
-             Map(columnFilterAttr -> AttributeString("foo"), desiredColumnAttr1 -> AttributeString("bar"))
-      )
-    val entity2 =
-      Entity(
-        UUID.randomUUID().toString,
-        entityType,
-        Map(columnFilterAttr -> AttributeString("foo"),
-            desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
-        )
-      )
-    insertAndGet(entity1)
-    insertAndGet(entity2)
-
-    val entityQuery = EntityQuery(
-      1,
-      10,
-      Attributable.nameReservedAttribute,
-      SortDirections.Ascending,
-      filterTerms,
-      columnFilter = columnFilter,
-      fields = WorkspaceFieldSpecs(Some(Set(toDelimitedName(desiredColumnAttr1), toDelimitedName(desiredColumnAttr2))))
-    )
-    val actual = runAndWait(testQuery(entityType, entityQuery))
-
-    actual should contain theSameElementsAs List(
-      entity1.copy(attributes = Map(desiredColumnAttr1 -> AttributeString("bar"), desiredColumnAttr2 -> AttributeNull)),
-      entity2.copy(attributes =
-        Map(desiredColumnAttr1 -> AttributeNull,
-            desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
-        )
-      )
-    )
-  }
-
-  // helper to validate counts of entities by workspace and type. Note this does not have a `where deleted=0` clause.
-  def getRawCounts: Seq[(UUID, String, Int)] = {
-    import driver.api._ // for bespoke SQL queries
-    implicit val getter: GetResult[(UUID, String, Int)] = GetResult(r => (r.<<, r.<<, r.<<))
-    runAndWait(
-      sql"select workspace_id, entity_type, count(1) from ENTITY group by workspace_id, entity_type"
-        .as[(UUID, String, Int)]
-    )
-  }
 }
