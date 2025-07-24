@@ -92,7 +92,30 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     runAndWait(q.getCachedKeys(wsid)) shouldBe empty
   }
 
-  it should "invalidate after updateEntity" is pending
+  it should "invalidate after updateEntity" in withMinimalTestDatabase { _ =>
+    val entityType = "entityType1"
+    // create entity
+    val provider = defaultProvider()
+    val entity = Entity("name", entityType, Map())
+    val createResult =
+      Await.result(provider.createEntity(entity, defaultRequestContext), atMost)
+    // insert valid cache entry
+    val cacheEntry = EntityTypeAndAttributeKeys(entityType, Set(AttributeName.withDefaultNS("attr1")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntry))) shouldBe 1
+    // validate cache entry
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntry)
+    // update entity
+    val ops = Seq(AddUpdateAttribute(AttributeName.withDefaultNS("attr1"), AttributeString("value")))
+    val updateResult =
+      Await.result(provider.updateEntity(entity.entityType, entity.name, ops, defaultRequestContext), atMost)
+    updateResult shouldBe entity.copy(attributes =
+      Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value"))
+    )
+    // validate cache entry invalidated
+    runAndWait(q.getCachedKeys(wsid)) shouldBe empty
+  }
+
   it should "invalidate after renameAttribute" is pending
   it should "invalidate after deleteEntityAttributes" is pending
 
