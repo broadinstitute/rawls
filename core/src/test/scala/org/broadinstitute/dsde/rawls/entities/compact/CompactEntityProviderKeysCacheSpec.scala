@@ -121,8 +121,89 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
 
   behavior of "multiple entity-type cache invalidation"
 
-  it should "invalidate after batchUpsertEntities" is pending
-  it should "invalidate after batchUpdateEntities" is pending
+  it should "invalidate after batchUpsertEntities" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // define updates for typeA and typeB
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1", "typeA", Seq()),
+      EntityUpdateDefinition("name2", "typeA", Seq()),
+      EntityUpdateDefinition("name3", "typeB", Seq())
+    )
+
+    // insert valid cache entries for typeA, typeB, and typeC
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(AttributeName.withDefaultNS("attr1")))
+    val cacheEntryB = EntityTypeAndAttributeKeys("typeB", Set(AttributeName.withDefaultNS("attr2")))
+    val cacheEntryC = EntityTypeAndAttributeKeys("typeC", Set(AttributeName.withDefaultNS("attr3")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryA, cacheEntryB, cacheEntryC))) shouldBe 3
+    // validate cache entries
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryA, cacheEntryB, cacheEntryC)
+
+    // perform the batch upsert
+    val numUpdated = Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 3
+    // validate results of batch upsert
+    val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataAfter.size shouldBe 2
+    metadataAfter.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataAfter("typeA").count shouldBe 2
+    metadataAfter("typeB").count shouldBe 1
+
+    // validate that typeA and typeB cache entries are invalidated
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryC)
+  }
+
+  it should "invalidate after batchUpdateEntities" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // insert entities to be updated
+    val entityA1 = Entity("name1", "typeA", Map())
+    val entityA2 = Entity("name2", "typeA", Map())
+    val entityB1 = Entity("name3", "typeB", Map())
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityA2, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityB1, defaultRequestContext), atMost)
+
+    // define updates for typeA and typeB
+    val updates: Seq[EntityUpdateDefinition] = Seq(
+      EntityUpdateDefinition("name1",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("bar")))
+      ),
+      EntityUpdateDefinition("name2",
+                             "typeA",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("baz")))
+      ),
+      EntityUpdateDefinition("name3",
+                             "typeB",
+                             Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("qux")))
+      )
+    )
+
+    // insert valid cache entries for typeA, typeB, and typeC
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(AttributeName.withDefaultNS("attr1")))
+    val cacheEntryB = EntityTypeAndAttributeKeys("typeB", Set(AttributeName.withDefaultNS("attr2")))
+    val cacheEntryC = EntityTypeAndAttributeKeys("typeC", Set(AttributeName.withDefaultNS("attr3")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryA, cacheEntryB, cacheEntryC))) shouldBe 3
+    // validate cache entries
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryA, cacheEntryB, cacheEntryC)
+
+    // perform the batch upsert
+    val numUpdated = Await.result(provider.batchUpdateEntities(Source(updates), defaultRequestContext), atMost)
+    numUpdated shouldBe 3
+    // validate results of batch upsert
+    val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataAfter.size shouldBe 2
+    metadataAfter.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataAfter("typeA").count shouldBe 2
+    metadataAfter("typeB").count shouldBe 1
+
+    // validate that typeA and typeB cache entries are invalidated
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryC)
+  }
+
   it should "invalidate after copyEntities" is pending
   it should "invalidate after saveWorkflowOutputEntities" is pending
 
