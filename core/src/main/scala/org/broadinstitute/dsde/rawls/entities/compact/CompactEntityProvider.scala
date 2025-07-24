@@ -636,8 +636,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   ): ReadWriteAction[Int] =
     if (updatedEntities.isEmpty)
       DBIO.successful(0)
-    else
-      repository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, updatedEntities, insertOnly = false)
+    else {
+      for {
+        rowCount <- repository.queries.batchWriteEntities(workspace.workspaceIdAsUUID,
+                                                          updatedEntities,
+                                                          insertOnly = false
+        )
+        // invalidate the cache for all entity types that were updated
+        _ <- repository.queries.invalidateCache(workspace.workspaceIdAsUUID, updatedEntities.map(_.entityType).toSet)
+      } yield rowCount
+    }
 
   override def updateEntity(entityType: String,
                             entityName: String,

@@ -366,7 +366,31 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     )
   }
 
-  it should "invalidate after saveWorkflowOutputEntities" is pending
+  it should "invalidate after saveWorkflowOutputEntities" in withMinimalTestDatabase { dataSource =>
+    val entityType = "entityType1"
+    // create entity
+    val provider = defaultProvider()
+    val entity = Entity("name", entityType, Map())
+    Await.result(provider.createEntity(entity, defaultRequestContext), atMost)
+    // insert valid cache entry
+    val cacheEntry = EntityTypeAndAttributeKeys(entityType, Set(AttributeName.withDefaultNS("attr1")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntry))) shouldBe 1
+    // validate cache entry
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntry)
+    // call saveWorkflowOutputEntities on this entity
+
+    val updatedEntity = entity.copy(attributes = Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value")))
+    val updateResult =
+      runAndWait(
+        provider.saveWorkflowOutputEntities(dataSource.dataAccess, minimalTestData.workspace, Seq(updatedEntity))
+      )
+    // note this returns 2, not 1. When MySQL updates an existing row in
+    // an "insert ... on duplicate key update" statement, it counts that as 2 rows affected.
+    updateResult shouldBe 2
+    // validate cache entry invalidated
+    runAndWait(q.getCachedKeys(wsid)) shouldBe empty
+  }
 
   behavior of "clone"
 
