@@ -14,6 +14,23 @@ import spray.json.DefaultJsonProtocol._
 trait CompactEntityKeysCache {
   this: CompactEntityQuery =>
 
+  // ========== read from cache ==========
+
+  /** get all valid cache entries for this workspace */
+  def getCachedKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKeys]] =
+    sql"""
+         select entity_type, attribute_keys
+         from ENTITY_KEYS_CACHE
+         where workspace_id = $workspaceId
+         and cached_at > invalidated_at;
+       """.as[(String, String)].map { rows =>
+      rows.map { case (entityType, keysJson) =>
+        // parse the json array of keys
+        val attrs = keysJson.parseJson.convertTo[Set[String]].map(AttributeName.fromDelimitedName)
+        EntityTypeAndAttributeKeys(entityType, attrs)
+      }
+    }
+
   // ========== save to cache ==========
 
   /** save the cache for the given entity type and workspace */
@@ -34,11 +51,14 @@ trait CompactEntityKeysCache {
 
       val values = reduceSqlActionsWithDelim(valueClauses, sql"")
 
-      sqlu"""insert into ENTITY_KEYS_CACHE (workspace_id, entity_type, attribute_keys, cached_at)
-              values $values as vals
-              on duplicate key update
-                ENTITY_KEYS_CACHE.attribute_keys = vals.attribute_keys,
-                ENTITY_KEYS_CACHE.cached_at = CURRENT_TIMESTAMP(6);"""
+      concatSqlActions(
+        sql"insert into ENTITY_KEYS_CACHE (workspace_id, entity_type, attribute_keys, cached_at) values",
+        values,
+        sql""" as vals
+               on duplicate key update
+                 ENTITY_KEYS_CACHE.attribute_keys = vals.attribute_keys,
+               E  NTITY_KEYS_CACHE.cached_at = CURRENT_TIMESTAMP(6);"""
+      ).asUpdate
     }
 
   // ========== cache invalidation ==========
