@@ -14,13 +14,12 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{verify, when}
+import org.mockito.Mockito.{doReturn, spy, verify, when}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsArray, JsBoolean, JsNumber, JsObject, JsString}
 
@@ -102,16 +101,17 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   def withCompactConstantTestDataApiServices[T](testCode: TestApiServiceWithMockedWorkspaceSettings => T): T =
     withCompactConstantTestDatabase { dataSource: SlickDataSource =>
-      val mockWorkspaceSettingRepository = mock[WorkspaceSettingRepository]
+      val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+      val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
 
-      when(
-        mockWorkspaceSettingRepository.getWorkspaceSettingOfType(
+      doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+        .when(spyWorkspaceSettingRepository)
+        .getWorkspaceSettingOfType(
           ArgumentMatchers.any[UUID](),
-          ArgumentMatchers.any[WorkspaceSettingType]()
+          ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
         )
-      ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
 
-      withCompactConstantTestDataApiServicesAndMockedSettings(dataSource, mockWorkspaceSettingRepository)(testCode)
+      withCompactConstantTestDataApiServicesAndMockedSettings(dataSource, spyWorkspaceSettingRepository)(testCode)
     }
 
   class MockSamDAOForAuthDomains(slickDataSource: SlickDataSource) extends MockSamDAO(slickDataSource) {

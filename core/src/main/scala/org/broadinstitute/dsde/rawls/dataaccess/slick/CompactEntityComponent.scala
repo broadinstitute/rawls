@@ -1229,6 +1229,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     uniqueResult(selectStatement.as[CompactEntityRecord])
   }
 
+  @VisibleForTesting
   def listActiveEntitiesOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[Entity]] =
     sql"""select name, entity_type, attributes
         from ENTITY
