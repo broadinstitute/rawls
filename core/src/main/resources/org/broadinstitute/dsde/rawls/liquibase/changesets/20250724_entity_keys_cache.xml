@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+    <changeSet logicalFilePath="dummy" author="davidan" id="entity_keys_cache">
+        <!-- create ENTITY_KEYS_CACHE table -->
+        <createTable tableName="ENTITY_KEYS_CACHE">
+            <column name="workspace_id" type="BINARY(16)">
+                <constraints nullable="false"
+                             referencedTableName="WORKSPACE" referencedColumnNames="id"
+                             foreignKeyName="fk_entity_keys_cache_workspace_id" deleteCascade="true"/>
+            </column>
+            <column name="entity_type" type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attribute_keys" type="JSON">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cached_at" type="TIMESTAMP(6)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="invalidated_at" type="TIMESTAMP(6)">
+                <constraints nullable="true"/>
+            </column>
+        </createTable>
+        <!-- index on workspace_id + entity_type -->
+        <createIndex indexName="idx_entity_keys_cache_workspace_and_entity_type" tableName="ENTITY_KEYS_CACHE" unique="true">
+            <column name="workspace_id"/>
+            <column name="entity_type"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>
