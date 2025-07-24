@@ -38,7 +38,7 @@ trait CompactEntityKeysCache {
     saveCache(workspaceId, Set(EntityTypeAndAttributeKeys(entityType, keys)))
 
   /** save multiple cache values for the given workspace */
-  def saveCache(workspaceId: UUID, cacheValues: Set[EntityTypeAndAttributeKeys]) =
+  def saveCache(workspaceId: UUID, cacheValues: Set[EntityTypeAndAttributeKeys]): ReadWriteAction[Int] =
     // short-circuit
     if (cacheValues.isEmpty) {
       DBIO.successful(0)

@@ -64,7 +64,7 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
 
   behavior of "entityTypeMetadata"
 
-  it should "read valid cache entries" is pending
+  it should "use valid cache entries" is pending
 
   it should "persist invalid cache entries" is pending
 
@@ -204,6 +204,7 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
     runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntryC)
   }
 
+  it should "invalidate after deleteEntities" is pending
   it should "invalidate after copyEntities" is pending
   it should "invalidate after saveWorkflowOutputEntities" is pending
 
@@ -214,6 +215,10 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
   behavior of "renameEntityType"
 
   it should "also rename the cache entry" is pending
+
+  behavior of "deleteEntitiesOfType"
+
+  it should "also delete the cache entry" is pending
 
   // ====================================================================================================
   //  helper methods
