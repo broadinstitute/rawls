@@ -10,7 +10,7 @@
                              referencedTableName="WORKSPACE" referencedColumnNames="id"
                              foreignKeyName="fk_entity_keys_cache_workspace_id" deleteCascade="true"/>
             </column>
-            <column name="entity_type" type="VARCHAR(254)">
+            <column name="entity_type" type="VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin">
                 <constraints nullable="false"/>
             </column>
             <column name="attribute_keys" type="JSON">

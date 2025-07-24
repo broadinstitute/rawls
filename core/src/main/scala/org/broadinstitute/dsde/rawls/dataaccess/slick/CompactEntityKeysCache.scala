@@ -22,7 +22,7 @@ trait CompactEntityKeysCache {
          select entity_type, attribute_keys
          from ENTITY_KEYS_CACHE
          where workspace_id = $workspaceId
-         and cached_at > invalidated_at;
+         and (invalidated_at is null OR cached_at > invalidated_at);
        """.as[(String, String)].map { rows =>
       rows.map { case (entityType, keysJson) =>
         // parse the json array of keys
@@ -57,7 +57,7 @@ trait CompactEntityKeysCache {
         sql""" as vals
                on duplicate key update
                  ENTITY_KEYS_CACHE.attribute_keys = vals.attribute_keys,
-               E  NTITY_KEYS_CACHE.cached_at = CURRENT_TIMESTAMP(6);"""
+                 ENTITY_KEYS_CACHE.cached_at = CURRENT_TIMESTAMP(6);"""
       ).asUpdate
     }
 
@@ -80,10 +80,14 @@ trait CompactEntityKeysCache {
       DBIO.successful(0)
     } else {
       val inClause = reduceSqlActionsWithDelim(entityTypes.map(t => sql"$t").toSeq, sql", ")
-      sqlu"""update ENTITY_KEYS_CACHE
+      concatSqlActions(
+        sql"""update ENTITY_KEYS_CACHE
               set invalidated_at = CURRENT_TIMESTAMP(6)
               where workspace_id = $workspaceId
-              and entity_type in ($inClause);"""
+              and entity_type in (""",
+        inClause,
+        sql");"
+      ).asUpdate
     }
 
   // ========== delete from cache ==========
@@ -104,9 +108,13 @@ trait CompactEntityKeysCache {
       DBIO.successful(0)
     } else {
       val inClause = reduceSqlActionsWithDelim(entityTypes.map(t => sql"$t").toSeq, sql", ")
-      sqlu"""delete from ENTITY_KEYS_CACHE
+      concatSqlActions(
+        sql"""delete from ENTITY_KEYS_CACHE
               where workspace_id = $workspaceId
-              and entity_type in ($inClause);"""
+              and entity_type in (""",
+        inClause,
+        sql");"
+      ).asUpdate
     }
 
 }
