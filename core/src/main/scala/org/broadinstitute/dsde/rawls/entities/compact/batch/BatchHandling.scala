@@ -151,6 +151,9 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
           }
         }
 
+        // invalidate the attribute keys cache for all entity types in this batch
+        _ <- repository.queries.invalidateCache(workspaceId, updatedEntities.map(_.entityType).toSet)
+
       } yield writeCount
     }
 

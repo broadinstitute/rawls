@@ -1,0 +1,87 @@
+package org.broadinstitute.dsde.rawls.dataaccess.slick
+
+import org.broadinstitute.dsde.rawls.model.AttributeName
+
+import java.util.UUID
+import slick.jdbc.MySQLProfile.api._
+import spray.json._
+import spray.json.DefaultJsonProtocol._
+
+/**
+ * Queries for working with the compact entity keys cache,
+ * i.e. the ENTITY_KEYS_CACHE table
+ */
+trait CompactEntityKeysCache {
+  this: CompactEntityQuery =>
+
+  // ========== read from cache ==========
+
+  /** get all valid cache entries for this workspace */
+  def getCachedKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKeys]] =
+    sql"""
+         select entity_type, attribute_keys
+         from ENTITY_KEYS_CACHE
+         where workspace_id = $workspaceId
+         and (invalidated_at is null OR cached_at > invalidated_at);
+       """.as[(String, String)].map { rows =>
+      rows.map { case (entityType, keysJson) =>
+        // parse the json array of keys
+        val attrs = keysJson.parseJson.convertTo[Set[String]].map(AttributeName.fromDelimitedName)
+        EntityTypeAndAttributeKeys(entityType, attrs)
+      }
+    }
+
+  // ========== save to cache ==========
+
+  /** save the cache for the given entity type and workspace */
+  def saveCache(workspaceId: UUID, entityType: String, keys: Set[AttributeName]): ReadWriteAction[Int] =
+    saveCache(workspaceId, Set(EntityTypeAndAttributeKeys(entityType, keys)))
+
+  /** save multiple cache values for the given workspace */
+  def saveCache(workspaceId: UUID, cacheValues: Set[EntityTypeAndAttributeKeys]): ReadWriteAction[Int] =
+    // short-circuit
+    if (cacheValues.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val valueClauses = cacheValues.map { case EntityTypeAndAttributeKeys(entityType, keys) =>
+        // build json array value of keys
+        val sortedKeys = keys.toSeq.map(x => AttributeName.toDelimitedName(x)).sorted.toJson.compactPrint
+        sql"($workspaceId, $entityType, $sortedKeys, CURRENT_TIMESTAMP(6))"
+      }.toSeq
+
+      val values = reduceSqlActionsWithDelim(valueClauses, sql", ")
+
+      concatSqlActions(
+        sql"insert into ENTITY_KEYS_CACHE (workspace_id, entity_type, attribute_keys, cached_at) values ",
+        values,
+        sql""" as vals
+               on duplicate key update
+                 ENTITY_KEYS_CACHE.attribute_keys = vals.attribute_keys,
+                 ENTITY_KEYS_CACHE.cached_at = CURRENT_TIMESTAMP(6);"""
+      ).asUpdate
+    }
+
+  // ========== cache invalidation ==========
+
+  /** Invalidate the cache for the given entity type and workspace */
+  def invalidateCache(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
+    invalidateCache(workspaceId, Set(entityType))
+
+  /** Invalidate the cache for the given entity types and workspace */
+  def invalidateCache(workspaceId: UUID, entityTypes: Set[String]): ReadWriteAction[Int] =
+    // short-circuit
+    if (entityTypes.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      val inClause = reduceSqlActionsWithDelim(entityTypes.map(t => sql"$t").toSeq, sql", ")
+      concatSqlActions(
+        sql"""update ENTITY_KEYS_CACHE
+              set invalidated_at = CURRENT_TIMESTAMP(6)
+              where workspace_id = $workspaceId
+              and entity_type in (""",
+        inClause,
+        sql");"
+      ).asUpdate
+    }
+
+}

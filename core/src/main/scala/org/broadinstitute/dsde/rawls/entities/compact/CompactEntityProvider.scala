@@ -150,6 +150,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                 }
               }
           }
+        // invalidate the cache for the destination workspace
+        _ <- repository.queries.invalidateCache(destWorkspaceContext.workspaceIdAsUUID, entityType)
       } yield result
     }
     withWorkspaceLastModified(copyResult)
@@ -246,6 +248,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
           throw new RawlsConcurrentModificationException(
             s"Detected concurrent modifications to entity ${savedEntityRecord.toPointer}."
           )
+        // invalidate cache for this entity type
+        _ <- repository.queries.invalidateCache(workspaceId, savedEntityRecord.entityType)
       } yield savedEntityRecord.toEntity
     }
     // fire-and-forget an update to the workspace's last-modified date; no need to wait for it to complete
@@ -273,7 +277,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                   java.lang.Long.valueOf(numHardDeletes)
         )
         _ = setTraceSpanAttribute(parentContext, AttributeKey.longKey("softDeletes"), java.lang.Long.valueOf(res))
-      } yield res
+        // invalidate the cache for all entity types that were deleted
+        _ <- repository.queries.invalidateCache(workspaceId, pointers.map(_.entityType).toSet)
+      } yield res + numHardDeletes
     }
 
   override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] =
@@ -300,7 +306,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                   java.lang.Long.valueOf(numHardDeletes)
         )
         _ = setTraceSpanAttribute(parentContext, AttributeKey.longKey("softDeletes"), java.lang.Long.valueOf(res))
-      } yield res
+        // invalidate the cache for this entity type
+        _ <- repository.queries.invalidateCache(workspaceId, entityType)
+      } yield res + numHardDeletes
     }
 
   override def deleteEntityAttributes(entityType: String,
@@ -332,6 +340,8 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
             entityType,
             attributeNames
           )
+          // Invalidate the cache for this entity type
+          _ <- repository.queries.invalidateCache(workspaceId, entityType)
         } yield ()
       }
     }
@@ -515,6 +525,10 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                                                                   oldName,
                                                                   attributeRenameRequest
         )
+        // invalidate the cache for this entity type
+        // we could optimize this to rename the attribute inside the cache instead of invalidating,
+        // but that would add complexity
+        _ <- repository.queries.invalidateCache(workspaceId, entityType)
       } yield numEntitiesAffected
     }
 
@@ -624,8 +638,16 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   ): ReadWriteAction[Int] =
     if (updatedEntities.isEmpty)
       DBIO.successful(0)
-    else
-      repository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, updatedEntities, insertOnly = false)
+    else {
+      for {
+        rowCount <- repository.queries.batchWriteEntities(workspace.workspaceIdAsUUID,
+                                                          updatedEntities,
+                                                          insertOnly = false
+        )
+        // invalidate the cache for all entity types that were updated
+        _ <- repository.queries.invalidateCache(workspace.workspaceIdAsUUID, updatedEntities.map(_.entityType).toSet)
+      } yield rowCount
+    }
 
   override def updateEntity(entityType: String,
                             entityName: String,
