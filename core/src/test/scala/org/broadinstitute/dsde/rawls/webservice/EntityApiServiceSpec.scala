@@ -102,7 +102,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   def withCompactConstantTestDataApiServices[T](testCode: TestApiServiceWithMockedWorkspaceSettings => T): T =
     withCompactConstantTestDatabase { dataSource: SlickDataSource =>
-
       val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
       val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
 
