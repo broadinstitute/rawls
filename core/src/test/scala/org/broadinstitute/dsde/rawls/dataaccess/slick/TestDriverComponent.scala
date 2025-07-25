@@ -3890,7 +3890,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   /* This test data should remain constant! Changing this data set will likely break
    * many of the tests that rely on it. */
-  class ConstantTestData() extends TestData {
+  class ConstantTestData(useCompact: Boolean = true) extends TestData {
     // setup workspace objects
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(
@@ -4233,7 +4233,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            entityQuery.save(context, allEntities),
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                                 allEntities,
+                                                                 true
+              )
+            } else {
+              entityQuery.save(context, allEntities)
+            },
             saveAllMCs(context),
             submissionQuery.create(context, submissionNoWorkflows),
             submissionQuery.create(context, submission1),
