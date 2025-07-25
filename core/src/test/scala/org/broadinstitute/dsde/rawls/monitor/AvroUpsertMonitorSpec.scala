@@ -79,11 +79,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       withApiServices(dataSource)(testCode)
     }
 
-  def withConstantTestDataApiServices[T](testCode: TestApiService => T): T =
-    withConstantTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource)(testCode)
-    }
-
   def this() = this(ActorSystem("AvroUpsertMonitorSpec"))
 
   override def beforeAll(): Unit =
