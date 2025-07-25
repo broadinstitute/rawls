@@ -365,23 +365,26 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
 
-      val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
-        new WorkspaceSettingService(_,
-                                    workspaceSettingRepository,
-                                    workspaceRepository,
-                                    gcsDAO,
-                                    samDAO,
-                                    appDependencies.googleStorageService
-        )(implicitly, IORuntime.global)
-
-      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+      // Define both constructors using lazy evaluation to break the circular dependency
+      lazy val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
         entityManager,
         appConfigManager.conf.getInt("entities.pageSizeLimit"),
-        Option(workspaceSettingServiceConstructor)
+        Some(workspaceSettingServiceConstructor)
       )
+
+      lazy val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
+        (ctx: RawlsRequestContext) =>
+          new WorkspaceSettingService(ctx,
+                                      workspaceSettingRepository,
+                                      workspaceRepository,
+                                      gcsDAO,
+                                      samDAO,
+                                      appDependencies.googleStorageService,
+                                      entityServiceConstructor(ctx)
+          )(implicitly, IORuntime.global)
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
