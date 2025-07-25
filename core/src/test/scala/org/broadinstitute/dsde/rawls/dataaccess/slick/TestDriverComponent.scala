@@ -16,6 +16,7 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.MySQLProfile.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -75,6 +76,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
   override val fetchSize: Int = DbResource.dataConfig.config.getInt("fetchSize")
   val slickDataSource = DbResource.dataSource
+
+  val compactEntityRepository = new CompactEntityRepository(slickDataSource)
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"),
                           OAuth2BearerToken("token"),
@@ -1704,7 +1707,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
             methodConfigurationQuery.create(context, methodConfigMissingOutputs),
             methodConfigurationQuery.create(context, methodConfigForWdlStruct),
             methodConfigurationQuery.create(context, methodConfigEntityUpdateReservedOutput),
+
             // HANDY HINT: if you're adding a new method configuration, don't reuse the name!
+
             // If you do, methodConfigurationQuery.create() will archive the old query and update it to point to the new one!
 
             submissionQuery.create(context, submissionTerminateTest),
@@ -1717,6 +1722,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
             submissionQuery.create(context, submissionUpdateWorkspace),
 
             // update exec key for all test data workflows that have been started.
+
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         },
@@ -2119,7 +2125,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   /* This test data should remain constant! Changing this data set will likely break
    * many of the tests that rely on it. */
-  class ConstantTestData() extends TestData {
+  class ConstantTestData(useCompact: Boolean = true) extends TestData {
     // setup workspace objects
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(
@@ -2462,7 +2468,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            entityQuery.save(context, allEntities),
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                                 allEntities,
+                                                                 true
+              )
+            } else {
+              entityQuery.save(context, allEntities)
+            },
             saveAllMCs(context),
             submissionQuery.create(context, submissionNoWorkflows),
             submissionQuery.create(context, submission1),
@@ -2484,7 +2497,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     withCustomTestDatabaseInternal(emptyData)(testCode(slickDataSource))
 
   val testData = new DefaultTestData()
-  val constantData = new ConstantTestData()
+  val constantData = new ConstantTestData(false)
+  val compactConstantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
   val localEntityProviderTestData = new LocalEntityProviderTestData()
   val protectedWorkspaceTestData = new ProtectedWorkspaceTestData()
@@ -2507,8 +2521,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def withConstantTestDatabase[T](testCode: => T): T =
     withCustomTestDatabaseInternal(constantData)(testCode)
 
-  def withConstantTestDatabase[T](testCode: SlickDataSource => T): T =
-    withCustomTestDatabaseInternal(constantData)(testCode(slickDataSource))
+  def withCompactConstantTestDatabase[T](testCode: => T): T =
+    withCustomTestDatabaseInternal(compactConstantData)(testCode)
+
+  def withCompactConstantTestDatabase[T](testCode: SlickDataSource => T): T =
+    withCustomTestDatabaseInternal(compactConstantData)(testCode(slickDataSource))
 
   def withCustomTestDatabase[T](data: TestData)(testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(data)(testCode(slickDataSource))

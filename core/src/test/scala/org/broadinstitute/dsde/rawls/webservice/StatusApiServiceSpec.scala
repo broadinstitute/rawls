@@ -49,20 +49,14 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
     } finally
       apiService.cleanupSupervisor
 
-  def withConstantTestDataApiServices[T](testCode: TestApiService => Any): Any =
-    withConstantTestDatabase { dataSource: SlickDataSource =>
+  def withCompactConstantTestDataApiServices[T](testCode: TestApiService => Any): Any =
+    withCompactConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
       withApiServices(dataSource, apiService)(testCode)
     }
 
-  def withConstantCriticalErrorTestDataApiServices[T](testCode: TestApiService => Any): Any =
-    withConstantTestDatabase { dataSource: SlickDataSource =>
-      val apiService = new TestApiService(dataSource, new MockGoogleServicesCriticalErrorDAO, new MockGooglePubSubDAO)
-      withApiServices(dataSource, apiService)(testCode)
-    }
-
-  def withConstantErrorTestDataApiServices[T](testCode: TestApiService => Any): Any =
-    withConstantTestDatabase { dataSource: SlickDataSource =>
+  def withCompactConstantErrorTestDataApiServices[T](testCode: TestApiService => Any): Any =
+    withCompactConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesErrorDAO, new MockGooglePubSubDAO)
       withApiServices(dataSource, apiService)(testCode)
     }
@@ -70,7 +64,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
   def initializeSubsystems(apiService: TestApiService): Unit =
     apiService.healthMonitor ! CheckAll
 
-  "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices { services =>
+  "StatusApiService" should "return 200 for ok status" in withCompactConstantTestDataApiServices { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -90,7 +84,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
     }
   }
 
-  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices {
+  it should "return 200 for non-ok status for any non critical subsystem" in withCompactConstantErrorTestDataApiServices {
     services =>
       eventually {
         withStatsD {
@@ -124,7 +118,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
   }
 
   List(CONNECT, DELETE, HEAD, OPTIONS, PATCH, POST, PUT, TRACE) foreach { method =>
-    it should s"return 405 for $method requests" in withConstantTestDataApiServices { services =>
+    it should s"return 405 for $method requests" in withCompactConstantTestDataApiServices { services =>
       new RequestBuilder(method).apply("/status") ~>
         sealRoute(services.statusRoute) ~>
         check {
@@ -133,6 +127,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
           }
         }
     }
+
   }
 
 }
