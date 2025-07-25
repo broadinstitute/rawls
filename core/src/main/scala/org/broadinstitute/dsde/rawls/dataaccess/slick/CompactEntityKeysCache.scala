@@ -96,4 +96,17 @@ trait CompactEntityKeysCache {
               where workspace_id = $workspaceId
               and entity_type = $oldName;"""
     }
+
+  // ========== clone cache entries to a new workspace ==========
+
+  def cloneCache(sourceWorkspaceId: UUID, destinationWorkspaceId: UUID): WriteAction[Int] =
+    if (sourceWorkspaceId == destinationWorkspaceId) {
+      DBIO.successful(0)
+    } else {
+      sqlu"""insert into ENTITY_KEYS_CACHE (workspace_id, entity_type, attribute_keys, cached_at)
+              select $destinationWorkspaceId, entity_type, attribute_keys, cached_at
+              from ENTITY_KEYS_CACHE
+              where workspace_id = $sourceWorkspaceId
+              and (invalidated_at is null OR cached_at > invalidated_at);"""
+    }
 }

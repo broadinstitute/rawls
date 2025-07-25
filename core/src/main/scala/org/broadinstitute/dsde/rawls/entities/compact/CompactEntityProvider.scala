@@ -162,9 +162,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                      destWorkspaceContext: Workspace,
                      parentContext: RawlsRequestContext
   ): WriteAction[(Int, Int)] =
+    // clone the cache entries from source to destination workspace
     repository.queries
-      .copyAllEntities(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID)
-      .map { copyActionResults: Int => (copyActionResults, 0) }
+      .cloneCache(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID) andThen
+      // then, clone the entities.
+      // we do it in this order to simplify syntax. This will be called within a transaction anyway, so the order
+      // doesn't matter
+      repository.queries
+        .copyAllEntities(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID)
+        .map { copyActionResults: Int => (copyActionResults, 0) }
 
   /**
    * Copy all entities from sourceWorkspaceId to destWorkspaceId, excluding any entities that
