@@ -479,7 +479,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
 
   /**
-   * Get all entity attribute keys for a workspace.
+   * Get the attribute keys for the given workspace and entity types.
    *
    * execution plan:
    *    ENTITY: Using index condition (Using index condition; Using temporary); Using temporary
