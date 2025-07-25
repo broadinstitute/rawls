@@ -40,10 +40,9 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
-import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when}
+import org.mockito.Mockito.{never, timeout => mockitotimeout, times, verify, when, RETURNS_SMART_NULLS}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Futures.{scaled, PatienceConfig}
-import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
 import slick.dbio.DBIO
 
@@ -93,11 +92,12 @@ class CompactEntityProviderSpec
   behavior of "batchUpsertEntities and batchUpdateEntities"
 
   it should "issue one insert statement for multiple entities" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.invalidateCache(any(), any[Set[String]]())).thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -115,11 +115,12 @@ class CompactEntityProviderSpec
   }
 
   it should "issue multiple insert statements when given large batches" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.invalidateCache(any(), any[Set[String]]())).thenReturn(DBIO.successful(0))
 
     val config = CompactEntityProviderConfig(batchUpsertBatchSize = 25) // pretty small to force batching
 
@@ -146,11 +147,12 @@ class CompactEntityProviderSpec
   }
 
   it should "ask to insert references" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.batchWriteEntities(any(), any(), any())).thenReturn(DBIO.successful(-1))
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.getEntities(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.getEntityVersions(any(), any())).thenReturn(DBIO.successful(Seq()))
+    when(mockQuery.invalidateCache(any(), any[Set[String]]())).thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -204,12 +206,13 @@ class CompactEntityProviderSpec
       )
 
     // mocks
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -244,12 +247,13 @@ class CompactEntityProviderSpec
                           Some("""{"baz":123,"foo":"bar"}""")
       )
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -295,12 +299,13 @@ class CompactEntityProviderSpec
         )
       )
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(true))
     when(mockQuery.createEntity(any(), any())).thenReturn(DBIO.successful(1))
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
       .thenReturn(DBIO.successful(Some(createdEntityRec))) // second request finds the entity we saved
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -341,7 +346,7 @@ class CompactEntityProviderSpec
       )
     )
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None)) // first request finds nothing
     when(mockQuery.existsAll(any(), any())).thenReturn(DBIO.successful(false)) // reference targets are missing
@@ -382,7 +387,7 @@ class CompactEntityProviderSpec
                           Some("{}")
       )
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(Some(createdEntityRec)))
 
@@ -418,7 +423,7 @@ class CompactEntityProviderSpec
   illegalEntities foreach { case (hint, entityToCreate) =>
     it should s"throw RawlsExceptionWithErrorReport when presented with a(n) $hint" in {
       // provider using mocks
-      val mockQuery = mock[CompactEntityQuery]
+      val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
       val provider = providerWithMocks(mockQuery)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
@@ -470,7 +475,7 @@ class CompactEntityProviderSpec
                           Some("""{"baz":456,"foo":"boo"}""")
       )
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.deleteEntities(any(), any())).thenReturn(DBIO.successful(0))
     when(
@@ -488,6 +493,7 @@ class CompactEntityProviderSpec
     )
       .thenReturn(DBIO.successful(Some(createdEntityRec2)))
     when(mockQuery.batchHide(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.invalidateCache(any(), any[Set[String]]())).thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -543,7 +549,7 @@ class CompactEntityProviderSpec
              )
       )
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getReferencesTo(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toPointer)))
     when(
       mockQuery.getEntity(any[UUID],
@@ -577,10 +583,11 @@ class CompactEntityProviderSpec
   it should "delete all entities of type" in {
     val entityType = "type"
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq()))
     when(mockQuery.deleteEntitiesOfType(any(), any())).thenReturn(DBIO.successful(0))
     when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     // provider using mocks
     val provider = providerWithMocks(mockQuery)
@@ -608,7 +615,7 @@ class CompactEntityProviderSpec
              )
       )
 
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getReferencesToType(any(), any())).thenReturn(DBIO.successful(Seq(referencingEntity.toPointer)))
     when(mockQuery.batchHideType(any(), any())).thenReturn(DBIO.successful(1))
 
@@ -630,7 +637,7 @@ class CompactEntityProviderSpec
   behavior of "entityTypeMetadata"
 
   it should "return empty map when no entities exist" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.listEntityKeysViaEntity(any[UUID]))
       .thenReturn(DBIO.successful(Seq.empty))
     when(mockQuery.countEntitiesGroupedByType(any[UUID]))
@@ -645,7 +652,7 @@ class CompactEntityProviderSpec
   }
 
   it should "return map with entity type and count when entities exist" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     // type1 and type2 have keys, type3 has no keys
     when(mockQuery.listEntityKeysViaEntity(any[UUID]))
       .thenReturn(
@@ -687,7 +694,7 @@ class CompactEntityProviderSpec
       CompactEntityRecord(1, "name", "type", UUID.randomUUID(), -1, deleted = false, Some("{}"))
 
     // mocks
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(Some(rec)))
 
@@ -706,7 +713,7 @@ class CompactEntityProviderSpec
       CompactEntityRecord(1, "name", "type", UUID.randomUUID(), -1, deleted = false, Some(attrString))
 
     // mocks
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(Some(rec)))
 
@@ -728,7 +735,7 @@ class CompactEntityProviderSpec
 
   it should "throw EntityNotFoundException if row not found in db" in {
     // mocks
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQuery.getEntity(any[UUID], anyString(), anyString()))
       .thenReturn(DBIO.successful(None))
     // provider using mocks
@@ -743,7 +750,7 @@ class CompactEntityProviderSpec
   behavior of "listWorkflowEntities"
 
   it should "pass the workspace and requested entity ids to the downstream query" in {
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     val requestedIds = Seq(111L, 222L, 333L)
 
@@ -761,7 +768,7 @@ class CompactEntityProviderSpec
   }
 
   it should "bypass the database when asked to save nothing" in {
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val provider = providerWithMocks(mockQueries)
 
     val mockDataAccess = mock[DataAccess]
@@ -784,7 +791,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS("same")
     val newName = AttributeName.withDefaultNS("same")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     val provider = providerWithMocks(mockQueries)
 
@@ -803,7 +810,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS("oldName")
     val newName = AttributeName.withDefaultNS("no! @@bad@@")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     val provider = providerWithMocks(mockQueries)
 
@@ -822,7 +829,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS("no! @@bad@@")
     val newName = AttributeName.withDefaultNS("newName")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     val provider = providerWithMocks(mockQueries)
 
@@ -841,7 +848,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS("oldName")
     val newName = AttributeName.withDefaultNS(s"${entityType}_id")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     val provider = providerWithMocks(mockQueries)
 
@@ -860,7 +867,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS(s"${entityType}_id")
     val newName = AttributeName.withDefaultNS("newName")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     val provider = providerWithMocks(mockQueries)
 
@@ -879,7 +886,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS("oldName")
     val newName = AttributeName.withDefaultNS("newName")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     // mock: new name already exists
     when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
@@ -902,7 +909,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS("oldName")
     val newName = AttributeName.withDefaultNS("newName")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     // mock: new name does not exist
     when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
@@ -928,7 +935,7 @@ class CompactEntityProviderSpec
     val oldName = AttributeName.withDefaultNS("oldName")
     val newName = AttributeName.withDefaultNS("newName")
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     // mock: new name does not exist
     when(mockQueries.attributeExists(any[UUID], anyString(), mockitoEq(newName)))
@@ -939,6 +946,7 @@ class CompactEntityProviderSpec
     // mock: rename touches 123 entities
     when(mockQueries.renameAttribute(any[UUID], anyString(), mockitoEq(oldName), mockitoEq(AttributeRename(newName))))
       .thenReturn(DBIO.successful(123))
+    when(mockQueries.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     val provider = providerWithMocks(mockQueries)
 
@@ -1094,7 +1102,7 @@ class CompactEntityProviderSpec
   behavior of "renameEntityType"
 
   it should "throw NotFound if the entity type doesn't exist" in {
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     // Mock the count for a non-existent entity type to return 0
     when(mockQueries.countEntities(any[UUID], anyString())).thenReturn(DBIO.successful(0))
@@ -1115,7 +1123,7 @@ class CompactEntityProviderSpec
   }
 
   it should "throw Conflict if the new entity type already exists" in {
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     // The old type exists
     when(mockQueries.countEntities(any[UUID], mockitoEq("existingType"))).thenReturn(DBIO.successful(2))
@@ -1141,7 +1149,7 @@ class CompactEntityProviderSpec
     val oldType = "oldType"
     val newType = "newType"
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
 
     // The old type exists
     when(mockQueries.countEntities(any[UUID], mockitoEq(oldType))).thenReturn(DBIO.successful(5))
@@ -1164,7 +1172,7 @@ class CompactEntityProviderSpec
     val entityName = "entityName"
     val operations = Seq.empty[AttributeUpdateOperation]
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val provider = providerWithMocks(mockQueries)
 
     val actual = intercept[UnsupportedEntityOperationException] {
@@ -1184,7 +1192,7 @@ class CompactEntityProviderSpec
       )
     )
 
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     // mock: batchUpdate does not find the pre-existing entity
     when(mockQueries.getEntities(mockitoEq(defaultWorkspace.workspaceIdAsUUID), any()))
       .thenAnswer(_ => throw new EntityNotFoundException())
@@ -1200,9 +1208,10 @@ class CompactEntityProviderSpec
   behavior of "saveWorkflowOutputEntities"
 
   it should "pass the workspace and requested entities to the downstream query" in {
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     when(mockQueries.batchWriteEntities(any(), any(), any()))
       .thenReturn(DBIO.successful(2))
+    when(mockQueries.invalidateCache(any(), any[Set[String]]())).thenReturn(DBIO.successful(0))
     val provider = providerWithMocks(mockQueries)
 
     val mockDataAccess = mock[DataAccess]
@@ -1221,7 +1230,7 @@ class CompactEntityProviderSpec
   }
 
   it should "bypass the database when asked to save nothing" in {
-    val mockQueries = mock[CompactEntityQuery]
+    val mockQueries = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val provider = providerWithMocks(mockQueries)
 
     val mockDataAccess = mock[DataAccess]
@@ -1246,7 +1255,7 @@ class CompactEntityProviderSpec
       AttributeName.withDefaultNS("baz") -> AttributeNumber(42)
     )
     val entity = Entity("name", "type", attributes)
-    val provider = providerWithMocks(mock[CompactEntityQuery])
+    val provider = providerWithMocks(mock[CompactEntityQuery](RETURNS_SMART_NULLS))
 
     val actual = provider.findAllReferences(entity)
 
@@ -1266,7 +1275,7 @@ class CompactEntityProviderSpec
       )
     )
     val entity = Entity("name", "type", attributes)
-    val provider = providerWithMocks(mock[CompactEntityQuery])
+    val provider = providerWithMocks(mock[CompactEntityQuery](RETURNS_SMART_NULLS))
 
     val actual = provider.findAllReferences(entity)
 
@@ -1289,7 +1298,7 @@ class CompactEntityProviderSpec
   it should "return an empty Map when fed an empty Seq" in {
     val input = Seq()
 
-    val provider = providerWithMocks(mock[CompactEntityQuery])
+    val provider = providerWithMocks(mock[CompactEntityQuery](RETURNS_SMART_NULLS))
 
     val actual = provider.findAllReferences(input)
 
@@ -1303,7 +1312,7 @@ class CompactEntityProviderSpec
     )
     val entity1 = Entity("name1", "type", attributes)
     val entity2 = Entity("name2", "type", attributes)
-    val provider = providerWithMocks(mock[CompactEntityQuery])
+    val provider = providerWithMocks(mock[CompactEntityQuery](RETURNS_SMART_NULLS))
 
     val actual =
       provider.findAllReferences(Seq(entity1, entity2))
@@ -1347,7 +1356,7 @@ class CompactEntityProviderSpec
       )
     )
 
-    val provider = providerWithMocks(mock[CompactEntityQuery])
+    val provider = providerWithMocks(mock[CompactEntityQuery](RETURNS_SMART_NULLS))
 
     val actual =
       provider.findAllReferences(Seq(entity1, entity2, entity3))
@@ -1391,7 +1400,7 @@ class CompactEntityProviderSpec
       )
     )
 
-    val provider = providerWithMocks(mock[CompactEntityQuery])
+    val provider = providerWithMocks(mock[CompactEntityQuery](RETURNS_SMART_NULLS))
 
     val actual =
       provider.findAllReferences(Seq(entity1, entity2, entity3))
@@ -1411,7 +1420,7 @@ class CompactEntityProviderSpec
   behavior of "withWorkspaceLastModified"
 
   it should "trigger a last-modified update on success of the original future" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
@@ -1431,7 +1440,7 @@ class CompactEntityProviderSpec
   }
 
   it should "not trigger a last-modified update on failure of the original future" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
@@ -1456,7 +1465,7 @@ class CompactEntityProviderSpec
   }
 
   it should "not fail if the last-modified update fails" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
@@ -1653,7 +1662,7 @@ class CompactEntityProviderSpec
 
   it should "copy entities from source workspace to destination workspace when no conflicts are present" in {
     val config = CompactEntityProviderConfig()
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
@@ -1700,6 +1709,7 @@ class CompactEntityProviderSpec
       )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
       .thenReturn(DBIO.successful(3))
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)
@@ -1726,7 +1736,7 @@ class CompactEntityProviderSpec
   }
 
   it should "not copy entities when a hard conflict is present" in {
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
@@ -1760,6 +1770,7 @@ class CompactEntityProviderSpec
     val mockEntityRefs = entityNames.map(name => EntityPointer(entityType, name))
     when(mockQuery.getEntityRefs(any[UUID], any[Set[EntityPointer]]))
       .thenReturn(DBIO.successful(Seq(CompactEntityRefRecord(1, "entity1", entityType))))
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
     val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
 
     val result = Await.result(provider.copyEntities(sourceWorkspace,
@@ -1785,7 +1796,7 @@ class CompactEntityProviderSpec
 
   it should "not copy entities when soft conflicts are present and linkExistingEntities is false" in {
     val config = CompactEntityProviderConfig()
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
@@ -1833,6 +1844,7 @@ class CompactEntityProviderSpec
           Set(RefMapping(EntityPointer(entityType, "entity1"), Set(EntityPointer(entityType, "entity2"))))
         )
       )
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     val provider = providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext))
     val result = Await.result(provider.copyEntities(sourceWorkspace,
@@ -1860,7 +1872,7 @@ class CompactEntityProviderSpec
 
   it should "exclude copying soft conflicts when soft conflicts are present and linkExistingEntities is true" in {
     val config = CompactEntityProviderConfig()
-    val mockQuery = mock[CompactEntityQuery]
+    val mockQuery = mock[CompactEntityQuery](RETURNS_SMART_NULLS)
     val mockRepository = mock[CompactEntityRepository]
     when(mockRepository.queries).thenReturn(mockQuery)
     when(mockRepository.dataSource).thenReturn(slickDataSource)
@@ -1910,6 +1922,7 @@ class CompactEntityProviderSpec
       )
     when(mockQuery.copyEntitiesToNewWorkspace(any[UUID], any[UUID], any[Set[EntityPointer]], any[Int]))
       .thenReturn(DBIO.successful(1))
+    when(mockQuery.invalidateCache(any(), any[String]())).thenReturn(DBIO.successful(0))
 
     val provider =
       providerWithMocks(mockRepository, EntityRequestArguments(sourceWorkspace, defaultRequestContext), config)

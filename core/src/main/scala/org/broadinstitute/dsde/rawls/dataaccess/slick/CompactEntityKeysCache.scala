@@ -63,12 +63,6 @@ trait CompactEntityKeysCache {
 
   // ========== cache invalidation ==========
 
-  /** Invalidate the cache for all entity types for this workspace */
-  def invalidateCache(workspaceId: UUID): ReadWriteAction[Int] =
-    sqlu"""update ENTITY_KEYS_CACHE
-            set invalidated_at = CURRENT_TIMESTAMP(6)
-            where workspace_id = $workspaceId;"""
-
   /** Invalidate the cache for the given entity type and workspace */
   def invalidateCache(workspaceId: UUID, entityType: String): ReadWriteAction[Int] =
     invalidateCache(workspaceId, Set(entityType))
