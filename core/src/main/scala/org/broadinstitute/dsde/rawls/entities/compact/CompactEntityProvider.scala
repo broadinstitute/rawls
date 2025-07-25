@@ -348,23 +348,66 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
 
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext
-  ): Future[Map[String, EntityTypeMetadata]] =
+  ): Future[Map[String, EntityTypeMetadata]] = {
+    setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("useCache"), java.lang.Boolean.valueOf(useCache))
+
+    // helper: translate uncached lookup objects to cached lookup objects
+    def keyToKeys(keySeq: Seq[EntityTypeAndAttributeKey]): Seq[EntityTypeAndAttributeKeys] =
+      keySeq
+        .groupMap(_.entityType)(_.attributeKey)
+        .map { case (entityType, keys) =>
+          EntityTypeAndAttributeKeys(entityType, keys.toSet)
+        }
+        .toSeq
+    // helper: translate cached lookup objects to uncached lookup objects
+    def keysToKey(keysSeq: Seq[EntityTypeAndAttributeKeys]): Seq[EntityTypeAndAttributeKey] =
+      keysSeq.flatMap { cacheEntry =>
+        cacheEntry.attributeKeys.map { key =>
+          EntityTypeAndAttributeKey(cacheEntry.entityType, key)
+        }
+      }
+
     repository.dataSource.inTransaction(ReadOnly) { _ =>
       for {
-        entityTypeAndKeys <- traceDBIOWithParent("listEntityKeys", parentContext) { _ =>
-          // If useCache is true, calculate attributes via the ENTITY table. This allows us to gather real-world
-          // empirical performance data; requests from Terra UI have useCache=true.
-          //
-          // if useCache is false, calculate attributes via the ENTITY_KEYS table. These requests will be rare
-          // in the wild, but our automated perf tests will generate them.
-          if (useCache)
-            repository.queries.listEntityKeysViaEntity(workspaceId)
-          else
-            repository.queries.listEntityKeys(workspaceId)
+        // If useCache is true, retrieve valid cache entries from the ENTITY_KEYS_CACHE table.
+        cachedEntityTypeAndKeys <- traceDBIOWithParent("cachedEntityTypeAndKeys", parentContext) { _ =>
+          if (useCache) {
+            repository.queries.getCachedKeys(workspaceId)
+          } else
+            DBIO.successful(Seq.empty[EntityTypeAndAttributeKeys])
         }
+        // query for known entity types and their counts. This is always uncached.
         entityTypeAndCounts <- traceDBIOWithParent("countEntitiesGroupedByType", parentContext) { _ =>
           repository.queries.countEntitiesGroupedByType(workspaceId)
         }
+        // perform an uncached lookup of entity keys for anything not found in cache
+        entityTypeAndKeys: Seq[EntityTypeAndAttributeKey] <-
+          if (!useCache) {
+            // if useCache is false, always calculate attributes for all entity types via the ENTITY table.
+            traceDBIOWithParent("listEntityKeysViaEntity", parentContext) { _ =>
+              repository.queries.listEntityKeysViaEntity(workspaceId)
+            }
+          } else {
+            // determine which, if any, entity types did not have a cache entry
+            val missingEntityTypes =
+              entityTypeAndCounts.map(_.entityType).toSet diff cachedEntityTypeAndKeys.map(_.entityType).toSet
+            if (missingEntityTypes.isEmpty) {
+              // all entity types were found in cache. Translate the cache results to the proper format.
+              DBIO.successful(keysToKey(cachedEntityTypeAndKeys))
+            } else {
+              for {
+                // calculate attributes for the missing entity types via the ENTITY table.
+                liveLookup <- traceDBIOWithParent("listEntityKeysViaEntity", parentContext) { _ =>
+                  repository.queries.listEntityKeysViaEntity(workspaceId, missingEntityTypes)
+                }
+                //  - persist back to cache those attributes we had to calculate
+                _ <- traceDBIOWithParent("saveCache", parentContext) { _ =>
+                  repository.queries.saveCache(workspaceId, keyToKeys(liveLookup).toSet)
+                }
+              } yield liveLookup ++ keysToKey(cachedEntityTypeAndKeys)
+            }
+          }
+
       } yield trace("resultCalculation", parentContext) { _ =>
         // note that entityTypeAndKeys only contains entity types that have at least one key
         // and that entityTypeAndCounts contains all entity types, even those with zero keys
@@ -378,6 +421,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         }.toMap
       }
     }
+  }
 
   override def evaluateExpression(entityType: String,
                                   entityName: String,

@@ -64,13 +64,158 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
 
   behavior of "entityTypeMetadata"
 
-  it should "use valid cache entries" is pending
+  it should "use valid cache entries" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
 
-  it should "persist invalid cache entries" is pending
+    val attr1 = AttributeName.withDefaultNS("attr1")
+    val attr2 = AttributeName.withLibraryNS("attr2")
+    val attr3 = AttributeName.fromDelimitedName("import:timestamp")
+    val attr4 = AttributeName.withDefaultNS("attr4")
+    val attr5 = AttributeName.withLibraryNS("attr5")
+    val attr6 = AttributeName.fromDelimitedName("foo:bar")
 
-  it should "persist missing cache entries" is pending
+    // insert some entities so metadata has values
+    val entityA1 = Entity("name1", "typeA", Map(attr1 -> AttributeString("value1")))
+    val entityA2 = Entity("name2", "typeA", Map(attr2 -> AttributeNumber(42)))
+    val entityB1 = Entity("name3", "typeB", Map(attr3 -> AttributeString("2023-10-01T00:00:00Z")))
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityA2, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityB1, defaultRequestContext), atMost)
 
-  it should "ignore extraneous cache entries" is pending
+    // validate initial metadata with no cache entries
+    // note useCache = false here to ensure the request for metadata doesn't save anything to the cache
+    val metadataInitial = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataInitial.size shouldBe 2
+    metadataInitial.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataInitial("typeA").attributeNames should contain theSameElementsAs Seq(attr1, attr2).map(toDelimitedName)
+    metadataInitial("typeB").attributeNames should contain theSameElementsAs Seq(attr3).map(toDelimitedName)
+
+    // insert a valid cache entry for typeA
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(attr4, attr5, attr6))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryA))) shouldBe 1
+
+    // validate metadata after inserting the cache entry; it should respect the cache entry
+    val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
+    metadataAfter.size shouldBe 2
+    metadataAfter.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataAfter("typeA").attributeNames should contain theSameElementsAs Seq(attr4, attr5, attr6).map(toDelimitedName)
+    metadataAfter("typeB").attributeNames should contain theSameElementsAs Seq(attr3).map(toDelimitedName)
+  }
+
+  it should "persist invalid cache entries" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val attr1 = AttributeName.withDefaultNS("attr1")
+    val attr2 = AttributeName.withLibraryNS("attr2")
+    val attr3 = AttributeName.fromDelimitedName("import:timestamp")
+    val attr4 = AttributeName.withDefaultNS("attr4")
+    val attr5 = AttributeName.withLibraryNS("attr5")
+    val attr6 = AttributeName.fromDelimitedName("foo:bar")
+
+    // insert some entities so metadata has values
+    val entityA1 = Entity("name1", "typeA", Map(attr1 -> AttributeString("value1")))
+    val entityA2 = Entity("name2", "typeA", Map(attr2 -> AttributeNumber(42)))
+    val entityB1 = Entity("name3", "typeB", Map(attr3 -> AttributeString("2023-10-01T00:00:00Z")))
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityA2, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityB1, defaultRequestContext), atMost)
+
+    // validate cache is empty before requesting metadata
+    runAndWait(q.getCachedKeys(wsid)) shouldBe empty
+
+    // insert an invalid cache entry for typeA
+    val cacheEntryA = EntityTypeAndAttributeKeys("typeA", Set(attr4, attr5, attr6))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryA))) shouldBe 1
+    // validate cache entry is saved
+    runAndWait(q.getCachedKeys(wsid)) should have size 1
+    // invalidate it
+    runAndWait(q.invalidateCache(wsid, Set(cacheEntryA.entityType))) shouldBe 1
+    // validate it is invalid
+    runAndWait(q.getCachedKeys(wsid)) should have size 0
+
+    // request metadata; this request should cause invalid cache entries to be updated
+    val metadataInitial = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
+    metadataInitial.size shouldBe 2
+    metadataInitial.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataInitial("typeA").attributeNames should contain theSameElementsAs Seq(attr1, attr2).map(toDelimitedName)
+    metadataInitial("typeB").attributeNames should contain theSameElementsAs Seq(attr3).map(toDelimitedName)
+
+    val actual = runAndWait(q.getCachedKeys(wsid))
+    actual should contain theSameElementsAs Seq(
+      EntityTypeAndAttributeKeys("typeA", Set(attr1, attr2)),
+      EntityTypeAndAttributeKeys("typeB", Set(attr3))
+    )
+  }
+
+  it should "persist missing cache entries" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val attr1 = AttributeName.withDefaultNS("attr1")
+    val attr2 = AttributeName.withLibraryNS("attr2")
+    val attr3 = AttributeName.fromDelimitedName("import:timestamp")
+
+    // insert some entities so metadata has values
+    val entityA1 = Entity("name1", "typeA", Map(attr1 -> AttributeString("value1")))
+    val entityA2 = Entity("name2", "typeA", Map(attr2 -> AttributeNumber(42)))
+    val entityB1 = Entity("name3", "typeB", Map(attr3 -> AttributeString("2023-10-01T00:00:00Z")))
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityA2, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityB1, defaultRequestContext), atMost)
+
+    // validate cache is empty before requesting metadata
+    runAndWait(q.getCachedKeys(wsid)) shouldBe empty
+
+    // request metadata; this request should cause cache entries to be created
+    val metadataInitial = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
+    metadataInitial.size shouldBe 2
+    metadataInitial.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataInitial("typeA").attributeNames should contain theSameElementsAs Seq(attr1, attr2).map(toDelimitedName)
+    metadataInitial("typeB").attributeNames should contain theSameElementsAs Seq(attr3).map(toDelimitedName)
+
+    val actual = runAndWait(q.getCachedKeys(wsid))
+    actual should contain theSameElementsAs Seq(
+      EntityTypeAndAttributeKeys("typeA", Set(attr1, attr2)),
+      EntityTypeAndAttributeKeys("typeB", Set(attr3))
+    )
+  }
+
+  it should "ignore extraneous cache entries" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    val attr1 = AttributeName.withDefaultNS("attr1")
+    val attr2 = AttributeName.withLibraryNS("attr2")
+    val attr3 = AttributeName.fromDelimitedName("import:timestamp")
+    val attr4 = AttributeName.withDefaultNS("attr4")
+    val attr5 = AttributeName.withLibraryNS("attr5")
+    val attr6 = AttributeName.fromDelimitedName("foo:bar")
+
+    // insert some entities so metadata has values
+    val entityA1 = Entity("name1", "typeA", Map(attr1 -> AttributeString("value1")))
+    val entityA2 = Entity("name2", "typeA", Map(attr2 -> AttributeNumber(42)))
+    val entityB1 = Entity("name3", "typeB", Map(attr3 -> AttributeString("2023-10-01T00:00:00Z")))
+    Await.result(provider.createEntity(entityA1, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityA2, defaultRequestContext), atMost)
+    Await.result(provider.createEntity(entityB1, defaultRequestContext), atMost)
+
+    // validate initial metadata with no cache entries
+    // note useCache = false here to ensure the request for metadata doesn't save anything to the cache
+    val metadataInitial = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
+    metadataInitial.size shouldBe 2
+    metadataInitial.keys should contain theSameElementsAs Seq("typeA", "typeB")
+    metadataInitial("typeA").attributeNames should contain theSameElementsAs Seq(attr1, attr2).map(toDelimitedName)
+    metadataInitial("typeB").attributeNames should contain theSameElementsAs Seq(attr3).map(toDelimitedName)
+
+    // insert a valid cache entry for typeC - note that this type does not exist in the database
+    val cacheEntryC = EntityTypeAndAttributeKeys("typeC", Set(attr4, attr5, attr6))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntryC))) shouldBe 1
+
+    // validate metadata after inserting the cache entry; the extraneous cache entry should be ignored
+    val metadataAfter = Await.result(provider.entityTypeMetadata(useCache = true, defaultRequestContext), atMost)
+    metadataAfter shouldBe metadataInitial // should not change
+  }
 
   behavior of "single entity-type cache invalidation"
 
