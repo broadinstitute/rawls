@@ -308,7 +308,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     )
   }
 
-  it should "count submissions by their statuses across all workspaces" in withConstantTestDatabase {
+  it should "count submissions by their statuses across all workspaces" in withCompactConstantTestDatabase {
     val statusMap = runAndWait(submissionQuery.countAllStatuses)
     statusMap shouldBe Map(SubmissionStatuses.Submitted.toString -> 3)
   }
@@ -591,7 +591,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
-  it should "count workflow statuses in aggregate" in withConstantTestDatabase {
+  it should "count workflow statuses in aggregate" in withCompactConstantTestDatabase {
     val statusMap = runAndWait(workflowQuery.countAllStatuses)
     statusMap shouldBe Map(WorkflowStatuses.Submitted.toString -> 6)
   }

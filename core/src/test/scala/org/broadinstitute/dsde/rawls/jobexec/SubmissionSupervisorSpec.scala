@@ -298,7 +298,7 @@ class SubmissionSupervisorSpec
     }
   }
 
-  it should "keep track of global workflow and submission gauges" in withConstantTestDatabase {
+  it should "keep track of global workflow and submission gauges" in withCompactConstantTestDatabase {
     withStatsD {
       withSupervisor() { supervisor =>
         // this just looks at the database so we don't need to tell the supervisor about any submissions
