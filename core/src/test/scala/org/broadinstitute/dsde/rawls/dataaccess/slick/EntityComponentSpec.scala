@@ -525,7 +525,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       }
       assertResult(0) { // the additional writes should not increment this entity's version
         runAndWait(
-          entityQuery.findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Pair", "pair2").map(_.version).result
+          entityQuery
+            .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Pair", "pair2")
+            .map(_.version)
+            .result
         ).head
       }
     }
@@ -806,10 +809,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val sampleSet1Paths = Seq(
         EntityPath(Seq(legacyTestData.sset1.toReference)),
         EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample1.toReference)),
-        EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample1.toReference, legacyTestData.aliquot1.toReference)),
+        EntityPath(
+          Seq(legacyTestData.sset1.toReference, legacyTestData.sample1.toReference, legacyTestData.aliquot1.toReference)
+        ),
         EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample2.toReference)),
         EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample3.toReference)),
-        EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample3.toReference, legacyTestData.sample1.toReference))
+        EntityPath(
+          Seq(legacyTestData.sset1.toReference, legacyTestData.sample3.toReference, legacyTestData.sample1.toReference)
+        )
       )
       val sampleSet2Paths = Seq(EntityPath(Seq(legacyTestData.sset2.toReference)),
                                 EntityPath(Seq(legacyTestData.sset2.toReference, legacyTestData.sample2.toReference))
@@ -831,7 +838,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val individual2Paths = Seq(
         EntityPath(Seq(legacyTestData.indiv2.toReference)),
         EntityPath(Seq(legacyTestData.indiv2.toReference, legacyTestData.sset2.toReference)),
-        EntityPath(Seq(legacyTestData.indiv2.toReference, legacyTestData.sset2.toReference, legacyTestData.sample2.toReference))
+        EntityPath(
+          Seq(legacyTestData.indiv2.toReference, legacyTestData.sset2.toReference, legacyTestData.sample2.toReference)
+        )
       )
       assertSameElements(individual2Paths,
                          runAndWait(entityQuery.getEntitySubtrees(context, "Individual", Set("indiv2")))
@@ -843,27 +852,30 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "get the full set of entity references from a list of entities" in withLegacyDefaultTestDatabase {
     withWorkspaceContext(legacyTestData.workspace) { context =>
-      val expected = Set(legacyTestData.sample1,
-                         legacyTestData.sample3,
-                         legacyTestData.pair1,
-                         legacyTestData.pair2,
-                         legacyTestData.sset1,
-                         legacyTestData.ps1,
-                         legacyTestData.indiv1
+      val expected = Set(
+        legacyTestData.sample1,
+        legacyTestData.sample3,
+        legacyTestData.pair1,
+        legacyTestData.pair2,
+        legacyTestData.sset1,
+        legacyTestData.ps1,
+        legacyTestData.indiv1
       ).map(_.toReference)
-      assertSameElements(expected,
-                         runAndWait(entityQuery.getAllReferringEntities(context, Set(legacyTestData.sample1.toReference)))
+      assertSameElements(
+        expected,
+        runAndWait(entityQuery.getAllReferringEntities(context, Set(legacyTestData.sample1.toReference)))
       )
 
-      val expected2 = Set(legacyTestData.aliquot1,
-                          legacyTestData.aliquot2,
-                          legacyTestData.sample1,
-                          legacyTestData.sample3,
-                          legacyTestData.pair1,
-                          legacyTestData.pair2,
-                          legacyTestData.sset1,
-                          legacyTestData.ps1,
-                          legacyTestData.indiv1
+      val expected2 = Set(
+        legacyTestData.aliquot1,
+        legacyTestData.aliquot2,
+        legacyTestData.sample1,
+        legacyTestData.sample3,
+        legacyTestData.pair1,
+        legacyTestData.pair2,
+        legacyTestData.sset1,
+        legacyTestData.ps1,
+        legacyTestData.indiv1
       ).map(_.toReference)
       assertSameElements(expected2,
                          runAndWait(
@@ -882,18 +894,25 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       runAndWait(entityQuery.hide(context, Seq(legacyTestData.indiv1.toReference, legacyTestData.pair2.toReference)))
 
       val expected =
-        Set(legacyTestData.sample1, legacyTestData.sample3, legacyTestData.pair1, legacyTestData.sset1, legacyTestData.ps1).map(_.toReference)
-      assertSameElements(expected,
-                         runAndWait(entityQuery.getAllReferringEntities(context, Set(legacyTestData.sample1.toReference)))
+        Set(legacyTestData.sample1,
+            legacyTestData.sample3,
+            legacyTestData.pair1,
+            legacyTestData.sset1,
+            legacyTestData.ps1
+        ).map(_.toReference)
+      assertSameElements(
+        expected,
+        runAndWait(entityQuery.getAllReferringEntities(context, Set(legacyTestData.sample1.toReference)))
       )
 
-      val expected2 = Set(legacyTestData.aliquot1,
-                          legacyTestData.aliquot2,
-                          legacyTestData.sample1,
-                          legacyTestData.sample3,
-                          legacyTestData.pair1,
-                          legacyTestData.sset1,
-                          legacyTestData.ps1
+      val expected2 = Set(
+        legacyTestData.aliquot1,
+        legacyTestData.aliquot2,
+        legacyTestData.sample1,
+        legacyTestData.sample3,
+        legacyTestData.pair1,
+        legacyTestData.sset1,
+        legacyTestData.ps1
       ).map(_.toReference)
       assertSameElements(expected2,
                          runAndWait(
