@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
 }
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.{
+  AgoraMethod,
   AttributeName,
   AttributeNumber,
   AttributeString,
@@ -337,6 +338,63 @@ class CompactExpressionEvaluatorSpec
         sampleGood2.name,
         Set(
           SubmissionValidationValue(Some(AttributeNumber(2)), None, intArgNameWithWfName)
+        )
+      )
+    )
+  }
+
+  it should "resolve method config inputs for a chained entity expression" in withConfigData {
+
+    val methConfig = MethodConfiguration(
+      "dsde",
+      "MethodConfig",
+      Some("Sample"),
+      prerequisites = Some(Map.empty[String, AttributeString]),
+      inputs = Map(stringArgNameWithWfName -> AttributeString("this.type")),
+      outputs = Map.empty,
+      AgoraMethod("dsde", "w1", 1)
+    )
+    when(
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq(testData.indiv1.name),
+                                                       any()
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(
+            testData.sample1.name -> Seq(toCompactEntityRecord(testData.sample1)),
+            testData.sample2.name -> Seq(toCompactEntityRecord(testData.sample2)),
+            testData.sample3.name -> Seq(toCompactEntityRecord(testData.sample3))
+          )
+        )
+      )
+
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(testData.indiv1.entityType),
+                                  Some(testData.indiv1.name),
+                                  Some("this.sset.samples"),
+                                  Some(testData.sample1.entityType)
+      )
+    val result = evalInputs(expressionEvaluationContext, methConfig, stringWdl)
+    result should contain theSameElementsAs Seq(
+      SubmissionValidationEntityInputs(
+        testData.sample1.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeString("normal")), None, stringArgNameWithWfName)
+        )
+      ),
+      SubmissionValidationEntityInputs(
+        testData.sample2.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeString("tumor")), None, stringArgNameWithWfName)
+        )
+      ),
+      SubmissionValidationEntityInputs(
+        testData.sample3.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeString("tumor")), None, stringArgNameWithWfName)
         )
       )
     )
