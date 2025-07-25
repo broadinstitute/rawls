@@ -621,6 +621,9 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         // Call the renameEntityType method in CompactEntityComponent to update entity types and references
         entityRowsUpdated <- repository.queries.renameEntityType(workspaceId, oldName, newName)
 
+        // also rename any entity type cache entries
+        _ <- repository.queries.renameCacheType(workspaceId, oldName, renameInfo)
+
       } yield entityRowsUpdated // Return the number of entities that were renamed
     }
 
