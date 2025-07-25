@@ -33,10 +33,6 @@ trait CompactEntityKeysCache {
 
   // ========== save to cache ==========
 
-  /** save the cache for the given entity type and workspace */
-  def saveCache(workspaceId: UUID, entityType: String, keys: Set[AttributeName]): ReadWriteAction[Int] =
-    saveCache(workspaceId, Set(EntityTypeAndAttributeKeys(entityType, keys)))
-
   /** save multiple cache values for the given workspace */
   def saveCache(workspaceId: UUID, cacheValues: Set[EntityTypeAndAttributeKeys]): ReadWriteAction[Int] =
     // short-circuit
