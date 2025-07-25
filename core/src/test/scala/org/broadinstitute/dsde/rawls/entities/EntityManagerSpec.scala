@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.AuditLoggingEntityProvider
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
@@ -65,6 +66,10 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
 
     val entityRequestArguments = EntityRequestArguments(workspace, defaultRequestContext)
 
+    // Mock workspace has no pending compact data tables setting
+    when(workspaceSettingRepository.hasPendingSettings(workspaceId, CompactDataTables))
+      .thenReturn(Future.successful(false))
+
     // check the EntityManager behavior when the compact data tables setting is not set
     when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
       .thenReturn(Future.successful(None))
@@ -94,6 +99,16 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
     afterUpdate shouldBe a[AuditLoggingEntityProvider]
     val afterUpdateAuditProvider = afterUpdate.asInstanceOf[AuditLoggingEntityProvider]
     afterUpdateAuditProvider.delegate shouldBe a[LocalEntityProvider]
+
+    // check the EntityManager behavior when there are pending compact data tables settings
+    when(workspaceSettingRepository.hasPendingSettings(workspaceId, CompactDataTables))
+      .thenReturn(Future.successful(true))
+    when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
+      .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+    val afterSettingPending = intercept[DataEntityException] {
+      Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
+    }
+    afterSettingPending.getMessage should include("migration is in progress")
   }
 
 }
