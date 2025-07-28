@@ -714,6 +714,53 @@ class WorkspaceService(
       }
     }
 
+  def repairWorkspace(workspaceName: WorkspaceName): Future[Unit] =
+    for {
+      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
+      workspace = workspaceOpt.getOrElse(
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+        )
+      )
+
+      val billingProjectName = RawlsBillingProjectName(workspaceName.namespace)
+      _ <- requireBillingProjectOwnerAccess(billingProjectName, ctx)
+      billingProject <- getBillingProjectContext(billingProjectName)
+      accountName = billingProject.billingAccount.getOrElse(
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest,
+                      s"No billing account found for billing project ${billingProject.projectName}"
+          )
+        )
+      )
+      _ <- gcsDAO.isBillingAccountEnabled(accountName).flatMap {
+        case true => Future.unit
+        case false =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Billing account $accountName is not enabled"
+              )
+            )
+          )
+      }
+      _ <- gcsDAO.getBucket(workspace.bucketName, Option(workspace.googleProjectId)).flatMap {
+        case Right(bucket) => Future.unit
+        case Left(message) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Workspace ${workspace.name} bucket ${workspace.bucketName} could not be repaired: $message"
+              )
+            )
+          )
+      }
+      // Call RBS repair endpoint
+
+    } yield ()
+
   def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
                                     newBillingProjectName: String
   ): Future[Option[Workspace]] =

@@ -139,6 +139,17 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                 }
               }
             }
+          } ~
+          pathPrefix("repair") {
+            pathEndOrSingleSlash {
+              post {
+                complete {
+                  workspaceServiceConstructor(ctx)
+                    .repairWorkspace(workspaceName)
+                    .map(_ => StatusCodes.OK)
+                }
+              }
+            }
           }
       } ~
         pathPrefix("bucketMigration") {
