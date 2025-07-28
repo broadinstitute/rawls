@@ -82,6 +82,11 @@ case class EntityTypeAndAttributeKey(
   attributeKey: AttributeName
 )
 
+case class EntityTypeAndAttributeKeys(
+  entityType: String,
+  attributeKeys: Set[AttributeName]
+)
+
 case class EntityTypeAndCount(
   entityType: String,
   count: Int

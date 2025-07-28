@@ -39,6 +39,7 @@ trait CompactEntityComponent extends LazyLogging {
 
 class CompactEntityQuery(driverComponent: DriverComponent)
     extends CompactEntityMigration
+    with CompactEntityKeysCache
     with RawSqlQuery
     with CompactEntitySerialization {
   override val driver = driverComponent.driver
@@ -477,6 +478,27 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     sql"""SELECT distinct entity_type, attribute_key
       FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
       where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
+
+  /**
+   * Get the attribute keys for the given workspace and entity types.
+   *
+   * execution plan:
+   *    ENTITY: Using index condition (Using index condition; Using temporary); Using temporary
+   *    t: Table function: json_table; Using temporary
+   */
+  def listEntityKeysViaEntity(workspaceId: UUID,
+                              entityTypes: Set[String]
+  ): ReadAction[Seq[EntityTypeAndAttributeKey]] = {
+    val inClause = reduceSqlActionsWithDelim(entityTypes.map(t => sql"$t").toSeq, sql", ")
+
+    concatSqlActions(
+      sql"""SELECT distinct entity_type, attribute_key
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      where workspace_id=$workspaceId and deleted = 0 and entity_type in (""",
+      inClause,
+      sql""");"""
+    ).as[EntityTypeAndAttributeKey]
+  }
 
   /**
    * Gets the count of entities in a workspace, grouped by entity type.
