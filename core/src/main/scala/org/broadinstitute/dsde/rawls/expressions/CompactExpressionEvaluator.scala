@@ -3,11 +3,7 @@ package org.broadinstitute.dsde.rawls.expressions
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
-  EntityName,
-  ExpressionAndResult,
-  LookupExpression
-}
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{
   ExpressionEvaluationContext,
   ExpressionEvaluationSupport,
@@ -26,8 +22,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValue,
   AttributeValueList,
   ErrorReport,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationValue
+  SubmissionValidationEntityInputs
 }
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio.DBIO
@@ -140,269 +135,181 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                           workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]] = Map.empty
   )(implicit executionContext: ExecutionContext): Future[LazyList[SubmissionValidationEntityInputs]] = {
 
-    //    val initialProcessingFuture: Future[
-    //      (Seq[(MethodInput, RootContext, Seq[ExpressionLookup])], Seq[EntityName], Map[String, Seq[ExpressionAndResult]])
-    //    ] =
-    (expressionEvaluationContext.entityType,
-     expressionEvaluationContext.entityName,
-     expressionEvaluationContext.rootEntityType
-    ) match {
-      // If there are exactly one or two of entity type, entity name, and root entity, fail
-      case (Some(_), None, _) =>
-        Future.failed(
-          RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Missing entityName")
-          )
-        )
-
-      case (None, Some(_), _) =>
-        Future.failed(
-          RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Missing entityType")
-          )
-        )
-
-      case (None, None, Some(_)) =>
-        Future.failed(
-          RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Missing entityType and entityName")
-          )
-        )
-
-      case (Some(_), Some(_), None) =>
-        Future.failed(
-          RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Missing rootEntityType")
-          )
-        )
-      case (Some(entityType), Some(entityName), Some(rootEntityType)) =>
-        if (
-          expressionEvaluationContext.expression.isEmpty &&
-          entityType != rootEntityType
-        ) {
-          val whatYouGaveUs =
-            if (expressionEvaluationContext.entityType.isDefined)
-              s"an entity of type ${expressionEvaluationContext.entityType.get}"
-            else "no entity"
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              errorReport = ErrorReport(
-                StatusCodes.BadRequest,
-                s"Method configuration expects an entity of type $rootEntityType, but you gave us $whatYouGaveUs."
+    val entityInfoFuture =
+      (expressionEvaluationContext.entityType,
+       expressionEvaluationContext.entityName,
+       expressionEvaluationContext.rootEntityType
+      ) match {
+        case (Some(entityType), Some(entityName), Some(rootEntityType)) =>
+          if (
+            expressionEvaluationContext.expression.isEmpty &&
+            entityType != rootEntityType
+          ) {
+            val whatYouGaveUs =
+              if (expressionEvaluationContext.entityType.isDefined)
+                s"an entity of type ${expressionEvaluationContext.entityType.get}"
+              else "no entity"
+            Future.failed(
+              new RawlsExceptionWithErrorReport(
+                errorReport = ErrorReport(
+                  StatusCodes.BadRequest,
+                  s"Method configuration expects an entity of type $rootEntityType, but you gave us $whatYouGaveUs."
+                )
               )
             )
-          )
-        } else {
-          val entityLookups: Seq[ExpressionLookup] = expressionEvaluationContext.expression match {
-            case None             => Seq.empty
-            case Some(expression) => parseLookups(expression)
+          } else {
+            val entityLookups: Seq[ExpressionLookup] = expressionEvaluationContext.expression match {
+              case None             => Seq.empty
+              case Some(expression) => parseLookups(expression)
+            }
+
+            val inputExpressionData: Seq[(MethodInput, RootContext, Seq[ExpressionLookup])] = inputsToExpressionData(
+              gatherInputsResult
+            )
+
+            val allLookups = inputExpressionData.flatMap { case (_, _, lookups) => lookups }
+
+            // If we have an entitylookup, prepend its chain to the relation chain of the query
+            val queryPlans = if (entityType != rootEntityType && entityLookups.nonEmpty) {
+              val entityRelationChain: List[String] =
+                entityLookups.flatMap(_.relations.map(_.attributeName()).map(_.getText)).toList
+              val updatedRelationChain = entityRelationChain ++ entityLookups.flatMap(_.attributeName).toList
+              val baseQueryPlans = buildQueryPlans(allLookups)
+
+              baseQueryPlans.map { plan =>
+                plan.copy(relationChain = updatedRelationChain ++ plan.relationChain)
+              }
+            } else {
+              buildQueryPlans(allLookups)
+            }
+
+            val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
+              executeQueryPlan(workspaceId, entityType, entityName, rootEntityType, plan, entityLookups)
+            }
+
+            repository.dataSource
+              .inTransaction { _ =>
+                DBIO.sequence(queryActions)
+              }
+              .map { allQueryResults =>
+                val combinedExpressionAndResults: Seq[ExpressionAndResult] = allQueryResults.flatten
+
+                val rootEntityNames = if (entityType == rootEntityType) {
+                  Seq(entityName)
+                } else {
+                  combinedExpressionAndResults.flatMap { case (_, resultMap) => resultMap.keys }.distinct
+                }
+
+                // Pre-compute a map from expression -> ExpressionAndResult for O(1) lookup
+                val entityExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+                  combinedExpressionAndResults.groupBy { case (expression, _) => expression }
+
+                // Transform workspaceExpressionResults to the same shape and add to the map
+                val workspaceExpressionAndResults: Seq[ExpressionAndResult] = workspaceExpressionResults.map {
+                  case (lookupExpression, tryValues) =>
+                    // Create a result map with the workspace values for all root entity names
+                    val resultMap = rootEntityNames.map { entityName =>
+                      entityName -> tryValues
+                    }.toMap
+
+                    (lookupExpression, resultMap)
+                }.toSeq
+
+                val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+                  workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
+
+                // Combine both maps, with workspace results taking precedence if there are conflicts
+                val expressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+                  entityExpressionToResultMap ++ workspaceExpressionToResultMap
+
+                inputExpressionData.flatMap { case (input, parsedTree, inputLookups) =>
+                  // Lookup ExpressionAndResults relevant to this input
+                  val relevantResults = inputLookups.flatMap { lookup =>
+                    expressionToResultMap.getOrElse(lookup.expression, Seq.empty)
+                  }
+
+                  val resultMap = InputExpressionReassembler.constructFinalInputValues(
+                    relevantResults,
+                    parsedTree,
+                    Some(rootEntityNames),
+                    Some(input)
+                  )
+                  convertToSubmissionValidationValues(resultMap, input)
+                }
+              }
           }
 
+        case (None, None, None) =>
+          // No entities involved, this should be static input expressions only
           val inputExpressionData: Seq[(MethodInput, RootContext, Seq[ExpressionLookup])] = inputsToExpressionData(
             gatherInputsResult
           )
 
-          val allLookups = inputExpressionData.flatMap { case (_, _, lookups) => lookups }
+          // Transform workspaceExpressionResults to the correct shape
+          val workspaceExpressionAndResults: Seq[ExpressionAndResult] = workspaceExpressionResults.map {
+            case (lookupExpression, tryValues) =>
+              // Create a result map with the workspace values for all root entity names
+              (lookupExpression, Map("" -> tryValues))
+          }.toSeq
 
-          // If we have an entitylookup, prepend its chain to the relation chain of the query
-          val queryPlans = if (entityType != rootEntityType && entityLookups.nonEmpty) {
-            val entityRelationChain: List[String] =
-              entityLookups.flatMap(_.relations.map(_.attributeName()).map(_.getText)).toList
-            val updatedRelationChain = entityRelationChain ++ entityLookups.flatMap(_.attributeName).toList
-            if (inputExpressionData.isEmpty) {
-              Seq(QueryPlan(updatedRelationChain, Map.empty))
-            } else {
-              buildQueryPlans(allLookups).map { plan =>
-                plan.copy(relationChain = updatedRelationChain ++ plan.relationChain)
-              }
+          val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
+            workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
+
+          // Repackage the parsed expressions into the correct form without querying the database
+          Future.successful {
+            inputExpressionData.flatMap { case (input, parsedTree, _) =>
+              val resultMap = InputExpressionReassembler.constructFinalInputValues(
+                workspaceExpressionToResultMap.getOrElse(input.expression, Seq.empty),
+                parsedTree,
+                None, // No root entity names since no entities are queried
+                Some(input)
+              )
+              convertToSubmissionValidationValues(resultMap, input)
             }
-          } else {
-            buildQueryPlans(allLookups)
           }
 
-          val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
-            executeQueryPlan(workspaceId, entityType, entityName, rootEntityType, plan, entityLookups)
-          }
-
-          repository.dataSource
-            .inTransaction { _ =>
-              DBIO.sequence(queryActions)
-            }
-            .map { allQueryResults =>
-              val combinedExpressionAndResults: Seq[ExpressionAndResult] = allQueryResults.flatten
-
-              val rootEntityNames = if (entityType == rootEntityType) {
-                Seq(entityName)
-              } else {
-                combinedExpressionAndResults.flatMap { case (_, resultMap) => resultMap.keys }.distinct
-              }
-
-              // Pre-compute a map from expression -> ExpressionAndResult for O(1) lookup
-              val entityExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
-                combinedExpressionAndResults.groupBy { case (expression, _) => expression }
-
-              // Transform workspaceExpressionResults to the same shape and add to the map
-              val workspaceExpressionAndResults: Seq[ExpressionAndResult] = workspaceExpressionResults.map {
-                case (lookupExpression, tryValues) =>
-                  // Create a result map with the workspace values for all root entity names
-                  val resultMap = rootEntityNames.map { entityName =>
-                    entityName -> tryValues
-                  }.toMap
-
-                  (lookupExpression, resultMap)
-              }.toSeq
-
-              val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
-                workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
-
-              // Combine both maps, with workspace results taking precedence if there are conflicts
-              val expressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
-                entityExpressionToResultMap ++ workspaceExpressionToResultMap
-
-              //              (inputExpressionData, rootEntityNames, expressionToResultMap)
-              if (inputExpressionData.isEmpty) {
-                // Short-circuit if there are no inputs
-                rootEntityNames
-                  .map { rootEntityName =>
-                    SubmissionValidationEntityInputs(entityName = rootEntityName, inputResolutions = Set.empty)
-                  }
-                  .to(LazyList)
-              } else {
-                val resultsSeq =
-                  inputExpressionData.flatMap { case (input, parsedTree, inputLookups) =>
-                    // Lookup ExpressionAndResults relevant to this input
-                    val relevantResults = inputLookups.flatMap { lookup =>
-                      expressionToResultMap.getOrElse(lookup.expression, Seq.empty)
-                    }
-
-                    val resultMap = InputExpressionReassembler.constructFinalInputValues(
-                      relevantResults,
-                      parsedTree,
-                      Some(rootEntityNames),
-                      Some(input)
-                    )
-                    convertToSubmissionValidationValues(resultMap, input)
-                  }
-
-                if (resultsSeq.isEmpty) {
-                  LazyList(
-                    SubmissionValidationEntityInputs(entityName = expressionEvaluationContext.entityName.getOrElse(""),
-                                                     inputResolutions = Set.empty
-                    )
-                  )
-                } else {
-                  CollectionUtils
-                    .groupByTuples(resultsSeq)
-                    .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-                      SubmissionValidationEntityInputs(
-                        entityName = entityName,
-                        inputResolutions = values.toSet
-                      )
-                    }
-                    .to(LazyList)
-                }
-
-              }
-            }
-        }
-
-      case (None, None, None) =>
-        // No entities involved, this should be static input expressions only
-        val inputExpressionData: Seq[(MethodInput, RootContext, Seq[ExpressionLookup])] = inputsToExpressionData(
-          gatherInputsResult
-        )
-
-        // Transform workspaceExpressionResults to the correct shape
-        val workspaceExpressionAndResults: Seq[ExpressionAndResult] = workspaceExpressionResults.map {
-          case (lookupExpression, tryValues) =>
-            // Create a result map with the workspace values for all root entity names
-            (lookupExpression, Map("" -> tryValues))
-        }.toSeq
-
-        val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
-          workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
-
-        //          Future.successful((inputExpressionData, Seq.empty[EntityName], workspaceExpressionToResultMap))
-
-        // Repackage the parsed expressions into the correct form without querying the database
-        //                  Future.successful {
-        val resultsSeq =
-          inputExpressionData.flatMap { case (input, parsedTree, _) =>
-            val resultMap = InputExpressionReassembler.constructFinalInputValues(
-              workspaceExpressionToResultMap.getOrElse(input.expression, Seq.empty),
-              parsedTree,
-              None, // No root entity names since no entities are queried
-              Some(input)
-            )
-            convertToSubmissionValidationValues(resultMap, input)
-          }
-        //                  }
-        Future.successful(if (resultsSeq.isEmpty) {
-          LazyList(
-            SubmissionValidationEntityInputs(entityName = expressionEvaluationContext.entityName.getOrElse(""),
-                                             inputResolutions = Set.empty
+        // If there are exactly one or two of entity type, entity name, and root entity, fail
+        case (Some(_), None, _) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing entityName")
             )
           )
-        } else {
-          CollectionUtils
-            .groupByTuples(resultsSeq)
-            .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-              SubmissionValidationEntityInputs(
-                entityName = entityName,
-                inputResolutions = values.toSet
-              )
-            }
-            .to(LazyList)
-        })
+
+        case (None, Some(_), _) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing entityType")
+            )
+          )
+
+        case (None, None, Some(_)) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing entityType and entityName")
+            )
+          )
+
+        case (Some(_), Some(_), None) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest, s"Missing rootEntityType")
+            )
+          )
+      }
+
+    entityInfoFuture.map { resultsSeq =>
+      CollectionUtils
+        .groupByTuples(resultsSeq)
+        .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
+          SubmissionValidationEntityInputs(
+            entityName = entityName,
+            inputResolutions = values.toSet
+          )
+        }
+        .to(LazyList)
     }
   }
-//
-//    initialProcessingFuture
-//      .map { case (inputExpressionData, rootEntityNames, expressionToResultMap) =>
-//        if (inputExpressionData.isEmpty) {
-//          // Short-circuit if there are no inputs
-//          rootEntityNames
-//            .map { rootEntityName =>
-//              SubmissionValidationEntityInputs(entityName = rootEntityName, inputResolutions = Set.empty)
-//            }
-//            .to(LazyList)
-//        } else {
-//          val resultsSeq =
-//            inputExpressionData.flatMap { case (input, parsedTree, inputLookups) =>
-//              // Lookup ExpressionAndResults relevant to this input
-//              val relevantResults = inputLookups.flatMap { lookup =>
-//                expressionToResultMap.getOrElse(lookup.expression, Seq.empty)
-//              }
-//
-//              val resultMap = InputExpressionReassembler.constructFinalInputValues(
-//                relevantResults,
-//                parsedTree,
-//                Some(rootEntityNames),
-//                Some(input)
-//              )
-//              convertToSubmissionValidationValues(resultMap, input)
-//            }
-//
-//          if (resultsSeq.isEmpty) {
-//            LazyList(
-//              SubmissionValidationEntityInputs(entityName = expressionEvaluationContext.entityName.getOrElse(""),
-//                                               inputResolutions = Set.empty
-//              )
-//            )
-//          } else {
-//            CollectionUtils
-//              .groupByTuples(resultsSeq)
-//              .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-//                SubmissionValidationEntityInputs(
-//                  entityName = entityName,
-//                  inputResolutions = values.toSet
-//                )
-//              }
-//              .to(LazyList)
-//          }
-//        }
-//      }
-//  }
 
   def parseLookups(expression: String): Seq[ExpressionLookup] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
@@ -522,67 +429,55 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         }
       }
 
-      if (plan.expressionMappings.isEmpty) {
-        // Return entities with empty input resolutions
-        Seq(
-          ("",
-           entityRecords.values.flatten.map { entity =>
-             entity.name -> Success(Seq.empty[AttributeValue])
-           }.toMap
-          )
-        )
-      } else {
+      // For each expression in this query plan, create an ExpressionAndResult
+      plan.expressionMappings.toSeq.flatMap { case (expression, attributeNames) =>
+        attributeNames.map { attrName =>
+          val attributeName = AttributeName.fromDelimitedName(attrName)
 
-        // For each expression in this query plan, create an ExpressionAndResult
-        plan.expressionMappings.toSeq.flatMap { case (expression, attributeNames) =>
-          attributeNames.map { attrName =>
-            val attributeName = AttributeName.fromDelimitedName(attrName)
-
-            val entityToAttributeValues: Map[String, Try[Seq[AttributeValue]]] = if (entityType == rootEntityType) {
-              // Group all results under the original entityName since we want results grouped by the starting entity type
-              val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
-                if (
-                  attributeName == AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
-                ) {
-                  Seq(AttributeString(record.name))
-                } else {
-                  record.toEntity.attributes.get(attributeName) match {
-                    case Some(avl: AttributeValueList) =>
-                      avl.list
-                    case Some(av: AttributeValue) =>
-                      Seq(av)
-                    case _ =>
-                      Seq.empty
-                  }
-                }
-              }
-              Map(entityName -> Success(allAttrs))
-            } else {
-              entityRecords.flatMap { case (_, records) =>
-                records.map { record =>
-                  val attrs: Seq[AttributeValue] =
-                    if (
-                      attributeName == AttributeName.withDefaultNS(
-                        record.entityType + Attributable.entityIdAttributeSuffix
-                      )
-                    ) {
-                      Seq(AttributeString(record.name))
-                    } else {
-                      record.toEntity.attributes.get(attributeName) match {
-                        case Some(avl: AttributeValueList) =>
-                          avl.list
-                        case Some(av: AttributeValue) =>
-                          Seq(av)
-                        case _ =>
-                          Seq.empty
-                      }
-                    }
-                  record.name -> Success(attrs)
+          val entityToAttributeValues: Map[String, Try[Seq[AttributeValue]]] = if (entityType == rootEntityType) {
+            // Group all results under the original entityName since we want results grouped by the starting entity type
+            val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
+              if (
+                attributeName == AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
+              ) {
+                Seq(AttributeString(record.name))
+              } else {
+                record.toEntity.attributes.get(attributeName) match {
+                  case Some(avl: AttributeValueList) =>
+                    avl.list
+                  case Some(av: AttributeValue) =>
+                    Seq(av)
+                  case _ =>
+                    Seq.empty
                 }
               }
             }
-            (expression, entityToAttributeValues)
+            Map(entityName -> Success(allAttrs))
+          } else {
+            entityRecords.flatMap { case (_, records) =>
+              records.map { record =>
+                val attrs: Seq[AttributeValue] =
+                  if (
+                    attributeName == AttributeName.withDefaultNS(
+                      record.entityType + Attributable.entityIdAttributeSuffix
+                    )
+                  ) {
+                    Seq(AttributeString(record.name))
+                  } else {
+                    record.toEntity.attributes.get(attributeName) match {
+                      case Some(avl: AttributeValueList) =>
+                        avl.list
+                      case Some(av: AttributeValue) =>
+                        Seq(av)
+                      case _ =>
+                        Seq.empty
+                    }
+                  }
+                record.name -> Success(attrs)
+              }
+            }
           }
+          (expression, entityToAttributeValues)
         }
       }
     }
