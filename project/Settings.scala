@@ -21,8 +21,7 @@ object Settings {
 
   val commonResolvers = List(
     "artifactory-releases" at googleArtifactoryRegistry + "libs-release",
-    "artifactory-snapshots" at googleArtifactoryRegistry + "libs-snapshot",
-    "Akka library repository" at "https://repo.akka.io/maven"
+    "artifactory-snapshots" at googleArtifactoryRegistry + "libs-snapshot"
   )
 
   //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings

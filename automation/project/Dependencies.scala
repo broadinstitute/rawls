@@ -3,8 +3,8 @@ import sbt._
 object Dependencies {
   val scalaV = "2.13"
 
-  val akkaV         = "2.10.5"
-  val akkaHttpV     = "10.7.1"
+  val akkaV         = "2.6.8"
+  val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.19.1"
 
   val workbenchLibsHash = "80e4b8d"
@@ -44,12 +44,11 @@ object Dependencies {
     "com.google.api-client" % "google-api-client" % "1.22.0" excludeAll (
       ExclusionRule("com.google.guava", "guava-jdk5"),
       ExclusionRule("org.apache.httpcomponents", "httpclient")),
-    "com.typesafe.akka"   %%  "akka-http-core"       % akkaHttpV,
-    "com.typesafe.akka"   %%  "akka-stream-testkit"  % akkaV,
-    "com.typesafe.akka"   %%  "akka-http"            % akkaHttpV,
-    "com.typesafe.akka"   %%  "akka-http-spray-json" % akkaHttpV,
-    "com.typesafe.akka"   %%  "akka-testkit"         % akkaV     % Test,
-    "com.typesafe.akka"   %%  "akka-slf4j"           % akkaV,
+    "com.typesafe.akka"   %%  "akka-http-core"     % akkaHttpV,
+    "com.typesafe.akka"   %%  "akka-stream-testkit" % akkaV,
+    "com.typesafe.akka"   %%  "akka-http"           % akkaHttpV,
+    "com.typesafe.akka"   %%  "akka-testkit"        % akkaV     % Test,
+    "com.typesafe.akka"   %%  "akka-slf4j"          % akkaV,
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
     "org.broadinstitute.dsde"       %% "rawls-model"         % "v0.0.470-SNAP"
