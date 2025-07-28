@@ -1163,6 +1163,7 @@ class CompactEntityProviderSpec
     when(mockQueries.countEntities(any[UUID], mockitoEq(newType))).thenReturn(DBIO.successful(0))
     // The rename operation will update 5 entities
     when(mockQueries.renameEntityType(any[UUID], mockitoEq(oldType), mockitoEq(newType))).thenReturn(DBIO.successful(5))
+    when(mockQueries.renameCacheType(any[UUID], anyString, any[EntityTypeRename])).thenReturn(DBIO.successful(0))
 
     val provider = providerWithMocks(mockQueries)
 

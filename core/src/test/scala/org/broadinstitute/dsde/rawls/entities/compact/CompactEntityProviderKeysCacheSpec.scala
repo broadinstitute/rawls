@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
   Entity,
   EntityPointer,
+  EntityTypeRename,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -559,13 +560,64 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
 
   behavior of "clone"
 
-  // this is an optimization; it would be correct but slower without this
-  it should "also clone cache entries" is pending
+  it should "also clone cache entries" in withMinimalTestDatabase { _ =>
+    val sourceWorkspace = minimalTestData.workspace
+    val destinationWorkspace = minimalTestData.workspace2
+
+    val entityType = "entityType1"
+    // create entity
+    val provider = defaultProvider()
+    val entity = Entity("name", entityType, Map())
+    Await.result(provider.createEntity(entity, defaultRequestContext), atMost)
+    // insert valid cache entries
+    val cacheEntry = EntityTypeAndAttributeKeys(entityType, Set(AttributeName.withDefaultNS("attr1")))
+    val anotherCacheEntry = EntityTypeAndAttributeKeys("someOtherType", Set(AttributeName.withDefaultNS("attr2")))
+    // save the cache
+    runAndWait(q.saveCache(sourceWorkspace.workspaceIdAsUUID, Set(cacheEntry, anotherCacheEntry))) shouldBe 2
+    // validate cache entries
+    runAndWait(q.getCachedKeys(sourceWorkspace.workspaceIdAsUUID)) should contain theSameElementsAs Seq(
+      cacheEntry,
+      anotherCacheEntry
+    )
+    // perform clone
+    val cloneResult =
+      runAndWait(provider.clone(sourceWorkspace, destinationWorkspace, defaultRequestContext))
+    cloneResult shouldBe (1, 0)
+    // validate cache entries were also cloned
+    runAndWait(q.getCachedKeys(destinationWorkspace.workspaceIdAsUUID)) should contain theSameElementsAs Seq(
+      cacheEntry,
+      anotherCacheEntry
+    )
+  }
 
   behavior of "renameEntityType"
 
-  // this is an optimization; it would be correct but slower without this
-  it should "also rename the cache entry" is pending
+  it should "also rename the cache entry" in withMinimalTestDatabase { _ =>
+    val oldEntityType = "entityType1"
+    val newEntityType = "entityType1renamed"
+    // create entity
+    val provider = defaultProvider()
+    val entity = Entity("name", oldEntityType, Map())
+    Await.result(provider.createEntity(entity, defaultRequestContext), atMost)
+    // insert valid cache entries
+    val cacheEntry = EntityTypeAndAttributeKeys(oldEntityType, Set(AttributeName.withDefaultNS("attr1")))
+    val anotherCacheEntry = EntityTypeAndAttributeKeys("someOtherType", Set(AttributeName.withDefaultNS("attr2")))
+    // save the cache
+    runAndWait(q.saveCache(wsid, Set(cacheEntry, anotherCacheEntry))) shouldBe 2
+    // validate cache entries
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntry, anotherCacheEntry)
+    // rename entity type
+    val renameResult =
+      Await.result(
+        provider.renameEntityType(entity.entityType, EntityTypeRename(newEntityType), defaultRequestContext),
+        atMost
+      )
+    renameResult shouldBe 1
+    // validate cache entry was renamed
+    runAndWait(q.getCachedKeys(wsid)) should contain theSameElementsAs Seq(cacheEntry.copy(entityType = newEntityType),
+                                                                           anotherCacheEntry
+    )
+  }
 
   // ====================================================================================================
   //  helper methods
