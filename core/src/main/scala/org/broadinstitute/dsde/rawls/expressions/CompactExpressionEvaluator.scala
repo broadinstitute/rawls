@@ -140,9 +140,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                           workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]] = Map.empty
   )(implicit executionContext: ExecutionContext): Future[LazyList[SubmissionValidationEntityInputs]] = {
 
-    //    val initialProcessingFuture: Future[
-    //      (Seq[(MethodInput, RootContext, Seq[ExpressionLookup])], Seq[EntityName], Map[String, Seq[ExpressionAndResult]])
-    //    ] =
     (expressionEvaluationContext.entityType,
      expressionEvaluationContext.entityName,
      expressionEvaluationContext.rootEntityType
@@ -259,7 +256,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               val expressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
                 entityExpressionToResultMap ++ workspaceExpressionToResultMap
 
-              //              (inputExpressionData, rootEntityNames, expressionToResultMap)
               if (inputExpressionData.isEmpty) {
                 // Short-circuit if there are no inputs
                 rootEntityNames
@@ -322,10 +318,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         val workspaceExpressionToResultMap: Map[String, Seq[ExpressionAndResult]] =
           workspaceExpressionAndResults.groupBy { case (expression, _) => expression }
 
-        //          Future.successful((inputExpressionData, Seq.empty[EntityName], workspaceExpressionToResultMap))
-
         // Repackage the parsed expressions into the correct form without querying the database
-        //                  Future.successful {
         val resultsSeq =
           inputExpressionData.flatMap { case (input, parsedTree, _) =>
             val resultMap = InputExpressionReassembler.constructFinalInputValues(
@@ -336,7 +329,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             )
             convertToSubmissionValidationValues(resultMap, input)
           }
-        //                  }
+
         Future.successful(if (resultsSeq.isEmpty) {
           LazyList(
             SubmissionValidationEntityInputs(entityName = expressionEvaluationContext.entityName.getOrElse(""),
@@ -356,53 +349,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
         })
     }
   }
-//
-//    initialProcessingFuture
-//      .map { case (inputExpressionData, rootEntityNames, expressionToResultMap) =>
-//        if (inputExpressionData.isEmpty) {
-//          // Short-circuit if there are no inputs
-//          rootEntityNames
-//            .map { rootEntityName =>
-//              SubmissionValidationEntityInputs(entityName = rootEntityName, inputResolutions = Set.empty)
-//            }
-//            .to(LazyList)
-//        } else {
-//          val resultsSeq =
-//            inputExpressionData.flatMap { case (input, parsedTree, inputLookups) =>
-//              // Lookup ExpressionAndResults relevant to this input
-//              val relevantResults = inputLookups.flatMap { lookup =>
-//                expressionToResultMap.getOrElse(lookup.expression, Seq.empty)
-//              }
-//
-//              val resultMap = InputExpressionReassembler.constructFinalInputValues(
-//                relevantResults,
-//                parsedTree,
-//                Some(rootEntityNames),
-//                Some(input)
-//              )
-//              convertToSubmissionValidationValues(resultMap, input)
-//            }
-//
-//          if (resultsSeq.isEmpty) {
-//            LazyList(
-//              SubmissionValidationEntityInputs(entityName = expressionEvaluationContext.entityName.getOrElse(""),
-//                                               inputResolutions = Set.empty
-//              )
-//            )
-//          } else {
-//            CollectionUtils
-//              .groupByTuples(resultsSeq)
-//              .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-//                SubmissionValidationEntityInputs(
-//                  entityName = entityName,
-//                  inputResolutions = values.toSet
-//                )
-//              }
-//              .to(LazyList)
-//          }
-//        }
-//      }
-//  }
 
   def parseLookups(expression: String): Seq[ExpressionLookup] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
@@ -432,7 +378,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
    *     up to relationLevel
    * @param relationLevel The current relation level starting with 0 and incrementing with each
    *     recursive call
-   * @return A seq of QueryPlans, which contain: 
+   * @return A seq of QueryPlans, which contain:
    *         - List of string representing the chain of relations,
    *         - Map of expression -> list of strings representing the attributes to get from the entities at the end of the chain
    */
