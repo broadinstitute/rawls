@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.model.AttributeName
+import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityTypeRename}
 
 import java.util.UUID
 import slick.jdbc.MySQLProfile.api._
@@ -80,4 +80,29 @@ trait CompactEntityKeysCache {
       ).asUpdate
     }
 
+  // ========== rename entity type for a cache entry ==========
+
+  def renameCacheType(workspaceId: UUID, oldName: String, renameInfo: EntityTypeRename): ReadWriteAction[Int] =
+    // rename the entity_type in the cache for the given workspace
+    if (oldName == renameInfo.newName) {
+      DBIO.successful(0)
+    } else {
+      sqlu"""update ENTITY_KEYS_CACHE
+              set entity_type = ${renameInfo.newName}
+              where workspace_id = $workspaceId
+              and entity_type = $oldName;"""
+    }
+
+  // ========== clone cache entries to a new workspace ==========
+
+  def cloneCache(sourceWorkspaceId: UUID, destinationWorkspaceId: UUID): WriteAction[Int] =
+    if (sourceWorkspaceId == destinationWorkspaceId) {
+      DBIO.successful(0)
+    } else {
+      sqlu"""insert into ENTITY_KEYS_CACHE (workspace_id, entity_type, attribute_keys, cached_at)
+              select $destinationWorkspaceId, entity_type, attribute_keys, cached_at
+              from ENTITY_KEYS_CACHE
+              where workspace_id = $sourceWorkspaceId
+              and (invalidated_at is null OR cached_at > invalidated_at);"""
+    }
 }
