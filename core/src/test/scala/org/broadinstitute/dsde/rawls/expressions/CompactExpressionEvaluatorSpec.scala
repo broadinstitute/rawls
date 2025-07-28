@@ -34,7 +34,6 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatest.concurrent.ScalaFutures
 import slick.dbio.DBIO
-import scala.concurrent.duration._
 
 import scala.util.{Random, Success}
 
@@ -46,9 +45,6 @@ class CompactExpressionEvaluatorSpec
     with TableDrivenPropertyChecks
     with TestDriverComponent
     with MethodConfigTestSupport {
-
-  implicit override val patienceConfig: PatienceConfig =
-    PatienceConfig(timeout = 300.seconds, interval = 100.millis)
 
   val compactEntityRepositoryMock: CompactEntityRepository = mock[CompactEntityRepository]
   val mockQueries: CompactEntityQuery = mock[CompactEntityQuery]

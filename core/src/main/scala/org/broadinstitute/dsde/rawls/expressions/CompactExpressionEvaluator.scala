@@ -172,6 +172,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             ErrorReport(StatusCodes.BadRequest, s"Missing rootEntityType")
           )
         )
+
       case (Some(entityType), Some(entityName), Some(rootEntityType)) =>
         if (
           expressionEvaluationContext.expression.isEmpty &&
@@ -280,23 +281,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                     convertToSubmissionValidationValues(resultMap, input)
                   }
 
-                if (resultsSeq.isEmpty) {
-                  LazyList(
-                    SubmissionValidationEntityInputs(entityName = expressionEvaluationContext.entityName.getOrElse(""),
-                                                     inputResolutions = Set.empty
-                    )
-                  )
-                } else {
-                  CollectionUtils
-                    .groupByTuples(resultsSeq)
-                    .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-                      SubmissionValidationEntityInputs(
-                        entityName = entityName,
-                        inputResolutions = values.toSet
-                      )
-                    }
-                    .to(LazyList)
-                }
+                groupsResultsByEntityName(resultsSeq, entityName)
 
               }
             }
@@ -330,23 +315,9 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             convertToSubmissionValidationValues(resultMap, input)
           }
 
-        Future.successful(if (resultsSeq.isEmpty) {
-          LazyList(
-            SubmissionValidationEntityInputs(entityName = expressionEvaluationContext.entityName.getOrElse(""),
-                                             inputResolutions = Set.empty
-            )
-          )
-        } else {
-          CollectionUtils
-            .groupByTuples(resultsSeq)
-            .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
-              SubmissionValidationEntityInputs(
-                entityName = entityName,
-                inputResolutions = values.toSet
-              )
-            }
-            .to(LazyList)
-        })
+        Future.successful(
+          groupsResultsByEntityName(resultsSeq, "")
+        )
     }
   }
 
@@ -545,5 +516,24 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       val parsedTree = terraExpressionParser.root()
       val inputLookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
       (input, parsedTree, inputLookups)
+    }
+
+  private def groupsResultsByEntityName(resultsSeq: Seq[(EntityName, SubmissionValidationValue)],
+                                        entityName: String
+  ): LazyList[SubmissionValidationEntityInputs] =
+    if (resultsSeq.isEmpty) {
+      LazyList(
+        SubmissionValidationEntityInputs(entityName, inputResolutions = Set.empty)
+      )
+    } else {
+      CollectionUtils
+        .groupByTuples(resultsSeq)
+        .map { case (entityName: ExpressionEvaluationSupport.EntityName, values) =>
+          SubmissionValidationEntityInputs(
+            entityName = entityName,
+            inputResolutions = values.toSet
+          )
+        }
+        .to(LazyList)
     }
 }
