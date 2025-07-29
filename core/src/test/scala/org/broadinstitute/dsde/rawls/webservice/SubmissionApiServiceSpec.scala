@@ -10,17 +10,20 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.WorkspaceAccessDeniedException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
+import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor
 import org.broadinstitute.dsde.rawls.mock.MockBardService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.Mockito.{verify, when}
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.{doReturn, spy, verify, when}
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import spray.json.DefaultJsonProtocol._
@@ -41,6 +44,25 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     implicit override val executionContext: ExecutionContext
   ) extends ApiServices
       with MockUserInfoDirectives
+      {
+
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    override val entityManager = EntityManager.defaultEntityManager(
+      slickDataSource,
+      spyWorkspaceSettingRepository,
+      testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
+      workbenchMetricBaseName
+    )(executionContext, system)
+  }
 
   // increase the route timeout slightly for this test as the "large submission" tests sometimes
   // bump up against the default 5 second timeout.

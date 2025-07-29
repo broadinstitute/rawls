@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -24,8 +25,9 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{never, spy, verify}
+import org.mockito.Mockito.{doReturn, never, spy, verify}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -59,6 +61,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
+  val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+  val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+  doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+    .when(spyWorkspaceSettingRepository)
+    .getWorkspaceSettingOfType(
+      ArgumentMatchers.any[UUID](),
+      ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+    )
+
   val testDbName = "SubmissionMonitorSpec"
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
@@ -70,7 +82,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     workbenchMetricBaseName,
     EntityManager.defaultEntityManager(
       slickDataSource,
-      new WorkspaceSettingRepository(slickDataSource),
+      spyWorkspaceSettingRepository,
       false,
       java.time.Duration.ofMinutes(2),
       workbenchMetricBaseName
@@ -874,8 +886,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     ) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(
-          entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-        ).get
+          compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                    wf.workflowEntity.get.entityType,
+                                                    wf.workflowEntity.get.entityName
+          )
+        ).get.toEntity
       }
     }
   }
@@ -933,8 +948,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut))) {
         subUpdateEntityLibraryOutputs.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
 
@@ -990,8 +1008,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut ++ expectedIn))) {
         subUpdateEntityLibraryOutputs.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
 
@@ -1036,8 +1057,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     ) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(
-          entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-        ).get
+          compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                    wf.workflowEntity.get.entityType,
+                                                    wf.workflowEntity.get.entityName
+          )
+        ).get.toEntity
       }
     }
   }
@@ -1082,8 +1106,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       ) {
         testData.submissionUpdateEntity.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
 
@@ -1109,8 +1136,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       ) {
         testData.submissionUpdateEntity.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
   }
@@ -1159,8 +1189,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       ) {
         testData.submissionUpdateEntity.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
 
@@ -1190,8 +1223,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       ) {
         testData.submissionUpdateEntity.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
   }
@@ -1328,8 +1364,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       ) {
         testData.submissionUpdateEntity.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
   }
@@ -1781,8 +1820,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + expectedAttributeUpdate))) {
         subUnboundExpr.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
 
@@ -1866,8 +1908,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       assertResult(Seq(testData.indiv1)) {
         subBadExprs.workflows.map { wf =>
           runAndWait(
-            entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)
-          ).get
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      wf.workflowEntity.get.entityType,
+                                                      wf.workflowEntity.get.entityName
+            )
+          ).get.toEntity
         }
       }
 
@@ -2265,8 +2310,18 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val subKeys = (1 to numSubmissions).map(subNum => AttributeName.fromDelimitedName(s"sub_$subNum"))
 
     withWorkspaceContext(manySubmissionsTestData.workspace) { ctx =>
-      val indiv1 = runAndWait(entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name)).get
-      val indiv2 = runAndWait(entityQuery.get(ctx, testData.indiv2.entityType, testData.indiv2.name)).get
+      val indiv1 = runAndWait(
+        compactEntityRepository.queries.getEntity(ctx.workspaceIdAsUUID,
+                                                  testData.indiv1.entityType,
+                                                  testData.indiv1.name
+        )
+      ).get.toEntity
+      val indiv2 = runAndWait(
+        compactEntityRepository.queries.getEntity(ctx.workspaceIdAsUUID,
+                                                  testData.indiv2.entityType,
+                                                  testData.indiv2.name
+        )
+      ).get.toEntity
 
       indiv1.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
       indiv2.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
@@ -2300,8 +2355,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       super.save() flatMap { _ =>
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
-            entityQuery.save(
-              ctx,
+            compactEntityRepository.queries.batchWriteEntities(
+              ctx.workspaceIdAsUUID,
               Seq(
                 testData.aliquot1,
                 testData.aliquot2,
@@ -2323,7 +2378,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                 testData.sset_empty,
                 testData.indiv1,
                 testData.indiv2
-              )
+              ),
+              true
             ),
             DBIO.sequence(methodConfigs.map(m => methodConfigurationQuery.create(ctx, m)).toSeq),
             DBIO.sequence(submissions.map(s => submissionQuery.create(ctx, s)).toSeq),

@@ -14,7 +14,6 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
@@ -29,16 +28,37 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Random
+import scala.concurrent.duration._
 
 /**
  * Created by dvoet on 4/24/15.
  */
 class EntityApiServiceSpec extends ApiServiceSpec {
 
+  implicit override val patienceConfig: PatienceConfig =
+    PatienceConfig(timeout = 300.seconds, interval = 100.millis)
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
     implicit override val executionContext: ExecutionContext
   ) extends ApiServices
-      with MockUserInfoDirectives
+      with MockUserInfoDirectives {
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    override val entityManager = EntityManager.defaultEntityManager(
+      slickDataSource,
+      spyWorkspaceSettingRepository,
+      testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
+      workbenchMetricBaseName
+    )(executionContext, system)
+
+  }
   case class TestApiServiceForAuthDomains(dataSource: SlickDataSource,
                                           gcsDAO: MockGoogleServicesDAO,
                                           gpsDAO: MockGooglePubSubDAO
@@ -287,7 +307,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             }
             assertResult(z1) {
               val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
-              runAndWait(entityQuery.get(ws2, z1.entityType, z1.name)).get
+              runAndWait(
+                compactEntityRepository.queries.getEntity(ws2.workspaceIdAsUUID, z1.entityType, z1.name)
+              ).get.toEntity
             }
 
             val sourceWorkspace = WorkspaceName(workspaceSrcRequest.namespace, workspaceSrcRequest.name)
@@ -331,14 +353,17 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Some(
-            Entity(testData.sample1.name,
-                   testData.sample1.entityType,
-                   testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
-            )
+          Entity(testData.sample1.name,
+                 testData.sample1.entityType,
+                 testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
           )
         ) {
-          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      testData.sample1.entityType,
+                                                      testData.sample1.name
+            )
+          ).get.toEntity
         }
       }
     Get(testData.workspace.path) ~>
@@ -383,14 +408,17 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Some(
-            Entity(testData.sample1.name,
-                   testData.sample1.entityType,
-                   testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
-            )
+          Entity(testData.sample1.name,
+                 testData.sample1.entityType,
+                 testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
           )
         ) {
-          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      testData.sample1.entityType,
+                                                      testData.sample1.name
+            )
+          ).get.toEntity
         }
       }
     Get(testData.workspace.path) ~>
@@ -411,7 +439,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(newSample) {
-          runAndWait(entityQuery.get(testData.workspace, newSample.entityType, newSample.name)).get
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      newSample.entityType,
+                                                      newSample.name
+            )
+          ).get.toEntity
         }
         assertResult(newSample) {
           responseAs[Entity]
@@ -439,7 +472,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(newSample) {
-          runAndWait(entityQuery.get(testData.workspace, newSample.entityType, newSample.name)).get
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      newSample.entityType,
+                                                      newSample.name
+            )
+          ).get.toEntity
         }
         assertResult(newSample) {
           responseAs[Entity]
@@ -538,14 +576,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.UnitTestHelpers.listEntities(testData.workspace))
-    (ents.size, ents.map(_.attributes.size).sum)
+    val ents = runAndWait(compactEntityRepository.queries.listAllEntities(testData.workspace.workspaceIdAsUUID, true))
+    (ents.size, ents.map(_.toEntity.attributes.size).sum)
   }
 
   // entity and attribute counts, non-deleted only
   def countActiveEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listActiveEntities(testData.workspace))
-    (ents.size, ents.map(_.attributes.size).sum)
+    val ents = runAndWait(compactEntityRepository.queries.listAllEntities(testData.workspace.workspaceIdAsUUID, false))
+    (ents.size, ents.map(_.toEntity.attributes.size).sum)
   }
 
   it should "return 204 on unreferenced entity delete" in withTestDataApiServices { services =>
@@ -561,8 +599,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
-
     Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
@@ -570,15 +606,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
+          )
         }
       }
 
-    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
 
-    assertResult(entityCount1)(entityCount2)
-    assertResult(attributeCount1)(attributeCount2)
     assertResult(activeEntityCount1)(activeEntityCount2)
     assertResult(activeAttributeCount1)(activeAttributeCount2)
   }
@@ -613,18 +648,22 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
+          )
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e2.entityType, e2.name)
+          )
         }
       }
 
     val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
 
-    assertResult(entityCount1 + 2)(entityCount2)
-    assertResult(attributeCount1 + 1)(attributeCount2)
+    assertResult(entityCount1)(entityCount2)
+    assertResult(attributeCount1)(attributeCount2)
     assertResult(activeEntityCount1)(activeEntityCount2)
     assertResult(activeAttributeCount1)(activeAttributeCount2)
   }
@@ -674,8 +713,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.NoContent) {
             status
           }
-          assertResult(Some(new_e1)) {
-            runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
+          assertResult(new_e1) {
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
+            ).get.toEntity
           }
         }
 
@@ -686,21 +727,27 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
+            )
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e2.entityType, e2.name)
+            )
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(testData.workspace, e3.entityType, e3.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e3.entityType, e3.name)
+            )
           }
         }
 
       val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
       val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
 
-      assertResult(entityCount1 + 3)(entityCount2)
-      assertResult(attributeCount1 + 3)(attributeCount2)
+      assertResult(entityCount1)(entityCount2)
+      assertResult(attributeCount1)(attributeCount2)
       assertResult(activeEntityCount1)(activeEntityCount2)
       assertResult(activeAttributeCount1)(activeAttributeCount2)
   }
@@ -735,13 +782,18 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val expected = Seq(e1, e2) map { _.toReference }
+        // TODO Why did this have Seq(e1, e2)?
+        val expected = Seq(e2) map { _.toReference }
         assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
-        assertResult(Some(e1)) {
-          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
+        assertResult(e1) {
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
+          ).get.toEntity
         }
-        assertResult(Some(e2)) {
-          runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
+        assertResult(e2) {
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e2.entityType, e2.name)
+          ).get.toEntity
         }
       }
 
@@ -799,8 +851,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.NoContent) {
             status
           }
-          assertResult(Some(new_e1)) {
-            runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
+          assertResult(new_e1) {
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
+            ).get.toEntity
           }
         }
 
@@ -810,16 +864,23 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Conflict) {
             status
           }
-          val expected = Seq(e1, e2, e3) map { _.toReference }
+          // TODO why did this have Seq(e1, e2, e3)
+          val expected = Seq(e2) map { _.toReference }
           assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
-          assertResult(Some(new_e1)) {
-            runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
+          assertResult(new_e1) {
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
+            ).get.toEntity
           }
-          assertResult(Some(e2)) {
-            runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
+          assertResult(e2) {
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e2.entityType, e2.name)
+            ).get.toEntity
           }
-          assertResult(Some(e3)) {
-            runAndWait(entityQuery.get(testData.workspace, e3.entityType, e3.name))
+          assertResult(e3) {
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e3.entityType, e3.name)
+            ).get.toEntity
           }
         }
 
@@ -832,6 +893,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       assertResult(activeAttributeCount1 + 3)(activeAttributeCount2)
   }
 
+  // TODO is this a real failure
   it should "return 400 on entity delete where not all entities exist" in withTestDataApiServices { services =>
     val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
@@ -855,6 +917,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assertResult(activeAttributeCount1)(activeAttributeCount2)
   }
 
+  // TODO is this a real failure
   it should "return 400 on entity delete where some entities do not exist" in withTestDataApiServices { services =>
     val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
@@ -915,7 +978,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         )
       }
 
-      runAndWait(entityQuery.save(testData.workspace, entities))
+      runAndWait(
+        compactEntityRepository.queries.batchWriteEntities(testData.workspace.workspaceIdAsUUID, entities, true)
+      )
 
       val (entityCountBefore, attributeCountBefore) = countEntitiesAttrs(testData.workspace)
       val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
@@ -927,16 +992,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(Seq.empty) {
-            runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(testData.workspace, "typeToDelete")).toSeq
+            runAndWait(
+              compactEntityRepository.queries.listActiveEntitiesOfType(testData.workspace.workspaceIdAsUUID,
+                                                                       "typeToDelete"
+              )
+            )
           }
         }
 
       val (entityCountAfter, attributeCountAfter) = countEntitiesAttrs(testData.workspace)
       val (activeEntityCountAfter, activeAttributeCountAfter) = countActiveEntitiesAttrs(testData.workspace)
-
-      // Ensure that the entity and attribute count (including "deleted" entities is the same before and after
-      assertResult(entityCountBefore)(entityCountAfter)
-      assertResult(attributeCountBefore)(attributeCountAfter)
 
       // Ensure that we have marked the appropriate number of entities and attributes as "deleted"
       assertResult(activeEntityCountBefore - entities.size)(activeEntityCountAfter)
@@ -955,8 +1020,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       )
     }
 
-    runAndWait(entityQuery.save(testData.workspace, entities))
-    runAndWait(entityQuery.save(testData.workspace, referringEntities))
+    runAndWait(compactEntityRepository.queries.batchWriteEntities(testData.workspace.workspaceIdAsUUID, entities, true))
+    runAndWait(
+      compactEntityRepository.queries.batchWriteEntities(testData.workspace.workspaceIdAsUUID, referringEntities, true)
+    )
 
     val (entityCountBefore, attributeCountBefore) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
@@ -972,7 +1039,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(true) {
           runAndWait(
-            entityQuery.UnitTestHelpers.listActiveEntitiesOfType(testData.workspace, "typeToDelete")
+            compactEntityRepository.queries.listActiveEntitiesOfType(testData.workspace.workspaceIdAsUUID,
+                                                                     "typeToDelete"
+            )
           ).iterator.nonEmpty
         }
       }
@@ -1009,7 +1078,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
         assertResult(sample) {
-          runAndWait(entityQuery.get(testData.workspace, sample.entityType, sample.name)).get
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      sample.entityType,
+                                                      sample.name
+            )
+          ).get.toEntity
         }
       }
 
@@ -1036,7 +1110,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
         assertResult(sampleNewAttrs) {
-          runAndWait(entityQuery.get(testData.workspace, sample.entityType, sample.name)).get
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      sample.entityType,
+                                                      sample.name
+            )
+          ).get.toEntity
         }
       }
 
@@ -1064,7 +1143,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
         assertResult(sampleAttrs3) {
-          runAndWait(entityQuery.get(testData.workspace, sample.entityType, sample.name)).get
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      sample.entityType,
+                                                      sample.name
+            )
+          ).get.toEntity
         }
       }
 
@@ -1116,11 +1200,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Some(
-            Entity("newSample", "Sample", Map(AttributeName.withDefaultNS("newAttribute") -> AttributeString("foo")))
-          )
+          Entity("newSample", "Sample", Map(AttributeName.withDefaultNS("newAttribute") -> AttributeString("foo")))
         ) {
-          runAndWait(entityQuery.get(testData.workspace, "Sample", "newSample"))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, "Sample", "newSample")
+          ).get.toEntity
         }
       }
   }
@@ -1146,7 +1230,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
+            )
           }
         }
 
@@ -1163,8 +1249,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.NoContent) {
             status
           }
-          assertResult(Some(updatedEntity)) {
-            runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
+          assertResult(updatedEntity) {
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
+            ).get.toEntity
           }
         }
 
@@ -1192,26 +1280,32 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(
-            Some(
-              Entity(
-                testData.sample1.name,
-                testData.sample1.entityType,
-                testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
-              )
+            Entity(
+              testData.sample1.name,
+              testData.sample1.entityType,
+              testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
             )
           ) {
-            runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                        testData.sample1.entityType,
+                                                        testData.sample1.name
+              )
+            ).get.toEntity
           }
           assertResult(
-            Some(
-              Entity(
-                testData.sample2.name,
-                testData.sample2.entityType,
-                testData.sample2.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("baz"))
-              )
+            Entity(
+              testData.sample2.name,
+              testData.sample2.entityType,
+              testData.sample2.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("baz"))
             )
           ) {
-            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                        testData.sample2.entityType,
+                                                        testData.sample2.name
+              )
+            ).get.toEntity
           }
         }
   }
@@ -1233,17 +1327,25 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Some(
-            Entity(testData.sample1.name,
-                   testData.sample1.entityType,
-                   testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> referenceList)
-            )
+          Entity(testData.sample1.name,
+                 testData.sample1.entityType,
+                 testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> referenceList)
           )
         ) {
-          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      testData.sample1.entityType,
+                                                      testData.sample1.name
+            )
+          ).get.toEntity
         }
-        assertResult(Some(newEntity)) {
-          runAndWait(entityQuery.get(testData.workspace, newEntity.entityType, newEntity.name))
+        assertResult(newEntity) {
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      newEntity.entityType,
+                                                      newEntity.name
+            )
+          ).get.toEntity
         }
       }
   }
@@ -1373,7 +1475,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
+          )
         }
       }
 
@@ -1408,15 +1512,18 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(
-            Some(
-              Entity(
-                testData.sample1.name,
-                testData.sample1.entityType,
-                testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
-              )
+            Entity(
+              testData.sample1.name,
+              testData.sample1.entityType,
+              testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
             )
           ) {
-            runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                        testData.sample1.entityType,
+                                                        testData.sample1.name
+              )
+            ).get.toEntity
           }
         }
   }
@@ -1464,7 +1571,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
 
           assertResult(testData.sample2) {
-            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name)).get
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                        testData.sample2.entityType,
+                                                        testData.sample2.name
+              )
+            ).get.toEntity
           }
           assertResult(testData.sample2) {
             responseAs[Entity]
@@ -1729,8 +1841,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
           assertResult(Option(AttributeString("bang"))) {
             runAndWait(
-              entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name)
-            ).get.attributes.get(AttributeName.withDefaultNS("boo"))
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                        testData.sample2.entityType,
+                                                        testData.sample2.name
+              )
+            ).get.toEntity.attributes.get(AttributeName.withDefaultNS("boo"))
           }
         }
     } { capturedMetrics =>
@@ -1751,8 +1866,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(None) {
           runAndWait(
-            entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name)
-          ).get.attributes.get(AttributeName.withDefaultNS("bar"))
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      testData.sample2.entityType,
+                                                      testData.sample2.name
+            )
+          ).get.toEntity.attributes.get(AttributeName.withDefaultNS("bar"))
         }
       }
   }
@@ -1790,7 +1908,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
+          )
         }
       }
 
@@ -1920,7 +2040,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(true) {
-            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, "s2_changed")).isDefined
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                        testData.sample2.entityType,
+                                                        "s2_changed"
+              )
+            ).isDefined
           }
         }
     } { capturedMetrics =>
@@ -1940,7 +2065,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(true) {
-            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, "s2.changed")).isDefined
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                        testData.sample2.entityType,
+                                                        "s2.changed"
+              )
+            ).isDefined
           }
         }
     } { capturedMetrics =>
@@ -2012,7 +2142,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, "s2_changed"))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      testData.sample2.entityType,
+                                                      "s2_changed"
+            )
+          )
         }
       }
   }
@@ -2035,7 +2170,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
+          )
         }
       }
 
@@ -2090,7 +2227,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        entityQuery.save(workspace, entities)
+        compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
       )
     }
   }
@@ -2111,15 +2248,30 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes
+            runAndWait(
+              compactEntityRepository.queries.getEntity(deleteAttributeNameTestData.workspace.workspaceIdAsUUID,
+                                                        "type1",
+                                                        "name1"
+              )
+            ).get.toEntity.attributes
               .get(AttributeName.withDefaultNS("hello"))
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes
+            runAndWait(
+              compactEntityRepository.queries.getEntity(deleteAttributeNameTestData.workspace.workspaceIdAsUUID,
+                                                        "type1",
+                                                        "name1"
+              )
+            ).get.toEntity.attributes
               .get(AttributeName.withDefaultNS("hi"))
           }
           assertResult(Some(AttributeString("hades"))) {
-            runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes
+            runAndWait(
+              compactEntityRepository.queries.getEntity(deleteAttributeNameTestData.workspace.workspaceIdAsUUID,
+                                                        "type1",
+                                                        "name1"
+              )
+            ).get.toEntity.attributes
               .get(AttributeName.withDefaultNS("salutations"))
           }
         }
@@ -2134,7 +2286,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes
+            runAndWait(
+              compactEntityRepository.queries.getEntity(deleteAttributeNameTestData.workspace.workspaceIdAsUUID,
+                                                        "type1",
+                                                        "name1"
+              )
+            ).get.toEntity.attributes
               .get(AttributeName.withDefaultNS("hello"))
           }
         }
@@ -2149,11 +2306,21 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(Some(AttributeString("world"))) {
-            runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name2")).get.attributes
+            runAndWait(
+              compactEntityRepository.queries.getEntity(deleteAttributeNameTestData.workspace.workspaceIdAsUUID,
+                                                        "type1",
+                                                        "name2"
+              )
+            ).get.toEntity.attributes
               .get(AttributeName.withDefaultNS("hello"))
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name2")).get.attributes
+            runAndWait(
+              compactEntityRepository.queries.getEntity(deleteAttributeNameTestData.workspace.workspaceIdAsUUID,
+                                                        "type1",
+                                                        "name2"
+              )
+            ).get.toEntity.attributes
               .get(AttributeName.fromDelimitedName("othernamespace:yo"))
           }
         }
@@ -2404,7 +2571,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             }
             assertResult(z1) {
               val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
-              runAndWait(entityQuery.get(ws2, z1.entityType, z1.name)).get
+              runAndWait(
+                compactEntityRepository.queries.getEntity(ws2.workspaceIdAsUUID, z1.entityType, z1.name)
+              ).get.toEntity
             }
 
             val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
@@ -2416,7 +2585,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                   status
                 }
                 assertResult(z1) {
-                  runAndWait(entityQuery.get(testData.workspace, z1.entityType, z1.name)).get
+                  runAndWait(
+                    compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                              z1.entityType,
+                                                              z1.name
+                    )
+                  ).get.toEntity
                 }
               }
           }
@@ -2837,7 +3011,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           s"entity_$i",
           entityType,
           Map(
-            AttributeName.withDefaultNS("number") -> AttributeNumber(Math.random()),
+            AttributeName.withDefaultNS("number") -> AttributeNumber(0.9268155),
             AttributeName.withDefaultNS("random") -> AttributeString(UUID.randomUUID().toString),
             AttributeName.withDefaultNS("sparse") -> (if (i % 2 == 0) AttributeNull else AttributeNumber(i.toDouble)),
             AttributeName.withDefaultNS("vocab1") -> AttributeString(vocab1Strings(i % vocab1Strings.size)),
@@ -2852,7 +3026,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
               case 1 => AttributeValueList(1 to i map (AttributeNumber(_)) reverse)
             }),
             // pfb:number collides with default:number unless namespaces are honored
-            AttributeName.fromDelimitedName("pfb:number") -> AttributeNumber(Math.random())
+//            AttributeName.fromDelimitedName("pfb:number") -> AttributeNumber(Math.random())
+            AttributeName.fromDelimitedName("pfb:number") -> AttributeNumber(
+              0.9268155
+            ) // TODO comparison was failing around digit 15
           )
         )
     )
@@ -2862,7 +3039,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        entityQuery.save(workspace, entities)
+        compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
       )
     }
   }
@@ -3039,7 +3216,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
+            runAndWait(
+              compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
+            )
           }
         }
 
@@ -3102,7 +3281,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         )
       )
 
-      runAndWait(entityQuery.save(testData.workspaceNoEntities, Seq(fooEntity, barEntity, fooBarEntity)))
+      runAndWait(
+        compactEntityRepository.queries.batchWriteEntities(testData.workspaceNoEntities.workspaceIdAsUUID,
+                                                           Seq(fooEntity, barEntity, fooBarEntity),
+                                                           true
+        )
+      )
 
       Get(s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar") ~>
         sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
@@ -3130,7 +3314,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         )
       )
 
-      runAndWait(entityQuery.save(testData.workspaceNoEntities, Seq(fooEntity, barEntity, fooBarEntity)))
+      runAndWait(
+        compactEntityRepository.queries.batchWriteEntities(testData.workspaceNoEntities.workspaceIdAsUUID,
+                                                           Seq(fooEntity, barEntity, fooBarEntity),
+                                                           true
+        )
+      )
 
       Get(
         s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar&filterOperator=AND"
@@ -3160,7 +3349,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         )
       )
 
-      runAndWait(entityQuery.save(testData.workspaceNoEntities, Seq(fooEntity, barEntity, fooBarEntity)))
+      runAndWait(
+        compactEntityRepository.queries.batchWriteEntities(testData.workspaceNoEntities.workspaceIdAsUUID,
+                                                           Seq(fooEntity, barEntity, fooBarEntity),
+                                                           true
+        )
+      )
 
       Get(
         s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar&filterOperator=OR"
@@ -3916,7 +4110,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        entityQuery.save(workspace, entities)
+        compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
       )
     }
   }

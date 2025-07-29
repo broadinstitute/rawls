@@ -19,7 +19,8 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityPointer,
   EntityQuery,
   FilterOperators,
-  SortDirections
+  SortDirections,
+  Workspace
 }
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
@@ -1237,5 +1238,17 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         and entity_type = $entityType
         and deleted = false"""
       .as[Entity]
+
+  // All entities in workspace, include deleted if deleted is true
+  @VisibleForTesting
+  def listAllEntities(workspaceId: UUID, deleted: Boolean): ReadAction[Seq[CompactEntityRecord]] = {
+    val deletedClause = if (!deleted) sql" and deleted = 0" else sql""
+    concatSqlActions(
+      sql"""#$basicCompactEntitySelect
+          from ENTITY
+          where workspace_id = $workspaceId""",
+      deletedClause
+    ).as[CompactEntityRecord]
+  }
 
 }

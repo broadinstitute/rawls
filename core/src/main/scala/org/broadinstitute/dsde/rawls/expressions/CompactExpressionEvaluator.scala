@@ -74,33 +74,38 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     // We need to get the parse tree to use for final input
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new CompactEvaluateVisitor()
-    val parsedTree = terraExpressionParser.root()
-    val lookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+    Try(terraExpressionParser.root()) match {
+      case Success(parsedTree) =>
+        //    val parsedTree = terraExpressionParser.root()
+        val lookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
 
-    // Determine the queries needed to find the correct entities
-    val queryPlans = buildQueryPlans(lookups)
-    val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
-      executeQueryPlan(workspaceId, entityType, entityName, entityType, plan)
+        // Determine the queries needed to find the correct entities
+        val queryPlans = buildQueryPlans(lookups)
+        val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
+          executeQueryPlan(workspaceId, entityType, entityName, entityType, plan)
+        }
+
+        repository.dataSource
+          .inTransaction { _ =>
+            DBIO.sequence(queryActions)
+          }
+          .map { allResults =>
+            val combinedResults: Seq[ExpressionAndResult] = allResults.flatten
+
+            InputExpressionReassembler
+              .constructFinalInputValues(
+                combinedResults,
+                parsedTree,
+                Some(Seq(entityName)),
+                None
+              )
+              .getOrElse(entityName, Success(Seq.empty))
+              .get
+              .toSeq
+          }
+      case Failure(regrets) =>
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regrets))
     }
-
-    repository.dataSource
-      .inTransaction { _ =>
-        DBIO.sequence(queryActions)
-      }
-      .map { allResults =>
-        val combinedResults: Seq[ExpressionAndResult] = allResults.flatten
-
-        InputExpressionReassembler
-          .constructFinalInputValues(
-            combinedResults,
-            parsedTree,
-            Some(Seq(entityName)),
-            None
-          )
-          .getOrElse(entityName, Success(Seq.empty))
-          .get
-          .toSeq
-      }
   }
 
   /**
