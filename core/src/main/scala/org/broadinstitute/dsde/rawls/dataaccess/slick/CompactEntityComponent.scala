@@ -40,6 +40,7 @@ trait CompactEntityComponent extends LazyLogging {
 
 class CompactEntityQuery(driverComponent: DriverComponent)
     extends CompactEntityMigration
+    with CompactEntityKeysCache
     with RawSqlQuery
     with CompactEntitySerialization {
   override val driver = driverComponent.driver
@@ -305,7 +306,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   /**
-   * Recursively retrieves all entity references for a given set of entities in a workspace.
+   * Recursively retrieves the specified entities and all entities they reference.
    *
    * This method performs a recursive query on the `ENTITY_REFS` table to find all downstream entities
    * referenced by the input entities. It returns a `Set[RefMapping]`, where each `RefMapping` contains:
@@ -341,13 +342,13 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         sql"""with recursive EntityReferences as (
                 select workspace_id, id as from_entity_id, entity_type as from_entity_type, name as from_name,
              	  jt.from_attribute_name, jt.to_entity_type, jt.to_name
-             	from ENTITY, JSON_TABLE(
+               from ENTITY left outer join JSON_TABLE(
                              attributes,
                              '$$.refs[*]' COLUMNS (
                                  from_attribute_name varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
              					to_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
              		            to_name varchar(254) PATH '$$.n'
-                              )) jt
+                              )) jt on true
              	where workspace_id = $workspaceId
              	and (""",
         entityTypeNameClauses,
@@ -375,7 +376,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             EntityPointer(row.toEntityType, row.toName)
           )
           .view
-          .mapValues(_.toSet)
+          // the query can return nulls in the "to" columns; filter those here
+          .mapValues(_.filterNot(x => Option(x.entityType).isEmpty || Option(x.entityName).isEmpty).toSet)
           .toMap
           .map { case (key, value) => RefMapping(key, value) }
           .toSet
@@ -477,6 +479,27 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     sql"""SELECT distinct entity_type, attribute_key
       FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
       where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
+
+  /**
+   * Get the attribute keys for the given workspace and entity types.
+   *
+   * execution plan:
+   *    ENTITY: Using index condition (Using index condition; Using temporary); Using temporary
+   *    t: Table function: json_table; Using temporary
+   */
+  def listEntityKeysViaEntity(workspaceId: UUID,
+                              entityTypes: Set[String]
+  ): ReadAction[Seq[EntityTypeAndAttributeKey]] = {
+    val inClause = reduceSqlActionsWithDelim(entityTypes.map(t => sql"$t").toSeq, sql", ")
+
+    concatSqlActions(
+      sql"""SELECT distinct entity_type, attribute_key
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      where workspace_id=$workspaceId and deleted = 0 and entity_type in (""",
+      inClause,
+      sql""");"""
+    ).as[EntityTypeAndAttributeKey]
+  }
 
   /**
    * Gets the count of entities in a workspace, grouped by entity type.
