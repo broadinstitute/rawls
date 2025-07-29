@@ -43,8 +43,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
     implicit override val executionContext: ExecutionContext
   ) extends ApiServices
-      with MockUserInfoDirectives
-      {
+      with MockUserInfoDirectives {
 
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
     val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
