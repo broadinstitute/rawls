@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.resourcebuffer
 
+import bio.terra.buffer.model.JobModel
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
@@ -33,5 +34,8 @@ class ResourceBufferServiceImpl(resourceBufferDAO: ResourceBufferDAO, config: Re
 
   def serviceAccountEmail: String =
     config.saEmail
+
+  def repairGoogleProject(googleProjectId: String): Future[JobModel] =
+    resourceBufferDAO.repairResource(googleProjectId)
 
 }

@@ -757,7 +757,8 @@ class WorkspaceService(
             )
           )
       }
-      // Call RBS repair endpoint
+      // This will launch an async stairway flight in RBS
+      _ <- resourceBufferService.repairGoogleProject(workspace.googleProjectId.value)
 
     } yield ()
 
