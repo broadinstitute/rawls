@@ -459,6 +459,51 @@ class CompactExpressionEvaluatorSpec
     )
   }
 
+  it should "return results when there are no inputs" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq("daSampleSet"),
+                                                       any()
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleSet.name -> Seq(sampleGoodAsCER, sampleMissingValueAsCER))
+        )
+      )
+
+    val methodConf = MethodConfiguration("namespace",
+                                         "name",
+                                         Some("Sample"),
+                                         None,
+                                         Map.empty,
+                                         Map.empty,
+                                         AgoraMethod("dsde", "no_input", 1)
+    )
+
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(sampleSet.entityType),
+                                  Some(sampleSet.name),
+                                  Some("this.samples"),
+                                  Some(sampleGood.entityType)
+      )
+    val result = evalInputs(expressionEvaluationContext, methodConf, arrayWdl)
+    result should contain theSameElementsAs Seq(
+      SubmissionValidationEntityInputs(
+        sampleGoodAsCER.name,
+        Set(
+        )
+      ),
+      SubmissionValidationEntityInputs(
+        sampleMissingValueAsCER.name,
+        Set(
+        )
+      )
+    )
+
+  }
+
   it should "return error on missing values" in withConfigData {
     when(
       mockQueries.getEntity(any(),
