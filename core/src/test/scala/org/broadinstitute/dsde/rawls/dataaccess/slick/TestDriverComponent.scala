@@ -1035,7 +1035,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "GoodMethodConfig",
       Some("Sample"),
       prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
+      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.type")),
       outputs = Map.empty,
       AgoraMethod("dsde", "three_step", 1)
     )
@@ -1071,7 +1071,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "EmptyOutputsMethodConfig",
       Some("Sample"),
       prerequisites = Some(Map.empty[String, AttributeString]),
-      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.name")),
+      inputs = Map("three_step.cgrep.pattern" -> AttributeString("this.type")),
       outputs = Map("three_step.cgrep.count" -> AttributeString("")),
       AgoraMethod("dsde", "three_step", 1)
     )

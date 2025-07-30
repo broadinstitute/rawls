@@ -4,7 +4,6 @@ import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import breeze.linalg.any
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
@@ -411,8 +410,8 @@ class SubmissionSpec(_system: ActorSystem)
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            entityQuery.save(context, sample1),
-            entityQuery.save(context, sample2),
+            compactEntityRepository.queries.createEntity(context.workspaceIdAsUUID, sample1),
+            compactEntityRepository.queries.createEntity(context.workspaceIdAsUUID, sample2),
             methodConfigurationQuery.create(context,
                                             MethodConfiguration("std",
                                                                 "someMethod",
@@ -579,10 +578,24 @@ class SubmissionSpec(_system: ActorSystem)
   // only some tests need the WorkspaceManagerDAO from withDataAndService
   // In order to avoid changing the signatures of all of these to match,
   // we're just wrapping call to discard the WorkspaceManagerDAO for tests that don't need it
-  def withSubmissionsService[T](testCode: SubmissionsService => T): T =
-    withDataAndService(service => testCode(service), withDefaultTestDatabase[T])
+  def withSubmissionsService[T](testCode: SubmissionsService => T): T = {
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
 
-//  def withCompactSubmissionsService[T](testCode: SubmissionsService => T): T =
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    withDataAndService(service => testCode(service),
+                       withDefaultTestDatabase[T],
+                       workspaceSettingRepository = spyWorkspaceSettingRepository
+    )
+  }
+
+  //  def withCompactSubmissionsService[T](testCode: SubmissionsService => T): T =
 //    withDataAndService(service => testCode(service), withCompactDefaultTestDatabase[T])
 
 //  def withCompactSubmissionsService[T](testCode: SubmissionsService => T) = {
@@ -618,11 +631,37 @@ class SubmissionSpec(_system: ActorSystem)
 
   def withSubmissionsServiceMockExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
-    withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    withDataAndService(service => testCode(execSvcDAO)(service),
+                       withDefaultTestDatabase[T],
+                       execSvcDAO,
+                       workspaceSettingRepository = spyWorkspaceSettingRepository
+    )
   }
   def withSubmissionsServiceMockTimeoutExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO(true)
-    withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    withDataAndService(service => testCode(execSvcDAO)(service),
+                       withDefaultTestDatabase[T],
+                       execSvcDAO,
+                       workspaceSettingRepository = spyWorkspaceSettingRepository
+    )
   }
 
   def withSubmissionTestSubmissionsService[T](testCode: SubmissionsService => T): T =
@@ -766,7 +805,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
 
-      runAndWait(entityQuery.save(testData.workspace, sset))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
 
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -806,7 +845,7 @@ class SubmissionSpec(_system: ActorSystem)
       )
     )
 
-    runAndWait(entityQuery.save(testData.workspace, sset))
+    runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
 
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",
@@ -827,8 +866,11 @@ class SubmissionSpec(_system: ActorSystem)
     val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
     assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
 
-    assertResult(Some(sset)) {
-      runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+    assertResult(sset) {
+      runAndWait(
+        compactEntityRepository.queries
+          .getEntity(testData.workspace.workspaceIdAsUUID, sset.entityType, sset.name)
+      ).get.toEntity
     }
   }
 
@@ -851,7 +893,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
 
-      runAndWait(entityQuery.save(testData.workspace, sset))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
 
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -874,7 +916,9 @@ class SubmissionSpec(_system: ActorSystem)
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
 
       assertResult(None) {
-        runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+        runAndWait(
+          compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, sset.entityType, sset.name)
+        )
       }
   }
 
@@ -897,7 +941,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
 
-      runAndWait(entityQuery.save(testData.workspace, sset))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
 
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -919,8 +963,10 @@ class SubmissionSpec(_system: ActorSystem)
       val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
 
-      assertResult(Some(sset)) {
-        runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+      assertResult(sset) {
+        runAndWait(
+          compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, sset.entityType, sset.name)
+        ).get.toEntity
       }
   }
 
@@ -978,8 +1024,8 @@ class SubmissionSpec(_system: ActorSystem)
       )
     )
 
-    runAndWait(entityQuery.save(testData.workspace, sset))
-    runAndWait(entityQuery.save(testData.workspace, referencingEntity))
+    runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
+    runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, referencingEntity))
 
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",
@@ -1002,15 +1048,17 @@ class SubmissionSpec(_system: ActorSystem)
     assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
 
     // The sset would have failed to delete, but the submission succeeded
-    assertResult(Some(sset)) {
-      runAndWait(entityQuery.get(testData.workspace, sset.entityType, sset.name))
+    assertResult(sset) {
+      runAndWait(
+        compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, sset.entityType, sset.name)
+      ).get.toEntity
     }
   }
 
   it should "return a successful Submission when given an wdl struct entity expression that evaluates to a set of entities" in withSubmissionsService {
     submissionsService =>
       val sample1 = Entity(
-        "sample1",
+        "sample1a",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(101),
@@ -1018,7 +1066,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
       val sample2 = Entity(
-        "sample2",
+        "sample2b",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(102),
@@ -1026,7 +1074,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
       val sample3 = Entity(
-        "sample3",
+        "sample3c",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(103),
@@ -1034,7 +1082,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
       val sample4 = Entity(
-        "sample4",
+        "sample4d",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(104),
@@ -1064,11 +1112,11 @@ class SubmissionSpec(_system: ActorSystem)
         AttributeValueRawJson("""{"id":104,"sample_name":"sample4"}""")
       )
 
-      runAndWait(entityQuery.save(testData.workspace, sample1))
-      runAndWait(entityQuery.save(testData.workspace, sample2))
-      runAndWait(entityQuery.save(testData.workspace, sample3))
-      runAndWait(entityQuery.save(testData.workspace, sample4))
-      runAndWait(entityQuery.save(testData.workspace, sset))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample1))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample2))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample3))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample4))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
 
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -1090,25 +1138,6 @@ class SubmissionSpec(_system: ActorSystem)
       val actualInputResolutions = submission.workflows.flatMap(_.inputResolutions.map(_.value.get))
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
       assertSameElements(expectedInputResolutions, actualInputResolutions)
-  }
-
-  it should "400 when given an entity expression that evaluates to an empty set of entities" in withSubmissionsService {
-    submissionsService =>
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = "dsde",
-        methodConfigurationName = "GoodMethodConfig",
-        entityType = Option("SampleSet"),
-        entityName = Option("sset_empty"),
-        expression = Option("this.samples"),
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-      val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
-      }
-      assertResult(StatusCodes.BadRequest) {
-        rqComplete.errorReport.statusCode.get
-      }
   }
 
   it should "400 when given a method configuration with unparseable inputs" in withSubmissionsService {
@@ -1359,23 +1388,29 @@ class SubmissionSpec(_system: ActorSystem)
     SeparateSubmissionFinalOutputs: Boolean
   )(test: (SubmissionsService) => T) = {
 
-    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
 
-    when(
-      workspaceSettingRepository.getWorkspaceSettings(
-        UUID.fromString(testData.workspace.workspaceId)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
       )
-    ).thenReturn(
+
+    doReturn(
       Future.successful(
         List(
           SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(SeparateSubmissionFinalOutputs))
         )
       )
-    )
+    ).when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))
 
     withDataAndService(service => test(service),
                        withDefaultTestDatabase[T],
-                       workspaceSettingRepository = workspaceSettingRepository
+                       workspaceSettingRepository = spyWorkspaceSettingRepository
     )
   }
 

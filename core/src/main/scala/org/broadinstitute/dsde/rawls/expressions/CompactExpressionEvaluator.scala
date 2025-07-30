@@ -335,7 +335,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
           // result is Seq[AttributeLookup]
           result
         }
-      case Failure(_) => Seq.empty
+      case Failure(regrets) =>
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regrets))
     }
   }
 
@@ -429,6 +430,9 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
       }
 
     queryAction.map { entityRecords =>
+      if (entityRecords.isEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "No entities found"))
+      }
       // Validate entity types if we have entityLookups
       if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
         val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
