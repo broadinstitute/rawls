@@ -4,15 +4,18 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.buffer.model.JobModel
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
+import com.google.api.services.storage.model.Bucket
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -45,12 +48,7 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  RawlsTestUtils,
-  TestExecutionContext
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
@@ -3908,6 +3906,112 @@ class WorkspaceServiceSpec
     err3.errorReport.message should include("Workspace attributes cannot reference entities")
     err3.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
 
+  }
+
+  behavior of "repairWorkspace"
+
+  it should "successfully repair a workspace" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+
+    val bucket = mock[Bucket]
+    bucket.setName(testData.workspace.bucketName)
+    when(services.gcsDAO.getBucket(any(), any())(any())).thenReturn(Future.successful(Right(bucket)))
+
+    when(services.gcsDAO.isBillingAccountEnabled(any[RawlsBillingAccountName])(any[ExecutionContext]))
+      .thenReturn(Future.successful(true))
+
+    val jobModel = mock[JobModel]
+    when(services.resourceBufferService.repairGoogleProject(any()))
+      .thenReturn(Future.successful(jobModel))
+
+    Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
+
+    verify(services.gcsDAO).getBucket(testData.workspace.bucketName, Option(testData.workspace.googleProjectId))(services.executionContext)
+    verify(services.gcsDAO).isBillingAccountEnabled(testData.workspace.currentBillingAccountOnGoogleProject.get)
+    verify(services.resourceBufferService).repairGoogleProject(testData.workspace.googleProjectId.value)
+  }
+
+  it should "fail to repair a workspace that doesn't exist" in withTestDataServices { services =>
+    val nonExistentWorkspaceName = WorkspaceName("fake-namespace", "fake-workspace")
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.repairWorkspace(nonExistentWorkspaceName), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+    error.errorReport.message should include("does not exist")
+  }
+
+  it should "fail to repair a workspace when user is not a billing project owner" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+
+    when(services.samDAO.listUserRolesForResource(
+      SamResourceTypeNames.billingProject,
+      testData.billingProject.projectName.value,
+      services.workspaceService.ctx
+    )).thenReturn(Future.successful(Set()))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+    error.errorReport.message should include("Missing owner role on billing project")
+  }
+
+  it should "fail to repair a workspace when the billing account is not found" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+    // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccount(
+          testData.billingProject.projectName,
+          billingAccount = None,
+          testData.userOwner.userSubjectId
+        )
+        updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.billingProject.projectName)
+      } yield updatedBillingProject.value.billingAccount shouldBe empty
+    }
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("No billing account found for billing project")
+  }
+
+  it should "fail to repair a workspace when the billing account is disabled" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+
+    when(services.gcsDAO.isBillingAccountEnabled(any[RawlsBillingAccountName])(any[ExecutionContext]))
+      .thenReturn(Future.successful(false))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("is not enabled")
+  }
+
+  it should "fail to repair a workspace when getting the bucket fails" in withTestDataServices { services =>
+    val workspaceName = testData.workspace.toWorkspaceName
+
+    when(services.gcsDAO.isBillingAccountEnabled(any[RawlsBillingAccountName])(any[ExecutionContext]))
+      .thenReturn(Future.successful(true))
+
+    when(services.gcsDAO.getBucket(any(), any())(any()))
+      .thenReturn(Future.successful(Left(s"HTTP 404: Bucket not found")))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    error.errorReport.message should include("not found")
+
+    verify(services.gcsDAO).getBucket(testData.workspace.bucketName, Option(testData.workspace.googleProjectId))(services.executionContext)
   }
 
 }
