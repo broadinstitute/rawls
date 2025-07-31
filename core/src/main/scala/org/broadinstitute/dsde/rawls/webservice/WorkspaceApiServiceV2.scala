@@ -142,6 +142,13 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
           } ~
           pathPrefix("repair") {
             pathEndOrSingleSlash {
+              get {
+                complete {
+                  workspaceServiceConstructor(ctx)
+                    .getRepairWorkspaceProgress(workspaceName)
+                    .map(_ => StatusCodes.OK)
+                }
+              }
               post {
                 complete {
                   workspaceServiceConstructor(ctx)

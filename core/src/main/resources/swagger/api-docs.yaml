@@ -4491,36 +4491,24 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/repair:
-    post:
+    get:
       tags:
         - workspaces_v2
-      summary: Repair workspace
-      description: Repair a workspace asynchronously
-      operationId: repairWorkspace
+      summary: Get status of repair workspace
+      description: Check the status of a workspace repair job that was started asynchronously
+      operationId: getRepairWorkspaceStatus
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-#      requestBody:
-#        description: Repair a workspace
-#        content:
-#          'application/json':
-#            schema:
-#              $ref: '#/components/schemas/WorkspaceRequestClone'
-#        required: true
       responses:
         200:
-          description: Successful Request
-          headers:
-            Location:
-              description: A request to repair this workspace has successfully been submitted
+          description: Success
+          content:
+            'application/json':
               schema:
-                type: string
-#          content:
-#            'application/json':
-#              schema:
-#                $ref: '#/components/schemas/WorkspaceDetails'
+                $ref: '#/components/schemas/RepairWorkspaceResponse'
         400:
-          description: Workspace namespace is not ready
+          description: Error repairing workspace
           content:
             'application/json':
               schema:
@@ -4532,7 +4520,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Source workspace not found
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: workspaceRequest
+    post:
+      tags:
+        - workspaces_v2
+      summary: Repair workspace
+      description: Repair a workspace asynchronously
+      operationId: repairWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: A request to repair this workspace has successfully been submitted
+        400:
+          description: Error repairing workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: User does not have access to this workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
           content:
             'application/json':
               schema:
@@ -7179,6 +7200,15 @@ components:
         message:
             type: string
             description: informational message about the project
+    RepairWorkspaceResponse:
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        status:
+          type: string
+          description: the status of the repair operation in RBS
   parameters:
     billingProjectActionPathParam:
       name: action

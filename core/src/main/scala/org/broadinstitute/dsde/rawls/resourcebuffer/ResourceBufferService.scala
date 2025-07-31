@@ -15,4 +15,8 @@ trait ResourceBufferService {
   def serviceAccountEmail: String
 
   def repairGoogleProject(googleProjectId: String): Future[JobModel]
+
+  def getRepairGoogleProjectStatus(googleProjectId: String): Future[JobModel]
+
+  def getJobDetails(googleProjectId: String): Future[Object]
 }

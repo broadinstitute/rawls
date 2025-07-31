@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
+import bio.terra.buffer.model.JobModel
 import bio.terra.policy.model.TpsPaoGetResult
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
@@ -38,16 +39,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{
-  AttributeNotFoundException,
-  AttributeSupport,
-  AttributeUpdateOperationException,
-  BillingProjectSupport,
-  JsonFilterUtils,
-  UserUtils,
-  UserWiths,
-  WorkspaceSupport
-}
+import org.broadinstitute.dsde.rawls.util.{AttributeNotFoundException, AttributeSupport, AttributeUpdateOperationException, BillingProjectSupport, JsonFilterUtils, UserUtils, UserWiths, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -761,6 +753,35 @@ class WorkspaceService(
       _ <- resourceBufferService.repairGoogleProject(workspace.googleProjectId.value)
 
     } yield ()
+
+  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] = {
+    for {
+      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
+      workspace = workspaceOpt.getOrElse(
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+        )
+      )
+      jobResult <- resourceBufferService.getRepairGoogleProjectStatus(workspace.googleProjectId.value)
+      response <- jobResult.getJobStatus match {
+        case JobModel.JobStatusEnum.FAILED =>
+          resourceBufferService.getJobDetails(jobResult.getId).flatMap { jobDetails =>
+            // TODO: Get error message from job result endpoint
+            // val message = jobDetails.getMessage.getOrElse("")
+            Future.failed(
+              RawlsExceptionWithErrorReport(
+                ErrorReport(
+                  StatusCodes.InternalServerError,
+                  s"Repair job failed for project ${workspace.googleProjectId.value}"
+                )
+              )
+            )
+          }
+        case _ =>
+          Future.successful(RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue))
+      }
+    } yield response
+  }
 
   def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
                                     newBillingProjectName: String
