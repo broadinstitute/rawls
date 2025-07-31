@@ -2280,17 +2280,34 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       }
   }
 
+  // TODO CORE-631 Switch this test to quicksilver (by updating ManySubmissionsTestData and removing the use of entityServiceConstructorWithoutSpy)
   val manySubmissionsTestData = new ManySubmissionsTestData
   it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withCustomTestDatabase(
     manySubmissionsTestData
   ) { dataSource: SlickDataSource =>
+    val entityServiceConstructorWithoutSpy = EntityService.constructor(
+      slickDataSource,
+      mockSamDAO,
+      workbenchMetricBaseName,
+      EntityManager.defaultEntityManager(
+        slickDataSource,
+        workspaceSettingRepository, // Use the original repository, not the spy
+        false,
+        java.time.Duration.ofMinutes(2),
+        workbenchMetricBaseName
+      ),
+      1000
+    ) _
+
     val submissions = manySubmissionsTestData.submissions
     val numSubmissions = submissions.length
     submissions.foreach(sub =>
-      createSubmissionMonitorActor(dataSource,
-                                   sub,
-                                   manySubmissionsTestData.wsName,
-                                   new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+      createSubmissionMonitorActor(
+        dataSource,
+        sub,
+        manySubmissionsTestData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString),
+        entityServiceConstructor = entityServiceConstructorWithoutSpy // Pass the new constructor
       )
     )
 
@@ -2311,17 +2328,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
     withWorkspaceContext(manySubmissionsTestData.workspace) { ctx =>
       val indiv1 = runAndWait(
-        compactEntityRepository.queries.getEntity(ctx.workspaceIdAsUUID,
-                                                  testData.indiv1.entityType,
-                                                  testData.indiv1.name
-        )
-      ).get.toEntity
+        entityQuery.get(ctx, legacyTestData.indiv1.entityType, legacyTestData.indiv1.name)
+      ).get
       val indiv2 = runAndWait(
-        compactEntityRepository.queries.getEntity(ctx.workspaceIdAsUUID,
-                                                  testData.indiv2.entityType,
-                                                  testData.indiv2.name
-        )
-      ).get.toEntity
+        entityQuery.get(ctx, legacyTestData.indiv2.entityType, legacyTestData.indiv2.name)
+      ).get
 
       indiv1.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
       indiv2.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
@@ -2333,17 +2344,19 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val numSubmissions = 50
 
     val (submissions, methodConfigs) = (1 to numSubmissions).map { subNumber =>
-      val methodConfig = testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber",
-                                                                outputs =
-                                                                  Map("o1" -> AttributeString(s"this.sub_$subNumber"))
-      )
+      val methodConfig =
+        legacyTestData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber",
+                                                     outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber"))
+        )
       val testSub = createTestSubmission(
-        testData.workspace,
+        legacyTestData.workspace,
         methodConfig,
-        testData.indiv1,
-        WorkbenchEmail(testData.userOwner.userEmail.value),
-        Seq(testData.indiv1, testData.indiv2),
-        Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
+        legacyTestData.indiv1,
+        WorkbenchEmail(legacyTestData.userOwner.userEmail.value),
+        Seq(legacyTestData.indiv1, legacyTestData.indiv2),
+        Map(legacyTestData.indiv1 -> legacyTestData.inputResolutions,
+            legacyTestData.indiv2 -> legacyTestData.inputResolutions
+        ),
         Seq(),
         Map()
       )
@@ -2355,31 +2368,30 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       super.save() flatMap { _ =>
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
-            compactEntityRepository.queries.batchWriteEntities(
-              ctx.workspaceIdAsUUID,
+            entityQuery.save(
+              ctx,
               Seq(
-                testData.aliquot1,
-                testData.aliquot2,
-                testData.sample1,
-                testData.sample2,
-                testData.sample3,
-                testData.sample4,
-                testData.sample5,
-                testData.sample6,
-                testData.sample7,
-                testData.sample8,
-                testData.pair1,
-                testData.pair2,
-                testData.ps1,
-                testData.sset1,
-                testData.sset2,
-                testData.sset3,
-                testData.sset4,
-                testData.sset_empty,
-                testData.indiv1,
-                testData.indiv2
-              ),
-              true
+                legacyTestData.aliquot1,
+                legacyTestData.aliquot2,
+                legacyTestData.sample1,
+                legacyTestData.sample2,
+                legacyTestData.sample3,
+                legacyTestData.sample4,
+                legacyTestData.sample5,
+                legacyTestData.sample6,
+                legacyTestData.sample7,
+                legacyTestData.sample8,
+                legacyTestData.pair1,
+                legacyTestData.pair2,
+                legacyTestData.ps1,
+                legacyTestData.sset1,
+                legacyTestData.sset2,
+                legacyTestData.sset3,
+                legacyTestData.sset4,
+                legacyTestData.sset_empty,
+                legacyTestData.indiv1,
+                legacyTestData.indiv2
+              )
             ),
             DBIO.sequence(methodConfigs.map(m => methodConfigurationQuery.create(ctx, m)).toSeq),
             DBIO.sequence(submissions.map(s => submissionQuery.create(ctx, s)).toSeq),
@@ -2393,7 +2405,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                                    submission: Submission,
                                    wsName: WorkspaceName,
                                    execSvcDAO: ExecutionServiceDAO,
-                                   trackDetailedSubmissionMetrics: Boolean = true
+                                   trackDetailedSubmissionMetrics: Boolean = true,
+                                   entityServiceConstructor: RawlsRequestContext => EntityService =
+                                     entityServiceConstructor // Default to the existing constructor
   ): TestActorRef[SubmissionMonitorActor] = {
     val config = SubmissionMonitorConfig(1 second, 30 days, trackDetailedSubmissionMetrics, 10, true, true)
     TestActorRef[SubmissionMonitorActor](

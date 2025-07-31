@@ -595,40 +595,6 @@ class SubmissionSpec(_system: ActorSystem)
     )
   }
 
-  //  def withCompactSubmissionsService[T](testCode: SubmissionsService => T): T =
-//    withDataAndService(service => testCode(service), withCompactDefaultTestDatabase[T])
-
-//  def withCompactSubmissionsService[T](testCode: SubmissionsService => T) = {
-//
-//    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-//    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-//
-////    when(
-////      spyWorkspaceSettingRepository.getWorkspaceSettingOfType(
-////        ArgumentMatchers.any[UUID](),
-////        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-////      )
-////    ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-//
-//    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-//      .when(spyWorkspaceSettingRepository)
-//      .getWorkspaceSettingOfType(
-//        ArgumentMatchers.any[UUID](),
-//        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-//      )
-//
-//    doReturn(Future.successful(List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-//      .when(spyWorkspaceSettingRepository)
-//      .getWorkspaceSettings(
-//        ArgumentMatchers.any[UUID]()
-//      )
-//
-//    withDataAndService(service => testCode(service),
-//                       withCompactDefaultTestDatabase[T],
-//                       workspaceSettingRepository = spyWorkspaceSettingRepository
-//    )
-//  }
-
   def withSubmissionsServiceMockExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
