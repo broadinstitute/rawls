@@ -844,11 +844,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.createOrUpdate(workspace),
-//        compactEntityRepository.queries.batchWriteEntities(
-//          workspace.workspaceIdAsUUID,
-//          lotsOfSamples :+ sampleSet,
-//          true
-//        ),
         entityQuery.save(
           workspace,
           lotsOfSamples :+ sampleSet

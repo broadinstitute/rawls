@@ -788,7 +788,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        // TODO Why did this have Seq(e1, e2)?
         val expected = Seq(e2) map { _.toReference }
         assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
         assertResult(e1) {
@@ -870,7 +869,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Conflict) {
             status
           }
-          // TODO why did this have Seq(e1, e2, e3)
+
           val expected = Seq(e2) map { _.toReference }
           assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
           assertResult(new_e1) {

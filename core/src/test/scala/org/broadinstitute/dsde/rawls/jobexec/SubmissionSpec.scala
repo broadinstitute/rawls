@@ -86,6 +86,21 @@ class SubmissionSpec(_system: ActorSystem)
     bigQueryDAO
   )
 
+  lazy val baseSpyWorkspaceSettingRepository: WorkspaceSettingRepository = {
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyRepo = spy(workspaceSettingRepository)
+
+    // All tests should be quicksilver
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyRepo)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+
+    spyRepo
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     mockServer.startServer()
@@ -446,7 +461,7 @@ class SubmissionSpec(_system: ActorSystem)
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName),
     bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory(),
     dataRepoDAO: DataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS),
-    workspaceSettingRepository: WorkspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    workspaceSettingRepository: WorkspaceSettingRepository = baseSpyWorkspaceSettingRepository
   ): T = {
 
     withDataOp { dataSource =>
@@ -578,56 +593,16 @@ class SubmissionSpec(_system: ActorSystem)
   // only some tests need the WorkspaceManagerDAO from withDataAndService
   // In order to avoid changing the signatures of all of these to match,
   // we're just wrapping call to discard the WorkspaceManagerDAO for tests that don't need it
-  def withSubmissionsService[T](testCode: SubmissionsService => T): T = {
-    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
-    withDataAndService(service => testCode(service),
-                       withDefaultTestDatabase[T],
-                       workspaceSettingRepository = spyWorkspaceSettingRepository
-    )
-  }
+  def withSubmissionsService[T](testCode: SubmissionsService => T): T =
+    withDataAndService(service => testCode(service), withDefaultTestDatabase[T])
 
   def withSubmissionsServiceMockExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
-    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
-    withDataAndService(service => testCode(execSvcDAO)(service),
-                       withDefaultTestDatabase[T],
-                       execSvcDAO,
-                       workspaceSettingRepository = spyWorkspaceSettingRepository
-    )
+    withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
   }
   def withSubmissionsServiceMockTimeoutExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO(true)
-    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
-    withDataAndService(service => testCode(execSvcDAO)(service),
-                       withDefaultTestDatabase[T],
-                       execSvcDAO,
-                       workspaceSettingRepository = spyWorkspaceSettingRepository
-    )
+    withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
   }
 
   def withSubmissionTestSubmissionsService[T](testCode: SubmissionsService => T): T =
@@ -1353,30 +1328,22 @@ class SubmissionSpec(_system: ActorSystem)
   def workspaceSettingSubmissionTest[T](
     SeparateSubmissionFinalOutputs: Boolean
   )(test: (SubmissionsService) => T) = {
-
-    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
-
-    doReturn(
-      Future.successful(
-        List(
-          SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(SeparateSubmissionFinalOutputs))
+    val extendedSpyWorkspaceSettingRepository = {
+      doReturn(
+        Future.successful(
+          List(
+            SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(SeparateSubmissionFinalOutputs))
+          )
         )
-      )
-    ).when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))
+      ).when(baseSpyWorkspaceSettingRepository)
+        .getWorkspaceSettings(UUID.fromString(testData.workspace.workspaceId))
+
+      baseSpyWorkspaceSettingRepository
+    }
 
     withDataAndService(service => test(service),
                        withDefaultTestDatabase[T],
-                       workspaceSettingRepository = spyWorkspaceSettingRepository
+                       workspaceSettingRepository = extendedSpyWorkspaceSettingRepository
     )
   }
 
