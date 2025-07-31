@@ -749,7 +749,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     exception.errorReport.message should include("Invalid settings requested.")
-    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 day and 10 years (3650 days)."
+    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 and 3650 days (10 years)."
   }
 
   it should "require a retention duration no more than 3650 days for GcpLogBucketRetention settings" in {
@@ -764,7 +764,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     exception.errorReport.message should include("Invalid settings requested.")
-    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 day and 10 years (3650 days)."
+    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 and 3650 days (10 years)."
   }
 
   "publicly readable setting" should "set public in sam and add all users to bucket" in {

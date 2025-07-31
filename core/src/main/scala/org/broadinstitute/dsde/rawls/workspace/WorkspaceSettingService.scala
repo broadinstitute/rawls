@@ -137,7 +137,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 Some(
                   validationErrorReport(
                     setting.settingType,
-                    "retention duration must be between 1 day and 10 years (3650 days)"
+                    "retention duration must be between 1 and 3650 days (10 years)"
                   )
                 )
               case _ => None
