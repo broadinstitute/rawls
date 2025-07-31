@@ -9,46 +9,11 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.QuicksilverMigrationResult
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  WorkspaceAccessDeniedException
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
-  CompactDataTablesConfig,
-  GcpBucketLifecycleAction,
-  GcpBucketLifecycleCondition,
-  GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule,
-  GcpBucketRequesterPaysConfig,
-  GcpBucketSoftDeleteConfig,
-  PubliclyReadableConfig,
-  SeparateSubmissionFinalOutputsConfig,
-  UseCromwellGcpBatchBackendConfig
-}
-import org.broadinstitute.dsde.rawls.model.{
-  CompactDataTablesSetting,
-  ErrorReport,
-  GcpBucketLifecycleSetting,
-  GcpBucketRequesterPaysSetting,
-  GcpBucketSoftDeleteSetting,
-  PubliclyReadableSetting,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  SamResourceTypeNames,
-  SamUserStatusResponse,
-  SamWorkspaceActions,
-  SamWorkspacePolicyNames,
-  SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGcpBatchBackendSetting,
-  UserInfo,
-  Workspace,
-  WorkspaceName,
-  WorkspaceSettingTypes
-}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{CompactDataTablesConfig, GcpBucketLifecycleAction, GcpBucketLifecycleCondition, GcpBucketLifecycleConfig, GcpBucketLifecycleRule, GcpBucketRequesterPaysConfig, GcpBucketSoftDeleteConfig, GcpLogBucketRetentionConfig, PubliclyReadableConfig, SeparateSubmissionFinalOutputsConfig, UseCromwellGcpBatchBackendConfig}
+import org.broadinstitute.dsde.rawls.model.{CompactDataTablesSetting, ErrorReport, GcpBucketLifecycleSetting, GcpBucketRequesterPaysSetting, GcpBucketSoftDeleteSetting, GcpLogBucketRetentionSetting, PubliclyReadableSetting, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceActions, SamWorkspacePolicyNames, SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, UserInfo, Workspace, WorkspaceName, WorkspaceSettingTypes}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -56,7 +21,7 @@ import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.must.Matchers.{contain, include}
@@ -262,6 +227,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty)),
       GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(7.days.toSeconds)),
       GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
+      GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(60)),
       SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
       UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
     )
@@ -305,6 +271,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       )
     ).thenReturn(Future.successful())
     when(gcsDAO.setRequesterPays(workspace.bucketName, requesterPaysEnabled = true, workspace.googleProjectId))
+      .thenReturn(Future.successful())
+    when(gcsDAO.setLogBucketRetentionPeriod(workspace.googleProjectId, 60))
       .thenReturn(Future.successful())
 
     val service =
@@ -730,6 +698,36 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     exception.errorReport.message should include("Invalid settings requested.")
     assert(exception.errorReport.causes.exists(_.message.matches("Invalid GcpBucketSoftDelete.*retention duration.*")))
+  }
+
+  it should "require a retention duration no shorter than 1 day for GcpLogBucketRetention settings" in {
+    val shortDurationSetting = GcpLogBucketRetentionSetting(
+      GcpLogBucketRetentionConfig(0)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(shortDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 day and 10 years (3650 days)."
+  }
+
+  it should "require a retention duration no more than 3650 days for GcpLogBucketRetention settings" in {
+    val longDurationSetting = GcpLogBucketRetentionSetting(
+      GcpLogBucketRetentionConfig(36912)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(longDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 day and 10 years (3650 days)."
   }
 
   "publicly readable setting" should "set public in sam and add all users to bucket" in {

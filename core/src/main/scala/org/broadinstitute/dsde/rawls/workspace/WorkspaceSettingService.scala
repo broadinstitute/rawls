@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
+  GcpLogBucketRetentionSetting,
   PubliclyReadableSetting,
   RawlsRequestContext,
   SamResourceTypeNames,
@@ -129,7 +130,18 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 )
               case _ => None
             }
-          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))                 => None
+          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_)) => None
+          case GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(retentionDuration)) =>
+            retentionDuration match {
+              case duration if duration < 1.days.toDays || duration > 3650.days.toDays =>
+                Some(
+                  validationErrorReport(
+                    setting.settingType,
+                    "retention duration must be between 1 day and 10 years (3650 days)"
+                  )
+                )
+              case _ => None
+            }
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
           case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
@@ -201,6 +213,9 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
 
         case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
           gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
+
+        case GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(retentionDurationInDays)) =>
+          gcsDAO.setLogBucketRetentionPeriod(workspace.googleProjectId, retentionDurationInDays)
 
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)

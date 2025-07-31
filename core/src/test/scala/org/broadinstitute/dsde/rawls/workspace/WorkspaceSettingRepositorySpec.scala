@@ -3,26 +3,9 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceSettingRecord}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
-  GcpBucketLifecycleAction,
-  GcpBucketLifecycleCondition,
-  GcpBucketLifecycleConfig,
-  GcpBucketLifecycleRule,
-  GcpBucketRequesterPaysConfig,
-  GcpBucketSoftDeleteConfig,
-  SeparateSubmissionFinalOutputsConfig,
-  UseCromwellGcpBatchBackendConfig
-}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{GcpBucketLifecycleAction, GcpBucketLifecycleCondition, GcpBucketLifecycleConfig, GcpBucketLifecycleRule, GcpBucketRequesterPaysConfig, GcpBucketSoftDeleteConfig, GcpLogBucketRetentionConfig, SeparateSubmissionFinalOutputsConfig, UseCromwellGcpBatchBackendConfig}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, GcpBucketSoftDelete}
-import org.broadinstitute.dsde.rawls.model.{
-  GcpBucketLifecycleSetting,
-  GcpBucketRequesterPaysSetting,
-  GcpBucketSoftDeleteSetting,
-  SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGcpBatchBackendSetting,
-  Workspace,
-  WorkspaceSettingTypes
-}
+import org.broadinstitute.dsde.rawls.model.{GcpBucketLifecycleSetting, GcpBucketRequesterPaysSetting, GcpBucketSoftDeleteSetting, GcpLogBucketRetentionSetting, SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, Workspace, WorkspaceSettingTypes}
 import org.joda.time.DateTime
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -109,6 +92,7 @@ class WorkspaceSettingRepositorySpec
       GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List())),
       GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0)),
       GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
+      GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(60)),
       SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
       UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
     )

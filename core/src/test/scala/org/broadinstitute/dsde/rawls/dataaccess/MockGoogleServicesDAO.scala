@@ -142,6 +142,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
                                 userProject: GoogleProjectId
   ): Future[Unit] = ???
 
+  override def setLogBucketRetentionPeriod(userProject: GoogleProjectId, retentionDays: Int): Future[Unit] = Future.successful(())
+
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext
   ): Future[Either[String, Bucket]] = Future.successful(Right(new Bucket))
