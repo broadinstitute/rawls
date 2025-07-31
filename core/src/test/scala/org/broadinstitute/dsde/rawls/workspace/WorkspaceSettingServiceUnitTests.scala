@@ -9,11 +9,48 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.{LifecycleRule, SoftDeletePolicy}
 import com.google.cloud.storage.BucketInfo.LifecycleRule.{LifecycleAction, LifecycleCondition}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.QuicksilverMigrationResult
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{CompactDataTablesConfig, GcpBucketLifecycleAction, GcpBucketLifecycleCondition, GcpBucketLifecycleConfig, GcpBucketLifecycleRule, GcpBucketRequesterPaysConfig, GcpBucketSoftDeleteConfig, GcpLogBucketRetentionConfig, PubliclyReadableConfig, SeparateSubmissionFinalOutputsConfig, UseCromwellGcpBatchBackendConfig}
-import org.broadinstitute.dsde.rawls.model.{CompactDataTablesSetting, ErrorReport, GcpBucketLifecycleSetting, GcpBucketRequesterPaysSetting, GcpBucketSoftDeleteSetting, GcpLogBucketRetentionSetting, PubliclyReadableSetting, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceActions, SamWorkspacePolicyNames, SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, UserInfo, Workspace, WorkspaceName, WorkspaceSettingTypes}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  CompactDataTablesConfig,
+  GcpBucketLifecycleAction,
+  GcpBucketLifecycleCondition,
+  GcpBucketLifecycleConfig,
+  GcpBucketLifecycleRule,
+  GcpBucketRequesterPaysConfig,
+  GcpBucketSoftDeleteConfig,
+  GcpLogBucketRetentionConfig,
+  PubliclyReadableConfig,
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
+}
+import org.broadinstitute.dsde.rawls.model.{
+  CompactDataTablesSetting,
+  ErrorReport,
+  GcpBucketLifecycleSetting,
+  GcpBucketRequesterPaysSetting,
+  GcpBucketSoftDeleteSetting,
+  GcpLogBucketRetentionSetting,
+  PubliclyReadableSetting,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  SamResourceTypeNames,
+  SamUserStatusResponse,
+  SamWorkspaceActions,
+  SamWorkspacePolicyNames,
+  SeparateSubmissionFinalOutputsSetting,
+  UseCromwellGcpBatchBackendSetting,
+  UserInfo,
+  Workspace,
+  WorkspaceName,
+  WorkspaceSettingTypes
+}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -21,7 +58,7 @@ import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.must.Matchers.{contain, include}

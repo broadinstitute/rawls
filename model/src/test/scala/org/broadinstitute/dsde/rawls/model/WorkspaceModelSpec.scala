@@ -4,7 +4,17 @@ import akka.http.scaladsl.model.StatusCodes.BadRequest
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{MethodRepoMethodFormat, WorkspaceSettingFormat}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{GcpBucketLifecycleAction, GcpBucketLifecycleCondition, GcpBucketLifecycleConfig, GcpBucketLifecycleRule, GcpBucketRequesterPaysConfig, GcpBucketSoftDeleteConfig, GcpLogBucketRetentionConfig, SeparateSubmissionFinalOutputsConfig, UseCromwellGcpBatchBackendConfig}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
+  GcpBucketLifecycleAction,
+  GcpBucketLifecycleCondition,
+  GcpBucketLifecycleConfig,
+  GcpBucketLifecycleRule,
+  GcpBucketRequesterPaysConfig,
+  GcpBucketSoftDeleteConfig,
+  GcpLogBucketRetentionConfig,
+  SeparateSubmissionFinalOutputsConfig,
+  UseCromwellGcpBatchBackendConfig
+}
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
