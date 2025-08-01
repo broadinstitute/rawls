@@ -133,7 +133,9 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
 
   override def getCost(id: String, userInfo: UserInfo): Future[WorkflowCostBreakdown] = {
     val url = executionServiceURL + s"/api/workflows/v1/$id/cost"
-    retry(when5xx)(() => pipeline[WorkflowCostBreakdown](userInfo) apply Get(url))
+    // In rare cases of many subworkflows, this query can get very slow & overwhelm Cromwell.
+    // Don't retry; doing so amplifies load but does not actually help the query succeed.
+    pipeline[WorkflowCostBreakdown](userInfo) apply Get(url)
   }
 
   override def version(): Future[ExecutionServiceVersion] = {
