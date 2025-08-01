@@ -999,7 +999,7 @@ class SubmissionSpec(_system: ActorSystem)
   it should "return a successful Submission when given an wdl struct entity expression that evaluates to a set of entities" in withSubmissionsService {
     submissionsService =>
       val sample1 = Entity(
-        "sample1a",
+        "sample1",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(101),
@@ -1007,7 +1007,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
       val sample2 = Entity(
-        "sample2b",
+        "sample2",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(102),
@@ -1015,7 +1015,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
       val sample3 = Entity(
-        "sample3c",
+        "sample3",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(103),
@@ -1023,7 +1023,7 @@ class SubmissionSpec(_system: ActorSystem)
         )
       )
       val sample4 = Entity(
-        "sample4d",
+        "sample4",
         "Sample",
         Map(
           AttributeName.withDefaultNS("participant_id") -> AttributeNumber(104),
@@ -1053,11 +1053,15 @@ class SubmissionSpec(_system: ActorSystem)
         AttributeValueRawJson("""{"id":104,"sample_name":"sample4"}""")
       )
 
-      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample1))
-      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample2))
-      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample3))
-      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sample4))
-      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
+      runAndWait(
+        compactEntityRepository.queries.batchWriteEntities(testData.workspace.workspaceIdAsUUID,
+                                                           Seq(sample1, sample2, sample3, sample4),
+                                                           false
+        )
+      )
+      runAndWait(
+        compactEntityRepository.queries.batchWriteEntities(testData.workspace.workspaceIdAsUUID, Seq(sset), true)
+      )
 
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",

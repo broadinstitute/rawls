@@ -311,11 +311,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.Created) {
               status
             }
-            assertResult(z1) {
+            assertResult(Some(z1)) {
               val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
               runAndWait(
                 compactEntityRepository.queries.getEntity(ws2.workspaceIdAsUUID, z1.entityType, z1.name)
-              ).get.toEntity
+              ).map(_.toEntity)
             }
 
             val sourceWorkspace = WorkspaceName(workspaceSrcRequest.namespace, workspaceSrcRequest.name)
@@ -359,9 +359,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Entity(testData.sample1.name,
-                 testData.sample1.entityType,
-                 testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+          Some(
+            Entity(testData.sample1.name,
+                   testData.sample1.entityType,
+                   testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+            )
           )
         ) {
           runAndWait(
@@ -369,7 +371,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                       testData.sample1.entityType,
                                                       testData.sample1.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
     Get(testData.workspace.path) ~>
@@ -414,9 +416,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Entity(testData.sample1.name,
-                 testData.sample1.entityType,
-                 testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+          Some(
+            Entity(testData.sample1.name,
+                   testData.sample1.entityType,
+                   testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+            )
           )
         ) {
           runAndWait(
@@ -424,7 +428,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                       testData.sample1.entityType,
                                                       testData.sample1.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
     Get(testData.workspace.path) ~>
@@ -444,13 +448,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        assertResult(newSample) {
+        assertResult(Some(newSample)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                       newSample.entityType,
                                                       newSample.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
         assertResult(newSample) {
           responseAs[Entity]
@@ -477,13 +481,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        assertResult(newSample) {
+        assertResult(Some(newSample)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                       newSample.entityType,
                                                       newSample.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
         assertResult(newSample) {
           responseAs[Entity]
@@ -719,10 +723,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.NoContent) {
             status
           }
-          assertResult(new_e1) {
+          assertResult(Some(new_e1)) {
             runAndWait(
               compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
-            ).get.toEntity
+            ).map(_.toEntity)
           }
         }
 
@@ -790,15 +794,15 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
         val expected = Seq(e2) map { _.toReference }
         assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
-        assertResult(e1) {
+        assertResult(Some(e1)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
-          ).get.toEntity
+          ).map(_.toEntity)
         }
-        assertResult(e2) {
+        assertResult(Some(e2)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e2.entityType, e2.name)
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
 
@@ -856,10 +860,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.NoContent) {
             status
           }
-          assertResult(new_e1) {
+          assertResult(Some(new_e1)) {
             runAndWait(
               compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
-            ).get.toEntity
+            ).map(_.toEntity)
           }
         }
 
@@ -872,20 +876,20 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
           val expected = Seq(e2) map { _.toReference }
           assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
-          assertResult(new_e1) {
+          assertResult(Some(new_e1)) {
             runAndWait(
               compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e1.entityType, e1.name)
-            ).get.toEntity
+            ).map(_.toEntity)
           }
-          assertResult(e2) {
+          assertResult(Some(e2)) {
             runAndWait(
               compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e2.entityType, e2.name)
-            ).get.toEntity
+            ).map(_.toEntity)
           }
-          assertResult(e3) {
+          assertResult(Some(e3)) {
             runAndWait(
               compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e3.entityType, e3.name)
-            ).get.toEntity
+            ).map(_.toEntity)
           }
         }
 
@@ -1058,13 +1062,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(sample) {
           responseAs[Entity]
         }
-        assertResult(sample) {
+        assertResult(Some(sample)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                       sample.entityType,
                                                       sample.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
 
@@ -1090,13 +1094,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(sampleNewAttrs) {
           responseAs[Entity]
         }
-        assertResult(sampleNewAttrs) {
+        assertResult(Some(sampleNewAttrs)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                       sample.entityType,
                                                       sample.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
 
@@ -1123,13 +1127,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(sampleAttrs3) {
           responseAs[Entity]
         }
-        assertResult(sampleAttrs3) {
+        assertResult(Some(sampleAttrs3)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                       sample.entityType,
                                                       sample.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
 
@@ -1183,11 +1187,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Entity("newSample", "Sample", Map(AttributeName.withDefaultNS("newAttribute") -> AttributeString("foo")))
+          Some(
+            Entity("newSample", "Sample", Map(AttributeName.withDefaultNS("newAttribute") -> AttributeString("foo")))
+          )
         ) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, "Sample", "newSample")
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
   }
@@ -1232,10 +1238,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.NoContent) {
             status
           }
-          assertResult(updatedEntity) {
+          assertResult(Some(updatedEntity)) {
             runAndWait(
               compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, e.entityType, e.name)
-            ).get.toEntity
+            ).map(_.toEntity)
           }
         }
 
@@ -1263,10 +1269,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(
-            Entity(
-              testData.sample1.name,
-              testData.sample1.entityType,
-              testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+            Some(
+              Entity(
+                testData.sample1.name,
+                testData.sample1.entityType,
+                testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+              )
             )
           ) {
             runAndWait(
@@ -1274,13 +1282,15 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                         testData.sample1.entityType,
                                                         testData.sample1.name
               )
-            ).get.toEntity
+            ).map(_.toEntity)
           }
           assertResult(
-            Entity(
-              testData.sample2.name,
-              testData.sample2.entityType,
-              testData.sample2.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("baz"))
+            Some(
+              Entity(
+                testData.sample2.name,
+                testData.sample2.entityType,
+                testData.sample2.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("baz"))
+              )
             )
           ) {
             runAndWait(
@@ -1288,7 +1298,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                         testData.sample2.entityType,
                                                         testData.sample2.name
               )
-            ).get.toEntity
+            ).map(_.toEntity)
           }
         }
   }
@@ -1310,9 +1320,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(
-          Entity(testData.sample1.name,
-                 testData.sample1.entityType,
-                 testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> referenceList)
+          Some(
+            Entity(testData.sample1.name,
+                   testData.sample1.entityType,
+                   testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> referenceList)
+            )
           )
         ) {
           runAndWait(
@@ -1320,15 +1332,15 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                       testData.sample1.entityType,
                                                       testData.sample1.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
-        assertResult(newEntity) {
+        assertResult(Some(newEntity)) {
           runAndWait(
             compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                       newEntity.entityType,
                                                       newEntity.name
             )
-          ).get.toEntity
+          ).map(_.toEntity)
         }
       }
   }
@@ -1504,10 +1516,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(
-            Entity(
-              testData.sample1.name,
-              testData.sample1.entityType,
-              testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+            Some(
+              Entity(
+                testData.sample1.name,
+                testData.sample1.entityType,
+                testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))
+              )
             )
           ) {
             runAndWait(
@@ -1515,7 +1529,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                         testData.sample1.entityType,
                                                         testData.sample1.name
               )
-            ).get.toEntity
+            ).map(_.toEntity)
           }
         }
   }
@@ -1539,13 +1553,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
 
-          assertResult(testData.sample2) {
+          assertResult(Some(testData.sample2)) {
             runAndWait(
               compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                         testData.sample2.entityType,
                                                         testData.sample2.name
               )
-            ).get.toEntity
+            ).map(_.toEntity)
           }
           assertResult(testData.sample2) {
             responseAs[Entity]
@@ -2476,11 +2490,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.Created) {
               status
             }
-            assertResult(z1) {
+            assertResult(Some(z1)) {
               val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
               runAndWait(
                 compactEntityRepository.queries.getEntity(ws2.workspaceIdAsUUID, z1.entityType, z1.name)
-              ).get.toEntity
+              ).map(_.toEntity)
             }
 
             val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
@@ -2491,13 +2505,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                 assertResult(StatusCodes.Created) {
                   status
                 }
-                assertResult(z1) {
+                assertResult(Some(z1)) {
                   runAndWait(
                     compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
                                                               z1.entityType,
                                                               z1.name
                     )
-                  ).get.toEntity
+                  ).map(_.toEntity)
                 }
               }
           }
@@ -2520,16 +2534,25 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 409 for soft conflicts multiple levels down" in withTestDataApiServices { services =>
-    val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
-    val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
+  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
+  it should "return 409 for soft conflicts multiple levels down" in withLegacyTestDataApiServices { services =>
+    val sourceWorkspace = WorkspaceName(legacyTestData.workspace.namespace, legacyTestData.workspace.name)
+    val newWorkspace = WorkspaceName(legacyTestData.workspace.namespace, "my-brand-new-workspace")
 
     val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, Map.empty)
 
     val copyAliquot1 =
-      EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.aliquot1.entityType, Seq(testData.aliquot1.name))
+      EntityCopyDefinition(sourceWorkspace,
+                           newWorkspace,
+                           legacyTestData.aliquot1.entityType,
+                           Seq(legacyTestData.aliquot1.name)
+      )
     val copySample3 =
-      EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
+      EntityCopyDefinition(sourceWorkspace,
+                           newWorkspace,
+                           legacyTestData.sample3.entityType,
+                           Seq(legacyTestData.sample3.name)
+      )
 
     Post("/workspaces", httpJson(newWorkspaceCreate)) ~>
       sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
@@ -2548,7 +2571,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
         val copyResponse = responseAs[EntityCopyResponse]
 
-        assertSameElements(Seq(testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
+        assertSameElements(Seq(legacyTestData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
         assertSameElements(Seq.empty, copyResponse.hardConflicts)
         assertSameElements(Seq.empty, copyResponse.softConflicts)
       }
@@ -2564,24 +2587,39 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
         assertSameElements(Seq.empty, copyResponse.entitiesCopied)
         assertSameElements(Seq.empty, copyResponse.hardConflicts)
+        val expectedSoftConflicts = Seq(
+          EntitySoftConflict(
+            legacyTestData.sample3.entityType,
+            legacyTestData.sample3.name,
+            Seq(
+              EntitySoftConflict(
+                legacyTestData.sample1.entityType,
+                legacyTestData.sample1.name,
+                Seq(EntitySoftConflict(legacyTestData.aliquot1.entityType, legacyTestData.aliquot1.name, Seq.empty))
+              )
+            )
+          )
+        )
+
+        assertSameElements(expectedSoftConflicts, copyResponse.softConflicts)
 
       }
   }
 
-  // todo org.scalatest.exceptions.TestFailedException: List(EntitySoftConflict("Sample", "sample3", List(EntitySoftConflict("Sample", "sample1", List(EntitySoftConflict("Aliquot", "aliquot1", List())))))) did not contain the same elements as List(EntitySoftConflict("Sample", "sample1", List(EntitySoftConflict("Aliquot", "aliquot1", List()))))
-  it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices {
+  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
+  it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withLegacyTestDataApiServices {
     services =>
-      val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+      val sourceWorkspace = WorkspaceName(legacyTestData.workspace.namespace, legacyTestData.workspace.name)
       val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace,
-                                                       testData.controlledWorkspace.toWorkspaceName,
-                                                       testData.sample1.entityType,
-                                                       Seq(testData.sample1.name)
+                                                       legacyTestData.controlledWorkspace.toWorkspaceName,
+                                                       legacyTestData.sample1.entityType,
+                                                       Seq(legacyTestData.sample1.name)
       )
       // this will cause a soft conflict because it references sample1
       val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace,
-                                                       testData.controlledWorkspace.toWorkspaceName,
-                                                       testData.sample3.entityType,
-                                                       Seq(testData.sample3.name)
+                                                       legacyTestData.controlledWorkspace.toWorkspaceName,
+                                                       legacyTestData.sample3.entityType,
+                                                       Seq(legacyTestData.sample3.name)
       )
 
       withStatsD {
@@ -2594,7 +2632,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
             val copyResponse = responseAs[EntityCopyResponse]
 
-            assertSameElements(Seq(testData.sample1, testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
+            assertSameElements(Seq(legacyTestData.sample1, legacyTestData.aliquot1).map(_.toReference),
+                               copyResponse.entitiesCopied
+            )
             assertSameElements(Seq.empty, copyResponse.hardConflicts)
             assertSameElements(Seq.empty, copyResponse.softConflicts)
           }
@@ -2608,14 +2648,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq.empty,
         Seq(
           EntitySoftConflict(
-            testData.sample3.entityType,
-            testData.sample3.name,
+            legacyTestData.sample3.entityType,
+            legacyTestData.sample3.name,
             Seq(
-              EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq.empty),
+              EntitySoftConflict(legacyTestData.sample1.entityType, legacyTestData.sample1.name, Seq.empty),
               EntitySoftConflict(
-                testData.sample1.entityType,
-                testData.sample1.name,
-                Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty))
+                legacyTestData.sample1.entityType,
+                legacyTestData.sample1.name,
+                Seq(EntitySoftConflict(legacyTestData.aliquot1.entityType, legacyTestData.aliquot1.name, Seq.empty))
               )
             )
           )
@@ -2630,9 +2670,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.Conflict) {
               status
             }
-//            assertResult(expectedSoftConflictResponse) {
-//              responseAs[EntityCopyResponse]
-//            }
+            assertResult(expectedSoftConflictResponse) {
+              responseAs[EntityCopyResponse]
+            }
           }
       } { capturedMetrics =>
         val expected = expectedHttpRequestMetrics("post", "workspaces.entities.copy", StatusCodes.Conflict.intValue, 1)
@@ -2646,9 +2686,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.Conflict) {
               status
             }
-//            assertResult(expectedSoftConflictResponse) {
-//              responseAs[EntityCopyResponse]
-//            }
+            assertResult(expectedSoftConflictResponse) {
+              responseAs[EntityCopyResponse]
+            }
           }
       } { capturedMetrics =>
         val expected = expectedHttpRequestMetrics("post", "workspaces.entities.copy", StatusCodes.Conflict.intValue, 1)
@@ -2661,7 +2701,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(EntityCopyResponse(Seq(testData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
+          assertResult(EntityCopyResponse(Seq(legacyTestData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
             responseAs[EntityCopyResponse]
           }
         }

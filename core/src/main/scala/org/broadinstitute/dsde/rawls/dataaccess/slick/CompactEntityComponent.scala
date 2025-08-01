@@ -19,8 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityPointer,
   EntityQuery,
   FilterOperators,
-  SortDirections,
-  Workspace
+  SortDirections
 }
 import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
