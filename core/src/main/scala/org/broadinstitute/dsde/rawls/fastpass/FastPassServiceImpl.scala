@@ -301,15 +301,6 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
     dataSource
       .inTransaction { implicit dataAccess =>
         for {
-          migrationAttempts <- dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
-          _ = if (migrationAttempts.nonEmpty && !migrationAttempts.exists(_.outcome.exists(_.isSuccess))) {
-            throw new RawlsExceptionWithErrorReport(
-              ErrorReport(
-                StatusCodes.Conflict,
-                s"Workspace ${workspace.toWorkspaceName} has been scheduled for bucket migration, but it has not succeeded yet."
-              )
-            )
-          }
           rawlsServiceAccountUserInfo <- DBIO.from(googleServicesDAO.getServiceAccountUserInfo())
           samUserInfo <- DBIO.from(
             samDAO.getUserIdInfo(email, RawlsRequestContext(rawlsServiceAccountUserInfo)).map {

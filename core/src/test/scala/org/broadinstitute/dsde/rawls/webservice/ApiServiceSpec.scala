@@ -17,7 +17,6 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 import org.broadinstitute.dsde.rawls.billing._
-import org.broadinstitute.dsde.rawls.bucketMigration.{BucketMigrationService, BucketMigrationServiceImpl}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -233,9 +232,6 @@ trait ApiServiceSpec
       new BillingAdminService(samDAO, billingRepository, new WorkspaceRepository(slickDataSource), _)(
         testExecutionContext
       )
-
-    override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
-      BucketMigrationServiceImpl.constructor(slickDataSource, samDAO, gcsDAO)
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),

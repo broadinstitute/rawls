@@ -8,7 +8,6 @@ import akka.http.scaladsl.server.Directive1
 import akka.stream.Materializer
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.billing._
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -67,8 +66,6 @@ class MockApiService(
     mock[WorkspaceAdminService](RETURNS_SMART_NULLS),
   override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
     mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
-  override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService = _ =>
-    mock[BucketMigrationService](RETURNS_SMART_NULLS),
   override val userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
   override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService = _ =>
     mock[BillingAdminService](RETURNS_SMART_NULLS),
