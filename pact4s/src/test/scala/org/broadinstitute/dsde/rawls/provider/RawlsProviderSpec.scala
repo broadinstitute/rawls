@@ -9,7 +9,6 @@ import cats.effect.unsafe.implicits.global
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 import org.broadinstitute.dsde.rawls.billing.{BillingAdminService, BillingProjectOrchestrator}
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -134,10 +133,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     lazy val mockBillingProjectOrchestrator: BillingProjectOrchestrator = mock[BillingProjectOrchestrator]
     _ => mockBillingProjectOrchestrator
   }
-  val mockBucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService = {
-    lazy val mockBucketMigrationService: BucketMigrationService = mock[BucketMigrationService]
-    _ => mockBucketMigrationService
-  }
   val mockStatusServiceConstructor: () => StatusService = {
     lazy val mockStatusService: StatusService = mock[StatusService]
     () => mockStatusService
@@ -164,7 +159,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     mockSnapshotServiceConstructor,
     mockSpendReportingConstructor,
     mockBillingProjectOrchestratorConstructor,
-    mockBucketMigrationServiceConstructor,
     mockMethodConfigServiceConstructor,
     mockSubmissionsServiceConstructor,
     mockStatusServiceConstructor,
