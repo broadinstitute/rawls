@@ -814,12 +814,25 @@ trait MethodConfigTestSupport {
     dummyMethod
   )
 
-  class ConfigData extends TestData {
+  class ConfigData(legacy: Boolean = false) extends TestData {
     override def save() =
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
-          DBIO.seq(
+          val entityActions = if (legacy) {
+            DBIO.seq(
+              entityQuery.save(context, sampleGood),
+              entityQuery.save(context, sampleGood2),
+              entityQuery.save(context, sampleMissingValue),
+              entityQuery.save(context, sampleWithSingleElementArray),
+              entityQuery.save(context, sampleSet),
+              entityQuery.save(context, sampleSet2),
+              entityQuery.save(context, sampleSet3),
+              entityQuery.save(context, sampleSet4),
+              entityQuery.save(context, sampleForWdlStruct),
+              entityQuery.save(context, sampleForWdlStruct2)
+            )
+          } else {
             compactEntityRepository.queries.batchWriteEntities(
               context.workspaceIdAsUUID,
               Seq(
@@ -835,7 +848,10 @@ trait MethodConfigTestSupport {
                 sampleForWdlStruct2
               ),
               true
-            ),
+            )
+          }
+          DBIO.seq(
+            entityActions,
             methodConfigurationQuery.create(context, configGood),
             methodConfigurationQuery.create(context, configMissingExpr),
             methodConfigurationQuery.create(context, configSampleSet),
@@ -850,7 +866,11 @@ trait MethodConfigTestSupport {
   }
 
   val configData = new ConfigData()
+  val legacyConfigData = new ConfigData(true)
 
   def withConfigData[T](testCode: => T): T =
     withCustomTestDatabaseInternal(configData)(testCode)
+
+  def withLegacyConfigData[T](testCode: => T): T =
+    withCustomTestDatabaseInternal(legacyConfigData)(testCode)
 }
