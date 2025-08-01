@@ -807,11 +807,11 @@ class SubmissionSpec(_system: ActorSystem)
     val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
     assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
 
-    assertResult(sset) {
+    assertResult(Some(sset)) {
       runAndWait(
         compactEntityRepository.queries
           .getEntity(testData.workspace.workspaceIdAsUUID, sset.entityType, sset.name)
-      ).get.toEntity
+      ).map(_.toEntity)
     }
   }
 
@@ -904,10 +904,10 @@ class SubmissionSpec(_system: ActorSystem)
       val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
 
-      assertResult(sset) {
+      assertResult(Some(sset)) {
         runAndWait(
           compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, sset.entityType, sset.name)
-        ).get.toEntity
+        ).map(_.toEntity)
       }
   }
 
@@ -989,10 +989,10 @@ class SubmissionSpec(_system: ActorSystem)
     assert(submission.workflows.forall(_.status == WorkflowStatuses.Queued))
 
     // The sset would have failed to delete, but the submission succeeded
-    assertResult(sset) {
+    assertResult(Some(sset)) {
       runAndWait(
         compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID, sset.entityType, sset.name)
-      ).get.toEntity
+      ).map(_.toEntity)
     }
   }
 
