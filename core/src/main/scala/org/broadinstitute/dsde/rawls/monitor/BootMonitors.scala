@@ -5,7 +5,6 @@ import akka.actor.typed.scaladsl.adapter._
 import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
-import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
@@ -32,12 +31,11 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceCloudPlatform
 }
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import spray.json._
 
 import scala.concurrent.Await
@@ -64,7 +62,6 @@ object BootMonitors extends LazyLogging {
                    leonardoDAO: LeonardoDAO,
                    workspaceRepository: WorkspaceRepository,
                    googleStorage: GoogleStorageService[IO],
-                   googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
                    drsResolver: DrsResolver,
                    entityService: RawlsRequestContext => EntityService,
@@ -191,17 +188,6 @@ object BootMonitors extends LazyLogging {
                              cwdsDAO,
                              avroUpsertMonitorConfig,
                              slickDataSource
-      )
-
-      startMultiregonalBucketMigrationActor(system,
-                                            appConfigManager.conf,
-                                            gcsDAO,
-                                            googleIamDAO,
-                                            slickDataSource,
-                                            workspaceService,
-                                            googleStorage,
-                                            googleStorageTransferService,
-                                            samDAO
       )
 
       startFastPassMonitor(system, appConfigManager.conf, slickDataSource, googleIamDAO, googleStorageDAO)
@@ -430,34 +416,6 @@ object BootMonitors extends LazyLogging {
         dataSource
       )
     )
-
-  private def startMultiregonalBucketMigrationActor(system: ActorSystem,
-                                                    config: Config,
-                                                    gcsDAO: GoogleServicesDAO,
-                                                    googleIamDAO: GoogleIamDAO,
-                                                    dataSource: SlickDataSource,
-                                                    workspaceService: RawlsRequestContext => WorkspaceService,
-                                                    storageService: GoogleStorageService[IO],
-                                                    storageTransferService: GoogleStorageTransferService[IO],
-                                                    samDAO: SamDAO
-  ) =
-    config.as[Option[MultiregionalBucketMigrationActor.Config]]("multiregional-bucket-migration").foreach {
-      actorConfig =>
-        system.spawn(
-          MultiregionalBucketMigrationActor(
-            actorConfig,
-            dataSource,
-            workspaceService,
-            storageService,
-            storageTransferService,
-            gcsDAO,
-            googleIamDAO,
-            samDAO
-          ).behavior,
-          "MultiregionalBucketMigrationActor"
-        )
-
-    }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =
     Await.result(dataSource.inTransaction { dataAccess =>

@@ -9,11 +9,9 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.billing.BillingAdminService
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -30,11 +28,9 @@ trait AdminApiService extends UserInfoDirectives {
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-  // val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService
   val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService
   val userServiceConstructor: RawlsRequestContext => UserService
-  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService
   val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService
 
   def adminRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
@@ -75,7 +71,7 @@ trait AdminApiService extends UserInfoDirectives {
                 else
                   StatusCodes.NotFound -> Option(
                     ErrorReport(StatusCodes.NotFound,
-                                s"Unable to abort submission. Submission ${submissionId} could not be found."
+                                s"Unable to abort submission. Submission $submissionId could not be found."
                     )
                   )
               }
@@ -85,93 +81,9 @@ trait AdminApiService extends UserInfoDirectives {
       path("admin" / "submissions" / "queueStatusByUser") {
         get {
           complete {
-            submissionsServiceConstructor(ctx).adminWorkflowQueueStatusByUser
+            submissionsServiceConstructor(ctx).adminWorkflowQueueStatusByUser()
           }
         }
-      } ~
-      pathPrefix("admin" / "bucketMigration") {
-        pathPrefix("workspaces") {
-          pathEndOrSingleSlash {
-            post {
-              entity(as[List[WorkspaceName]]) { workspaceNames =>
-                complete {
-                  bucketMigrationServiceConstructor(ctx)
-                    .adminMigrateAllWorkspaceBuckets(workspaceNames)
-                    .map(StatusCodes.Created -> _)
-                }
-              }
-            }
-          } ~
-            pathPrefix("getProgress") {
-              pathEndOrSingleSlash {
-                post {
-                  entity(as[List[WorkspaceName]]) { workspaceNames =>
-                    complete {
-                      bucketMigrationServiceConstructor(ctx)
-                        .adminGetBucketMigrationProgressForWorkspaces(workspaceNames)
-                        .map(StatusCodes.OK -> _)
-                    }
-                  }
-                }
-              }
-            } ~
-            pathPrefix(Segment / Segment) { (namespace, name) =>
-              val workspaceName = WorkspaceName(namespace, name)
-              pathEndOrSingleSlash {
-                get {
-                  complete {
-                    bucketMigrationServiceConstructor(ctx)
-                      .adminGetBucketMigrationAttemptsForWorkspace(workspaceName)
-                      .map(ms => StatusCodes.OK -> ms)
-                  }
-                } ~
-                  post {
-                    complete {
-                      bucketMigrationServiceConstructor(ctx)
-                        .adminMigrateWorkspaceBucket(workspaceName)
-                        .map(StatusCodes.Created -> _)
-                    }
-                  }
-              } ~
-                path("progress") {
-                  get {
-                    complete {
-                      bucketMigrationServiceConstructor(ctx)
-                        .adminGetBucketMigrationProgressForWorkspace(workspaceName)
-                        .map(StatusCodes.OK -> _)
-                    }
-                  }
-                }
-            }
-        } ~
-          pathPrefix("billing" / Segment) { projectName =>
-            val billingProjectName = RawlsBillingProjectName(projectName)
-            pathEndOrSingleSlash {
-              post {
-                complete {
-                  bucketMigrationServiceConstructor(ctx)
-                    .adminMigrateWorkspaceBucketsInBillingProject(billingProjectName)
-                    .map(StatusCodes.Created -> _)
-                }
-              } ~
-                get {
-                  complete {
-                    bucketMigrationServiceConstructor(ctx)
-                      .adminGetBucketMigrationAttemptsForBillingProject(billingProjectName)
-                      .map(ms => StatusCodes.OK -> ms)
-                  }
-                }
-            } ~
-              path("progress") {
-                get {
-                  complete {
-                    bucketMigrationServiceConstructor(ctx)
-                      .adminGetBucketMigrationProgressForBillingProject(billingProjectName)
-                      .map(StatusCodes.OK -> _)
-                  }
-                }
-              }
-          }
       } ~
       pathPrefix("admin" / "workspaces") {
         pathPrefix(Segment / Segment) { (workspaceNamespace, workspaceName) =>

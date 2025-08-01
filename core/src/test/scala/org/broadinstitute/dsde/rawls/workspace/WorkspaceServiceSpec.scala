@@ -710,32 +710,6 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "fail to unlock a migrating workspace" in withTestDataServices { services =>
-    runAndWait(
-      for {
-        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(
-          testData.workspace,
-          Option("US")
-        )
-        attempts <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(
-          testData.workspace
-        )
-        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.update(
-          attempts.head.id,
-          slickDataSource.dataAccess.multiregionalBucketMigrationQuery.startedCol,
-          Some(Timestamp.from(Instant.now))
-        )
-      } yield (),
-      Duration.Inf
-    )
-
-    val exception = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.unlockWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
-    }
-
-    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-  }
-
   behavior of "deleteWorkspace"
 
   it should "delete a workspace with linked bond service account" in withTestDataServices { services =>

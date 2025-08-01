@@ -17,7 +17,6 @@ import io.opentelemetry.context.Context
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.{BillingAdminService, BillingProjectOrchestrator}
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
@@ -222,7 +221,6 @@ class RawlsApiServiceImpl(
   val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
   val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
   val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
-  val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
   val methodConfigurationServiceConstructor: RawlsRequestContext => MethodConfigurationService,
   val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService,
   val statusServiceConstructor: () => StatusService,
