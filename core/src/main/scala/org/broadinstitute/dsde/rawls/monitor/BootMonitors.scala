@@ -35,7 +35,7 @@ import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import spray.json._
 
 import scala.concurrent.Await
@@ -62,7 +62,6 @@ object BootMonitors extends LazyLogging {
                    leonardoDAO: LeonardoDAO,
                    workspaceRepository: WorkspaceRepository,
                    googleStorage: GoogleStorageService[IO],
-                   googleStorageTransferService: GoogleStorageTransferService[IO], // TODO CORE-615: remove
                    methodRepoDAO: MethodRepoDAO,
                    drsResolver: DrsResolver,
                    entityService: RawlsRequestContext => EntityService,

@@ -559,7 +559,6 @@ object Boot extends IOApp with LazyLogging {
           leonardoDAO,
           workspaceRepository,
           appDependencies.googleStorageService,
-          appDependencies.googleStorageTransferService,
           methodRepoDAO,
           drsResolver,
           entityServiceConstructor,
@@ -633,9 +632,6 @@ object Boot extends IOApp with LazyLogging {
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
     for {
       googleStorage <- GoogleStorageServiceFactory.createGoogleStorageService(appConfigManager)
-      googleStorageTransferService <- StorageTransferServiceFactory.createStorageTransferService(
-        appConfigManager
-      )
       googleServiceHttp <- GoogleServiceHttpFactory.createGoogleServiceHttp(appConfigManager, executionContext)
       topicAdmin <- GoogleTopicAdminFactory.createGoogleTopicAdmin(appConfigManager)
       bqServiceFactory = GoogleBigQueryServiceFactory.createGoogleBigQueryServiceFactory(
@@ -661,7 +657,6 @@ object Boot extends IOApp with LazyLogging {
       )
     } yield AppDependencies[F](
       googleStorage,
-      googleStorageTransferService,
       googleServiceHttp,
       topicAdmin,
       bqServiceFactory,
@@ -723,7 +718,6 @@ object Boot extends IOApp with LazyLogging {
 
 // Any resources need clean up should be put in AppDependencies
 final case class AppDependencies[F[_]](googleStorageService: GoogleStorageService[F],
-                                       googleStorageTransferService: GoogleStorageTransferService[F],
                                        googleServiceHttp: GoogleServiceHttp[F],
                                        topicAdmin: GoogleTopicAdmin[F],
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
