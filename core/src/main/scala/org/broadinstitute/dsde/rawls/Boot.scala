@@ -25,7 +25,6 @@ import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
 import io.opentelemetry.semconv.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import org.broadinstitute.dsde.rawls.billing._
-import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
@@ -506,9 +505,6 @@ object Boot extends IOApp with LazyLogging {
       val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
         new BillingAdminService(samDAO, billingRepository, workspaceRepository, _)
 
-      val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
-        BucketMigrationServiceFactory.createBucketMigrationService(appConfigManager, slickDataSource, samDAO, gcsDAO)
-
       val googleProjectRegistrationServiceConstructor: RawlsRequestContext => GoogleProjectRegistrationService =
         new GoogleProjectRegistrationService(_, samDAO, googleProjectRegRepo, billingRepository, gcsDAO)
 
@@ -523,7 +519,6 @@ object Boot extends IOApp with LazyLogging {
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
         billingProjectOrchestratorConstructor,
-        bucketMigrationServiceConstructor,
         methodConfigurationServiceConstructor,
         submissionsServiceConstructor,
         statusServiceConstructor,

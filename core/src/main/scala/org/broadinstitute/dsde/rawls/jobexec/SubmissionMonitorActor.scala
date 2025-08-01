@@ -224,7 +224,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     executionContext: ExecutionContext
   ): Future[ExecutionServiceStatusResponse] = {
     val submissionFuture = datasource.inTransaction { dataAccess =>
-      dataAccess.uniqueResult[SubmissionRecord](dataAccess.submissionQuery.findById(submissionId))
+      datasource.slickDataSource.dataAccess
+        .uniqueResult[SubmissionRecord](dataAccess.submissionQuery.findById(submissionId))
     }
 
     def abortQueuedWorkflows(submissionId: UUID) =
