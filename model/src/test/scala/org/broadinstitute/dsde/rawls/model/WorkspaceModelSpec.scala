@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
+  GcpLogBucketRetentionConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
@@ -1092,6 +1093,76 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             |  }""".stripMargin.parseJson
         intercept[DeserializationException] {
           WorkspaceSettingFormat.read(requesterPaysSettingBadConfig)
+        }
+      }
+    }
+
+    "GcpLogBucketRetentionSetting" - {
+      "serializes properly" in {
+        val logBucketRetentionSettingJson =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {
+            |      "retentionDurationInDays": 50
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult(logBucketRetentionSettingJson) {
+          WorkspaceSettingFormat.write(
+            GcpLogBucketRetentionSetting(
+              GcpLogBucketRetentionConfig(50)
+            )
+          )
+        }
+      }
+
+      "parses log bucket retention setting with retentionDurationInDays" in {
+        val logBucketRetentionSetting =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {
+            |      "retentionDurationInDays": 60
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          GcpLogBucketRetentionSetting(
+            GcpLogBucketRetentionConfig(60)
+          )
+        } {
+          WorkspaceSettingFormat.read(logBucketRetentionSetting)
+        }
+      }
+
+      "throws an exception for missing retentionDurationInDays" in {
+        val logBucketRetentionSettingNoDuration =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {}
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(logBucketRetentionSettingNoDuration)
+        }
+      }
+
+      "throws an exception for missing config" in {
+        val logBucketRetentionSettingNoConfig =
+          """{
+            |    "settingType": "GcpLogBucketRetention"
+            |  }""".stripMargin.parseJson
+        intercept[NoSuchElementException] {
+          WorkspaceSettingFormat.read(logBucketRetentionSettingNoConfig)
+        }
+      }
+
+      "throws an exception for incorrect format" in {
+        val logBucketRetentionSettingBadConfig =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {
+            |      "retentionDurationInDays": "not a number"
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(logBucketRetentionSettingBadConfig)
         }
       }
     }
