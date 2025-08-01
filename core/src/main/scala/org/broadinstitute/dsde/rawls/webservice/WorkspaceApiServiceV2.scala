@@ -64,21 +64,6 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
               }
             }
           } ~
-          pathPrefix("bucketMigration") {
-            pathEndOrSingleSlash {
-              get {
-                complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-              } ~
-                post {
-                  complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-                }
-            } ~
-              path("progress") {
-                get {
-                  complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-                }
-              }
-          } ~
           pathPrefix("settings") {
             pathEndOrSingleSlash {
               get {
