@@ -125,28 +125,7 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
               }
             }
           }
-      } ~
-        pathPrefix("bucketMigration") {
-          pathEndOrSingleSlash {
-            post {
-              entity(as[List[WorkspaceName]]) { workspaceNames =>
-                complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-              }
-            } ~
-              get {
-                complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-              }
-          } ~
-            pathPrefix("getProgress") {
-              pathEndOrSingleSlash {
-                post {
-                  entity(as[List[WorkspaceName]]) { workspaceNames =>
-                    complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-                  }
-                }
-              }
-            }
-        }
+      }
     }
   }
 }

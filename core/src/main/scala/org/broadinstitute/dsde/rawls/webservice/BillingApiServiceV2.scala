@@ -246,21 +246,6 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                       }
                     }
                 }
-            } ~
-            pathPrefix("bucketMigration") {
-              pathEndOrSingleSlash {
-                post {
-                  complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-                } ~
-                  get {
-                    complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-                  }
-              } ~
-                path("progress") {
-                  get {
-                    complete(StatusCodes.BadRequest -> Map("message" -> "This API is no longer supported."))
-                  }
-                }
             }
         } ~
         pathEnd {
