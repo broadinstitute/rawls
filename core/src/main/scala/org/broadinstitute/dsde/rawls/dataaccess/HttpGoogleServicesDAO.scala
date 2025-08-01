@@ -33,6 +33,8 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
+import com.google.api.services.logging.v2.{Logging, LoggingScopes}
+import com.google.api.services.logging.v2.model.LogBucket
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
@@ -134,6 +136,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val lifesciencesScopes = Seq(CloudLifeSciencesScopes.CLOUD_PLATFORM)
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
   val serviceUsageScopes = Seq(ServiceUsageScopes.CLOUD_PLATFORM_READ_ONLY)
+  val loggingBucketScopes = Seq(LoggingScopes.LOGGING_ADMIN)
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = GsonFactory.getDefaultInstance
@@ -361,6 +364,28 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .compile
       .drain
       .unsafeToFuture()
+
+  override def setLogBucketRetentionPeriod(userProject: GoogleProjectId, retentionDays: Int): Future[Unit] = {
+    implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.Logging
+
+    // logs are sent to _Default bucket which is in global region
+    val bucketName = s"projects/${userProject.value}/locations/global/buckets/_Default"
+    val logBucket = new LogBucket().setRetentionDays(retentionDays)
+
+    val patchRequest = getLogging(getLoggingServiceAccountCredential)
+      .projects()
+      .locations()
+      .buckets()
+      .patch(bucketName, logBucket)
+      .setUpdateMask("retention_days")
+
+    retryWithRecoverWhen500orGoogleError { () =>
+      executeGoogleRequest(patchRequest)
+      ()
+    } { case e =>
+      throw new RawlsException(s"Failed to update retention period for bucket $bucketName: ${e.getMessage}", e)
+    }
+  }
 
   override def isAdmin(userEmail: String): Future[Boolean] =
     hasGoogleRole(adminGroupName, userEmail)
@@ -1104,6 +1129,9 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   def getStorage(credential: Credential) =
     new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
 
+  def getLogging(credential: Credential): Logging =
+    new Logging.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+
   override def getBucketMetrics(
     projectId: GoogleProjectId
   ): BucketMetricsResponse = {
@@ -1228,6 +1256,17 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setJsonFactory(jsonFactory)
       .setServiceAccountScopes(serviceUsageScopes.asJava)
       .setServiceAccountId(clientEmail)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+
+  def getLoggingServiceAccountCredential: Credential =
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(clientEmail)
+      .setServiceAccountScopes(
+        loggingBucketScopes.asJava
+      ) // grant log bucket admin powers to be able to update log bucket configuration
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
 
