@@ -113,7 +113,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem)
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            entityQuery.save(context, sample1),
+            compactEntityRepository.queries.createEntity(context.workspaceIdAsUUID, sample1),
             methodConfigurationQuery.create(context,
                                             MethodConfiguration("std",
                                                                 "someMethod",

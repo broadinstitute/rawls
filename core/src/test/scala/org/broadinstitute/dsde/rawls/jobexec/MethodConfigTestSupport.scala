@@ -820,16 +820,22 @@ trait MethodConfigTestSupport {
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            entityQuery.save(context, sampleGood),
-            entityQuery.save(context, sampleGood2),
-            entityQuery.save(context, sampleMissingValue),
-            entityQuery.save(context, sampleWithSingleElementArray),
-            entityQuery.save(context, sampleSet),
-            entityQuery.save(context, sampleSet2),
-            entityQuery.save(context, sampleSet3),
-            entityQuery.save(context, sampleSet4),
-            entityQuery.save(context, sampleForWdlStruct),
-            entityQuery.save(context, sampleForWdlStruct2),
+            compactEntityRepository.queries.batchWriteEntities(
+              context.workspaceIdAsUUID,
+              Seq(
+                sampleGood,
+                sampleGood2,
+                sampleMissingValue,
+                sampleWithSingleElementArray,
+                sampleSet,
+                sampleSet2,
+                sampleSet3,
+                sampleSet4,
+                sampleForWdlStruct,
+                sampleForWdlStruct2
+              ),
+              true
+            ),
             methodConfigurationQuery.create(context, configGood),
             methodConfigurationQuery.create(context, configMissingExpr),
             methodConfigurationQuery.create(context, configSampleSet),

@@ -189,13 +189,11 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
           workspaceQuery.createOrUpdate(workspace2),
           withWorkspaceContext(workspace) { ctx =>
             DBIO.seq(
-              entityQuery.save(ctx, sample1),
-              entityQuery.save(ctx, sample2),
-              entityQuery.save(ctx, sample3),
-              entityQuery.save(ctx, sample4),
-              entityQuery.save(ctx, sample5),
-              entityQuery.save(ctx, sample6),
-              entityQuery.save(ctx, sampleSet),
+              compactEntityRepository.queries.batchWriteEntities(
+                ctx.workspaceIdAsUUID,
+                Seq(sample1, sample2, sample3, sample4, sample5, sample6, sampleSet),
+                true
+              ),
               methodConfigurationQuery.create(ctx, methodConfig),
               submissionQuery.create(ctx, submissionSuccess),
               submissionQuery.create(ctx, submissionFail),
