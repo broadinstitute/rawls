@@ -39,13 +39,7 @@ class ResourceBufferServiceImpl(resourceBufferDAO: ResourceBufferDAO, config: Re
   def repairGoogleProject(googleProjectId: String): Future[JobModel] =
     resourceBufferDAO.repairResource(googleProjectId)
 
-  def getRepairGoogleProjectStatus(googleProjectId: String): Future[JobModel] =
-    getRepairGoogleProjectJob(googleProjectId).flatMap {
-      case Some(job) => resourceBufferDAO.getJob(job.getId)
-      case None      => Future.failed(new Exception(s"No repair job found for project $googleProjectId"))
-    }
-
-  def getRepairGoogleProjectJob(googleProjectId: String): Future[Option[JobModel]] =
+  def getGoogleProjectRepairJobs(googleProjectId: String): Future[java.util.List[JobModel]] = {
     resourceBufferDAO
       .enumerateJobs(
         0,
@@ -54,7 +48,7 @@ class ResourceBufferServiceImpl(resourceBufferDAO: ResourceBufferDAO, config: Re
         "bio.terra.buffer.service.resource.flight.GoogleProjectRepairFlight",
         java.util.List.of("googleProjectId=" + googleProjectId)
       )
-      .map(_.headOption)
+  }
 
   def getJobDetails(jobId: String): Future[Object] =
     resourceBufferDAO.getJobResult(jobId)

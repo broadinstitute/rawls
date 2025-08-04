@@ -771,12 +771,25 @@ class WorkspaceService(
           ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
         )
       )
-      jobResult <- resourceBufferService.getRepairGoogleProjectStatus(workspace.googleProjectId.value)
+      jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
+        if (!jobList.isEmpty) {
+          Future.successful(jobList.get(0))
+        } else {
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.NotFound,
+                s"No repair job was started for project ${workspace.googleProjectId.value}"
+              )
+            )
+          )
+        }
+      }
       response <- jobResult.getJobStatus match {
         case JobModel.JobStatusEnum.FAILED =>
-          resourceBufferService.getJobDetails(jobResult.getId).flatMap { jobDetails =>
-            // TODO: Get error message from job result endpoint
-            // val message = jobDetails.getMessage.getOrElse("")
+        // TODO: Get error message from job result endpoint
+          // resourceBufferService.getJobDetails(jobResult.getId).flatMap { jobDetails =>
+          // val message = jobDetails.getMessage.getOrElse("")
             Future.failed(
               RawlsExceptionWithErrorReport(
                 ErrorReport(
@@ -785,7 +798,7 @@ class WorkspaceService(
                 )
               )
             )
-          }
+//          }
         case _ =>
           Future.successful(RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue))
       }

@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.buffer.model.JobModel
+import bio.terra.buffer.model.JobModel.JobStatusEnum
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
@@ -4012,6 +4013,62 @@ class WorkspaceServiceSpec
     error.errorReport.message should include("not found")
 
     verify(services.gcsDAO).getBucket(testData.workspace.bucketName, Option(testData.workspace.googleProjectId))(services.executionContext)
+  }
+
+  behavior of "repairWorkspaceProgress"
+
+  it should "fail if workspace does not exist" in withTestDataServices { services =>
+    val nonExistentWorkspaceName = WorkspaceName("fake-namespace", "fake-workspace")
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.getRepairWorkspaceProgress(nonExistentWorkspaceName), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+    error.errorReport.message should include("does not exist")
+  }
+
+  it should "fail if no repair job was started" in withTestDataServices { services =>
+    val workspace = testData.workspace
+    val jobModel = mock[JobModel]
+    val jobStatus = JobStatusEnum.FAILED
+    when(jobModel.getJobStatus).thenReturn(jobStatus)
+    when(services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(workspace.googleProjectId.value)))
+      .thenReturn(Future.successful(java.util.List.of()))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.getRepairWorkspaceProgress(workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+    error.errorReport.message should include(s"No repair job was started for project ${workspace.googleProjectId.value}")
+  }
+
+  it should "fail if the repair job in RBS failed" in withTestDataServices { services =>
+    val workspace = testData.workspace
+    val jobModel = mock[JobModel]
+    val jobStatus = JobStatusEnum.FAILED
+    when(jobModel.getJobStatus).thenReturn(jobStatus)
+    when(services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(workspace.googleProjectId.value)))
+      .thenReturn(Future.successful(java.util.List.of(jobModel)))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.getRepairWorkspaceProgress(workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+    error.errorReport.message should include(s"Repair job failed for project ${workspace.googleProjectId.value}")
+  }
+
+  it should "return workspace repair progress" in withTestDataServices { services =>
+    val jobModel = mock[JobModel]
+    val jobStatus = JobStatusEnum.SUCCEEDED
+    when(jobModel.getJobStatus).thenReturn(jobStatus)
+    when(services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(testData.workspace.googleProjectId.value)))
+      .thenReturn(Future.successful(java.util.List.of(jobModel)))
+
+    val expectedResponse = RepairWorkspaceResponse(testData.workspace.googleProjectId.value, jobStatus.getValue)
+    services.workspaceService.getRepairWorkspaceProgress(testData.workspace.toWorkspaceName).map { response =>
+      response shouldBe expectedResponse
+    }
   }
 
 }
