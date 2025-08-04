@@ -61,10 +61,11 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
   }
 
   override def enumerateJobs(offset: Integer,
-                    limit: Integer,
-                    direction: SqlSortDirectionDescDefault,
-                    className: String,
-                    inputs: java.util.List[String]): Future[java.util.List[JobModel]] = {
+                             limit: Integer,
+                             direction: SqlSortDirectionDescDefault,
+                             className: String,
+                             inputs: java.util.List[String]
+  ): Future[java.util.List[JobModel]] = {
     clientServiceAccountCreds.refreshToken()
     val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
     retry(when500) { () =>

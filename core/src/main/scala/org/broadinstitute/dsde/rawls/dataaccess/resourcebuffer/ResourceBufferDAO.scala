@@ -15,7 +15,8 @@ trait ResourceBufferDAO {
                     limit: Integer,
                     direction: SqlSortDirectionDescDefault,
                     className: String,
-                    inputs: java.util.List[String]): Future[java.util.List[JobModel]]
+                    inputs: java.util.List[String]
+  ): Future[java.util.List[JobModel]]
 
   def getJob(jobId: String): Future[JobModel]
 

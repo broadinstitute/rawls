@@ -39,23 +39,24 @@ class ResourceBufferServiceImpl(resourceBufferDAO: ResourceBufferDAO, config: Re
   def repairGoogleProject(googleProjectId: String): Future[JobModel] =
     resourceBufferDAO.repairResource(googleProjectId)
 
-  def getRepairGoogleProjectStatus(googleProjectId: String): Future[JobModel] = {
+  def getRepairGoogleProjectStatus(googleProjectId: String): Future[JobModel] =
     getRepairGoogleProjectJob(googleProjectId).flatMap {
       case Some(job) => resourceBufferDAO.getJob(job.getId)
-      case None => Future.failed(new Exception(s"No repair job found for project $googleProjectId"))
+      case None      => Future.failed(new Exception(s"No repair job found for project $googleProjectId"))
     }
-  }
 
-  def getRepairGoogleProjectJob(googleProjectId: String): Future[Option[JobModel]] = {
-    resourceBufferDAO.enumerateJobs(
-      0, 10, SqlSortDirectionDescDefault.DESC,
-      "bio.terra.buffer.service.resource.flight.GoogleProjectRepairFlight",
-      java.util.List.of("googleProjectId=" + googleProjectId)
-    ).map(_.headOption)
-  }
+  def getRepairGoogleProjectJob(googleProjectId: String): Future[Option[JobModel]] =
+    resourceBufferDAO
+      .enumerateJobs(
+        0,
+        10,
+        SqlSortDirectionDescDefault.DESC,
+        "bio.terra.buffer.service.resource.flight.GoogleProjectRepairFlight",
+        java.util.List.of("googleProjectId=" + googleProjectId)
+      )
+      .map(_.headOption)
 
-  def getJobDetails(jobId: String): Future[Object] = {
+  def getJobDetails(jobId: String): Future[Object] =
     resourceBufferDAO.getJobResult(jobId)
-  }
 
 }

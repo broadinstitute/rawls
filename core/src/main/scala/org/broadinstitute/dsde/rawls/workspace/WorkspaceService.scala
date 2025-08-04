@@ -39,7 +39,16 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{AttributeNotFoundException, AttributeSupport, AttributeUpdateOperationException, BillingProjectSupport, JsonFilterUtils, UserUtils, UserWiths, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeNotFoundException,
+  AttributeSupport,
+  AttributeUpdateOperationException,
+  BillingProjectSupport,
+  JsonFilterUtils,
+  UserUtils,
+  UserWiths,
+  WorkspaceSupport
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -754,7 +763,7 @@ class WorkspaceService(
 
     } yield ()
 
-  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] = {
+  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
     for {
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
       workspace = workspaceOpt.getOrElse(
@@ -781,7 +790,6 @@ class WorkspaceService(
           Future.successful(RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue))
       }
     } yield response
-  }
 
   def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
                                     newBillingProjectName: String
