@@ -432,7 +432,7 @@ class EntityServiceSpec
   // TODO CORE-651 Update messaging behavior to be more specific, then change these tests to quicksilver
   it should "fail to rename an attribute name to a name already in use" in withLegacyTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
-    val ex = intercept[AttributeException] {
+    val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
         services.entityService.renameAttribute(legacyTestData.wsName,
                                                legacyTestData.pair1.entityType,
@@ -442,8 +442,8 @@ class EntityServiceSpec
         waitDuration
       )
     }
-    ex.getMessage shouldBe "control already exists."
-    ex.code shouldBe StatusCodes.BadRequest
+    ex.errorReport.message shouldBe "control already exists as an attribute name"
+    ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
   it should "rename an attribute name as long as the selected name is not in use" in withTestDataServices { services =>
@@ -471,7 +471,7 @@ class EntityServiceSpec
   it should "throw an error when trying to rename an attribute that does not exist" in withLegacyTestDataServices {
     services =>
       val waitDuration = Duration(10, SECONDS)
-      val ex = intercept[AttributeException] {
+      val ex = intercept[RawlsExceptionWithErrorReport] {
         Await.result(
           services.entityService.renameAttribute(
             legacyTestData.wsName,
@@ -482,8 +482,8 @@ class EntityServiceSpec
           waitDuration
         )
       }
-      ex.getMessage shouldBe "non-existent-attribute does not exist."
-      ex.code shouldBe StatusCodes.BadRequest
+      ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
+      ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
   }
 
   it should "do nothing when asked to delete zero entities" in withTestDataServices { services =>

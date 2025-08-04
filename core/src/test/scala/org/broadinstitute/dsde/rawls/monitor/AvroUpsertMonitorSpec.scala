@@ -536,6 +536,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     }
   }
 
+  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
   it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
@@ -592,6 +593,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
+  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
   it should "bubble up useful error message if upserts result in partial failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
@@ -657,6 +659,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
+  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
   it should "bubble up useful error message if upserts result in complete failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
