@@ -4,10 +4,9 @@ import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 import akka.testkit.TestKit
 import cats.effect.unsafe.implicits.global
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
@@ -15,28 +14,30 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeFormat,
   AttributeName,
   AttributeString,
-  DataReferenceName,
+  CompactDataTablesSetting,
   Entity,
-  GoogleProjectId,
   ImportStatuses,
   RawlsRequestContext,
   TypedAttributeListSerializer,
   UserInfo,
-  WorkspaceName
+  WorkspaceName,
+  WorkspaceSettingTypes
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.{doReturn, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -64,6 +65,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   ) extends ApiServices
       with MockUserInfoDirectives {
     override val submissionMonitorsEnabled: Boolean = false
+
   }
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
@@ -76,6 +78,11 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
 
   def withTestDataApiServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+
+  def withLegacyTestDataApiServices[T](testCode: TestApiService => T): T =
+    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
 
@@ -101,8 +108,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   val entityType = "test-type"
   val failImportStatusUUID = UUID.randomUUID()
 
-  def testAttributes(importId: UUID): Map[String, String] = Map(
-    "workspaceId" -> workspaceId.toString,
+  def testAttributes(importId: UUID, wsId: UUID = workspaceId): Map[String, String] = Map(
+    "workspaceId" -> wsId.toString,
     "userEmail" -> userInfo.userEmail.toString,
     "upsertFile" -> s"$bucketName/${importId.toString}",
     "jobId" -> importId.toString
@@ -137,15 +144,40 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       Duration.apply(10, TimeUnit.SECONDS)
     )
 
-  def setUp(services: TestApiService) = {
+  def setUp(services: TestApiService, useLegacy: Boolean = false) = {
     setUpPubSub(services)
+
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    val mockEntityManager = EntityManager.defaultEntityManager(
+      slickDataSource,
+      if (useLegacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
+      services.testConf.getBoolean("entityStatisticsCache.enabled"),
+      services.testConf.getDuration("entities.queryTimeout"),
+      workbenchMetricBaseName
+    )
+
+    val mockEntityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+      slickDataSource,
+      services.samDAO,
+      workbenchMetricBaseName,
+      mockEntityManager,
+      1000
+    )
 
     val mockCwdsDAO = new MockCwdsDAO()
 
     // Start the monitor
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
-        services.entityServiceConstructor,
+        mockEntityServiceConstructor,
         services.gcsDAO,
         services.samDAO,
         googleStorage,
@@ -299,7 +331,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // Check in db if entities are there
       withWorkspaceContext(testData.workspace) { context =>
         eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-          val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
+          val entitiesOfType =
+            runAndWait(compactEntityRepository.queries.listActiveEntitiesOfType(context.workspaceIdAsUUID, entityType))
           assertResult(upsertQuantity)(entitiesOfType.size)
           upsertRange(upsertQuantity) foreach { idx =>
             val name = s"avro-entity-$idx"
@@ -503,14 +536,15 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     }
   }
 
-  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withTestDataApiServices {
+  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
+  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services)
+      val mockCwdsDAO = setUp(services, useLegacy = true)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
@@ -534,8 +568,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -558,14 +593,15 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
-  it should "bubble up useful error message if upserts result in partial failure" in withTestDataApiServices {
+  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
+  it should "bubble up useful error message if upserts result in partial failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services)
+      val mockCwdsDAO = setUp(services, useLegacy = true)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
 
@@ -596,8 +632,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -622,14 +659,15 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
-  it should "bubble up useful error message if upserts result in complete failure" in withTestDataApiServices {
+  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
+  it should "bubble up useful error message if upserts result in complete failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services)
+      val mockCwdsDAO = setUp(services, useLegacy = true)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       // failure creates an entity that refers to a non-existent entity
@@ -659,8 +697,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.

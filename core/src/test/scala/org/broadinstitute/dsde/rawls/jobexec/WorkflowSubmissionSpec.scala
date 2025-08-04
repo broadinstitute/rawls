@@ -549,8 +549,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
         Map()
       )
 
-      runAndWait(entityQuery.save(ctx, sample))
-      runAndWait(entityQuery.save(ctx, sampleSet))
+      runAndWait(compactEntityRepository.queries.createEntity(ctx.workspaceIdAsUUID, sample))
+      runAndWait(compactEntityRepository.queries.createEntity(ctx.workspaceIdAsUUID, sampleSet))
       runAndWait(submissionQuery.create(ctx, submissionDos))
       val (workflowRecs, submissionRec, workspaceRec) =
         getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
@@ -584,7 +584,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                         Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(samples))
       )
 
-      runAndWait(entityQuery.save(testData.workspace, sset))
+      runAndWait(compactEntityRepository.queries.createEntity(testData.workspace.workspaceIdAsUUID, sset))
 
       def inputResolutions(sampleName: String) =
         Seq(
