@@ -49,7 +49,12 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  RawlsTestUtils,
+  TestExecutionContext
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
@@ -3927,7 +3932,9 @@ class WorkspaceServiceSpec
 
     Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
 
-    verify(services.gcsDAO).getBucket(testData.workspace.bucketName, Option(testData.workspace.googleProjectId))(services.executionContext)
+    verify(services.gcsDAO).getBucket(testData.workspace.bucketName, Option(testData.workspace.googleProjectId))(
+      services.executionContext
+    )
     verify(services.gcsDAO).isBillingAccountEnabled(testData.workspace.currentBillingAccountOnGoogleProject.get)
     verify(services.resourceBufferService).repairGoogleProject(testData.workspace.googleProjectId.value)
   }
@@ -3946,11 +3953,13 @@ class WorkspaceServiceSpec
   it should "fail to repair a workspace when user is not a billing project owner" in withTestDataServices { services =>
     val workspaceName = testData.workspace.toWorkspaceName
 
-    when(services.samDAO.listUserRolesForResource(
-      SamResourceTypeNames.billingProject,
-      testData.billingProject.projectName.value,
-      services.workspaceService.ctx
-    )).thenReturn(Future.successful(Set()))
+    when(
+      services.samDAO.listUserRolesForResource(
+        SamResourceTypeNames.billingProject,
+        testData.billingProject.projectName.value,
+        services.workspaceService.ctx
+      )
+    ).thenReturn(Future.successful(Set()))
 
     val error = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
@@ -3970,7 +3979,9 @@ class WorkspaceServiceSpec
           billingAccount = None,
           testData.userOwner.userSubjectId
         )
-        updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.billingProject.projectName)
+        updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(
+          testData.billingProject.projectName
+        )
       } yield updatedBillingProject.value.billingAccount shouldBe empty
     }
 
@@ -4012,7 +4023,9 @@ class WorkspaceServiceSpec
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     error.errorReport.message should include("not found")
 
-    verify(services.gcsDAO).getBucket(testData.workspace.bucketName, Option(testData.workspace.googleProjectId))(services.executionContext)
+    verify(services.gcsDAO).getBucket(testData.workspace.bucketName, Option(testData.workspace.googleProjectId))(
+      services.executionContext
+    )
   }
 
   behavior of "repairWorkspaceProgress"
@@ -4031,7 +4044,9 @@ class WorkspaceServiceSpec
     val jobModel = mock[JobModel]
     val jobStatus = JobStatusEnum.FAILED
     when(jobModel.getJobStatus).thenReturn(jobStatus)
-    when(services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(workspace.googleProjectId.value)))
+    when(
+      services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(workspace.googleProjectId.value))
+    )
       .thenReturn(Future.successful(java.util.List.of()))
 
     val error = intercept[RawlsExceptionWithErrorReport] {
@@ -4039,7 +4054,9 @@ class WorkspaceServiceSpec
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
-    error.errorReport.message should include(s"No repair job was started for project ${workspace.googleProjectId.value}")
+    error.errorReport.message should include(
+      s"No repair job was started for project ${workspace.googleProjectId.value}"
+    )
   }
 
   it should "fail if the repair job in RBS failed" in withTestDataServices { services =>
@@ -4047,7 +4064,9 @@ class WorkspaceServiceSpec
     val jobModel = mock[JobModel]
     val jobStatus = JobStatusEnum.FAILED
     when(jobModel.getJobStatus).thenReturn(jobStatus)
-    when(services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(workspace.googleProjectId.value)))
+    when(
+      services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(workspace.googleProjectId.value))
+    )
       .thenReturn(Future.successful(java.util.List.of(jobModel)))
 
     val error = intercept[RawlsExceptionWithErrorReport] {
@@ -4062,7 +4081,11 @@ class WorkspaceServiceSpec
     val jobModel = mock[JobModel]
     val jobStatus = JobStatusEnum.SUCCEEDED
     when(jobModel.getJobStatus).thenReturn(jobStatus)
-    when(services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(testData.workspace.googleProjectId.value)))
+    when(
+      services.resourceBufferService.getGoogleProjectRepairJobs(
+        ArgumentMatchers.eq(testData.workspace.googleProjectId.value)
+      )
+    )
       .thenReturn(Future.successful(java.util.List.of(jobModel)))
 
     val expectedResponse = RepairWorkspaceResponse(testData.workspace.googleProjectId.value, jobStatus.getValue)

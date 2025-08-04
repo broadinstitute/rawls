@@ -787,17 +787,17 @@ class WorkspaceService(
       }
       response <- jobResult.getJobStatus match {
         case JobModel.JobStatusEnum.FAILED =>
-        // TODO: Get error message from job result endpoint
+          // TODO: Get error message from job result endpoint
           // resourceBufferService.getJobDetails(jobResult.getId).flatMap { jobDetails =>
           // val message = jobDetails.getMessage.getOrElse("")
-            Future.failed(
-              RawlsExceptionWithErrorReport(
-                ErrorReport(
-                  StatusCodes.InternalServerError,
-                  s"Repair job failed for project ${workspace.googleProjectId.value}"
-                )
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.InternalServerError,
+                s"Repair job failed for project ${workspace.googleProjectId.value}"
               )
             )
+          )
 //          }
         case _ =>
           Future.successful(RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue))

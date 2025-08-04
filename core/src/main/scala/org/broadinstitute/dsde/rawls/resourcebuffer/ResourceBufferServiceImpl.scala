@@ -39,7 +39,7 @@ class ResourceBufferServiceImpl(resourceBufferDAO: ResourceBufferDAO, config: Re
   def repairGoogleProject(googleProjectId: String): Future[JobModel] =
     resourceBufferDAO.repairResource(googleProjectId)
 
-  def getGoogleProjectRepairJobs(googleProjectId: String): Future[java.util.List[JobModel]] = {
+  def getGoogleProjectRepairJobs(googleProjectId: String): Future[java.util.List[JobModel]] =
     resourceBufferDAO
       .enumerateJobs(
         0,
@@ -48,7 +48,6 @@ class ResourceBufferServiceImpl(resourceBufferDAO: ResourceBufferDAO, config: Re
         "bio.terra.buffer.service.resource.flight.GoogleProjectRepairFlight",
         java.util.List.of("googleProjectId=" + googleProjectId)
       )
-  }
 
   def getJobDetails(jobId: String): Future[Object] =
     resourceBufferDAO.getJobResult(jobId)
