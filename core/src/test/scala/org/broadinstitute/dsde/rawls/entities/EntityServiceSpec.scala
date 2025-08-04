@@ -121,7 +121,7 @@ class EntityServiceSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
+  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser, useLegacy: Boolean = false)(implicit
     val executionContext: ExecutionContext
   ) extends EntityApiService
       with MockUserInfoDirectivesWithUser {
@@ -153,7 +153,7 @@ class EntityServiceSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        spyWorkspaceSettingRepository,
+        if (useLegacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -167,8 +167,15 @@ class EntityServiceSpec
       withServices(dataSource, testData.userOwner)(testCode)
     }
 
-  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
-    val apiService = new TestApiService(dataSource, user)
+  def withLegacyTestDataServices[T](testCode: TestApiService => T): T =
+    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServices(dataSource, legacyTestData.userOwner, true)(testCode)
+    }
+
+  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser, useLegacy: Boolean = false)(
+    testCode: (TestApiService) => T
+  ) = {
+    val apiService = new TestApiService(dataSource, user, useLegacy)
     testCode(apiService)
   }
 
@@ -422,13 +429,13 @@ class EntityServiceSpec
     }
   }
 
-  // TODO Keep these behavior changes and change the test, or keep the test and change the behavior?
-  it should "fail to rename an attribute name to a name already in use" in withTestDataServices { services =>
+  // TODO CORE-651 Update messaging behavior to be more specific, then change these tests to quicksilver
+  it should "fail to rename an attribute name to a name already in use" in withLegacyTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[AttributeException] {
       Await.result(
-        services.entityService.renameAttribute(testData.wsName,
-                                               testData.pair1.entityType,
+        services.entityService.renameAttribute(legacyTestData.wsName,
+                                               legacyTestData.pair1.entityType,
                                                AttributeName.withDefaultNS("case"),
                                                AttributeRename(AttributeName.withDefaultNS("control"))
         ),
@@ -460,16 +467,17 @@ class EntityServiceSpec
     }
   }
 
-  // TODO Keep these behavior changes and change the test, or keep the test and change the behavior?
-  it should "throw an error when trying to rename an attribute that does not exist" in withTestDataServices {
+  // TODO CORE-651 Update messaging behavior to be more specific, then change these tests to quicksilver
+  it should "throw an error when trying to rename an attribute that does not exist" in withLegacyTestDataServices {
     services =>
       val waitDuration = Duration(10, SECONDS)
       val ex = intercept[AttributeException] {
         Await.result(
-          services.entityService.renameAttribute(testData.wsName,
-                                                 testData.pair1.entityType,
-                                                 AttributeName.withDefaultNS("non-existent-attribute"),
-                                                 AttributeRename(AttributeName.withDefaultNS("any"))
+          services.entityService.renameAttribute(
+            legacyTestData.wsName,
+            legacyTestData.pair1.entityType,
+            AttributeName.withDefaultNS("non-existent-attribute"),
+            AttributeRename(AttributeName.withDefaultNS("any"))
           ),
           waitDuration
         )

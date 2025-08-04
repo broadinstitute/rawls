@@ -40,6 +40,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   private val ws2id = minimalTestData.workspace2.workspaceIdAsUUID
   private val q = compactEntityQuery
 
+  // for raw sql queries
+  import slickDataSource.dataAccess.compactEntityQuery.{GetUUIDResult, SetUUIDParameter}
+
   behavior of "batchCreateEntities and getEntity"
 
   // tests both batchCreateEntities and getEntity
