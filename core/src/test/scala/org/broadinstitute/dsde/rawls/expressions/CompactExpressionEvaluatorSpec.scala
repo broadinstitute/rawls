@@ -102,7 +102,6 @@ class CompactExpressionEvaluatorSpec
             )
           )
         ),
-        ("blah", List()),
         ("\"blah\"",
          List(
          )
@@ -182,6 +181,13 @@ class CompactExpressionEvaluatorSpec
     complexResult2(1).attributeName shouldBe Some("bar")
 
   }
+
+  it should "error on invalid expressions" in
+    List("blah", "invalid.exp.").foreach { input =>
+      intercept[RawlsExceptionWithErrorReport] {
+        compactExpressionEvaluator.parseLookups(input)
+      }
+    }
 
   // Many test cases are taken from LocalEntityProviderSpec
   behavior of "evaluateExpressions"

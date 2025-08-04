@@ -10,17 +10,20 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.WorkspaceAccessDeniedException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
+import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor
 import org.broadinstitute.dsde.rawls.mock.MockBardService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.Mockito.{verify, when}
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.{doReturn, spy, verify, when}
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import spray.json.DefaultJsonProtocol._
@@ -37,20 +40,42 @@ import scala.language.postfixOps
 //noinspection TypeAnnotation,NameBooleanParameters,ScalaUnnecessaryParentheses,RedundantNewCaseClass,RedundantBlock,ScalaUnusedSymbol
 class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyChecks {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
-    implicit override val executionContext: ExecutionContext
+  case class TestApiService(dataSource: SlickDataSource,
+                            gcsDAO: MockGoogleServicesDAO,
+                            gpsDAO: MockGooglePubSubDAO,
+                            legacy: Boolean = false
+  )(implicit
+    override val executionContext: ExecutionContext
   ) extends ApiServices
-      with MockUserInfoDirectives
+      with MockUserInfoDirectives {
+
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    override val entityManager = EntityManager.defaultEntityManager(
+      slickDataSource,
+      if (legacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
+      testConf.getBoolean("entityStatisticsCache.enabled"),
+      testConf.getDuration("entities.queryTimeout"),
+      workbenchMetricBaseName
+    )(executionContext, system)
+  }
 
   // increase the route timeout slightly for this test as the "large submission" tests sometimes
   // bump up against the default 5 second timeout.
   implicit override val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(30.seconds)
 
-  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
+  def withApiServices[T](dataSource: SlickDataSource, legacy: Boolean = false)(testCode: TestApiService => T): T = {
 
     val gcsDAO = new MockGoogleServicesDAO("test")
 
-    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
+    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO, legacy)
     try
       testCode(apiService)
     finally
@@ -71,7 +96,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T =
     withCustomTestDatabase(largeSampleTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource) { services =>
+      withApiServices(dataSource, legacy = true) { services =>
         try {
           // Simulate a large submission in the mock Cromwell server by making it return
           // numSamples workflows for submission requests.
@@ -478,6 +503,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   val numSamples = 10000
 
+  // TODO CORE-640 Convert to quicksilver
   it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = largeSampleTestData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
@@ -818,7 +844,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.createOrUpdate(workspace),
-        entityQuery.save(workspace, lotsOfSamples :+ sampleSet)
+        entityQuery.save(
+          workspace,
+          lotsOfSamples :+ sampleSet
+        )
       )
     }
   }

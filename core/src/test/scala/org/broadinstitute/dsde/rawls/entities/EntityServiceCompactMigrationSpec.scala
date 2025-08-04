@@ -125,7 +125,7 @@ class EntityServiceCompactMigrationSpec
   }
 
   def withTestDataServices[T](testCode: TestApiService => T): T =
-    withDefaultTestDatabase { dataSource: SlickDataSource =>
+    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
     }
 
@@ -137,9 +137,9 @@ class EntityServiceCompactMigrationSpec
   private val atMost = Duration("60 seconds") // timeout for Await() in tests
 
   private val testWorkspaces = Map(
-    testData.workspace -> 18, // has 20 entities, but 2 of them have no attributes, so 18 entities are updated in the migration
-    testData.workspaceNoAttrs -> 0, // has 0 entities
-    testData.workspaceWithRealm -> 0 // has 1 entity, but that entity has no attributes, so 0 entities are updated in the migration
+    legacyTestData.workspace -> 18, // has 20 entities, but 2 of them have no attributes, so 18 entities are updated in the migration
+    legacyTestData.workspaceNoAttrs -> 0, // has 0 entities
+    legacyTestData.workspaceWithRealm -> 0 // has 1 entity, but that entity has no attributes, so 0 entities are updated in the migration
   )
 
   behavior of "Compact Entity Migration"
@@ -195,7 +195,7 @@ class EntityServiceCompactMigrationSpec
   }
 
   it should s"migrate to compact entities with various attribute data types" in withTestDataServices { apiService =>
-    val workspace = testData.workspace // has some entities we can use to test references
+    val workspace = legacyTestData.workspace // has some entities we can use to test references
 
     // various attribute types to ensure migration works for all of them
     val attrs: Map[AttributeName, Attribute] = Map(
@@ -288,7 +288,7 @@ class EntityServiceCompactMigrationSpec
   }
 
   it should s"maintain reference array ordering" in withTestDataServices { apiService =>
-    val workspace = testData.workspace // has some entities we can use to test references
+    val workspace = legacyTestData.workspace // has some entities we can use to test references
 
     val targetEntityType = "targetEntityType"
     val targetEntityNames = Seq("targetName1", "targetName2", "targetName3", "targetName4", "targetName5")
@@ -378,7 +378,7 @@ class EntityServiceCompactMigrationSpec
   }
 
   it should s"hard delete legacy data when requested" in withTestDataServices { apiService =>
-    val workspace = testData.workspace // has some entities we can use to test references
+    val workspace = legacyTestData.workspace // has some entities we can use to test references
 
     val defaultRequestContext =
       RawlsRequestContext(

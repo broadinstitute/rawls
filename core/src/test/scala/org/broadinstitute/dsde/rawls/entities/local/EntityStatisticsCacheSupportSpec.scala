@@ -22,8 +22,8 @@ class EntityStatisticsCacheSupportSpec extends TestDriverComponentWithFlatSpecAn
 
   behavior of "EntityStatisticsCacheSupport"
 
-  it should "list all entity type metadata" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "list all entity type metadata" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val cacheSupport = new CacheSupport(slickDataSource, context)
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
