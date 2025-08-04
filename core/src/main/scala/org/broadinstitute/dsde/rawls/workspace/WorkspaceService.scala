@@ -718,11 +718,14 @@ class WorkspaceService(
   def repairWorkspace(workspaceName: WorkspaceName): Future[Unit] =
     for {
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
-      workspace = workspaceOpt.getOrElse(
-        throw RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+      workspace <- workspaceOpt match {
+        case Some(ws) => Future.successful(ws)
+        case None => Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+          )
         )
-      )
+      }
 
       val billingProjectName = RawlsBillingProjectName(workspaceName.namespace)
       _ <- requireBillingProjectOwnerAccess(billingProjectName, ctx)
@@ -763,14 +766,17 @@ class WorkspaceService(
 
     } yield ()
 
-  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
+  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] = {
     for {
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
-      workspace = workspaceOpt.getOrElse(
-        throw RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+      workspace <- workspaceOpt match {
+        case Some(ws) => Future.successful(ws)
+        case None => Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+          )
         )
-      )
+      }
       jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
         if (!jobList.isEmpty) {
           Future.successful(jobList.get(0))
@@ -803,6 +809,7 @@ class WorkspaceService(
           Future.successful(RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue))
       }
     } yield response
+  }
 
   def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
                                     newBillingProjectName: String
