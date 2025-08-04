@@ -128,6 +128,15 @@ trait AdminApiService extends UserInfoDirectives {
               }
             }
         } ~
+          path("googleProject" / Segment) { googleProjectId =>
+            get {
+              complete {
+                workspaceAdminServiceConstructor(ctx)
+                  .getWorkspaceByGoogleProjectId(GoogleProjectId(googleProjectId))
+                  .map(StatusCodes.OK -> _)
+              }
+            }
+          } ~
           path(Segment) { workspaceId =>
             get {
               complete {
@@ -137,6 +146,7 @@ trait AdminApiService extends UserInfoDirectives {
               }
             }
           }
+
       }
   }
 }

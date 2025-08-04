@@ -329,6 +329,29 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     verify(workspaceAdminService).getWorkspaceById(workspaceId)
   }
 
+  it should "get a workspace with its current settings by googleProjectId" in {
+    val googleProjectId = GoogleProjectId("google-project-id")
+    val workspaceAdminService = mock[WorkspaceAdminService]
+
+    when(workspaceAdminService.getWorkspaceByGoogleProjectId(googleProjectId)).thenReturn(
+      Future.successful(
+        WorkspaceAdminResponse(
+          WorkspaceDetails.fromWorkspaceAndOptions(compactConstantData.workspace, None, useAttributes = false),
+          List.empty
+        )
+      )
+    )
+    val service = new MockApiService(workspaceAdminServiceConstructor = _ => workspaceAdminService)
+
+    Get(
+      s"/admin/workspaces/googleProject/$googleProjectId"
+    ) ~> service.testRoutes ~> check {
+      assertResult(StatusCodes.OK)(status)
+    }
+
+    verify(workspaceAdminService).getWorkspaceByGoogleProjectId(googleProjectId)
+  }
+
   it should "get a billing project with a list of its workspaces" in {
     val billingProjectName = RawlsBillingProjectName("project")
     val billingAdminService = mock[BillingAdminService]
