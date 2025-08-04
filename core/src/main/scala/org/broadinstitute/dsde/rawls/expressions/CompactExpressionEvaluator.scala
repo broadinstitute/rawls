@@ -81,7 +81,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     val visitor = new CompactEvaluateVisitor()
     Try(terraExpressionParser.root()) match {
       case Success(parsedTree) =>
-        //    val parsedTree = terraExpressionParser.root()
         val lookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
 
         // Determine the queries needed to find the correct entities
