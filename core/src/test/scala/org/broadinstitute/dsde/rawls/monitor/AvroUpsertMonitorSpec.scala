@@ -81,6 +81,11 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       withApiServices(dataSource)(testCode)
     }
 
+  def withLegacyTestDataApiServices[T](testCode: TestApiService => T): T =
+    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+
   def this() = this(ActorSystem("AvroUpsertMonitorSpec"))
 
   override def beforeAll(): Unit =
@@ -103,8 +108,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   val entityType = "test-type"
   val failImportStatusUUID = UUID.randomUUID()
 
-  def testAttributes(importId: UUID): Map[String, String] = Map(
-    "workspaceId" -> workspaceId.toString,
+  def testAttributes(importId: UUID, wsId: UUID = workspaceId): Map[String, String] = Map(
+    "workspaceId" -> wsId.toString,
     "userEmail" -> userInfo.userEmail.toString,
     "upsertFile" -> s"$bucketName/${importId.toString}",
     "jobId" -> importId.toString
@@ -139,7 +144,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       Duration.apply(10, TimeUnit.SECONDS)
     )
 
-  def setUp(services: TestApiService) = {
+  def setUp(services: TestApiService, useLegacy: Boolean = false) = {
     setUpPubSub(services)
 
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
@@ -153,7 +158,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
     val mockEntityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      spyWorkspaceSettingRepository,
+      if (useLegacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
       services.testConf.getBoolean("entityStatisticsCache.enabled"),
       services.testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
@@ -531,14 +536,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     }
   }
 
-  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withTestDataApiServices {
+  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services)
+      val mockCwdsDAO = setUp(services, useLegacy = true)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
@@ -562,8 +567,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -586,14 +592,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
-  it should "bubble up useful error message if upserts result in partial failure" in withTestDataApiServices {
+  it should "bubble up useful error message if upserts result in partial failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services)
+      val mockCwdsDAO = setUp(services, useLegacy = true)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
 
@@ -624,8 +630,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -650,14 +657,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
-  it should "bubble up useful error message if upserts result in complete failure" in withTestDataApiServices {
+  it should "bubble up useful error message if upserts result in complete failure" in withLegacyTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services)
+      val mockCwdsDAO = setUp(services, useLegacy = true)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       // failure creates an entity that refers to a non-existent entity
@@ -687,8 +694,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
