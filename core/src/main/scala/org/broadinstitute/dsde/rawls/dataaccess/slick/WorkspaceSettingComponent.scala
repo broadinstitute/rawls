@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{
   GcpBucketLifecycleConfigFormat,
   GcpBucketRequesterPaysConfigFormat,
   GcpBucketSoftDeleteConfigFormat,
+  GcpLogBucketRetentionConfigFormat,
   PubliclyReadableConfigFormat,
   SeparateSubmissionFinalOutputsConfigFormat,
   UseCromwellGcpBatchBackendConfigFormat
@@ -14,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleConfig,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
+  GcpLogBucketRetentionConfig,
   PubliclyReadableConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
@@ -73,6 +75,8 @@ object WorkspaceSettingRecord {
         GcpBucketSoftDeleteSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketSoftDeleteConfig])
       case WorkspaceSettingTypes.GcpBucketRequesterPays =>
         GcpBucketRequesterPaysSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpBucketRequesterPaysConfig])
+      case WorkspaceSettingTypes.GcpLogBucketRetention =>
+        GcpLogBucketRetentionSetting(workspaceSettingRecord.config.parseJson.convertTo[GcpLogBucketRetentionConfig])
       case WorkspaceSettingTypes.SeparateSubmissionFinalOutputs =>
         SeparateSubmissionFinalOutputsSetting(
           workspaceSettingRecord.config.parseJson.convertTo[SeparateSubmissionFinalOutputsConfig]

@@ -76,6 +76,8 @@ trait GoogleServicesDAO extends ErrorReportable {
 
   def setRequesterPays(bucketName: String, requesterPaysEnabled: Boolean, userProject: GoogleProjectId): Future[Unit]
 
+  def setLogBucketRetentionPeriod(userProject: GoogleProjectId, retentionDays: Int): Future[Unit]
+
   def isAdmin(userEmail: String): Future[Boolean]
 
   def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean]

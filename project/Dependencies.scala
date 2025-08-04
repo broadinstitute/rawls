@@ -76,7 +76,6 @@ object Dependencies {
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.20.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
@@ -107,7 +106,7 @@ object Dependencies {
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.127.38" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.128.1" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
@@ -133,7 +132,7 @@ object Dependencies {
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.150-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "0.1.23-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.402")
+  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.407")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
   val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.23-SNAPSHOT")
 
@@ -256,7 +255,6 @@ object Dependencies {
     googleStorageLocal,
     workbenchGoogleMocks,
     workbenchUtil,
-    ficus,
     apacheCommonsIO,
     dataRepo,
     antlrParser,

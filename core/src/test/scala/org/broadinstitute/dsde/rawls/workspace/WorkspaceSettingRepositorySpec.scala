@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
+  GcpLogBucketRetentionConfig,
   SeparateSubmissionFinalOutputsConfig,
   UseCromwellGcpBatchBackendConfig
 }
@@ -18,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
+  GcpLogBucketRetentionSetting,
   SeparateSubmissionFinalOutputsSetting,
   UseCromwellGcpBatchBackendSetting,
   Workspace,
@@ -109,6 +111,7 @@ class WorkspaceSettingRepositorySpec
       GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List())),
       GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0)),
       GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
+      GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(60)),
       SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
       UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
     )
