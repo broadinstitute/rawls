@@ -149,7 +149,7 @@ class CaseSensitivitySpec
 
           // get types from cache and verify
           val cachedTypes = cachedKeys.map(_.entityType)
-          cachedTypes shouldBe exemplarTypes
+          cachedTypes should contain theSameElementsAs exemplarTypes
           // get metadata again, should come from cache, and verify
           val cachedMetadata =
             services.entityService.entityTypeMetadata(testWorkspace.wsName, useCache = true).futureValue
@@ -667,7 +667,6 @@ class CaseSensitivitySpec
         val provider = defaultProvider
         // get metadata
         val metadata = provider.entityTypeMetadata(useCache = false, testContext).futureValue
-        metadata("cat").attributeNames.size shouldEqual exemplarAttributeNames.size
         metadata("cat").attributeNames should contain theSameElementsAs exemplarAttributeNames
       }
 
@@ -734,8 +733,7 @@ class CaseSensitivitySpec
           .getEntity(caseInsensitiveAttributeData.head.entityType, caseInsensitiveAttributeData.head.name, testContext)
           .futureValue
           .attributes
-        exemplarAttributeNames.size shouldBe allAttributes.size
-        allAttributes.keys should contain theSameElementsAs exemplarAttributeNames
+        allAttributes.keys.map(AttributeName.toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should return all attribute names when listing entities" in withTestDataServices { services =>
@@ -787,11 +785,11 @@ class CaseSensitivitySpec
 
             // verify an attribute is deleted
             allAttributes.size shouldBe exemplarAttributeNames.size - 1
-            allAttributes shouldNot contain(toDelimitedName(attributeNameToDelete))
+            allAttributes shouldNot contain(attributeNameToDelete)
 
             // verify the correct attributes remain
             val remainingAttributeNames = exemplarAttributeNames.toSet - toDelimitedName(attributeNameToDelete)
-            allAttributes should contain theSameElementsAs remainingAttributeNames
+            allAttributes.map(AttributeName.toDelimitedName) should contain theSameElementsAs remainingAttributeNames
         }
       }
 

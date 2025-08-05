@@ -466,7 +466,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    */
   def listEntityKeysViaEntity(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
     sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$')) t
       where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
 
   /**
@@ -483,7 +483,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
     concatSqlActions(
       sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$')) t
       where workspace_id=$workspaceId and deleted = 0 and entity_type in (""",
       inClause,
       sql""");"""
