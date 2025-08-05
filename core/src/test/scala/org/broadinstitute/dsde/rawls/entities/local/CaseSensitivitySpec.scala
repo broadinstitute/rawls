@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.local
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
@@ -48,18 +48,18 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
   implicit val actorSystem: ActorSystem = ActorSystem() // needed for stream materialization
 
-  val testConf = ConfigFactory.load()
+  val testConf: Config = ConfigFactory.load()
 
   // ===================================================================================================================
   // exemplar data used in multiple tests
   // ===================================================================================================================
 
-  val exemplarTypes = Set("cat", "Cat", "CAT", "dog", "rat")
+  val exemplarTypes: Set[ShardId] = Set("cat", "Cat", "CAT", "dog", "rat")
   val testWorkspace = new EmptyWorkspace
-  val fooAttribute = AttributeName.withDefaultNS("foo")
+  val fooAttribute: AttributeName = AttributeName.withDefaultNS("foo")
 
   // create three entities for each type in our list, using unique names for each entity.
-  val exemplarData = exemplarTypes.toSeq.zipWithIndex flatMap { case (typeName, index) =>
+  val exemplarData: Seq[Entity] = exemplarTypes.toSeq.zipWithIndex flatMap { case (typeName, index) =>
     Seq(
       Entity(s"$typeName-$index-001", typeName, Map(fooAttribute -> AttributeString(s"$typeName-001"))),
       Entity(s"$typeName-$index-002", typeName, Map(fooAttribute -> AttributeString(s"$typeName-002"))),
@@ -68,7 +68,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
   }
 
   // create three entities for each type in our list, reusing names across entity types.
-  val exemplarDataWithCommonNames = exemplarTypes flatMap { typeName =>
+  val exemplarDataWithCommonNames: Set[Entity] = exemplarTypes flatMap { typeName =>
     Seq(
       Entity(s"001", typeName, Map(fooAttribute -> AttributeString(s"$typeName-001"))),
       Entity(s"002", typeName, Map(fooAttribute -> AttributeString(s"$typeName-002"))),
@@ -81,8 +81,8 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       AttributeName(namespace, name) -> AttributeString(s"$namespace:$name-bar")
     )
   }.toMap
-  val exemplarAttributeNames = exemplarAttributesMap.keys.map(toDelimitedName)
-  val caseInsensitiveAttributeData = Seq(Entity("005", "cat", exemplarAttributesMap))
+  val exemplarAttributeNames: Iterable[ShardId] = exemplarAttributesMap.keys.map(toDelimitedName)
+  val caseInsensitiveAttributeData: Seq[Entity] = Seq(Entity("005", "cat", exemplarAttributesMap))
 
   // ===================================================================================================================
   // tests
@@ -103,7 +103,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                                  "metricsBaseName"
           )
           // get metadata
-          val metadata = provider.entityTypeMetadata(false, testContext).futureValue
+          val metadata = provider.entityTypeMetadata(useCache = false, testContext).futureValue
           metadata.keySet shouldBe exemplarTypes
         }
 
@@ -141,7 +141,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           } else {
             lastChar.toLower
           }
-          val newName = (newLastChar + typeUnderTest.reverse.tail).reverse
+          val newName = (newLastChar.toString + typeUnderTest.reverse.tail).reverse
 
           s"should only rename target type [$typeUnderTest] -> [$newName]" in withTestDataServices { services =>
             // save exemplar data
@@ -255,6 +255,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                             FilterOperators.And,
                                             WorkspaceFieldSpecs(None)
             )
+            // noinspection ScalaDeprecation
             val queryResponse = provider.queryEntities(typeUnderTest, queryCriteria).futureValue
             // extract distinct entity types from results
             val typesFromResults = queryResponse.results.map(_.entityType).distinct
@@ -618,7 +619,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                                "metricsBaseName"
         )
         // get metadata
-        val metadata = provider.entityTypeMetadata(false, testContext).futureValue
+        val metadata = provider.entityTypeMetadata(useCache = false, testContext).futureValue
         metadata("cat").attributeNames.size shouldEqual exemplarAttributeNames.size
         metadata("cat").attributeNames should contain theSameElementsAs exemplarAttributeNames
       }
@@ -637,7 +638,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                                testConf.getDuration("entities.queryTimeout"),
                                                "metricsBaseName"
         )
-        provider.entityTypeMetadata(true, testContext).futureValue
+        provider.entityTypeMetadata(useCache = true, testContext).futureValue
 
         // cache is now populated
         assert(runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)).isDefined)
@@ -661,6 +662,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
         // query all entities
         val entityQueryParameters = EntityQuery(1, 10, "name", SortDirections.Ascending, None)
+        // noinspection ScalaDeprecation
         val queriedEntities = provider.queryEntities("cat", entityQueryParameters).futureValue
 
         // verify all attributes are returned
@@ -858,7 +860,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)
         exemplarAttributesMap.keys.foreach { attr =>
-          entity.attributes.get(attr).get shouldBe AttributeString(s"${toDelimitedName(attr)}: new-attribute")
+          entity.attributes(attr) shouldBe AttributeString(s"${toDelimitedName(attr)}: new-attribute")
         }
       }
 
