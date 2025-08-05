@@ -41,7 +41,6 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
 import org.scalatest.concurrent.ScalaFutures
@@ -53,7 +52,6 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 class CaseSensitivitySpec
     extends AnyFreeSpec
