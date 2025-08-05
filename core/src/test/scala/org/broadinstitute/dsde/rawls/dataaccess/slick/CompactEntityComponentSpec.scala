@@ -266,36 +266,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual should contain theSameElementsAs selectedRecords
   }
 
-  behavior of "ENTITY_KEYS population triggers"
-  // the ENTITY_KEYS table is populated by triggers on the ENTITY table.
-  // these tests verify the behavior of those triggers.
-
-  it should "save a row with empty keys for an entity with no attributes" in withMinimalTestDatabase { _ =>
-    val entity = Entity("entityName", "entityType", Map())
-    val savedEntity = insertAndGet(entity)
-    // get the keys
-    val actual = runAndWait(q.getKeys(savedEntity.id))
-    actual should not be empty
-    actual.get.attributeKeys shouldBe "[]"
-  }
-
-  it should "save keys for an entity with attributes" in withMinimalTestDatabase { _ =>
-    val attributeNames = List("red", "green", "blue", "pfb:importedColumn")
-    // define an entity with attributes named according to ${attributeNames}
-    val entity = Entity(
-      "entityName",
-      "entityType",
-      attributeNames.map { attrName =>
-        AttributeName.fromDelimitedName(attrName) -> AttributeNumber(System.currentTimeMillis())
-      }.toMap
-    )
-    val savedEntity = insertAndGet(entity)
-    // get the keys
-    val actual = runAndWait(q.getKeys(savedEntity.id))
-    actual should not be empty
-    actual.get.attributeKeys.parseJson.convertTo[List[String]] should contain theSameElementsAs attributeNames
-  }
-
   behavior of "existsAll and countExisting"
 
   it should "find the entities" in withMinimalTestDatabase { _ =>
@@ -451,7 +421,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // create entities in a different workspace to make sure they are not included
     createEntitiesWithKeys(entityType1AttributeNames, entityType2, minimalTestData.workspace2.workspaceIdAsUUID)
 
-    val actual = runAndWait(q.listEntityKeys(wsid))
+    val actual = runAndWait(q.listEntityKeysViaEntity(wsid))
     actual should contain theSameElementsAs entityType1AttributeNames.map {
       EntityTypeAndAttributeKey(entityType1, _)
     } ++ entityType2AttributeNames.map {
@@ -1386,13 +1356,13 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
     // check metadata before any renames
-    runAndWait(q.listEntityKeys(wsid)) should contain theSameElementsAs Seq(
+    runAndWait(q.listEntityKeysViaEntity(wsid)) should contain theSameElementsAs Seq(
       EntityTypeAndAttributeKey("entityType1", attr1),
       EntityTypeAndAttributeKey("entityType1", attr2),
       EntityTypeAndAttributeKey("entityType2", attr2),
       EntityTypeAndAttributeKey("entityType2", attr3)
     )
-    runAndWait(q.listEntityKeys(wsid2)) should contain theSameElementsAs Seq(
+    runAndWait(q.listEntityKeysViaEntity(wsid2)) should contain theSameElementsAs Seq(
       EntityTypeAndAttributeKey("entityType1", attr1),
       EntityTypeAndAttributeKey("entityType1", attr2),
       EntityTypeAndAttributeKey("entityType2", attr2),
@@ -1403,13 +1373,13 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val newAttr1 = AttributeName.withDefaultNS("new1")
     runAndWait(q.renameAttribute(wsid, "entityType1", attr2, AttributeRename(newAttr1))) shouldBe 1
     // check metadata
-    runAndWait(q.listEntityKeys(wsid)) should contain theSameElementsAs Seq(
+    runAndWait(q.listEntityKeysViaEntity(wsid)) should contain theSameElementsAs Seq(
       EntityTypeAndAttributeKey("entityType1", attr1),
       EntityTypeAndAttributeKey("entityType1", newAttr1),
       EntityTypeAndAttributeKey("entityType2", attr2),
       EntityTypeAndAttributeKey("entityType2", attr3)
     )
-    runAndWait(q.listEntityKeys(wsid2)) should contain theSameElementsAs Seq(
+    runAndWait(q.listEntityKeysViaEntity(wsid2)) should contain theSameElementsAs Seq(
       EntityTypeAndAttributeKey("entityType1", attr1),
       EntityTypeAndAttributeKey("entityType1", attr2),
       EntityTypeAndAttributeKey("entityType2", attr2),
@@ -3024,16 +2994,6 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       .list should contain theSameElementsAs Seq(
       newTargetEntity1.toReference
     )
-    // Verify entity keys table is updated
-    import driver.api._
-
-    val entityKeysQuery1 =
-      sql"""select entity_type from ENTITY_KEYS where workspace_id = $wsid and entity_type = $targetType""".as[String]
-    runAndWait(entityKeysQuery1).size shouldBe 0
-    val entityKeysQuery2 =
-      sql"""select entity_type from ENTITY_KEYS where workspace_id = $wsid and entity_type = $newTargetType"""
-        .as[String]
-    runAndWait(entityKeysQuery2).size shouldBe 2
   }
 
   it should "not change non references that match the old name" in withMinimalTestDatabase { _ =>

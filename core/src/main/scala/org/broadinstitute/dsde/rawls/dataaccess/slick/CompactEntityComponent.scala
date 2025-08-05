@@ -460,16 +460,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
    * Get all entity attribute keys for a workspace.
    *
-   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
-   */
-  def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
-    sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
-      where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
-
-  /**
-   * Get all entity attribute keys for a workspace.
-   *
    * execution plan:
    *    ENTITY: Using index condition (Using index condition; Using temporary); Using temporary
    *    t: Table function: json_table; Using temporary
@@ -506,9 +496,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
    */
   def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
-    // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
     sql"""SELECT entity_type, COUNT(*)
-      FROM ENTITY_KEYS
+      FROM ENTITY
       WHERE workspace_id = $workspaceId
       GROUP BY entity_type;""".as[EntityTypeAndCount]
 
@@ -978,7 +967,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+   * `execution plan: Using index condition; Using where. Index used: idx_entity_type_name`
     */
   def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
     anyAttributeExists(workspaceId, entityType, Set(attributeName))
@@ -986,23 +975,23 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * `execution plan: subquery Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    * `execution plan: Using index condition; Using where. Index used: idx_entity_type_name`
     */
   def anyAttributeExists(workspaceId: UUID,
                          entityType: String,
                          attributeNames: Set[AttributeName]
   ): ReadAction[Boolean] = {
-    val containsClauses = attributeNames.map { attributeName =>
-      sql"""JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)}))"""
-    }
-    val clause = reduceSqlActionsWithDelim(containsClauses.toSeq, sql" or ")
+    // values for the attribute paths
+    val attrPaths = attributeNames.map(attr => sql"${slickAttributePath(attr)}")
 
-    val baseSql = sql"""select exists (select 1 from ENTITY_KEYS
+    val containsClause = reduceSqlActionsWithDelim(attrPaths.toSeq, sql", ")
+
+    val baseSql = sql"""select exists (select 1 from ENTITY
          where workspace_id = $workspaceId
           and entity_type = $entityType
-          and ("""
+          and JSON_CONTAINS_PATH(attributes, 'one', """
 
-    concatSqlActions(baseSql, clause, sql"))")
+    concatSqlActions(baseSql, containsClause, sql"))")
       .as[Boolean]
       .head
   }
@@ -1225,16 +1214,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
          where workspace_id = $workspaceId
          and from_entity_type = ${from.entityType}
          and from_name = ${from.entityName}""".as[EntityPointer]
-
-  // return the ENTITY_KEYS row for a given entity
-  // `execution plan: single row constant; fully indexed by primary key`
-  @VisibleForTesting
-  protected[slick] def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
-    val query = sql"""select id, workspace_id, entity_type, attribute_keys, last_updated
-            from ENTITY_KEYS
-            where id = $entityId;""".as[KeysRecord]
-    uniqueResult(query)
-  }
 
   @VisibleForTesting
   protected[slick] def getDeletedEntity(workspaceId: UUID,
