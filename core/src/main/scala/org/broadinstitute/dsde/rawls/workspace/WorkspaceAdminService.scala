@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   ErrorReportSource,
+  GoogleProjectId,
   RawlsRequestContext,
   SamResourceTypeAdminActions,
   SamResourceTypeName,
@@ -195,6 +196,24 @@ class WorkspaceAdminService(
         )
       workspaceOpt <- workspaceRepository.getWorkspaceId(workspaceName)
     } yield workspaceOpt.map(_.toString)
+
+  def getWorkspaceByGoogleProjectId(googleProjectId: GoogleProjectId): Future[WorkspaceAdminResponse] =
+    for {
+      userIsAdmin <- samDAO.admin
+        .userHasResourceTypeAdminPermission(SamResourceTypeNames.workspace,
+                                            SamResourceTypeAdminActions.readSummaryInformation,
+                                            ctx
+        )
+      _ = if (!userIsAdmin)
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.Forbidden, "You must be an admin to call this API.")
+        )
+      workspaceOpt <- workspaceRepository.getWorkspaceByGoogleProject(googleProjectId)
+      workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(googleProjectId.toString))
+      settings <- workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
+    } yield WorkspaceAdminResponse(WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
+                                   settings
+    )
 
   // moved out of WorkspaceSupport because the only usage was in this file,
   // and it has raw datasource/dataAccess usage, which is being refactored out of WorkspaceSupport
