@@ -156,7 +156,8 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     val googleProjectId = workspace.googleProjectId
 
     val workspaceRepository = mock[WorkspaceRepository]
-    when(workspaceRepository.getWorkspaceByGoogleProject(googleProjectId)).thenReturn(Future.successful(Option(workspace)))
+    when(workspaceRepository.getWorkspaceByGoogleProject(googleProjectId))
+      .thenReturn(Future.successful(Option(workspace)))
 
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
     when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
