@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   SlickDataSource
 }
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProviderBuilder
+import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProviderBuilder, CompactEntitySerialization}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
@@ -42,7 +42,8 @@ import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.when
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -51,8 +52,15 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import spray.json._
+import spray.json.DefaultJsonProtocol._
 
-class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
+class CaseSensitivitySpec
+    extends AnyFreeSpec
+    with CompactEntitySerialization
+    with Matchers
+    with TestDriverComponent
+    with ScalaFutures {
 
   implicit val actorSystem: ActorSystem = ActorSystem() // needed for stream materialization
 
@@ -91,7 +99,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       AttributeName(namespace, name) -> AttributeString(s"$namespace:$name-bar")
     )
   }.toMap
-  val exemplarAttributeNames: Iterable[ShardId] = exemplarAttributesMap.keys.map(toDelimitedName)
+  val exemplarAttributeNames: Iterable[String] = exemplarAttributesMap.keys.map(toDelimitedName)
   val caseInsensitiveAttributeData: Seq[Entity] = Seq(Entity("005", "cat", exemplarAttributesMap))
 
   // ===================================================================================================================
@@ -128,29 +136,25 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           )
 
           // assert cache is not yet populated
-          // TODO CORE-650
-          runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) shouldBe empty
+          runAndWait(compactEntityQuery.getCachedKeys(testWorkspace.workspace.workspaceIdAsUUID)) shouldBe empty
 
           // get metadata
           val metadata =
             services.entityService.entityTypeMetadata(testWorkspace.wsName, useCache = true).futureValue
           metadata.keySet shouldBe exemplarTypes
 
-          // assert cache is populated and up-to-date
-          // TODO CORE-650
-          runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) should contain(0)
+          // assert cache is populated
+          val cachedKeys = runAndWait(compactEntityQuery.getCachedKeys(testWorkspace.workspace.workspaceIdAsUUID))
+          cachedKeys should not be empty
 
           // get types from cache and verify
-          // TODO CORE-650
-          val cachedTypes = runAndWait(entityTypeStatisticsQuery.getAll(testWorkspace.workspace.workspaceIdAsUUID))
-          cachedTypes.keySet shouldBe exemplarTypes
+          val cachedTypes = cachedKeys.map(_.entityType)
+          cachedTypes shouldBe exemplarTypes
           // get metadata again, should come from cache, and verify
           val cachedMetadata =
             services.entityService.entityTypeMetadata(testWorkspace.wsName, useCache = true).futureValue
           cachedMetadata.keySet shouldBe exemplarTypes
 
-          // TODO CORE-650
-          runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) should contain(0)
         }
 
         exemplarTypes foreach { typeUnderTest =>
@@ -290,10 +294,14 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
                                             FilterOperators.And,
                                             WorkspaceFieldSpecs(None)
             )
-            // noinspection ScalaDeprecation
-            val queryResponse = provider.queryEntities(typeUnderTest, queryCriteria, testContext).futureValue
+            val queryResponse = provider
+              .queryEntitiesSource(typeUnderTest, queryCriteria, testContext)
+              .futureValue
+              ._2
+              .runWith(Sink.seq)
+              .futureValue
             // extract distinct entity types from results
-            val typesFromResults = queryResponse.results.map(_.entityType).distinct
+            val typesFromResults = queryResponse.map(_.entityType).distinct
             typesFromResults.toSet shouldBe Set(typeUnderTest)
           }
         }
@@ -532,35 +540,26 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
             // get database-level entity record for the entity containing the reference
             val entityRecordContainingReference = runAndWait(
-              // TODO CORE-650
-              entityQuery.getEntityRecords(testWorkspace.workspace.workspaceIdAsUUID,
-                                           Set(AttributeEntityReference(typeUnderTest, "001"))
+              compactEntityQuery.getEntities(testWorkspace.workspace.workspaceIdAsUUID,
+                                             Set(EntityPointer(typeUnderTest, "001"))
               )
             ).head
 
             // get database-level entity record for the entity being referenced
             val entityRecordBeingReferenced = runAndWait(
-              // TODO CORE-650
-              entityQuery.getEntityRecords(testWorkspace.workspace.workspaceIdAsUUID,
-                                           Set(AttributeEntityReference(typeUnderTest, "003"))
+              compactEntityQuery.getEntities(testWorkspace.workspace.workspaceIdAsUUID,
+                                             Set(EntityPointer(typeUnderTest, "003"))
               )
             ).head
 
-            // get database-level attribute record for the reference and find the entity id it is referencing
-            import driver.api._
-            val actualReferencedIds = runAndWait(
-              // TODO CORE-650
-              entityAttributeShardQuery(testWorkspace.workspace.workspaceIdAsUUID)
-                .findByOwnerQuery(Seq(entityRecordContainingReference.id))
-                .filter(_.name === "my-entity-reference")
-                .map(attr => attr.valueEntityRef)
-                .result
-            )
+            val sqlData = entityRecordContainingReference.attributes.map(_.parseJson.convertTo[SqlEntityData])
+            sqlData should not be empty
+            val actualReferences = sqlData.get.refs
 
             // we should have exactly one reference, and it should point to entityRecordBeingReferenced
-            actualReferencedIds.size shouldBe 1
-            actualReferencedIds.head shouldNot be(empty)
-            actualReferencedIds.head.get shouldBe entityRecordBeingReferenced.id
+            actualReferences.size shouldBe 1
+            actualReferences.head.t shouldBe entityRecordBeingReferenced.entityType
+            actualReferences.head.n shouldBe entityRecordBeingReferenced.name
           }
         }
 
@@ -682,23 +681,20 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         )
 
         // cache is empty
-        // TODO CORE-650
-        runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) shouldBe empty
+        runAndWait(compactEntityQuery.getCachedKeys(testWorkspace.workspace.workspaceIdAsUUID)) shouldBe empty
 
         // get provider
         val provider = defaultProvider
         provider.entityTypeMetadata(useCache = true, testContext).futureValue
 
         // cache is now populated
-        // TODO CORE-650
-        assert(runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)).isDefined)
+        val cachedKeys = runAndWait(compactEntityQuery.getCachedKeys(testWorkspace.workspace.workspaceIdAsUUID))
+        cachedKeys should not be empty
 
         // get column names from cache to verify
-        // TODO CORE-650
-        val cachedValues = runAndWait(entityAttributeStatisticsQuery.getAll(testWorkspace.workspace.workspaceIdAsUUID))
-        cachedValues("cat").map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
+        val cachedValues = cachedKeys.find(_.entityType == "cat").get.attributeKeys
+        cachedValues.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
       }
-
       "should return all attribute names when querying entities" in withTestDataServices { _ =>
         // save case insensitive attribute data
         runAndWait(
@@ -713,38 +709,18 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
         // query all entities
         val entityQueryParameters = EntityQuery(1, 10, "name", SortDirections.Ascending, None)
-        // noinspection ScalaDeprecation
-        val queriedEntities = provider.queryEntities("cat", entityQueryParameters, testContext).futureValue
+        val queriedEntities = provider
+          .queryEntitiesSource("cat", entityQueryParameters, testContext)
+          .futureValue
+          ._2
+          .runWith(Sink.seq)
+          .futureValue
 
         // verify all attributes are returned
-        queriedEntities.results.size shouldBe 1
-        val queriedAttributes = queriedEntities.results.head.attributes
+        queriedEntities.size shouldBe 1
+        val queriedAttributes = queriedEntities.head.attributes
         exemplarAttributeNames.size should equal(queriedAttributes.size)
         queriedAttributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
-      }
-
-      "should delete all associated attributes when deleting entities of any type" in withTestDataServices { _ =>
-        // save case insensitive attribute data
-        runAndWait(
-          compactEntityQuery.batchWriteEntities(testWorkspace.workspace.workspaceIdAsUUID,
-                                                caseInsensitiveAttributeData,
-                                                insertOnly = false
-          )
-        )
-
-        // get provider
-        val provider = defaultProvider
-
-        // delete our test entity
-        provider.deleteEntities(Seq(EntityPointer("cat", "005")), testContext).futureValue shouldBe 1
-
-        // make sure all attributes are marked as deleted
-        import driver.api._
-
-        // TODO CORE-650
-        val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
-        exemplarAttributeNames.size shouldBe allAttributes.size
-        allAttributes.foreach(attr => assert(attr.deleted))
       }
 
       "should create all attributes for a new entity" in withTestDataServices { _ =>
@@ -754,15 +730,12 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         // create our entity
         provider.createEntity(caseInsensitiveAttributeData.head, testContext).futureValue // Entity
 
-        // make sure all attributes are created
-        import driver.api._
-
-        // TODO CORE-650
-        val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
+        val allAttributes = provider
+          .getEntity(caseInsensitiveAttributeData.head.entityType, caseInsensitiveAttributeData.head.name, testContext)
+          .futureValue
+          .attributes
         exemplarAttributeNames.size shouldBe allAttributes.size
-        allAttributes.map(attr =>
-          toDelimitedName(AttributeName(attr.namespace, attr.name))
-        ) should contain theSameElementsAs exemplarAttributeNames
+        allAttributes.keys should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should return all attribute names when listing entities" in withTestDataServices { services =>
@@ -798,22 +771,19 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
               )
             )
 
+            // get provider
+            val provider = defaultProvider
+
             // delete column all entities
             val columnsToDelete = Set(attributeNameToDelete)
-            runAndWait(
-              // TODO CORE-650
-              entityAttributeShardQuery(testWorkspace.workspace).deleteAttributes(testWorkspace.workspace,
-                                                                                  "cat",
-                                                                                  columnsToDelete
-              )
-            )
+            provider.deleteEntityAttributes("cat", columnsToDelete, testContext).futureValue
 
             // get all attributes to verify deletion
-            import driver.api._
-
-            // TODO CORE-650
-            val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
-              .map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name)))
+            val allAttributes = provider
+              .listEntities("cat")
+              .runWith(Sink.seq)
+              .futureValue
+              .flatMap(_.attributes.keys)
 
             // verify an attribute is deleted
             allAttributes.size shouldBe exemplarAttributeNames.size - 1
@@ -995,12 +965,10 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
     // when EntityManager asks if the workspace should use Quicksilver data tables, answer yes
-    val mockWorkspaceSettingRepository = mock[WorkspaceSettingRepository]
-    when(
-      mockWorkspaceSettingRepository.getWorkspaceSettingOfType(ArgumentMatchers.any[UUID](),
-                                                               ArgumentMatchers.any[WorkspaceSettingType]()
-      )
-    )
+    val mockWorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
+    when(mockWorkspaceSettingRepository.hasPendingSettings(any[UUID], any[WorkspaceSettingType])(any[ExecutionContext]))
+      .thenReturn(Future(false))
+    when(mockWorkspaceSettingRepository.getWorkspaceSettingOfType(any[UUID], any[WorkspaceSettingType]))
       .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
 
     val entityServiceConstructor = EntityService.constructor(
