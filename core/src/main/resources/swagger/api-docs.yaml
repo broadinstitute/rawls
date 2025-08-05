@@ -954,6 +954,37 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/workspaces/googleProject/{googleProjectId}:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: get workspace by google project id
+      description: Returns the workspace identified by google project id
+      operationId: adminGetWorkspaceByGoogleProjectId
+      parameters:
+        - $ref: '#/components/parameters/googleProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceAdminResponse'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be an admin to get a workspace ID
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
