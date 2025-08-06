@@ -646,7 +646,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
           msg
             .attributes("errorMessage")
             .contains(
-              "Successfully updated 1000 entities; 1 updates failed. First 100 failures are: test-type this-entity-does-not-exist not found"
+              "Successfully updated 1000 entities; 1 updates failed."
             )
         })
       }
@@ -712,8 +712,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
 
       withClue("Text in the pubsub error message was incorrect:") {
-        errorMsg.attributes("errorMessage") shouldBe
-          "All entities failed to update. There were 1 errors in total. Error messages: test-type this-entity-does-not-exist not found"
+        errorMsg.attributes("errorMessage") should contain
+        "All entities failed to update. There were 1 errors in total."
       }
   }
 

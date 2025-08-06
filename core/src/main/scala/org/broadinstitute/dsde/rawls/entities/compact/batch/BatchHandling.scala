@@ -84,22 +84,23 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     allowInsert: Boolean
   ): Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Int], _] =
     Flow[Seq[EntityUpdateDefinition]].map { updates =>
-      // validate entity type, entity name, and attribute names
-      updates foreach { update =>
+      // Extract the entity type and name from each update
+      val updateIdentifiers = updates.map(update => EntityPointer(update.entityType, update.name))
+      val uniqueUpdateIdentifiers = updateIdentifiers.toSet
+
+      // validate entity type and entity name
+      uniqueUpdateIdentifiers foreach { update =>
         EntityUtils.validateEntityType(update.entityType)
-        EntityUtils.validateEntityName(update.name)
+        EntityUtils.validateEntityName(update.entityName)
       }
 
+      // validate the attribute names in all operations
       val attributeNamesToCheck: Seq[AttributeName] = for {
         update <- updates
         operation <- update.operations
       } yield operation.name
       // noop function to validate attribute names
       withAttributeNamespaceCheck(attributeNamesToCheck) {}
-
-      // Extract the entity type and name from each update
-      val updateIdentifiers = updates.map(update => EntityPointer(update.entityType, update.name))
-      val uniqueUpdateIdentifiers = updateIdentifiers.toSet
 
       for {
         // Query the database for any pre-existing entities being updated
