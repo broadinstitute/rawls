@@ -497,40 +497,42 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
     datasource
-      .inTransactionWithAttrTempTable { dataAccess =>
-        (execServiceOutputsOption match {
-          case Some(execServiceOutputs) =>
-            // this workflow has Cromwell outputs. Persist those outputs.
-            handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, tracingContext)
-          case None => DBIO.successful(())
-        }).flatMap { _ =>
-          for {
-            // refetch the workflow record; this ensures that 1) its record version is up to date, and 2) that we can
-            // check its status to see if handleOutputs marked it as failed
-            currentRec <- dataAccess.workflowQuery.findWorkflowById(workflowRec.id).result.head
-            // No need to update statuses for any workflows that are in terminal statuses.
-            // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by handleOutputs.
-            doRecordUpdate = !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(currentRec.status))
-            numRowsUpdated <-
-              if (doRecordUpdate) {
-                for {
-                  updateResult <-
-                    if (config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined) {
-                      dataAccess.workflowQuery.updateStatusAndCost(currentRec,
-                                                                   WorkflowStatuses.withName(workflowRec.status),
-                                                                   workflowRec.cost.getOrElse(BigDecimal(0))
-                      )
-                    } else {
-                      dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
-                    }
-                  _ = logger.info(
-                    s"workflow ${externalId(currentRec)} status change ${currentRec.status} -> ${workflowRec.status} in submission ${submissionId}"
-                  )
-                } yield updateResult
-              } else DBIO.successful(0)
-          } yield numRowsUpdated
-        }
-      }
+      .inTransactionWithAttrTempTable(
+        dataAccess =>
+          (execServiceOutputsOption match {
+            case Some(execServiceOutputs) =>
+              // this workflow has Cromwell outputs. Persist those outputs.
+              handleOutputs(Seq((workflowRec, execServiceOutputs)), dataAccess, tracingContext)
+            case None => DBIO.successful(())
+          }).flatMap { _ =>
+            for {
+              // refetch the workflow record; this ensures that 1) its record version is up to date, and 2) that we can
+              // check its status to see if handleOutputs marked it as failed
+              currentRec <- dataAccess.workflowQuery.findWorkflowById(workflowRec.id).result.head
+              // No need to update statuses for any workflows that are in terminal statuses.
+              // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by handleOutputs.
+              doRecordUpdate = !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(currentRec.status))
+              numRowsUpdated <-
+                if (doRecordUpdate) {
+                  for {
+                    updateResult <-
+                      if (config.enableCostEstimatesForAllWorkflows || perWorkflowCostCap.isDefined) {
+                        dataAccess.workflowQuery.updateStatusAndCost(currentRec,
+                                                                     WorkflowStatuses.withName(workflowRec.status),
+                                                                     workflowRec.cost.getOrElse(BigDecimal(0))
+                        )
+                      } else {
+                        dataAccess.workflowQuery.updateStatus(currentRec, WorkflowStatuses.withName(workflowRec.status))
+                      }
+                    _ = logger.info(
+                      s"workflow ${externalId(currentRec)} status change ${currentRec.status} -> ${workflowRec.status} in submission ${submissionId}"
+                    )
+                  } yield updateResult
+                } else DBIO.successful(0)
+            } yield numRowsUpdated
+          },
+        isolationLevel = _root_.slick.jdbc.TransactionIsolation.Serializable
+      )
       .recoverWith {
         // fatal error writing outputs for this workflow. Mark it as failed.
         case fatal: RawlsFatalExceptionWithErrorReport =>

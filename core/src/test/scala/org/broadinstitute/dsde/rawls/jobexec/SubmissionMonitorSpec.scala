@@ -8,7 +8,7 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
@@ -28,6 +28,7 @@ import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, never, spy, verify}
+import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -2280,25 +2281,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       }
   }
 
-  // TODO CORE-631 Switch this test to quicksilver (by updating ManySubmissionsTestData and removing the use of entityServiceConstructorWithoutSpy)
   val manySubmissionsTestData = new ManySubmissionsTestData
   it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withCustomTestDatabase(
     manySubmissionsTestData
   ) { dataSource: SlickDataSource =>
-    val entityServiceConstructorWithoutSpy = EntityService.constructor(
-      slickDataSource,
-      mockSamDAO,
-      workbenchMetricBaseName,
-      EntityManager.defaultEntityManager(
-        slickDataSource,
-        workspaceSettingRepository, // Use the original repository, not the spy
-        false,
-        java.time.Duration.ofMinutes(2),
-        workbenchMetricBaseName
-      ),
-      1000
-    ) _
-
     val submissions = manySubmissionsTestData.submissions
     val numSubmissions = submissions.length
     submissions.foreach(sub =>
@@ -2306,17 +2292,18 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         dataSource,
         sub,
         manySubmissionsTestData.wsName,
-        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString),
-        entityServiceConstructor = entityServiceConstructorWithoutSpy // Pass the new constructor
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
       )
     )
 
     // they're all being monitored. they should all complete just fine, without deadlocking forever or otherwise barfing
     awaitCond(
       {
-        val submissionList = runAndWait(DBIO.sequence(submissions map { sub: Submission =>
-          submissionQuery.findById(UUID.fromString(sub.submissionId)).result
-        })).flatten
+        val submissionList: Seq[SubmissionRecord] =
+          runAndWait[Seq[Seq[SubmissionRecord]]](DBIO.sequence(submissions map { sub: Submission =>
+            submissionQuery.findById(UUID.fromString(sub.submissionId)).result
+          })).flatten
+
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
       },
       max = 60 seconds,
@@ -2328,14 +2315,22 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
     withWorkspaceContext(manySubmissionsTestData.workspace) { ctx =>
       val indiv1 = runAndWait(
-        entityQuery.get(ctx, legacyTestData.indiv1.entityType, legacyTestData.indiv1.name)
-      ).get
+        compactEntityQuery.getEntity(ctx.workspaceIdAsUUID, testData.indiv1.entityType, testData.indiv1.name)
+      ).get.toEntity
       val indiv2 = runAndWait(
-        entityQuery.get(ctx, legacyTestData.indiv2.entityType, legacyTestData.indiv2.name)
-      ).get
+        compactEntityQuery.getEntity(ctx.workspaceIdAsUUID, testData.indiv2.entityType, testData.indiv2.name)
+      ).get.toEntity
 
-      indiv1.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
-      indiv2.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
+      // calculate the attribute keys for indiv1 and indiv2
+      val keys1 = indiv1.attributes.keys.filter(an => an.name.startsWith("sub_"))
+      val keys2 = indiv2.attributes.keys.filter(an => an.name.startsWith("sub_"))
+
+      withClue(s"indiv1 is missing keys: ${keys1.size} vs ${subKeys.size} ") {
+        keys1 should contain theSameElementsAs subKeys
+      }
+      withClue(s"indiv2 is missing keys: ${keys2.size} vs ${subKeys.size} ") {
+        keys2 should contain theSameElementsAs subKeys
+      }
     }
   }
 
@@ -2345,18 +2340,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
     val (submissions, methodConfigs) = (1 to numSubmissions).map { subNumber =>
       val methodConfig =
-        legacyTestData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber",
-                                                     outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber"))
+        testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber",
+                                               outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber"))
         )
       val testSub = createTestSubmission(
-        legacyTestData.workspace,
+        testData.workspace,
         methodConfig,
-        legacyTestData.indiv1,
-        WorkbenchEmail(legacyTestData.userOwner.userEmail.value),
-        Seq(legacyTestData.indiv1, legacyTestData.indiv2),
-        Map(legacyTestData.indiv1 -> legacyTestData.inputResolutions,
-            legacyTestData.indiv2 -> legacyTestData.inputResolutions
-        ),
+        testData.indiv1,
+        WorkbenchEmail(testData.userOwner.userEmail.value),
+        Seq(testData.indiv1, testData.indiv2),
+        Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
         Seq(),
         Map()
       )
@@ -2368,30 +2361,31 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       super.save() flatMap { _ =>
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
-            entityQuery.save(
-              ctx,
+            compactEntityQuery.batchWriteEntities(
+              ctx.workspaceIdAsUUID,
               Seq(
-                legacyTestData.aliquot1,
-                legacyTestData.aliquot2,
-                legacyTestData.sample1,
-                legacyTestData.sample2,
-                legacyTestData.sample3,
-                legacyTestData.sample4,
-                legacyTestData.sample5,
-                legacyTestData.sample6,
-                legacyTestData.sample7,
-                legacyTestData.sample8,
-                legacyTestData.pair1,
-                legacyTestData.pair2,
-                legacyTestData.ps1,
-                legacyTestData.sset1,
-                legacyTestData.sset2,
-                legacyTestData.sset3,
-                legacyTestData.sset4,
-                legacyTestData.sset_empty,
-                legacyTestData.indiv1,
-                legacyTestData.indiv2
-              )
+                testData.aliquot1,
+                testData.aliquot2,
+                testData.sample1,
+                testData.sample2,
+                testData.sample3,
+                testData.sample4,
+                testData.sample5,
+                testData.sample6,
+                testData.sample7,
+                testData.sample8,
+                testData.pair1,
+                testData.pair2,
+                testData.ps1,
+                testData.sset1,
+                testData.sset2,
+                testData.sset3,
+                testData.sset4,
+                testData.sset_empty,
+                testData.indiv1,
+                testData.indiv2
+              ),
+              insertOnly = false
             ),
             DBIO.sequence(methodConfigs.map(m => methodConfigurationQuery.create(ctx, m)).toSeq),
             DBIO.sequence(submissions.map(s => submissionQuery.create(ctx, s)).toSeq),
