@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   ReadWriteAction,
   RefMapping
 }
+import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.{
   CompactEntityProvider,
   CompactEntityProviderConfig,
@@ -16,7 +17,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.{
 }
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{Entity, EntityPointer, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, Entity, EntityPointer, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 
@@ -83,6 +84,19 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     allowInsert: Boolean
   ): Flow[Seq[EntityUpdateDefinition], ReadWriteAction[Int], _] =
     Flow[Seq[EntityUpdateDefinition]].map { updates =>
+      // validate entity type, entity name, and attribute names
+      updates foreach { update =>
+        EntityUtils.validateEntityType(update.entityType)
+        EntityUtils.validateEntityName(update.name)
+      }
+
+      val attributeNamesToCheck: Seq[AttributeName] = for {
+        update <- updates
+        operation <- update.operations
+      } yield operation.name
+      // noop function to validate attribute names
+      withAttributeNamespaceCheck(attributeNamesToCheck) {}
+
       // Extract the entity type and name from each update
       val updateIdentifiers = updates.map(update => EntityPointer(update.entityType, update.name))
       val uniqueUpdateIdentifiers = updateIdentifiers.toSet
