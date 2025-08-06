@@ -81,11 +81,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       withApiServices(dataSource)(testCode)
     }
 
-  def withLegacyTestDataApiServices[T](testCode: TestApiService => T): T =
-    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource)(testCode)
-    }
-
   def this() = this(ActorSystem("AvroUpsertMonitorSpec"))
 
   override def beforeAll(): Unit =
@@ -144,7 +139,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       Duration.apply(10, TimeUnit.SECONDS)
     )
 
-  def setUp(services: TestApiService, useLegacy: Boolean = false) = {
+  def setUp(services: TestApiService) = {
     setUpPubSub(services)
 
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
@@ -158,7 +153,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
     val mockEntityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      if (useLegacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
+      spyWorkspaceSettingRepository,
       services.testConf.getBoolean("entityStatisticsCache.enabled"),
       services.testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
@@ -536,15 +531,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     }
   }
 
-  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
-  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withLegacyTestDataApiServices {
+  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services, useLegacy = true)
+      val mockCwdsDAO = setUp(services)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
@@ -570,7 +564,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // Publish message on the request topic
       services.gpsDAO.publishMessages(
         importReadPubSubTopic,
-        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
+        List(MessageRequest(importId1.toString, testAttributes(importId1)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -593,15 +587,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
-  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
-  it should "bubble up useful error message if upserts result in partial failure" in withLegacyTestDataApiServices {
+  it should "bubble up useful error message if upserts result in partial failure" in withTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services, useLegacy = true)
+      val mockCwdsDAO = setUp(services)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
       val successfulBatch = createUpsertOpsList(upsertRange(1000))
 
@@ -634,7 +627,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // Publish message on the request topic
       services.gpsDAO.publishMessages(
         importReadPubSubTopic,
-        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
+        List(MessageRequest(importId1.toString, testAttributes(importId1)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -659,15 +652,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
-  // TODO CORE-652 Switch this test to quicksilver once the entities are properly validated
-  it should "bubble up useful error message if upserts result in complete failure" in withLegacyTestDataApiServices {
+  it should "bubble up useful error message if upserts result in complete failure" in withTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
       val importId1 = UUID.randomUUID()
 
       // add the imports and their statuses to the mock cwdsDAO
-      val mockCwdsDAO = setUp(services, useLegacy = true)
+      val mockCwdsDAO = setUp(services)
       mockCwdsDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
       // failure creates an entity that refers to a non-existent entity
@@ -699,7 +691,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // Publish message on the request topic
       services.gpsDAO.publishMessages(
         importReadPubSubTopic,
-        List(MessageRequest(importId1.toString, testAttributes(importId1, legacyTestData.workspace.workspaceIdAsUUID)))
+        List(MessageRequest(importId1.toString, testAttributes(importId1)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
