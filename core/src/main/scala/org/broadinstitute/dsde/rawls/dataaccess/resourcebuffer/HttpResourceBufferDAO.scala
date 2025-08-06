@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId}
 import org.broadinstitute.dsde.rawls.util.Retry
 
+import java.util
 import scala.concurrent.{ExecutionContext, Future}
 
 class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCreds: Credential)(implicit
@@ -55,7 +56,7 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
     val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
     retry(when500) { () =>
       Future {
-        getResourceApi(accessToken).repairResource(googleProjectId)
+        getResourceApi(accessToken).repairResource(googleProjectId, new util.HashMap[String, Any]())
       }
     }
   }
@@ -88,11 +89,9 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
   override def getJobResult(jobId: String): Future[Object] = {
     clientServiceAccountCreds.refreshToken()
     val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
-    retry(when500) { () =>
       Future {
         getJobsApi(accessToken).retrieveJobResult(jobId)
       }
-    }
   }
 
   private def getResourceBufferApi(accessToken: OAuth2BearerToken) =
