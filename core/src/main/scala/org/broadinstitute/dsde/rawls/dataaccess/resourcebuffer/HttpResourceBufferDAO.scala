@@ -76,16 +76,6 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
     }
   }
 
-  override def getJob(jobId: String): Future[JobModel] = {
-    clientServiceAccountCreds.refreshToken()
-    val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
-    retry(when500) { () =>
-      Future {
-        getJobsApi(accessToken).retrieveJob(jobId)
-      }
-    }
-  }
-
   override def getJobResult(jobId: String): Future[Object] = {
     clientServiceAccountCreds.refreshToken()
     val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)

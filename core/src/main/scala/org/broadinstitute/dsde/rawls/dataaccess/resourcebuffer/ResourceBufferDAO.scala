@@ -18,7 +18,5 @@ trait ResourceBufferDAO {
                     inputs: java.util.List[String]
   ): Future[java.util.List[JobModel]]
 
-  def getJob(jobId: String): Future[JobModel]
-
   def getJobResult(jobId: String): Future[Object]
 }

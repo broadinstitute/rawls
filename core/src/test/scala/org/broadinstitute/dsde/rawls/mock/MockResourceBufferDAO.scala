@@ -42,14 +42,5 @@ class MockResourceBufferDAO extends ResourceBufferDAO {
     Future.successful(java.util.List.of(jobModel, jobModel2))
   }
 
-  override def getJob(jobId: String): Future[JobModel] = {
-    val jobModel = new JobModel()
-    jobModel.setId("test-job-id")
-    jobModel.setJobStatus(JobModel.JobStatusEnum.RUNNING)
-    jobModel.setDescription("test-description")
-    jobModel.setClassName("test-class-name")
-    Future.successful(jobModel)
-  }
-
   override def getJobResult(jobId: String): Future[Object] = Future.successful(new Object())
 }
