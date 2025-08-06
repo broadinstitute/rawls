@@ -2315,16 +2315,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
     withWorkspaceContext(manySubmissionsTestData.workspace) { ctx =>
       val indiv1 = runAndWait(
-        compactEntityQuery.getEntity(ctx.workspaceIdAsUUID,
-                                     legacyTestData.indiv1.entityType,
-                                     legacyTestData.indiv1.name
-        )
+        compactEntityQuery.getEntity(ctx.workspaceIdAsUUID, testData.indiv1.entityType, testData.indiv1.name)
       ).get.toEntity
       val indiv2 = runAndWait(
-        compactEntityQuery.getEntity(ctx.workspaceIdAsUUID,
-                                     legacyTestData.indiv2.entityType,
-                                     legacyTestData.indiv2.name
-        )
+        compactEntityQuery.getEntity(ctx.workspaceIdAsUUID, testData.indiv2.entityType, testData.indiv2.name)
       ).get.toEntity
 
       // calculate the attribute keys for indiv1 and indiv2
@@ -2346,18 +2340,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
     val (submissions, methodConfigs) = (1 to numSubmissions).map { subNumber =>
       val methodConfig =
-        legacyTestData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber",
-                                                     outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber"))
+        testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber",
+                                               outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber"))
         )
       val testSub = createTestSubmission(
-        legacyTestData.workspace,
+        testData.workspace,
         methodConfig,
-        legacyTestData.indiv1,
-        WorkbenchEmail(legacyTestData.userOwner.userEmail.value),
-        Seq(legacyTestData.indiv1, legacyTestData.indiv2),
-        Map(legacyTestData.indiv1 -> legacyTestData.inputResolutions,
-            legacyTestData.indiv2 -> legacyTestData.inputResolutions
-        ),
+        testData.indiv1,
+        WorkbenchEmail(testData.userOwner.userEmail.value),
+        Seq(testData.indiv1, testData.indiv2),
+        Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
         Seq(),
         Map()
       )
@@ -2372,26 +2364,26 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             compactEntityQuery.batchWriteEntities(
               ctx.workspaceIdAsUUID,
               Seq(
-                legacyTestData.aliquot1,
-                legacyTestData.aliquot2,
-                legacyTestData.sample1,
-                legacyTestData.sample2,
-                legacyTestData.sample3,
-                legacyTestData.sample4,
-                legacyTestData.sample5,
-                legacyTestData.sample6,
-                legacyTestData.sample7,
-                legacyTestData.sample8,
-                legacyTestData.pair1,
-                legacyTestData.pair2,
-                legacyTestData.ps1,
-                legacyTestData.sset1,
-                legacyTestData.sset2,
-                legacyTestData.sset3,
-                legacyTestData.sset4,
-                legacyTestData.sset_empty,
-                legacyTestData.indiv1,
-                legacyTestData.indiv2
+                testData.aliquot1,
+                testData.aliquot2,
+                testData.sample1,
+                testData.sample2,
+                testData.sample3,
+                testData.sample4,
+                testData.sample5,
+                testData.sample6,
+                testData.sample7,
+                testData.sample8,
+                testData.pair1,
+                testData.pair2,
+                testData.ps1,
+                testData.sset1,
+                testData.sset2,
+                testData.sset3,
+                testData.sset4,
+                testData.sset_empty,
+                testData.indiv1,
+                testData.indiv2
               ),
               insertOnly = false
             ),
