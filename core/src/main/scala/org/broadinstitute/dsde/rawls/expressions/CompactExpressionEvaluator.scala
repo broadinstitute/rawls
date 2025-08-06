@@ -3,32 +3,16 @@ package org.broadinstitute.dsde.rawls.expressions
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
-  EntityName,
-  ExpressionAndResult,
-  LookupExpression
-}
-import org.broadinstitute.dsde.rawls.entities.base.{
-  ExpressionEvaluationContext,
-  ExpressionEvaluationSupport,
-  InputExpressionReassembler
-}
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
+import org.broadinstitute.dsde.rawls.entities.base.{ExpressionEvaluationContext, ExpressionEvaluationSupport, InputExpressionReassembler}
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, CompactEvaluateVisitor}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.RootContext
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeName,
-  AttributeString,
-  AttributeValue,
-  AttributeValueList,
-  ErrorReport,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationValue
-}
+import org.broadinstitute.dsde.rawls.model.Attributable.nameReservedAttribute
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeString, AttributeValue, AttributeValueList, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio.DBIO
 
@@ -467,7 +451,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               // Group all results under the original entityName since we want results grouped by the starting entity type
               val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
                 if (
-                  attributeName == AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
+                  attributeName == AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
                 ) {
                   Seq(AttributeString(record.name))
                 } else {

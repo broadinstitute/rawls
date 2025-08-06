@@ -1475,4 +1475,31 @@ class CompactExpressionEvaluatorSpec
 
   }
 
+  it should "recognize the id column" in withConfigData {
+    val expression1 = "this.name"
+    val expression2 = "this.sample_id"
+    val queryPlan = QueryPlan(List("samples"), Map(expression1 -> Set("name"), expression2 -> Set("Sample_id")))
+
+    when(
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleSet.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
+        )
+      )
+    val result = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
+    )
+
+    result.size shouldBe 2
+    //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
+    result should contain theSameElementsAs Seq(
+      (expression1, Map("daSampleSet" -> Success(Seq(AttributeString("sampleGood"), AttributeString("sampleGood2"))))),
+      (expression2, Map("daSampleSet" -> Success(Seq(AttributeString("sampleGood"), AttributeString("sampleGood2")))))
+    )
+
+  }
+
 }
