@@ -1493,11 +1493,28 @@ class CompactExpressionEvaluatorSpec
         .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
     )
 
-    result.size shouldBe 2
-    //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
       (expression1, Map("daSampleSet" -> Success(Seq(AttributeString("sampleGood"), AttributeString("sampleGood2"))))),
       (expression2, Map("daSampleSet" -> Success(Seq(AttributeString("sampleGood"), AttributeString("sampleGood2")))))
+    )
+
+    val queryPlan2 = QueryPlan(List(), Map(expression1 -> Set("name"), expression2 -> Set("Sample_id")))
+
+    when(
+      mockQueries.getEntity(any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Some(sampleGoodAsCER)
+        )
+      )
+    val result2 = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", sampleGood.name, "sample", queryPlan2)
+    )
+    result2 should contain theSameElementsAs Seq(
+      (expression1, Map(sampleGood.name -> Success(Seq(AttributeString("sampleGood"))))),
+      (expression2, Map(sampleGood.name -> Success(Seq(AttributeString("sampleGood")))))
     )
 
   }

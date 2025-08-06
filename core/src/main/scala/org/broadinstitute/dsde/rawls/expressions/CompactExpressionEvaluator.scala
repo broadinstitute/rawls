@@ -492,7 +492,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                     if (
                       attributeName == AttributeName.withDefaultNS(
                         record.entityType + Attributable.entityIdAttributeSuffix
-                      )
+                      ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
                     ) {
                       Seq(AttributeString(record.name))
                     } else {
