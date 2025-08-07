@@ -103,8 +103,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   val entityType = "test-type"
   val failImportStatusUUID = UUID.randomUUID()
 
-  def testAttributes(importId: UUID, wsId: UUID = workspaceId): Map[String, String] = Map(
-    "workspaceId" -> wsId.toString,
+  def testAttributes(importId: UUID): Map[String, String] = Map(
+    "workspaceId" -> workspaceId.toString,
     "userEmail" -> userInfo.userEmail.toString,
     "upsertFile" -> s"$bucketName/${importId.toString}",
     "jobId" -> importId.toString
