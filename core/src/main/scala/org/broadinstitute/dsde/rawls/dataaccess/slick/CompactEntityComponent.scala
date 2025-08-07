@@ -499,6 +499,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     sql"""SELECT entity_type, COUNT(*)
       FROM ENTITY
       WHERE workspace_id = $workspaceId
+      AND deleted = 0
       GROUP BY entity_type;""".as[EntityTypeAndCount]
 
   /**
