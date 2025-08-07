@@ -63,7 +63,6 @@ trait DataAccess
     }.toSeq
 
     DBIO.sequence(shardDeletes) andThen // FK to entity
-      TableQuery[CompactEntityKeysTable].delete andThen // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen // FK to entity, workspace
       TableQuery[SubmissionAttributeTable].delete andThen // FK to entity, submissionvalidation
       TableQuery[MethodConfigurationInputTable].delete andThen // FK to MC
