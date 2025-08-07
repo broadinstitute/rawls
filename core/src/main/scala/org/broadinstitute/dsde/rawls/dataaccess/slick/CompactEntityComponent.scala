@@ -1196,7 +1196,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
           sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
       },
-      sql" #${SortDirections.toSql(entityQuery.sortDirection)}"
+      sql" #${SortDirections.toSql(entityQuery.sortDirection)}, name #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
 
   private def paginationClause(entityQuery: EntityQuery): SQLActionBuilder =

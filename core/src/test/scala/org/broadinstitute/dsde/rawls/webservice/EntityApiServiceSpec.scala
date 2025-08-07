@@ -2916,7 +2916,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Math.round(Math.random() * factor) / factor
   }
 
-  class PaginationTestData(legacy: Boolean = false) extends TestData {
+  class PaginationTestData extends TestData {
     val userOwner = RawlsUser(
       UserInfo(RawlsUserEmail("owner-access"),
                OAuth2BearerToken("token"),
@@ -2975,25 +2975,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        if (legacy) { entityQuery.save(workspace, entities) }
-        else {
-          compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
-        }
+        compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
       )
     }
   }
 
   val paginationTestData = new PaginationTestData()
-  val legacyPaginationTestData = new PaginationTestData(true)
 
   def withPaginationTestDataApiServices[T](testCode: TestApiService => T): T =
     withCustomTestDatabase(paginationTestData) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
-    }
-
-  def withLegacyPaginationTestDataApiServices[T](testCode: TestApiService => T): T =
-    withCustomTestDatabase(legacyPaginationTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true)(testCode)
     }
 
   val defaultQuery = EntityQuery(1, 10, "name", Ascending, None)
@@ -3068,31 +3059,30 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   // TODO CORE-635 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 200 OK on entity query for unknown sort field" in withLegacyPaginationTestDataApiServices {
-    services =>
-      Get(
-        s"${legacyPaginationTestData.workspace.path}/entityQuery/${legacyPaginationTestData.entityType}?sortField=asdfasdfasdf"
-      ) ~>
-        sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(
-            EntityQueryResponse(
-              defaultQuery.copy(sortField = "asdfasdfasdf"),
-              EntityQueryResultMetadata(
-                legacyPaginationTestData.numEntities,
-                legacyPaginationTestData.numEntities,
-                calculateNumPages(legacyPaginationTestData.numEntities, defaultQuery.pageSize)
-              ),
-              legacyPaginationTestData.entities.sortBy(_.name).take(defaultQuery.pageSize)
-            )
-          ) {
-
-            responseAs[EntityQueryResponse]
-          }
+  it should "return 200 OK on entity query for unknown sort field" in withPaginationTestDataApiServices { services =>
+    Get(
+      s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf"
+    ) ~>
+      sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
         }
+        assertResult(
+          EntityQueryResponse(
+            defaultQuery.copy(sortField = "asdfasdfasdf"),
+            EntityQueryResultMetadata(
+              paginationTestData.numEntities,
+              paginationTestData.numEntities,
+              calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)
+            ),
+            paginationTestData.entities.sortBy(_.name).take(defaultQuery.pageSize)
+          )
+        ) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
   }
 
   it should "return 404 not found on entity query for workspace that does not exist" in withPaginationTestDataApiServices {
@@ -3370,45 +3360,43 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-635 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return sorted results on entity query for number field" in withLegacyPaginationTestDataApiServices {
-    services =>
-      withStatsD {
-        Get(
-          s"${legacyPaginationTestData.workspace.path}/entityQuery/${legacyPaginationTestData.entityType}?sortField=number"
-        ) ~>
-          services.sealedInstrumentedRoutes ~>
-          check {
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            assertResult(
-              EntityQueryResponse(
-                defaultQuery.copy(sortField = "number"),
-                EntityQueryResultMetadata(
-                  legacyPaginationTestData.numEntities,
-                  legacyPaginationTestData.numEntities,
-                  calculateNumPages(legacyPaginationTestData.numEntities, defaultQuery.pageSize)
-                ),
-                legacyPaginationTestData.entities
-                  .sortBy(_.attributes(AttributeName.withDefaultNS("number")).asInstanceOf[AttributeNumber].value)
-                  .take(defaultQuery.pageSize)
-              )
-            ) {
-
-              responseAs[EntityQueryResponse]
-            }
+  it should "return sorted results on entity query for number field" in withPaginationTestDataApiServices { services =>
+    withStatsD {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=number"
+      ) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
           }
-      } { capturedMetrics =>
-        val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
-        val expected =
-          expectedHttpRequestMetrics("get",
-                                     s"$wsPathForRequestMetrics.entityQuery.${legacyPaginationTestData.entityType}",
-                                     StatusCodes.OK.intValue,
-                                     1
-          )
-        assertSubsetOf(expected, capturedMetrics)
-      }
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(sortField = "number"),
+              EntityQueryResultMetadata(
+                paginationTestData.numEntities,
+                paginationTestData.numEntities,
+                calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)
+              ),
+              paginationTestData.entities
+                .sortBy(_.attributes(AttributeName.withDefaultNS("number")).asInstanceOf[AttributeNumber].value)
+                .take(defaultQuery.pageSize)
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected =
+        expectedHttpRequestMetrics("get",
+                                   s"$wsPathForRequestMetrics.entityQuery.${paginationTestData.entityType}",
+                                   StatusCodes.OK.intValue,
+                                   1
+        )
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return sorted results on entity query for string field" in withPaginationTestDataApiServices { services =>
@@ -3531,13 +3519,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-635 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return sorted results on entity query for namespaced attributes" in withLegacyPaginationTestDataApiServices {
+  it should "return sorted results on entity query for namespaced attributes" in withPaginationTestDataApiServices {
     services =>
       val sortAttr = AttributeName.fromDelimitedName("pfb:number")
 
       Get(
-        s"${legacyPaginationTestData.workspace.path}/entityQuery/${legacyPaginationTestData.entityType}?sortField=${toDelimitedName(sortAttr)}"
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=${toDelimitedName(sortAttr)}"
       ) ~>
         services.sealedInstrumentedRoutes ~>
         check {
@@ -3548,11 +3535,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             EntityQueryResponse(
               defaultQuery.copy(sortField = toDelimitedName(sortAttr)),
               EntityQueryResultMetadata(
-                legacyPaginationTestData.numEntities,
-                legacyPaginationTestData.numEntities,
-                calculateNumPages(legacyPaginationTestData.numEntities, defaultQuery.pageSize)
+                paginationTestData.numEntities,
+                paginationTestData.numEntities,
+                calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)
               ),
-              legacyPaginationTestData.entities
+              paginationTestData.entities
                 .sortBy(_.attributes(sortAttr).asInstanceOf[AttributeNumber].value)
                 .take(defaultQuery.pageSize)
             )
