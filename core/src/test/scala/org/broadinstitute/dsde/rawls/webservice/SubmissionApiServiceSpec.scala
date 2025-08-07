@@ -96,7 +96,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T =
     withCustomTestDatabase(largeSampleTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true) { services =>
+      withApiServices(dataSource) { services =>
         try {
           // Simulate a large submission in the mock Cromwell server by making it return
           // numSamples workflows for submission requests.
@@ -844,9 +844,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.createOrUpdate(workspace),
-        entityQuery.save(
-          workspace,
-          lotsOfSamples :+ sampleSet
+        compactEntityRepository.queries.batchWriteEntities(
+          workspace.workspaceIdAsUUID,
+          lotsOfSamples :+ sampleSet,
+          true
         )
       )
     }
