@@ -499,6 +499,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     sql"""SELECT entity_type, COUNT(*)
       FROM ENTITY
       WHERE workspace_id = $workspaceId
+      AND deleted = 0
       GROUP BY entity_type;""".as[EntityTypeAndCount]
 
   /**
@@ -989,6 +990,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     val baseSql = sql"""select exists (select 1 from ENTITY
          where workspace_id = $workspaceId
           and entity_type = $entityType
+          and deleted = 0
           and JSON_CONTAINS_PATH(attributes, 'one', """
 
     concatSqlActions(baseSql, containsClause, sql"))")
