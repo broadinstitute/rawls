@@ -40,7 +40,16 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsRepository
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{AttributeNotFoundException, AttributeSupport, AttributeUpdateOperationException, BillingProjectSupport, JsonFilterUtils, UserUtils, UserWiths, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.util.{
+  AttributeNotFoundException,
+  AttributeSupport,
+  AttributeUpdateOperationException,
+  BillingProjectSupport,
+  JsonFilterUtils,
+  UserUtils,
+  UserWiths,
+  WorkspaceSupport
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.{BUCKET_GET_PERMISSION, QueryOptions}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -712,11 +721,12 @@ class WorkspaceService(
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
       workspace <- workspaceOpt match {
         case Some(ws) => Future.successful(ws)
-        case None => Future.failed(
-          RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+        case None =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+            )
           )
-        )
       }
 
       val billingProjectName = RawlsBillingProjectName(workspaceName.namespace)
@@ -753,21 +763,30 @@ class WorkspaceService(
             )
           )
       }
+      // Grant RBS permission to re-enable APIs on the workspace project
+      _ <- gcsDAO.addPolicyBindings(
+        workspace.googleProjectId,
+        Map(
+          "roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail)
+        )
+      )
+
       // This will launch an async stairway flight in RBS
       _ <- resourceBufferService.repairGoogleProject(workspace.googleProjectId.value)
 
     } yield ()
 
-  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] = {
+  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
     for {
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
       workspace <- workspaceOpt match {
         case Some(ws) => Future.successful(ws)
-        case None => Future.failed(
-          RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+        case None =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
+            )
           )
-        )
       }
       jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
         if (!jobList.isEmpty) {
@@ -802,7 +821,6 @@ class WorkspaceService(
           Future.successful(RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue))
       }
     } yield response
-  }
 
   def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
                                     newBillingProjectName: String

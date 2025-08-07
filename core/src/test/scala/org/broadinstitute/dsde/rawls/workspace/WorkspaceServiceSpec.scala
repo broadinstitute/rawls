@@ -3926,6 +3926,10 @@ class WorkspaceServiceSpec
     when(services.gcsDAO.isBillingAccountEnabled(any[RawlsBillingAccountName])(any[ExecutionContext]))
       .thenReturn(Future.successful(true))
 
+    doReturn(Future.successful(true))
+      .when(services.gcsDAO)
+      .addPolicyBindings(any(), any())
+
     val jobModel = mock[JobModel]
     when(services.resourceBufferService.repairGoogleProject(any()))
       .thenReturn(Future.successful(jobModel))
@@ -3936,6 +3940,10 @@ class WorkspaceServiceSpec
       services.executionContext
     )
     verify(services.gcsDAO).isBillingAccountEnabled(testData.workspace.currentBillingAccountOnGoogleProject.get)
+    verify(services.gcsDAO).addPolicyBindings(
+      testData.workspace.googleProjectId,
+      Map("roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:fake-email@test.firecloud.org"))
+    )
     verify(services.resourceBufferService).repairGoogleProject(testData.workspace.googleProjectId.value)
   }
 
