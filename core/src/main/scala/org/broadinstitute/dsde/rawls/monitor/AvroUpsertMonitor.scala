@@ -4,8 +4,7 @@ import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.ByteString
+import akka.stream.scaladsl.Source
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
@@ -13,12 +12,12 @@ import fs2.concurrent.SignallingRef
 import io.circe.fs2._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.model.{
-  Entity,
   ErrorReport => RawlsErrorReport,
   ImportStatuses,
   RawlsRequestContext,
@@ -492,9 +491,17 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                 logger.warn(
                   s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors"
                 )
+              // CompactEntityProvider will throw a DataEntityException, which gets caught by this Throwable case
+              case Failure(t: Throwable) =>
+                logger.warn(
+                  s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The error is: ${t.getMessage}"
+                )
+
               case _ => // noop; here for completeness of matching
             }
-            logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
+            logger.info(
+              s"completed upsert batch #$idx for jobId ${jobId.toString} with ${attempt.getClass.getSimpleName}..."
+            )
             attempt
           }
         }
@@ -512,6 +519,10 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         case Failure(regrets: RawlsExceptionWithErrorReport) if regrets.errorReport.causes.nonEmpty =>
           regrets.errorReport.causes
         case Failure(regrets: RawlsExceptionWithErrorReport) => Seq(regrets.errorReport)
+        case Failure(de: DataEntityException) =>
+          Seq(RawlsErrorReport(de.code, de.getMessage))
+        case Failure(t: Throwable) =>
+          Seq(RawlsErrorReport(StatusCodes.InternalServerError, t.getMessage))
       } flatten
 
       // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
