@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
@@ -366,7 +367,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     metadataBefore shouldBe empty
 
     // perform the batchUpsert
-    intercept[SQLException] {
+    intercept[RawlsExceptionWithErrorReport] {
       Await.result(provider.batchUpsertEntities(Source(updates), defaultRequestContext), atMost)
     }
 
