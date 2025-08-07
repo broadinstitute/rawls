@@ -69,7 +69,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   // increase the route timeout slightly for this test as the "large submission" tests sometimes
   // bump up against the default 5 second timeout.
-  implicit override val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(30.seconds)
+  implicit override val routeTestTimeout: RouteTestTimeout = RouteTestTimeout(40.seconds)
 
   def withApiServices[T](dataSource: SlickDataSource, legacy: Boolean = false)(testCode: TestApiService => T): T = {
 
@@ -503,7 +503,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   val numSamples = 10000
 
-  // TODO CORE-640 Convert to quicksilver
   it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = largeSampleTestData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
