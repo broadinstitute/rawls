@@ -2916,7 +2916,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Math.round(Math.random() * factor) / factor
   }
 
-  class PaginationTestData(legacy: Boolean = false) extends TestData {
+  class PaginationTestData extends TestData {
     val userOwner = RawlsUser(
       UserInfo(RawlsUserEmail("owner-access"),
                OAuth2BearerToken("token"),
@@ -2975,25 +2975,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        if (legacy) { entityQuery.save(workspace, entities) }
-        else {
-          compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
-        }
+        compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
       )
     }
   }
 
   val paginationTestData = new PaginationTestData()
-  val legacyPaginationTestData = new PaginationTestData(true)
 
   def withPaginationTestDataApiServices[T](testCode: TestApiService => T): T =
     withCustomTestDatabase(paginationTestData) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
-    }
-
-  def withLegacyPaginationTestDataApiServices[T](testCode: TestApiService => T): T =
-    withCustomTestDatabase(legacyPaginationTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true)(testCode)
     }
 
   val defaultQuery = EntityQuery(1, 10, "name", Ascending, None)
