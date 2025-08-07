@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVis
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.RootContext
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.model.Attributable.nameReservedAttribute
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeName,
@@ -467,7 +468,9 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               // Group all results under the original entityName since we want results grouped by the starting entity type
               val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
                 if (
-                  attributeName == AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
+                  attributeName == AttributeName.withDefaultNS(
+                    record.entityType + Attributable.entityIdAttributeSuffix
+                  ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
                 ) {
                   Seq(AttributeString(record.name))
                 } else {
@@ -489,7 +492,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                     if (
                       attributeName == AttributeName.withDefaultNS(
                         record.entityType + Attributable.entityIdAttributeSuffix
-                      )
+                      ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
                     ) {
                       Seq(AttributeString(record.name))
                     } else {

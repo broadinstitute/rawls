@@ -1475,4 +1475,48 @@ class CompactExpressionEvaluatorSpec
 
   }
 
+  it should "recognize the id column" in withConfigData {
+    val expression1 = "this.name"
+    val expression2 = "this.sample_id"
+    val queryPlan = QueryPlan(List("samples"), Map(expression1 -> Set("name"), expression2 -> Set("Sample_id")))
+
+    when(
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleSet.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
+        )
+      )
+    val result = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", "daSampleSet", "sampleset", queryPlan)
+    )
+
+    result should contain theSameElementsAs Seq(
+      (expression1, Map("daSampleSet" -> Success(Seq(AttributeString("sampleGood"), AttributeString("sampleGood2"))))),
+      (expression2, Map("daSampleSet" -> Success(Seq(AttributeString("sampleGood"), AttributeString("sampleGood2")))))
+    )
+
+    val queryPlan2 = QueryPlan(List(), Map(expression1 -> Set("name"), expression2 -> Set("Sample_id")))
+
+    when(
+      mockQueries.getEntity(any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Some(sampleGoodAsCER)
+        )
+      )
+    val result2 = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", sampleGood.name, "sample", queryPlan2)
+    )
+    result2 should contain theSameElementsAs Seq(
+      (expression1, Map(sampleGood.name -> Success(Seq(AttributeString("sampleGood"))))),
+      (expression2, Map(sampleGood.name -> Success(Seq(AttributeString("sampleGood")))))
+    )
+
+  }
+
 }
