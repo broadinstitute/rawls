@@ -1520,6 +1520,29 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual should contain theSameElementsAs List(EntityTypeAndCount(entityType1, 2), EntityTypeAndCount(entityType2, 1))
   }
 
+  it should "ignore soft-deleted entities in the count of entities grouped by type" in withMinimalTestDatabase { _ =>
+    // insert an entity with attributes
+    val entityType1 = "entityType1"
+    val entityType2 = "entityType2"
+    val entity1 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity2 = Entity(UUID.randomUUID().toString, entityType2, Map())
+    val entity3 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    val entity4 = Entity(UUID.randomUUID().toString, entityType1, Map())
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+    insertAndGet(entity4, minimalTestData.workspace2.workspaceIdAsUUID) // different workspace
+
+    // now soft-delete entity1 and entity2
+    runAndWait(q.batchHide(wsid, Seq(entity1.toPointer, entity2.toPointer)))
+
+    // get the count of entities grouped by type
+    val actual = runAndWait(q.countEntitiesGroupedByType(wsid))
+    // only entity3 should be counted. entity1 and entity2 are soft-deleted, entity4 is in a different workspace
+    actual should contain theSameElementsAs List(EntityTypeAndCount(entityType1, 1))
+
+  }
+
   behavior of "batchHide"
 
   it should "mark the entities as deleted and remove attributes" in withMinimalTestDatabase { _ =>
