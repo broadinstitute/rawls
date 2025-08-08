@@ -696,7 +696,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * @param startingEntityType  The type of the root entity to start the query from.
    * @param startingEntityName    The name of the root entity to start the query from.
    * @param relationChain   A chain of strings representing the relation columns between entities
-   * @return                 A `ReadAction` that resolves to a map of starting entity name to a Seq[`CompactEntityRecord`]
+   * @return                 A `ReadAction` that resolves to a map of entity name to a Seq[`CompactEntityRecord`]
    *                         that includes all entities found by traversing the specified relationships.
    */
   def queryRelatedRecordsWithRelationChain(
@@ -705,30 +705,64 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     startingEntityName: String,
     relationChain: Seq[String]
   ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
-    if (relationChain.isEmpty) {
+    if (relationChain.isEmpty) { // The method shouldn't have been called in this case
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
     } else {
       // Start with the root entity
       val initialEntities = Set(EntityPointer(startingEntityType, startingEntityName))
 
-      // Traverse each relation step by step
-      relationChain
-        .foldLeft(DBIO.successful(initialEntities): ReadAction[Set[EntityPointer]]) { (entitiesFuture, relation) =>
+      // First step: get the first-level entities (these will be our grouping keys)
+      traverseOneStep(workspaceId, initialEntities, relationChain.head).flatMap { firstStepEntities =>
+        if (firstStepEntities.isEmpty) {
+          DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
+        } else if (relationChain.length == 1) {
+          // Only one relation - group by first step entities
+          getEntities(workspaceId, firstStepEntities).map { entities =>
+            entities.groupBy(_.name)
+          }
+        } else {
+          // Multiple relations - traverse the rest but track which first-step entity each result came from
+          val remainingChain = relationChain.tail
+          traverseOneStepWithGrouping(workspaceId, firstStepEntities, remainingChain).flatMap { groupedFinalEntities =>
+            // Get full records for all final entities
+            val allFinalEntities = groupedFinalEntities.values.flatten.toSet
+            getEntities(workspaceId, allFinalEntities).map { entities =>
+              val entitiesByPointer = entities.groupBy(e => EntityPointer(e.entityType, e.name))
+
+              // Map each first-step entity to its corresponding final entities
+              groupedFinalEntities.view.mapValues { entityPointers =>
+                entityPointers.flatMap(entitiesByPointer.get).flatten.toSeq
+              }.toMap
+            }
+          }
+        }
+      }
+    }
+
+  private def traverseOneStepWithGrouping(
+    workspaceId: UUID,
+    firstStepEntities: Set[EntityPointer],
+    remainingChain: Seq[String]
+  ): ReadAction[Map[String, Set[EntityPointer]]] = {
+    // For each first-step entity, traverse the remaining relations independently
+    val traversalFutures = firstStepEntities.map { firstEntity =>
+      // Start with just this first entity and traverse the remaining chain
+      remainingChain
+        .foldLeft(DBIO.successful(Set(firstEntity)): ReadAction[Set[EntityPointer]]) { (entitiesFuture, relation) =>
           entitiesFuture.flatMap { currentEntities =>
             if (currentEntities.isEmpty) {
-              DBIO.successful(Set.empty[EntityPointer]): ReadAction[Set[EntityPointer]]
+              DBIO.successful(Set.empty[EntityPointer])
             } else {
               traverseOneStep(workspaceId, currentEntities, relation)
             }
           }
         }
-        .flatMap { finalEntityPointers =>
-          // Get the full records for the final entities
-          getEntities(workspaceId, finalEntityPointers).map { entities =>
-            Map(startingEntityName -> entities)
-          }
-        }
+        .map(finalEntities => firstEntity.entityName -> finalEntities)
     }
+
+    // Convert Set to Seq before calling DBIO.sequence
+    DBIO.sequence(traversalFutures.toSeq).map(_.toMap)
+  }
 
   private def traverseOneStep(
     workspaceId: UUID,
@@ -750,8 +784,8 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         ref_type VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
         ref_name VARCHAR(255) PATH '$$.n'
       )
-    ) jt ON jt.attr_name = ${relation}
-    WHERE e.workspace_id = ${workspaceId}
+    ) jt ON jt.attr_name = $relation
+    WHERE e.workspace_id = $workspaceId
       AND e.deleted = 0
       AND (
     """,
