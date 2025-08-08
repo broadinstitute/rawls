@@ -708,61 +708,59 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     if (relationChain.isEmpty) {
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
     } else {
-      // Build the SQL with explicit joins for each relation in the chain
-      // Start with the base entity
-      val sqlBuilder = sql"""
-        SELECT DISTINCT
-          e1.name as rootEntityName,
-          e#${relationChain.length}.id,
-          e#${relationChain.length}.name,
-          e#${relationChain.length}.entity_type,
-          e#${relationChain.length}.workspace_id,
-          e#${relationChain.length}.record_version,
-          e#${relationChain.length}.deleted,
-          e#${relationChain.length}.attributes
-        FROM ENTITY e0
-      """
+      // Start with the root entity
+      val initialEntities = Set(EntityPointer(startingEntityType, startingEntityName))
 
-      // Add joins for each relation in the chain
-      val joinsSql = relationChain.zipWithIndex.foldLeft(sqlBuilder) { case (sql, (relation, idx)) =>
-        val nextIdx = idx + 1
-        concatSqlActions(
-          sql,
-          sql"""
-          JOIN JSON_TABLE(
-            JSON_EXTRACT(e#$idx.attributes, '$$.refs'),
-            '$$[*]' COLUMNS (
-              attributeName#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
-              entityType#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
-              entityName#$idx VARCHAR(255) PATH '$$.n'
-            )
-          ) jt#$idx ON jt#$idx.attributeName#$idx = $relation
-          JOIN ENTITY e#$nextIdx ON e#$nextIdx.entity_type = jt#$idx.entityType#$idx
-            AND e#$nextIdx.name = jt#$idx.entityName#$idx
-            AND e#$nextIdx.workspace_id = $workspaceId
-            AND e#$nextIdx.deleted = 0
-          """
-        )
-      }
+      // Traverse each relation step by step
+      relationChain
+        .foldLeft(DBIO.successful(initialEntities): ReadAction[Set[EntityPointer]]) { (entitiesFuture, relation) =>
+          entitiesFuture.flatMap { currentEntities =>
+            if (currentEntities.isEmpty) {
+              DBIO.successful(Set.empty[EntityPointer]): ReadAction[Set[EntityPointer]]
+            } else {
+              traverseOneStep(workspaceId, currentEntities, relation)
+            }
+          }
+        }
+        .flatMap { finalEntityPointers =>
+          // Get the full records for the final entities
+          getEntities(workspaceId, finalEntityPointers).map { entities =>
+            Map(startingEntityName -> entities)
+          }
+        }
+    }
 
-      // Add the WHERE clause for the starting entity
-      val finalSql = concatSqlActions(
-        joinsSql,
+  private def traverseOneStep(
+    workspaceId: UUID,
+    currentEntities: Set[EntityPointer],
+    relation: String
+  ): ReadAction[Set[EntityPointer]] =
+    if (currentEntities.isEmpty) {
+      DBIO.successful(Set.empty[EntityPointer])
+    } else {
+      val typeNameClauses = generateTypeNameSql(currentEntities)
+      val query = concatSqlActions(
         sql"""
-        WHERE e0.workspace_id = $workspaceId
-          AND e0.entity_type = $startingEntityType
-          AND e0.name = $startingEntityName
-          AND e0.deleted = 0
-        """
+    SELECT DISTINCT jt.ref_type, jt.ref_name
+    FROM ENTITY e
+    JOIN JSON_TABLE(
+      e.attributes,
+      '$$.refs[*]' COLUMNS (
+        attr_name VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+        ref_type VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+        ref_name VARCHAR(255) PATH '$$.n'
+      )
+    ) jt ON jt.attr_name = ${relation}
+    WHERE e.workspace_id = ${workspaceId}
+      AND e.deleted = 0
+      AND (
+    """,
+        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" OR "),
+        sql")"
       )
 
-      case class RootNameAndEntity(rootEntityName: String, entity: CompactEntityRecord)
-      implicit val getRootNameAndEntity: GetResult[RootNameAndEntity] =
-        GetResult(r => RootNameAndEntity(r.<<, CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)))
-
-      finalSql.as[RootNameAndEntity].map { results =>
-        results.groupMap(_.rootEntityName)(_.entity)
-      }
+      // Convert SqlStreamingAction to ReadAction and collect results into a Set
+      query.as[EntityPointer].map(_.toSet)
     }
 
   /**
