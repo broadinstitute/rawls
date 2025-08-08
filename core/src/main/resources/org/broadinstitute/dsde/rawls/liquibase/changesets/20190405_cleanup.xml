@@ -11,9 +11,6 @@
     <changeSet logicalFilePath="dummy" author="dvoet" id="drop-table-PENDING_WORKSPACE_ACCESS" failOnError="false">
         <dropTable tableName="PENDING_WORKSPACE_ACCESS"/>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="dvoet" id="drop-table-TEMP_SUBMITTER_IDS_WITH_EMAILS" failOnError="false">
-        <dropTable tableName="TEMP_SUBMITTER_IDS_WITH_EMAILS"/>
-    </changeSet>
     <changeSet logicalFilePath="dummy" author="dvoet" id="drop-table-WORKSPACE_ACCESS" failOnError="false">
         <dropTable tableName="WORKSPACE_ACCESS"/>
     </changeSet>
@@ -37,8 +34,5 @@
     </changeSet>
     <changeSet logicalFilePath="dummy" author="dvoet" id="drop-table-WORKSPACE_USER_SHARE" failOnError="false">
         <dropTable tableName="WORKSPACE_USER_SHARE"/>
-    </changeSet>
-    <changeSet logicalFilePath="dummy" author="dvoet" id="drop-column-SUBMITTER_OLD" failOnError="false">
-        <dropColumn tableName="SUBMISSION" columnName="SUBMITTER_OLD"/>
     </changeSet>
 </databaseChangeLog>
