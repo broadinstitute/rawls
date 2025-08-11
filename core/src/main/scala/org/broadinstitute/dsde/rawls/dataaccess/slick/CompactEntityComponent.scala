@@ -12,6 +12,8 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
+  AttributeEntityReference,
+  AttributeEntityReferenceList,
   AttributeName,
   AttributeRename,
   Entity,
@@ -772,29 +774,20 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     if (currentEntities.isEmpty) {
       DBIO.successful(Set.empty[EntityPointer])
     } else {
-      val typeNameClauses = generateTypeNameSql(currentEntities)
-      val query = concatSqlActions(
-        sql"""
-    SELECT DISTINCT jt.ref_type, jt.ref_name
-    FROM ENTITY e
-    JOIN JSON_TABLE(
-      e.attributes,
-      '$$.refs[*]' COLUMNS (
-        attr_name VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
-        ref_type VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
-        ref_name VARCHAR(255) PATH '$$.n'
-      )
-    ) jt ON jt.attr_name = $relation
-    WHERE e.workspace_id = $workspaceId
-      AND e.deleted = 0
-      AND (
-    """,
-        reduceSqlActionsWithDelim(typeNameClauses.toSeq, sql" OR "),
-        sql")"
-      )
-
-      // Convert SqlStreamingAction to ReadAction and collect results into a Set
-      query.as[EntityPointer].map(_.toSet)
+      // retrieve the current entities to get their attributes
+      getEntities(workspaceId, currentEntities).flatMap { entities =>
+        // find all references in the specified relation attribute
+        // TODO: should this reuse CompactEntityProvider.findAllReferences ?
+        val references = entities.flatMap { entityRecord =>
+          val attrValue = entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation))
+          attrValue match {
+            case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
+            case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
+            case _                                        => Seq.empty[EntityPointer]
+          }
+        }
+        DBIO.successful(references.toSet)
+      }
     }
 
   /**
