@@ -805,12 +805,12 @@ class WorkspaceService(
       response <- jobResult.getJobStatus match {
         case JobModel.JobStatusEnum.FAILED =>
           resourceBufferService.getJobDetails(jobResult.getId).flatMap { jobDetails =>
-            var errorMessage = s"Repair job failed for project ${workspace.googleProjectId.value}"
-            jobDetails match {
+            val extraDetails = jobDetails match {
               case errorDetails: ErrorModel =>
-                errorMessage += ":" + errorDetails.getMessage
-              case _ =>
+                ":" + errorDetails.getMessage
+              case _ => ""
             }
+            val errorMessage = s"Repair job failed for project ${workspace.googleProjectId.value}$extraDetails"
             Future.failed(
               RawlsExceptionWithErrorReport(
                 ErrorReport(StatusCodes.InternalServerError, errorMessage)
