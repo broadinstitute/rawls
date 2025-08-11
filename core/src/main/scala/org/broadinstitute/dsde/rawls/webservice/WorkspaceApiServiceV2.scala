@@ -153,7 +153,7 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                 complete {
                   workspaceServiceConstructor(ctx)
                     .repairWorkspace(workspaceName)
-                    .map(_ => StatusCodes.OK)
+                    .map(_ => StatusCodes.Accepted)
                 }
               }
             }

@@ -4538,7 +4538,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
-        200:
+        202:
           description: A request to repair this workspace has successfully been submitted
         400:
           description: Error repairing workspace
