@@ -54,11 +54,10 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
   override def repairResource(googleProjectId: String): Future[JobModel] = {
     clientServiceAccountCreds.refreshToken()
     val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
-    retry(when500) { () =>
+      // This does not retry so that multiple repair flights do not get launched
       Future {
         getResourceApi(accessToken).repairResource(googleProjectId, new util.HashMap[String, Any]())
       }
-    }
   }
 
   override def enumerateJobs(offset: Integer,
