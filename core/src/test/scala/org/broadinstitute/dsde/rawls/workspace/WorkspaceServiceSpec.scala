@@ -3942,7 +3942,9 @@ class WorkspaceServiceSpec
     verify(services.gcsDAO).isBillingAccountEnabled(testData.workspace.currentBillingAccountOnGoogleProject.get)
     verify(services.gcsDAO).addPolicyBindings(
       testData.workspace.googleProjectId,
-      Map("roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:fake-email@test.firecloud.org"))
+      Map(
+        "roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:fake-email@test.firecloud.org"),
+        "roles/resourcemanager.projectIamAdmin" -> Set("serviceAccount:fake-email@test.firecloud.org"))
     )
     verify(services.resourceBufferService).repairGoogleProject(testData.workspace.googleProjectId.value)
   }

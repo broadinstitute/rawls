@@ -767,7 +767,8 @@ class WorkspaceService(
       _ <- gcsDAO.addPolicyBindings(
         workspace.googleProjectId,
         Map(
-          "roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail)
+          "roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail),
+          "roles/resourcemanager.projectIamAdmin" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail)
         )
       )
 
