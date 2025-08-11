@@ -718,24 +718,14 @@ class WorkspaceService(
 
   def repairWorkspace(workspaceName: WorkspaceName): Future[Unit] =
     for {
-      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
-      workspace <- workspaceOpt match {
-        case Some(ws) => Future.successful(ws)
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
-            )
-          )
-      }
-
-      val billingProjectName = RawlsBillingProjectName(workspaceName.namespace)
-      _ <- requireBillingProjectOwnerAccess(billingProjectName, ctx)
-      billingProject <- getBillingProjectContext(billingProjectName)
-      accountName = billingProject.billingAccount.getOrElse(
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                  SamBillingProjectActions.own,
+                                                  Some(WorkspaceAttributeSpecs(all = false))
+      )
+      accountName = workspace.currentBillingAccountOnGoogleProject.getOrElse(
         throw RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest,
-                      s"No billing account found for billing project ${billingProject.projectName}"
+                      s"No billing account found for ${workspaceName.toString}"
           )
         )
       )
@@ -779,16 +769,10 @@ class WorkspaceService(
 
   def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
     for {
-      workspaceOpt <- workspaceRepository.getWorkspace(workspaceName)
-      workspace <- workspaceOpt match {
-        case Some(ws) => Future.successful(ws)
-        case None =>
-          Future.failed(
-            RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"Workspace ${workspaceName.name} does not exist")
-            )
-          )
-      }
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
+        SamBillingProjectActions.own,
+        Some(WorkspaceAttributeSpecs(all = false))
+      )
       jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
         if (!jobList.isEmpty) {
           Future.successful(jobList.get(0))
@@ -807,8 +791,8 @@ class WorkspaceService(
         case JobModel.JobStatusEnum.FAILED =>
           resourceBufferService.getJobDetails(jobResult.getId).flatMap { jobDetails =>
             val extraDetails = jobDetails match {
-              case errorDetails: ErrorModel =>
-                ":" + errorDetails.getMessage
+              case errorDetails: ErrorReport =>
+                ":" + errorDetails.message
               case _ => ""
             }
             val errorMessage = s"Repair job failed for project ${workspace.googleProjectId.value}$extraDetails"
