@@ -145,7 +145,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
                         destWorkspaceContext.workspaceIdAsUUID
                       )
                     } else {
-                      unmergedSoftConflicts(entityReferenceMap, softConflicts)
+                      unmergedSoftConflicts(entityReferenceMap, softConflicts, entitiesToCopyRefs)
                     }
                 }
               }
@@ -202,12 +202,13 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   }
 
   /**
-   * For each entity in the entityReferenceMap, check any of the entites that it references
+   * For each entity in the entityReferenceMap, check any of the entities that it references
    * are in the set of soft conflicts. If so, create an EntitySoftConflict for that entity
    */
-  def unmergedSoftConflicts(entityReferenceMap: Set[RefMapping],
-                            softConflicts: Set[EntityPointer]
+  def unmergedSoftConflictsOLD(entityReferenceMap: Set[RefMapping],
+                               softConflicts: Set[EntityPointer]
   ): DBIOAction[EntityCopyResponse, NoStream, Effect] = {
+
     val unmergedSoftConflicts = entityReferenceMap.flatMap { refMapping =>
       val conflicts = refMapping.to
         .intersect(softConflicts)
@@ -220,6 +221,70 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
       }
     }.toSeq
     DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
+  }
+
+  /**
+   * Build the response payload for unmerged soft conflicts.
+   *
+   * A soft conflict occurs when an entity to be copied references another entity which already exists. The entity being
+   * referenced is the soft conflict. (A hard conflict is when the entity to be copied itself already exists.)
+   *
+   * This response contains the full reference path from each entity in the original copy request to each soft conflict;
+   * this path may include transitive references which are not themselves soft conflicts. If an entity is both a
+   * transitive member of a reference chain and a soft conflict.
+   *
+   * Assume a source workspace with entity A which references B which references C.
+   * Assume a destination workspace which already has B and C.
+   * If the user requests to copy A, both B and C are soft conflicts and the response will be:
+   *  A -> B
+   *  A -> B -> C
+   *
+   * @param entityReferenceMap known parent->child references
+   * @param softConflicts the soft conflicts
+   * @param originalCopyRequest the original set of entities the user requested to copy
+   * @return the soft-conflict response
+   */
+  def unmergedSoftConflicts(entityReferenceMap: Set[RefMapping],
+                            softConflicts: Set[EntityPointer],
+                            originalCopyRequest: Set[EntityPointer]
+  ): DBIOAction[EntityCopyResponse, NoStream, Effect] = {
+    // Build a map from each entity to its children
+    val childrenMap: Map[EntityPointer, Set[EntityPointer]] =
+      entityReferenceMap
+        .groupBy(_.from)
+        .view
+        .mapValues(_.flatMap(_.to).toSet)
+        .toMap
+
+    // Roots are those in the original deletion request that are not children of any mapping
+    val allChildren = entityReferenceMap.flatMap(_.to)
+    val roots = originalCopyRequest -- allChildren
+
+    // Leaves are those in the map which are not the parent of any other entity
+    val allLeaves = childrenMap.values.flatten.toSet -- childrenMap.keySet
+
+    // Recursive function to build the hierarchy downwards from a parent
+    def buildHierarchyDown(node: EntityPointer): EntitySoftConflict = {
+      val children = childrenMap.getOrElse(node, Set.empty)
+
+      val childConflicts = children.toSeq.flatMap { childNode =>
+        // if this child is itself a soft conflict - and not a leaf, start a new EntitySoftConflict for that child.
+        // Any children which are NOT themselves a soft conflict are only mentioned as part of the path to a conflict.
+        val startNewTree = softConflicts.contains(childNode) && !allLeaves.contains(childNode)
+        val extraConflict = if (startNewTree) {
+          Seq(EntitySoftConflict(childNode.entityType, childNode.entityName, Seq.empty))
+        } else {
+          Seq.empty[EntitySoftConflict]
+        }
+        extraConflict :+ buildHierarchyDown(childNode)
+      }
+
+      EntitySoftConflict(node.entityType, node.entityName, childConflicts)
+    }
+
+    val unmergedSoftConflicts = roots.map(buildHierarchyDown)
+
+    DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts.toSeq))
   }
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = {
