@@ -96,7 +96,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T =
     withCustomTestDatabase(largeSampleTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true) { services =>
+      withApiServices(dataSource) { services =>
         try {
           // Simulate a large submission in the mock Cromwell server by making it return
           // numSamples workflows for submission requests.
@@ -503,7 +503,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   val numSamples = 10000
 
-  // TODO CORE-640 Convert to quicksilver
   it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = largeSampleTestData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
@@ -844,9 +843,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.createOrUpdate(workspace),
-        entityQuery.save(
-          workspace,
-          lotsOfSamples :+ sampleSet
+        compactEntityRepository.queries.batchWriteEntities(
+          workspace.workspaceIdAsUUID,
+          lotsOfSamples :+ sampleSet,
+          true
         )
       )
     }
