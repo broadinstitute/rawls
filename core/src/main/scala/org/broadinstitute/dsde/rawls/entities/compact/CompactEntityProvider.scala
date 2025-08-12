@@ -202,28 +202,6 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
   }
 
   /**
-   * For each entity in the entityReferenceMap, check any of the entities that it references
-   * are in the set of soft conflicts. If so, create an EntitySoftConflict for that entity
-   */
-  def unmergedSoftConflictsOLD(entityReferenceMap: Set[RefMapping],
-                               softConflicts: Set[EntityPointer]
-  ): DBIOAction[EntityCopyResponse, NoStream, Effect] = {
-
-    val unmergedSoftConflicts = entityReferenceMap.flatMap { refMapping =>
-      val conflicts = refMapping.to
-        .intersect(softConflicts)
-        .map(conflict => EntitySoftConflict(conflict.entityType, conflict.entityName, Seq.empty))
-        .toSeq
-      if (conflicts.nonEmpty) {
-        Some(EntitySoftConflict(refMapping.from.entityType, refMapping.from.entityName, conflicts))
-      } else {
-        None
-      }
-    }.toSeq
-    DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
-  }
-
-  /**
    * Build the response payload for unmerged soft conflicts.
    *
    * A soft conflict occurs when an entity to be copied references another entity which already exists. The entity being
