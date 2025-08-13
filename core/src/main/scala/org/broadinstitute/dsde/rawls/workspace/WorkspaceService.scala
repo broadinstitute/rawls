@@ -719,14 +719,12 @@ class WorkspaceService(
   def repairWorkspace(workspaceName: WorkspaceName): Future[Unit] =
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
-                                                  SamBillingProjectActions.own,
-                                                  Some(WorkspaceAttributeSpecs(all = false))
+                                                       SamBillingProjectActions.own,
+                                                       Some(WorkspaceAttributeSpecs(all = false))
       )
       accountName = workspace.currentBillingAccountOnGoogleProject.getOrElse(
         throw RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.BadRequest,
-                      s"No billing account found for ${workspaceName.toString}"
-          )
+          ErrorReport(StatusCodes.BadRequest, s"No billing account found for ${workspaceName.toString}")
         )
       )
       _ <- gcsDAO.isBillingAccountEnabled(accountName).flatMap {
@@ -770,8 +768,8 @@ class WorkspaceService(
   def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
-        SamBillingProjectActions.own,
-        Some(WorkspaceAttributeSpecs(all = false))
+                                                       SamBillingProjectActions.own,
+                                                       Some(WorkspaceAttributeSpecs(all = false))
       )
       jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
         if (!jobList.isEmpty) {
@@ -789,21 +787,22 @@ class WorkspaceService(
       }
       response <- jobResult.getJobStatus match {
         case JobModel.JobStatusEnum.FAILED =>
-          resourceBufferService.getJobDetails(jobResult.getId).flatMap { jobDetails =>
-            val extraDetails = jobDetails match {
-              case errorDetails: ErrorReport =>
-                ":" + errorDetails.message
-              case _ => ""
+          resourceBufferService
+            .getJobDetails(jobResult.getId)
+            .map { _ =>
+              // This block currently will not get called since getJobDetails always fails if the job status is FAILED
+              RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue, None)
             }
-            val errorMessage = s"Repair job failed for project ${workspace.googleProjectId.value}$extraDetails"
-            Future.failed(
-              RawlsExceptionWithErrorReport(
-                ErrorReport(StatusCodes.InternalServerError, errorMessage)
+            .recover { case ex =>
+              RepairWorkspaceResponse(workspace.googleProjectId.value,
+                                      jobResult.getJobStatus.getValue,
+                                      Option(ex.getMessage)
               )
-            )
-          }
+            }
         case _ =>
-          Future.successful(RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue))
+          Future.successful(
+            RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue, None)
+          )
       }
     } yield response
 

@@ -7209,6 +7209,9 @@ components:
         status:
           type: string
           description: the status of the repair operation in RBS
+        message:
+          type: string
+          description: an optional error message about the repair operation
   parameters:
     billingProjectActionPathParam:
       name: action

@@ -1093,7 +1093,7 @@ case class ManagedGroupAccessInstructions(groupName: String, instructions: Strin
 
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
-case class RepairWorkspaceResponse(googleProjectId: String, status: String)
+case class RepairWorkspaceResponse(googleProjectId: String, status: String, message: Option[String])
 
 case class BucketMetricsResponse(
   metrics: Seq[BucketMetric]
@@ -1393,7 +1393,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceStatusFormat: RootJsonFormat[WorkspaceStatus] = jsonFormat2(WorkspaceStatus)
 
-  implicit val RepairWorkspaceResponseFormat: RootJsonFormat[RepairWorkspaceResponse] = jsonFormat2(RepairWorkspaceResponse)
+  implicit val RepairWorkspaceResponseFormat: RootJsonFormat[RepairWorkspaceResponse] = jsonFormat3(
+    RepairWorkspaceResponse
+  )
 
   implicit val BucketMetricsFormat: RootJsonFormat[BucketMetric] = jsonFormat3(BucketMetric)
 

@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.buffer.model.JobModel
 import bio.terra.buffer.model.JobModel.JobStatusEnum
+import bio.terra.common.exception.InternalServerErrorException
 import bio.terra.policy.model.{TpsPaoGetResult, TpsPolicyInput, TpsPolicyInputs, TpsPolicyPair}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
@@ -3944,18 +3945,17 @@ class WorkspaceServiceSpec
       testData.workspace.googleProjectId,
       Map(
         "roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:fake-email@test.firecloud.org"),
-        "roles/resourcemanager.projectIamAdmin" -> Set("serviceAccount:fake-email@test.firecloud.org"))
+        "roles/resourcemanager.projectIamAdmin" -> Set("serviceAccount:fake-email@test.firecloud.org")
+      )
     )
     verify(services.resourceBufferService).repairGoogleProject(testData.workspace.googleProjectId.value)
   }
 
   it should "fail to repair a workspace that doesn't exist" in withTestDataServices { services =>
     val nonExistentWorkspaceName = WorkspaceName("fake-namespace", "fake-workspace")
-
     val error = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.workspaceService.repairWorkspace(nonExistentWorkspaceName), Duration.Inf)
     }
-
     error.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
     error.errorReport.message should include("does not exist")
   }
@@ -3981,18 +3981,17 @@ class WorkspaceServiceSpec
 
   it should "fail to repair a workspace when the billing account is not found" in withTestDataServices { services =>
     val workspaceName = testData.workspace.toWorkspaceName
-    // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
     runAndWait {
       for {
-        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccount(
-          testData.billingProject.projectName,
-          billingAccount = None,
-          testData.userOwner.userSubjectId
+        _ <- slickDataSource.dataAccess.workspaceQuery.updateBilling(
+          testData.workspace.workspaceIdAsUUID,
+          testData.workspace.namespace,
+          None
         )
-        updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(
-          testData.billingProject.projectName
+        updatedBilling <- slickDataSource.dataAccess.workspaceQuery.findById(
+          testData.workspace.workspaceId, None
         )
-      } yield updatedBillingProject.value.billingAccount shouldBe empty
+      } yield updatedBilling.value.currentBillingAccountOnGoogleProject shouldBe empty
     }
 
     val error = intercept[RawlsExceptionWithErrorReport] {
@@ -4000,7 +3999,7 @@ class WorkspaceServiceSpec
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-    error.errorReport.message should include("No billing account found for billing project")
+    error.errorReport.message should include(s"No billing account found for ${testData.workspace.toWorkspaceName.toString}")
   }
 
   it should "fail to repair a workspace when the billing account is disabled" in withTestDataServices { services =>
@@ -4069,25 +4068,29 @@ class WorkspaceServiceSpec
     )
   }
 
-  it should "fail if the repair job in RBS failed" in withTestDataServices { services =>
+  it should "return failed workspace repair progress" in withTestDataServices { services =>
     val workspace = testData.workspace
     val jobModel = mock[JobModel]
+    val jobId = "fake-job-id"
+    when(jobModel.getId).thenReturn(jobId)
     val jobStatus = JobStatusEnum.FAILED
     when(jobModel.getJobStatus).thenReturn(jobStatus)
     when(
       services.resourceBufferService.getGoogleProjectRepairJobs(ArgumentMatchers.eq(workspace.googleProjectId.value))
-    )
-      .thenReturn(Future.successful(java.util.List.of(jobModel)))
+    ).thenReturn(Future.successful(java.util.List.of(jobModel)))
 
-    val error = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.getRepairWorkspaceProgress(workspace.toWorkspaceName), Duration.Inf)
+    val errorMessage = "Repair job failed for project " + workspace.googleProjectId.value
+    when(services.resourceBufferService.getJobDetails(jobId))
+      .thenReturn(Future.failed(new InternalServerErrorException(errorMessage)))
+
+    val expectedResponse =
+      RepairWorkspaceResponse(testData.workspace.googleProjectId.value, jobStatus.getValue, Option(errorMessage))
+    services.workspaceService.getRepairWorkspaceProgress(testData.workspace.toWorkspaceName).map { response =>
+      response shouldBe expectedResponse
     }
-
-    error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
-    error.errorReport.message should include(s"Repair job failed for project ${workspace.googleProjectId.value}")
   }
 
-  it should "return workspace repair progress" in withTestDataServices { services =>
+  it should "return successful workspace repair progress" in withTestDataServices { services =>
     val jobModel = mock[JobModel]
     val jobStatus = JobStatusEnum.SUCCEEDED
     when(jobModel.getJobStatus).thenReturn(jobStatus)
@@ -4098,7 +4101,7 @@ class WorkspaceServiceSpec
     )
       .thenReturn(Future.successful(java.util.List.of(jobModel)))
 
-    val expectedResponse = RepairWorkspaceResponse(testData.workspace.googleProjectId.value, jobStatus.getValue)
+    val expectedResponse = RepairWorkspaceResponse(testData.workspace.googleProjectId.value, jobStatus.getValue, None)
     services.workspaceService.getRepairWorkspaceProgress(testData.workspace.toWorkspaceName).map { response =>
       response shouldBe expectedResponse
     }

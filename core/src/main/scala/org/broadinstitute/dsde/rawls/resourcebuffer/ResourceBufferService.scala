@@ -18,5 +18,5 @@ trait ResourceBufferService {
 
   def getGoogleProjectRepairJobs(googleProjectId: String): Future[java.util.List[JobModel]]
 
-  def getJobDetails(googleProjectId: String): Future[Object]
+  def getJobDetails(jobId: String): Future[Object]
 }
