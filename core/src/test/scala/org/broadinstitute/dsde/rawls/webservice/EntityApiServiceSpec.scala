@@ -902,17 +902,17 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       assertResult(activeAttributeCount1 + 3)(activeAttributeCount2)
   }
 
-  // TODO CORE-632 Update this test to use quicksilver once the behavior matches legacy
-  it should "return 400 on entity delete where not all entities exist" in withLegacyTestDataApiServices { services =>
+  it should "delete what it can when not all entities exist" in withTestDataApiServices { services =>
     val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
 
-    val request = EntityDeleteRequest(testData.sample2.copy(name = "DNE1"), testData.sample2.copy(name = "DNE2"))
+    // in this delete request, one entity does exist; one does not
+    val request = EntityDeleteRequest(testData.sset4, testData.sset4.copy(name = "does-not-exist"))
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(request)) ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
-        assertResult(StatusCodes.BadRequest) {
+        assertResult(StatusCodes.NoContent) {
           status
         }
       }
@@ -920,10 +920,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
 
-    assertResult(entityCount1)(entityCount2)
-    assertResult(attributeCount1)(attributeCount2)
-    assertResult(activeEntityCount1)(activeEntityCount2)
-    assertResult(activeAttributeCount1)(activeAttributeCount2)
+    val deletedAttrCount = testData.sset4.attributes.size
+
+    assertResult(entityCount1 - 1)(entityCount2)
+    assertResult(attributeCount1 - deletedAttrCount)(attributeCount2)
+    assertResult(activeEntityCount1 - 1)(activeEntityCount2)
+    assertResult(activeAttributeCount1 - deletedAttrCount)(activeAttributeCount2)
   }
 
   it should "return 400 on entity delete where caller specified nothing to delete" in withTestDataApiServices {
