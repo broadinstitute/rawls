@@ -209,7 +209,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
    *
    * This response contains the full reference path from each entity in the original copy request to each soft conflict;
    * this path may include transitive references which are not themselves soft conflicts. If an entity is both a
-   * transitive member of a reference chain and a soft conflict.
+   * transitive member of a reference chain and a soft conflict, it will be represented twice in the response.
    *
    * Assume a source workspace with entity A which references B which references C.
    * Assume a destination workspace which already has B and C.
