@@ -2535,24 +2535,20 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   // TODO CORE-649 Switch to Quicksilver once the behavior is updated
-  it should "return 409 for soft conflicts multiple levels down" in withLegacyTestDataApiServices { services =>
-    val sourceWorkspace = WorkspaceName(legacyTestData.workspace.namespace, legacyTestData.workspace.name)
-    val newWorkspace = WorkspaceName(legacyTestData.workspace.namespace, "my-brand-new-workspace")
+  it should "return 409 for soft conflicts multiple levels down" in withTestDataApiServices { services =>
+    val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
 
     val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, Map.empty)
 
     val copyAliquot1 =
       EntityCopyDefinition(sourceWorkspace,
                            newWorkspace,
-                           legacyTestData.aliquot1.entityType,
+                           testData.aliquot1.entityType,
                            Seq(legacyTestData.aliquot1.name)
       )
     val copySample3 =
-      EntityCopyDefinition(sourceWorkspace,
-                           newWorkspace,
-                           legacyTestData.sample3.entityType,
-                           Seq(legacyTestData.sample3.name)
-      )
+      EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
 
     Post("/workspaces", httpJson(newWorkspaceCreate)) ~>
       sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
@@ -2571,7 +2567,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
         val copyResponse = responseAs[EntityCopyResponse]
 
-        assertSameElements(Seq(legacyTestData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
+        assertSameElements(Seq(testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
         assertSameElements(Seq.empty, copyResponse.hardConflicts)
         assertSameElements(Seq.empty, copyResponse.softConflicts)
       }
@@ -2589,13 +2585,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertSameElements(Seq.empty, copyResponse.hardConflicts)
         val expectedSoftConflicts = Seq(
           EntitySoftConflict(
-            legacyTestData.sample3.entityType,
-            legacyTestData.sample3.name,
+            testData.sample3.entityType,
+            testData.sample3.name,
             Seq(
               EntitySoftConflict(
-                legacyTestData.sample1.entityType,
-                legacyTestData.sample1.name,
-                Seq(EntitySoftConflict(legacyTestData.aliquot1.entityType, legacyTestData.aliquot1.name, Seq.empty))
+                testData.sample1.entityType,
+                testData.sample1.name,
+                Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty))
               )
             )
           )
@@ -2607,19 +2603,19 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   // TODO CORE-649 Switch to Quicksilver once the behavior is updated
-  it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withLegacyTestDataApiServices {
+  it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices {
     services =>
-      val sourceWorkspace = WorkspaceName(legacyTestData.workspace.namespace, legacyTestData.workspace.name)
+      val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
       val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace,
-                                                       legacyTestData.controlledWorkspace.toWorkspaceName,
-                                                       legacyTestData.sample1.entityType,
-                                                       Seq(legacyTestData.sample1.name)
+                                                       testData.controlledWorkspace.toWorkspaceName,
+                                                       testData.sample1.entityType,
+                                                       Seq(testData.sample1.name)
       )
       // this will cause a soft conflict because it references sample1
       val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace,
-                                                       legacyTestData.controlledWorkspace.toWorkspaceName,
-                                                       legacyTestData.sample3.entityType,
-                                                       Seq(legacyTestData.sample3.name)
+                                                       testData.controlledWorkspace.toWorkspaceName,
+                                                       testData.sample3.entityType,
+                                                       Seq(testData.sample3.name)
       )
 
       withStatsD {
@@ -2632,9 +2628,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
             val copyResponse = responseAs[EntityCopyResponse]
 
-            assertSameElements(Seq(legacyTestData.sample1, legacyTestData.aliquot1).map(_.toReference),
-                               copyResponse.entitiesCopied
-            )
+            assertSameElements(Seq(testData.sample1, testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
             assertSameElements(Seq.empty, copyResponse.hardConflicts)
             assertSameElements(Seq.empty, copyResponse.softConflicts)
           }
@@ -2648,14 +2642,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq.empty,
         Seq(
           EntitySoftConflict(
-            legacyTestData.sample3.entityType,
-            legacyTestData.sample3.name,
+            testData.sample3.entityType,
+            testData.sample3.name,
             Seq(
-              EntitySoftConflict(legacyTestData.sample1.entityType, legacyTestData.sample1.name, Seq.empty),
+              EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq.empty),
               EntitySoftConflict(
-                legacyTestData.sample1.entityType,
-                legacyTestData.sample1.name,
-                Seq(EntitySoftConflict(legacyTestData.aliquot1.entityType, legacyTestData.aliquot1.name, Seq.empty))
+                testData.sample1.entityType,
+                testData.sample1.name,
+                Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty))
               )
             )
           )
@@ -2701,7 +2695,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(EntityCopyResponse(Seq(legacyTestData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
+          assertResult(EntityCopyResponse(Seq(testData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
             responseAs[EntityCopyResponse]
           }
         }
