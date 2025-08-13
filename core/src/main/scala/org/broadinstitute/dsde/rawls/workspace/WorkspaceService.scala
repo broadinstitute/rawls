@@ -768,8 +768,8 @@ class WorkspaceService(
   def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
-        SamWorkspaceActions.own,
-        Some(WorkspaceAttributeSpecs(all = false))
+                                                       SamWorkspaceActions.own,
+                                                       Some(WorkspaceAttributeSpecs(all = false))
       )
       jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
         if (!jobList.isEmpty) {

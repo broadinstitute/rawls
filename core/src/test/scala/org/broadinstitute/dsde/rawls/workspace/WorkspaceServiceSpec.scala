@@ -3977,7 +3977,9 @@ class WorkspaceServiceSpec
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
-    error.errorReport.message should include(s"${workspace.toWorkspaceName} does not exist or you do not have permission to use it")
+    error.errorReport.message should include(
+      s"${workspace.toWorkspaceName} does not exist or you do not have permission to use it"
+    )
   }
 
   it should "fail to repair a workspace when the billing account is not found" in withTestDataServices { services =>
@@ -3990,7 +3992,8 @@ class WorkspaceServiceSpec
           None
         )
         updatedBilling <- slickDataSource.dataAccess.workspaceQuery.findById(
-          testData.workspace.workspaceId, None
+          testData.workspace.workspaceId,
+          None
         )
       } yield updatedBilling.value.currentBillingAccountOnGoogleProject shouldBe empty
     }
@@ -4000,7 +4003,9 @@ class WorkspaceServiceSpec
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-    error.errorReport.message should include(s"No billing account found for ${testData.workspace.toWorkspaceName.toString}")
+    error.errorReport.message should include(
+      s"No billing account found for ${testData.workspace.toWorkspaceName.toString}"
+    )
   }
 
   it should "fail to repair a workspace when the billing account is disabled" in withTestDataServices { services =>
