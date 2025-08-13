@@ -3960,23 +3960,24 @@ class WorkspaceServiceSpec
     error.errorReport.message should include("does not exist")
   }
 
-  it should "fail to repair a workspace when user is not a billing project owner" in withTestDataServices { services =>
+  it should "fail to repair a workspace when user is not a workspace owner" in withTestDataServices { services =>
     val workspaceName = testData.workspace.toWorkspaceName
 
     when(
-      services.samDAO.listUserRolesForResource(
-        SamResourceTypeNames.billingProject,
-        testData.billingProject.projectName.value,
-        services.workspaceService.ctx
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(testData.workspace.workspaceId),
+        any,
+        any
       )
-    ).thenReturn(Future.successful(Set()))
+    ).thenReturn(Future.successful(false))
 
     val error = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.workspaceService.repairWorkspace(workspaceName), Duration.Inf)
     }
 
-    error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
-    error.errorReport.message should include("Missing owner role on billing project")
+    error.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+    error.errorReport.message should include(s"${workspace.toWorkspaceName} does not exist or you do not have permission to use it")
   }
 
   it should "fail to repair a workspace when the billing account is not found" in withTestDataServices { services =>

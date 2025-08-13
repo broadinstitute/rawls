@@ -719,7 +719,7 @@ class WorkspaceService(
   def repairWorkspace(workspaceName: WorkspaceName): Future[Unit] =
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
-                                                       SamBillingProjectActions.own,
+                                                       SamWorkspaceActions.own,
                                                        Some(WorkspaceAttributeSpecs(all = false))
       )
       accountName = workspace.currentBillingAccountOnGoogleProject.getOrElse(
@@ -768,8 +768,8 @@ class WorkspaceService(
   def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
     for {
       workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
-                                                       SamBillingProjectActions.own,
-                                                       Some(WorkspaceAttributeSpecs(all = false))
+        SamWorkspaceActions.own,
+        Some(WorkspaceAttributeSpecs(all = false))
       )
       jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
         if (!jobList.isEmpty) {
