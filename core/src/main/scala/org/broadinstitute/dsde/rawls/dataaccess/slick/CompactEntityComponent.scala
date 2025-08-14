@@ -1173,16 +1173,20 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    */
   private def filteredAttributesColumn(entityQuery: EntityQuery) =
     entityQuery.fields.fields match {
-      case Some(fields) =>
-        val fieldSqls = fields.map { field =>
-          sql"$field, e.attributes -> ${slickAttributePath(field)}"
+      case Some(fields) if fields.nonEmpty =>
+        // For each field, create a JSON_OBJECT that contains the field if it exists;
+        // else create an empty JSON_OBJECT. These objects are all merged together below;
+        // this ensures that if a field is missing in the db, it will not be present in the result.
+        val fieldObjects = fields.map { field =>
+          sql"IF(JSON_CONTAINS_PATH(e.attributes, 'one', ${slickAttributePath(field)}), JSON_OBJECT($field, ${slickAttributePath(field)}), JSON_OBJECT())"
         }
         concatSqlActions(
           sql"""JSON_OBJECT(
                '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
                '#${CompactEntitySerialization.REFS_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.REFS_KEY}',
-               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_OBJECT(""",
-          reduceSqlActionsWithDelim(fieldSqls.toSeq, sql","),
+               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_MERGE_PATCH(
+                  JSON_OBJECT(),""",
+          reduceSqlActionsWithDelim(fieldObjects.toSeq, sql","),
           sql"))"
         )
       case _ => sql"attributes"
