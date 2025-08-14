@@ -1178,7 +1178,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         // else create an empty JSON_OBJECT. These objects are all merged together below;
         // this ensures that if a field is missing in the db, it will not be present in the result.
         val fieldObjects = fields.map { field =>
-          sql"IF(JSON_CONTAINS_PATH(e.attributes, 'one', ${slickAttributePath(field)}), JSON_OBJECT($field, ${slickAttributePath(field)}), JSON_OBJECT())"
+          sql"IF(JSON_CONTAINS_PATH(e.attributes, 'one', ${slickAttributePath(field)}), JSON_OBJECT($field, e.attributes -> ${slickAttributePath(field)}), JSON_OBJECT())"
         }
         concatSqlActions(
           sql"""JSON_OBJECT(
