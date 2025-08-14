@@ -1346,7 +1346,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-633 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 400 when batch upserting an entity with references that don't exist" in withTestDataApiServices {
     services =>
       val update1 = EntityUpdateDefinition(
@@ -1365,8 +1364,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.BadRequest) {
             status
           }
-          assertResult(2) {
-            responseAs[ErrorReport].causes.length
+          assertResult("Some entity references do not exist") {
+            responseAs[ErrorReport].message
           }
         }
   }
@@ -1438,7 +1437,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-633 Expected 400 Bad Request, but got 404 Not Found
   // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 400 when batch updating an entity that does not yet exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(
@@ -1452,13 +1450,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-        assertResult(1) {
-          responseAs[ErrorReport].causes.length
+        assertResult("Expected 1 entities to be updated, but found 0") {
+          responseAs[ErrorReport].message
         }
       }
   }
 
-  // TODO CORE-633 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 404 Not Found
   // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 400 when batch updating an entity that was deleted" in withTestDataApiServices { services =>
     val e = Entity("foo", "bar", Map.empty)
@@ -1495,8 +1492,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-        assertResult(1) {
-          responseAs[ErrorReport].causes.length
+        assertResult("Expected 1 entities to be updated, but found 0") {
+          responseAs[ErrorReport].message
         }
       }
   }

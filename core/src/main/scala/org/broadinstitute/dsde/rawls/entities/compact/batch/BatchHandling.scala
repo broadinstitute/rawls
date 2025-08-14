@@ -115,7 +115,7 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
             existingEntities.size != uniqueUpdateIdentifiers.size || (uniqueUpdateIdentifiers diff actualPointers).nonEmpty
           )
             throw new EntityNotFoundException(
-              s"expected ${uniqueUpdateIdentifiers.size} entities to be updated, but found ${existingEntities.size}",
+              s"Expected ${uniqueUpdateIdentifiers.size} entities to be updated, but found ${existingEntities.size}",
               code = StatusCodes.BadRequest
             )
         }
@@ -192,11 +192,8 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
       if (updates.isEmpty) {
         // end of updates.
         // now that everything has been applied, collect and handle any errors.
-        val failures = accum.collect { case Failure(ex) =>
-          ErrorReport(ex)
-        }
+        val failures = accum.collect { case Failure(ex) => ErrorReport(ex) }
         if (failures.nonEmpty) {
-          logger.warn(s"**************** ${failures.size} failures; throwing")
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", failures)
           )
