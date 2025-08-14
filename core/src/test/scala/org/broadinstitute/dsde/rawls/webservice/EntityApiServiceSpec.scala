@@ -1145,7 +1145,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assert(newId != id3)
   }
 
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices {
     services =>
       val update1 =
@@ -1416,7 +1415,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 400 when batch updating an entity with invalid update operations" in withTestDataApiServices {
     services =>
       val update1 =
@@ -2527,7 +2525,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
   it should "return 409 for soft conflicts multiple levels down" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
@@ -2595,7 +2592,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
   it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices {
     services =>
       val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
@@ -3045,7 +3041,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-635 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 200 OK on entity query for unknown sort field" in withPaginationTestDataApiServices { services =>
     Get(
       s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf"
