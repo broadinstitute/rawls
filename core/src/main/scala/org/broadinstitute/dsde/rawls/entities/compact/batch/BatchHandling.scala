@@ -1,9 +1,11 @@
 package org.broadinstitute.dsde.rawls.entities.compact.batch
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   RawlsConcurrentModificationException,
   ReadWriteAction,
@@ -17,12 +19,13 @@ import org.broadinstitute.dsde.rawls.entities.compact.{
 }
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, EntityReferenceNotFoundException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeName, Entity, EntityPointer, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, Entity, EntityPointer, ErrorReport, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import slick.dbio.DBIO
 
 import scala.annotation.tailrec
 import scala.concurrent.Future
+import scala.util.{Failure, Success, Try}
 
 /**
   * Support for batchUpsert/batchUpdate; to be mixed in to CompactEntityProvider
@@ -112,7 +115,8 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
             existingEntities.size != uniqueUpdateIdentifiers.size || (uniqueUpdateIdentifiers diff actualPointers).nonEmpty
           )
             throw new EntityNotFoundException(
-              s"expected ${uniqueUpdateIdentifiers.size} entities to be updated, but found ${existingEntities.size}"
+              s"expected ${uniqueUpdateIdentifiers.size} entities to be updated, but found ${existingEntities.size}",
+              code = StatusCodes.BadRequest
             )
         }
 
@@ -183,17 +187,21 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
     @tailrec
     def applyOne(updates: Seq[EntityUpdateDefinition],
                  existingEntitiesByIdentifier: Map[EntityPointer, Entity],
-                 accum: Seq[Entity]
-    ): Seq[Entity] =
+                 accum: Seq[Try[Entity]]
+    ): Seq[Try[Entity]] =
       if (updates.isEmpty) {
         // end of updates.
-        // now that everything has been applied, de-duplicate the entities.
-        // If the same entity appears multiple times in our update, take the last one.
+        // now that everything has been applied, collect and handle any errors.
+        val failures = accum.collect { case Failure(ex) =>
+          ErrorReport(ex)
+        }
+        if (failures.nonEmpty) {
+          logger.warn(s"**************** ${failures.size} failures; throwing")
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", failures)
+          )
+        }
         accum
-          .groupBy(_.toPointer)
-          .values
-          .map(_.last)
-          .toSeq
       } else {
         val thisUpdate = updates.head
 
@@ -207,19 +215,34 @@ trait BatchHandling extends LazyLogging with AttributeSupport {
             Entity(thisUpdate.name, thisUpdate.entityType, Map())
           )
 
-        val updatedEntity = applyOperationsToEntity(thisBaseEntity, thisUpdate.operations)
+        val updatedEntityTrial = Try(applyOperationsToEntity(thisBaseEntity, thisUpdate.operations))
 
-        // If the entity has not changed and already exists, we can skip it.
-        val newAccum = if (isPreExisting && thisBaseEntity == updatedEntity) {
-          accum
-        } else {
-          accum :+ updatedEntity
+        updatedEntityTrial match {
+          case Failure(_) =>
+            applyOne(updates.tail, existingEntitiesByIdentifier, accum :+ updatedEntityTrial)
+          case Success(updatedEntity) =>
+            // If the entity has not changed and already exists, we can skip it.
+            val newAccum = if (isPreExisting && thisBaseEntity == updatedEntity) {
+              accum
+            } else {
+              accum :+ updatedEntityTrial
+            }
+            applyOne(updates.tail, existingEntitiesByIdentifier + (updatedEntity.toPointer -> updatedEntity), newAccum)
         }
-
-        applyOne(updates.tail, existingEntitiesByIdentifier + (updatedEntity.toPointer -> updatedEntity), newAccum)
       }
 
-    applyOne(updates, existingEntitiesByIdentifier, Seq())
+    // applyOne() will throw on invalid updates; if we get a result back from it we can assume
+    // that all updates were valid and applied successfully.
+    val trials = applyOne(updates, existingEntitiesByIdentifier, Seq())
+
+    // De-duplicate the entities.
+    // If the same entity appears multiple times in our update, take the last one.
+    trials
+      .map(_.get)
+      .groupBy(_.toPointer)
+      .values
+      .map(_.last)
+      .toSeq
 
   }
 
