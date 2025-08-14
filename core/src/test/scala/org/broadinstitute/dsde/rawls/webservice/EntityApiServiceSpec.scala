@@ -4004,7 +4004,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   // *********** START entityQuery field-selection tests
 
   // creates 30 entities, in groups of 10; each group has different attributes, with some overlap.
-  class FieldSelectionTestData(legacy: Boolean = false) extends TestData {
+  class FieldSelectionTestData() extends TestData {
     val userOwner = RawlsUser(
       UserInfo(RawlsUserEmail("owner-access"),
                OAuth2BearerToken("token"),
@@ -4050,25 +4050,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        if (legacy) { entityQuery.save(workspace, entities) }
-        else {
-          compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
-        }
+        compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
       )
     }
   }
 
   val fieldSelectionTestData = new FieldSelectionTestData()
-  val legacyFieldSelectionTestData = new FieldSelectionTestData(true)
 
   def withFieldSelectionTestDataApiServices[T](testCode: TestApiService => T): T =
     withCustomTestDatabase(fieldSelectionTestData) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
-    }
-
-  def withLegacyFieldSelectionTestDataApiServices[T](testCode: TestApiService => T): T =
-    withCustomTestDatabase(legacyFieldSelectionTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true)(testCode)
     }
 
   val fieldSelectionApiPath =
@@ -4203,8 +4194,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return no attributes if requested field exists, but not in this page of results" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return no attributes if requested field exists, but not in this page of results" in withFieldSelectionTestDataApiServices {
     services =>
       // get the first page of results, but request a field from the second page
       Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=violet") ~>
@@ -4216,8 +4206,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return no attributes if unrecognized field names in parameter" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return no attributes if unrecognized field names in parameter" in withFieldSelectionTestDataApiServices {
     services =>
       // request a totally nonexistent field
       Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=nonexistent") ~>
@@ -4229,8 +4218,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return requested fields in conjunction with sort and filter" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return requested fields in conjunction with sort and filter" in withFieldSelectionTestDataApiServices {
     services =>
       // request all 30 results, but use a filter term that should only return the third page.
       // request fields from all pages, but expect only the third page's fields back.
@@ -4246,8 +4234,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return no attributes if field list is empty, i.e. 'fields='" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return no attributes if field list is empty, i.e. 'fields='" in withFieldSelectionTestDataApiServices {
     services =>
       // query for all entities
       Get(s"$fieldSelectionApiPath?pageSize=${fieldSelectionTestData.entities.size}&fields=") ~>
