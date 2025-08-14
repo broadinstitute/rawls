@@ -3361,11 +3361,9 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     val actual = runAndWait(testQuery(entityType, entityQuery))
 
     actual should contain theSameElementsAs List(
-      entity1.copy(attributes = Map(desiredColumnAttr1 -> AttributeString("bar"), desiredColumnAttr2 -> AttributeNull)),
+      entity1.copy(attributes = Map(desiredColumnAttr1 -> AttributeString("bar"))),
       entity2.copy(attributes =
-        Map(desiredColumnAttr1 -> AttributeNull,
-            desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux")))
-        )
+        Map(desiredColumnAttr2 -> AttributeValueList(Seq(AttributeString("baz"), AttributeString("qux"))))
       )
     )
   }
