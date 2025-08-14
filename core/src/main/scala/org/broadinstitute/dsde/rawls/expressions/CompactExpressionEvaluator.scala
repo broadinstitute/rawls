@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{QueryTiming, ReadAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
   EntityName,
   ExpressionAndResult,
@@ -42,7 +42,9 @@ case class QueryPlan(
   expressionMappings: Map[String, Set[String]] // expression -> attributes it needs from this query
 )
 
-class CompactExpressionEvaluator(repository: CompactEntityRepository) extends ExpressionEvaluationSupport {
+class CompactExpressionEvaluator(repository: CompactEntityRepository)
+    extends ExpressionEvaluationSupport
+    with QueryTiming {
 
   /**
    * Evaluates a single expression against a specific entity and returns the resulting attribute values.
@@ -426,7 +428,13 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             )
         }
       } else {
-        repository.queries.queryRelatedRecordsWithRelationChain(workspaceId, entityType, entityName, plan.relationChain)
+        withTiming("queryRelatedRecordsWithRelationChain") {
+          repository.queries.queryRelatedRecordsWithRelationChain(workspaceId,
+                                                                  entityType,
+                                                                  entityName,
+                                                                  plan.relationChain
+          )
+        }
       }
 
     queryAction.map { entityRecords =>
