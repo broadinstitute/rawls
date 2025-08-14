@@ -1145,9 +1145,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assert(newId != id3)
   }
 
-  // TODO CORE-633 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch upserting an entity with invalid update operations" in withLegacyTestDataApiServices {
+  it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices {
     services =>
       val update1 =
         EntityUpdateDefinition(testData.sample1.name,
@@ -1347,8 +1345,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-633 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch upserting an entity with references that don't exist" in withLegacyTestDataApiServices {
+  it should "return 400 when batch upserting an entity with references that don't exist" in withTestDataApiServices {
     services =>
       val update1 = EntityUpdateDefinition(
         testData.sample1.name,
@@ -1366,14 +1363,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.BadRequest) {
             status
           }
-          assertResult(2) {
-            responseAs[ErrorReport].causes.length
+          assertResult("Some entity references do not exist") {
+            responseAs[ErrorReport].message
           }
         }
   }
 
-  // TODO CORE-633 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 403 when batch upserting an entity with invalid-namespace attributes" in withLegacyTestDataApiServices {
+  it should "return 403 when batch upserting an entity with invalid-namespace attributes" in withTestDataApiServices {
     services =>
       val invalidAttrNamespace = "invalid"
 
@@ -1419,9 +1415,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-633 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch updating an entity with invalid update operations" in withLegacyTestDataApiServices {
+  it should "return 400 when batch updating an entity with invalid update operations" in withTestDataApiServices {
     services =>
       val update1 =
         EntityUpdateDefinition(testData.sample1.name,
@@ -1440,30 +1434,25 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-633 Expected 400 Bad Request, but got 404 Not Found
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch updating an entity that does not yet exist" in withLegacyTestDataApiServices {
-    services =>
-      val update1 = EntityUpdateDefinition(
-        "superDuperNewSample",
-        "Samples",
-        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))
-      )
-      Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
-        sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
-          assertResult(1) {
-            responseAs[ErrorReport].causes.length
-          }
+  it should "return 400 when batch updating an entity that does not yet exist" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(
+      "superDuperNewSample",
+      "Samples",
+      Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))
+    )
+    Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
+      sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
+        assertResult("Expected 1 entities to be updated, but found 0") {
+          responseAs[ErrorReport].message
+        }
+      }
   }
 
-  // TODO CORE-633 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 404 Not Found
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch updating an entity that was deleted" in withLegacyTestDataApiServices { services =>
+  it should "return 400 when batch updating an entity that was deleted" in withTestDataApiServices { services =>
     val e = Entity("foo", "bar", Map.empty)
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
@@ -1498,8 +1487,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-        assertResult(1) {
-          responseAs[ErrorReport].causes.length
+        assertResult("Expected 1 entities to be updated, but found 0") {
+          responseAs[ErrorReport].message
         }
       }
   }
@@ -2536,7 +2525,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
   it should "return 409 for soft conflicts multiple levels down" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
@@ -2604,7 +2592,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
   it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices {
     services =>
       val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
@@ -3054,7 +3041,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-635 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 200 OK on entity query for unknown sort field" in withPaginationTestDataApiServices { services =>
     Get(
       s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf"
