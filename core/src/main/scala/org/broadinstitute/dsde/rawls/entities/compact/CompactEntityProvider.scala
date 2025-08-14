@@ -767,6 +767,12 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
             case None            => throw new EntityNotFoundException()
           }
         }
+      } recover {
+        // batchUpdateEntities throws a 400 BadRequest if the entities it is updating do not exist.
+        // however, for this updateEntity method, which only updates one entity, we want to throw a 404 NotFound instead.
+        // So, look for a thrown EntityNotFoundException (which will have code=400) and re-throw it with its default code=404.
+        case _: EntityNotFoundException =>
+          throw new EntityNotFoundException("Requested entity does not exist in this workspace.")
       }
     }
 
