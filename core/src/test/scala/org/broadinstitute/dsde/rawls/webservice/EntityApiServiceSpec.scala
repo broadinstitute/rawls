@@ -1370,7 +1370,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-633 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 403 when batch upserting an entity with invalid-namespace attributes" in withTestDataApiServices {
     services =>
       val invalidAttrNamespace = "invalid"
@@ -1437,7 +1436,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 400 when batch updating an entity that does not yet exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(
       "superDuperNewSample",
@@ -1456,7 +1454,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 400 when batch updating an entity that was deleted" in withTestDataApiServices { services =>
     val e = Entity("foo", "bar", Map.empty)
 
