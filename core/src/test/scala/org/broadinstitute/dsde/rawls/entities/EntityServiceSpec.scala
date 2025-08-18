@@ -121,7 +121,7 @@ class EntityServiceSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser, useLegacy: Boolean = false)(implicit
+  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
     val executionContext: ExecutionContext
   ) extends EntityApiService
       with MockUserInfoDirectivesWithUser {
@@ -153,7 +153,7 @@ class EntityServiceSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        if (useLegacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
+        spyWorkspaceSettingRepository,
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -167,15 +167,10 @@ class EntityServiceSpec
       withServices(dataSource, testData.userOwner)(testCode)
     }
 
-  def withLegacyTestDataServices[T](testCode: TestApiService => T): T =
-    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
-      withServices(dataSource, legacyTestData.userOwner, true)(testCode)
-    }
-
-  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser, useLegacy: Boolean = false)(
+  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(
     testCode: (TestApiService) => T
   ) = {
-    val apiService = new TestApiService(dataSource, user, useLegacy)
+    val apiService = new TestApiService(dataSource, user)
     testCode(apiService)
   }
 
