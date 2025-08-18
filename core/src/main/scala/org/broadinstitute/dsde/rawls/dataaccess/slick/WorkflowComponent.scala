@@ -38,7 +38,11 @@ case class WorkflowMessageRecord(workflowId: Long, message: String)
 case class WorkflowId(id: Long)
 
 trait WorkflowComponent {
-  this: DriverComponent with EntityComponent with SubmissionComponent with AttributeComponent =>
+  this: DriverComponent
+    with CompactEntityComponent
+    with EntityComponent
+    with SubmissionComponent
+    with AttributeComponent =>
 
   import driver.api._
 
@@ -126,9 +130,9 @@ trait WorkflowComponent {
     )(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
       def insertWorkflowRecs(submissionId: UUID,
                              workflows: Seq[Workflow],
-                             localEntityRecs: Seq[EntityRecord]
+                             localEntityRecs: Seq[CompactEntityRefRecord]
       ): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
-        val localEntityRecsMap = localEntityRecs.map(e => e.toReference -> e.id).toMap
+        val localEntityRecsMap = localEntityRecs.map(e => e.toAttributeEntityReference -> e.id).toMap
         val recsToInsert = workflows.map { workflow =>
           val entityId = workflow.workflowEntity.flatMap(localEntityRecsMap.get)
           // if entity does not exist locally (i.e. we don't have an id) then workflowEntity must be external
@@ -240,7 +244,9 @@ trait WorkflowComponent {
             DBIO.successful(Seq.empty)
           case None =>
             // externalEntityInfo does not exist: lookup local entities
-            entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, workflows.flatMap(_.workflowEntity).toSet)
+            compactEntityQuery.getEntityRefs(workspaceContext.workspaceIdAsUUID,
+                                             workflows.flatMap(_.workflowEntity).map(_.toPointer).toSet
+            )
         }
 
       for {

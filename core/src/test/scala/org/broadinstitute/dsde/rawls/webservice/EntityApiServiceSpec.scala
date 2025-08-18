@@ -34,12 +34,8 @@ import scala.util.Random
  */
 class EntityApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource,
-                            gcsDAO: MockGoogleServicesDAO,
-                            gpsDAO: MockGooglePubSubDAO,
-                            legacy: Boolean = false
-  )(implicit
-    override val executionContext: ExecutionContext
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
+    implicit override val executionContext: ExecutionContext
   ) extends ApiServices
       with MockUserInfoDirectives {
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
@@ -53,7 +49,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       )
     override val entityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      if (legacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
+      spyWorkspaceSettingRepository,
       testConf.getBoolean("entityStatisticsCache.enabled"),
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
@@ -158,8 +154,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Future.successful(authDomains.getOrElse((resourceTypeName, resourceId), Set.empty).toSeq)
   }
 
-  def withApiServices[T](dataSource: SlickDataSource, legacy: Boolean = false)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, legacy)
+  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
+    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try
       testCode(apiService)
     finally
@@ -189,11 +185,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   def withTestDataApiServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
-    }
-
-  def withLegacyTestDataApiServices[T](testCode: TestApiService => T): T =
-    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true)(testCode)
     }
 
   def withEmptyDatabaseApiServicesForAuthDomains[T](testCode: TestApiServiceForAuthDomains => T): T =
@@ -902,17 +893,17 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       assertResult(activeAttributeCount1 + 3)(activeAttributeCount2)
   }
 
-  // TODO CORE-632 Update this test to use quicksilver once the behavior matches legacy
-  it should "return 400 on entity delete where not all entities exist" in withLegacyTestDataApiServices { services =>
+  it should "delete what it can when not all entities exist" in withTestDataApiServices { services =>
     val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
 
-    val request = EntityDeleteRequest(testData.sample2.copy(name = "DNE1"), testData.sample2.copy(name = "DNE2"))
+    // in this delete request, one entity does exist; one does not
+    val request = EntityDeleteRequest(testData.sset4, testData.sset4.copy(name = "does-not-exist"))
 
     Post(s"${testData.workspace.path}/entities/delete", httpJson(request)) ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
       check {
-        assertResult(StatusCodes.BadRequest) {
+        assertResult(StatusCodes.NoContent) {
           status
         }
       }
@@ -920,10 +911,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
 
-    assertResult(entityCount1)(entityCount2)
-    assertResult(attributeCount1)(attributeCount2)
-    assertResult(activeEntityCount1)(activeEntityCount2)
-    assertResult(activeAttributeCount1)(activeAttributeCount2)
+    val deletedAttrCount = testData.sset4.attributes.size
+
+    assertResult(entityCount1 - 1)(entityCount2)
+    assertResult(attributeCount1 - deletedAttrCount)(attributeCount2)
+    assertResult(activeEntityCount1 - 1)(activeEntityCount2)
+    assertResult(activeAttributeCount1 - deletedAttrCount)(activeAttributeCount2)
   }
 
   it should "return 400 on entity delete where caller specified nothing to delete" in withTestDataApiServices {
@@ -1143,9 +1136,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assert(newId != id3)
   }
 
-  // TODO CORE-633 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch upserting an entity with invalid update operations" in withLegacyTestDataApiServices {
+  it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices {
     services =>
       val update1 =
         EntityUpdateDefinition(testData.sample1.name,
@@ -1345,8 +1336,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-633 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch upserting an entity with references that don't exist" in withLegacyTestDataApiServices {
+  it should "return 400 when batch upserting an entity with references that don't exist" in withTestDataApiServices {
     services =>
       val update1 = EntityUpdateDefinition(
         testData.sample1.name,
@@ -1364,14 +1354,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.BadRequest) {
             status
           }
-          assertResult(2) {
-            responseAs[ErrorReport].causes.length
+          assertResult("Some entity references do not exist") {
+            responseAs[ErrorReport].message
           }
         }
   }
 
-  // TODO CORE-633 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 403 when batch upserting an entity with invalid-namespace attributes" in withLegacyTestDataApiServices {
+  it should "return 403 when batch upserting an entity with invalid-namespace attributes" in withTestDataApiServices {
     services =>
       val invalidAttrNamespace = "invalid"
 
@@ -1417,9 +1406,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-633 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch updating an entity with invalid update operations" in withLegacyTestDataApiServices {
+  it should "return 400 when batch updating an entity with invalid update operations" in withTestDataApiServices {
     services =>
       val update1 =
         EntityUpdateDefinition(testData.sample1.name,
@@ -1438,30 +1425,25 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-633 Expected 400 Bad Request, but got 404 Not Found
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch updating an entity that does not yet exist" in withLegacyTestDataApiServices {
-    services =>
-      val update1 = EntityUpdateDefinition(
-        "superDuperNewSample",
-        "Samples",
-        Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))
-      )
-      Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
-        sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
-          assertResult(1) {
-            responseAs[ErrorReport].causes.length
-          }
+  it should "return 400 when batch updating an entity that does not yet exist" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(
+      "superDuperNewSample",
+      "Samples",
+      Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))
+    )
+    Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
+      sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
+        assertResult("Expected 1 entities to be updated, but found 0") {
+          responseAs[ErrorReport].message
+        }
+      }
   }
 
-  // TODO CORE-633 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 404 Not Found
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 when batch updating an entity that was deleted" in withLegacyTestDataApiServices { services =>
+  it should "return 400 when batch updating an entity that was deleted" in withTestDataApiServices { services =>
     val e = Entity("foo", "bar", Map.empty)
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
@@ -1496,8 +1478,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-        assertResult(1) {
-          responseAs[ErrorReport].causes.length
+        assertResult("Expected 1 entities to be updated, but found 0") {
+          responseAs[ErrorReport].message
         }
       }
   }
@@ -1874,9 +1856,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-634 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 on remove from an attribute that is not a list" in withLegacyTestDataApiServices { services =>
+  it should "return 400 on remove from an attribute that is not a list" in withTestDataApiServices { services =>
     Patch(
       testData.sample2.path(testData.workspace),
       httpJson(
@@ -1891,9 +1871,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-634 Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 on remove from list attribute that does not exist" in withLegacyTestDataApiServices { services =>
+  it should "return 400 on remove from list attribute that does not exist" in withTestDataApiServices { services =>
     Patch(
       testData.sample2.path(testData.workspace),
       httpJson(
@@ -1908,9 +1886,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-634 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 on add to list attribute that is not a list" in withLegacyTestDataApiServices { services =>
+  it should "return 400 on add to list attribute that is not a list" in withTestDataApiServices { services =>
     Patch(
       testData.sample1.path(testData.workspace),
       httpJson(
@@ -2534,25 +2510,20 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
-  it should "return 409 for soft conflicts multiple levels down" in withLegacyTestDataApiServices { services =>
-    val sourceWorkspace = WorkspaceName(legacyTestData.workspace.namespace, legacyTestData.workspace.name)
-    val newWorkspace = WorkspaceName(legacyTestData.workspace.namespace, "my-brand-new-workspace")
+  it should "return 409 for soft conflicts multiple levels down" in withTestDataApiServices { services =>
+    val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
 
     val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, Map.empty)
 
     val copyAliquot1 =
       EntityCopyDefinition(sourceWorkspace,
                            newWorkspace,
-                           legacyTestData.aliquot1.entityType,
+                           testData.aliquot1.entityType,
                            Seq(legacyTestData.aliquot1.name)
       )
     val copySample3 =
-      EntityCopyDefinition(sourceWorkspace,
-                           newWorkspace,
-                           legacyTestData.sample3.entityType,
-                           Seq(legacyTestData.sample3.name)
-      )
+      EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
 
     Post("/workspaces", httpJson(newWorkspaceCreate)) ~>
       sealRoute(services.workspaceRoutes(userInfo = userInfo)) ~>
@@ -2571,7 +2542,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
         val copyResponse = responseAs[EntityCopyResponse]
 
-        assertSameElements(Seq(legacyTestData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
+        assertSameElements(Seq(testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
         assertSameElements(Seq.empty, copyResponse.hardConflicts)
         assertSameElements(Seq.empty, copyResponse.softConflicts)
       }
@@ -2589,13 +2560,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertSameElements(Seq.empty, copyResponse.hardConflicts)
         val expectedSoftConflicts = Seq(
           EntitySoftConflict(
-            legacyTestData.sample3.entityType,
-            legacyTestData.sample3.name,
+            testData.sample3.entityType,
+            testData.sample3.name,
             Seq(
               EntitySoftConflict(
-                legacyTestData.sample1.entityType,
-                legacyTestData.sample1.name,
-                Seq(EntitySoftConflict(legacyTestData.aliquot1.entityType, legacyTestData.aliquot1.name, Seq.empty))
+                testData.sample1.entityType,
+                testData.sample1.name,
+                Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty))
               )
             )
           )
@@ -2606,20 +2577,19 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-649 Switch to Quicksilver once the behavior is updated
-  it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withLegacyTestDataApiServices {
+  it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices {
     services =>
-      val sourceWorkspace = WorkspaceName(legacyTestData.workspace.namespace, legacyTestData.workspace.name)
+      val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
       val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace,
-                                                       legacyTestData.controlledWorkspace.toWorkspaceName,
-                                                       legacyTestData.sample1.entityType,
-                                                       Seq(legacyTestData.sample1.name)
+                                                       testData.controlledWorkspace.toWorkspaceName,
+                                                       testData.sample1.entityType,
+                                                       Seq(testData.sample1.name)
       )
       // this will cause a soft conflict because it references sample1
       val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace,
-                                                       legacyTestData.controlledWorkspace.toWorkspaceName,
-                                                       legacyTestData.sample3.entityType,
-                                                       Seq(legacyTestData.sample3.name)
+                                                       testData.controlledWorkspace.toWorkspaceName,
+                                                       testData.sample3.entityType,
+                                                       Seq(testData.sample3.name)
       )
 
       withStatsD {
@@ -2632,9 +2602,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
             val copyResponse = responseAs[EntityCopyResponse]
 
-            assertSameElements(Seq(legacyTestData.sample1, legacyTestData.aliquot1).map(_.toReference),
-                               copyResponse.entitiesCopied
-            )
+            assertSameElements(Seq(testData.sample1, testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
             assertSameElements(Seq.empty, copyResponse.hardConflicts)
             assertSameElements(Seq.empty, copyResponse.softConflicts)
           }
@@ -2648,14 +2616,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Seq.empty,
         Seq(
           EntitySoftConflict(
-            legacyTestData.sample3.entityType,
-            legacyTestData.sample3.name,
+            testData.sample3.entityType,
+            testData.sample3.name,
             Seq(
-              EntitySoftConflict(legacyTestData.sample1.entityType, legacyTestData.sample1.name, Seq.empty),
+              EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq.empty),
               EntitySoftConflict(
-                legacyTestData.sample1.entityType,
-                legacyTestData.sample1.name,
-                Seq(EntitySoftConflict(legacyTestData.aliquot1.entityType, legacyTestData.aliquot1.name, Seq.empty))
+                testData.sample1.entityType,
+                testData.sample1.name,
+                Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty))
               )
             )
           )
@@ -2701,7 +2669,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(EntityCopyResponse(Seq(legacyTestData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
+          assertResult(EntityCopyResponse(Seq(testData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
             responseAs[EntityCopyResponse]
           }
         }
@@ -3058,7 +3026,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-635 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
   it should "return 200 OK on entity query for unknown sort field" in withPaginationTestDataApiServices { services =>
     Get(
       s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf"
@@ -4008,7 +3975,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   // *********** START entityQuery field-selection tests
 
   // creates 30 entities, in groups of 10; each group has different attributes, with some overlap.
-  class FieldSelectionTestData(legacy: Boolean = false) extends TestData {
+  class FieldSelectionTestData() extends TestData {
     val userOwner = RawlsUser(
       UserInfo(RawlsUserEmail("owner-access"),
                OAuth2BearerToken("token"),
@@ -4054,25 +4021,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        if (legacy) { entityQuery.save(workspace, entities) }
-        else {
-          compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
-        }
+        compactEntityRepository.queries.batchWriteEntities(workspace.workspaceIdAsUUID, entities, true)
       )
     }
   }
 
   val fieldSelectionTestData = new FieldSelectionTestData()
-  val legacyFieldSelectionTestData = new FieldSelectionTestData(true)
 
   def withFieldSelectionTestDataApiServices[T](testCode: TestApiService => T): T =
     withCustomTestDatabase(fieldSelectionTestData) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
-    }
-
-  def withLegacyFieldSelectionTestDataApiServices[T](testCode: TestApiService => T): T =
-    withCustomTestDatabase(legacyFieldSelectionTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true)(testCode)
     }
 
   val fieldSelectionApiPath =
@@ -4207,8 +4165,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return no attributes if requested field exists, but not in this page of results" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return no attributes if requested field exists, but not in this page of results" in withFieldSelectionTestDataApiServices {
     services =>
       // get the first page of results, but request a field from the second page
       Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=violet") ~>
@@ -4220,8 +4177,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return no attributes if unrecognized field names in parameter" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return no attributes if unrecognized field names in parameter" in withFieldSelectionTestDataApiServices {
     services =>
       // request a totally nonexistent field
       Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=nonexistent") ~>
@@ -4233,8 +4189,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return requested fields in conjunction with sort and filter" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return requested fields in conjunction with sort and filter" in withFieldSelectionTestDataApiServices {
     services =>
       // request all 30 results, but use a filter term that should only return the third page.
       // request fields from all pages, but expect only the third page's fields back.
@@ -4250,8 +4205,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
   }
 
-  // TODO CORE-636 Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return no attributes if field list is empty, i.e. 'fields='" in withLegacyFieldSelectionTestDataApiServices {
+  it should "return no attributes if field list is empty, i.e. 'fields='" in withFieldSelectionTestDataApiServices {
     services =>
       // query for all entities
       Get(s"$fieldSelectionApiPath?pageSize=${fieldSelectionTestData.entities.size}&fields=") ~>
