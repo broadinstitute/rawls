@@ -1825,6 +1825,20 @@ class WorkspaceServiceSpec
 
   }
 
+  it should "enable Quicksilver for all new workspaces" in withTestDataServices { services =>
+    val workspaceRequest = WorkspaceRequest(testData.workspace.namespace, "quicksilverWs", Map.empty)
+
+    val newWs = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val actual = runAndWait(
+      workspaceSettingQuery.getAppliedSettingForWorkspaceByType(newWs.workspaceIdAsUUID,
+                                                                WorkspaceSettingTypes.CompactDataTables
+      )
+    )
+
+    actual should contain(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {

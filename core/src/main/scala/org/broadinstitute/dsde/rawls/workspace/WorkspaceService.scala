@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceIdAttribute, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -205,6 +205,27 @@ class WorkspaceService(
             )
           )
       }
+
+    /**
+     * Enable Quicksilver for a workspace by creating a CompactDataTables setting record.
+     * This bypasses WorkspaceSettingService and works directly with workspaceSettingsRepository to manipulate
+     * database rows. We do this because we don't want to trigger any of the Quicksilver migration logic
+     * when adding this setting.
+     *
+     * @param workspaceId UUID of workspace for which to enable Quicksilver
+     * @return number of settings applied; should always be 1.
+     */
+    def enableQuicksilver(workspaceId: UUID): Future[Int] = for {
+      _ <- workspaceSettingsRepository.createWorkspaceSettingsRecords(
+        workspaceId,
+        List(CompactDataTablesSetting(CompactDataTablesConfig(true))),
+        parentContext.userInfo.userSubjectId
+      )
+      numApplied <- workspaceSettingsRepository.markWorkspaceSettingApplied(workspaceId,
+                                                                            WorkspaceSettingTypes.CompactDataTables
+      )
+    } yield numApplied
+
     for {
       _ <- traceFutureWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
         withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
@@ -240,9 +261,13 @@ class WorkspaceService(
               )
               _ = createdWorkspaceCounter.inc()
             } yield newWorkspace,
-          TransactionIsolation.ReadCommitted
+          TransactionIsolation.ReadCommitted // read committed to avoid deadlocks on workspace attribute scratch table
         )
-      ) // read committed to avoid deadlocks on workspace attribute scratch table
+      )
+      // enable quicksilver for new workspaces
+      _ <- traceFutureWithParent("enableQuicksilverForWorkspace", parentContext)(_ =>
+        enableQuicksilver(workspace.workspaceIdAsUUID)
+      )
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext).syncFastPassesForUserInWorkspace(workspace)
       )
