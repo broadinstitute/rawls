@@ -34,12 +34,8 @@ import scala.util.Random
  */
 class EntityApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource,
-                            gcsDAO: MockGoogleServicesDAO,
-                            gpsDAO: MockGooglePubSubDAO,
-                            legacy: Boolean = false
-  )(implicit
-    override val executionContext: ExecutionContext
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
+    implicit override val executionContext: ExecutionContext
   ) extends ApiServices
       with MockUserInfoDirectives {
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
@@ -53,7 +49,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       )
     override val entityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      if (legacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
+      spyWorkspaceSettingRepository,
       testConf.getBoolean("entityStatisticsCache.enabled"),
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
@@ -158,8 +154,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Future.successful(authDomains.getOrElse((resourceTypeName, resourceId), Set.empty).toSeq)
   }
 
-  def withApiServices[T](dataSource: SlickDataSource, legacy: Boolean = false)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, legacy)
+  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
+    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try
       testCode(apiService)
     finally
@@ -189,11 +185,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   def withTestDataApiServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
-    }
-
-  def withLegacyTestDataApiServices[T](testCode: TestApiService => T): T =
-    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource, legacy = true)(testCode)
     }
 
   def withEmptyDatabaseApiServicesForAuthDomains[T](testCode: TestApiServiceForAuthDomains => T): T =
@@ -1865,9 +1856,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-634 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 on remove from an attribute that is not a list" in withLegacyTestDataApiServices { services =>
+  it should "return 400 on remove from an attribute that is not a list" in withTestDataApiServices { services =>
     Patch(
       testData.sample2.path(testData.workspace),
       httpJson(
@@ -1882,9 +1871,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-634 Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 on remove from list attribute that does not exist" in withLegacyTestDataApiServices { services =>
+  it should "return 400 on remove from list attribute that does not exist" in withTestDataApiServices { services =>
     Patch(
       testData.sample2.path(testData.workspace),
       httpJson(
@@ -1899,9 +1886,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO CORE-634 org.scalatest.exceptions.TestFailedException: Expected 400 Bad Request, but got 500 Internal Server Error
-  // Update quicksilver to have same behavior as legacy, then update test to use quicksilver
-  it should "return 400 on add to list attribute that is not a list" in withLegacyTestDataApiServices { services =>
+  it should "return 400 on add to list attribute that is not a list" in withTestDataApiServices { services =>
     Patch(
       testData.sample1.path(testData.workspace),
       httpJson(
