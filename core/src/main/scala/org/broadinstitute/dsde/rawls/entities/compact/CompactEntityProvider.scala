@@ -602,15 +602,15 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         newNameExists <- repository.queries.attributeExists(workspaceId, entityType, newName)
         _ = if (newNameExists)
           throw new AttributeException(
-            message = s"${AttributeName.toDelimitedName(newName)} already exists.",
-            code = StatusCodes.BadRequest
+            message = s"${AttributeName.toDelimitedName(newName)} already exists as an attribute name",
+            code = StatusCodes.Conflict
           )
         // does old name already exist? fail if it does not.
         oldNameExists <- repository.queries.attributeExists(workspaceId, entityType, oldName)
         _ = if (!oldNameExists)
           throw new AttributeException(
-            message = s"${AttributeName.toDelimitedName(oldName)} does not exist.",
-            code = StatusCodes.BadRequest
+            message = s"Can't find attribute name ${AttributeName.toDelimitedName(oldName)}",
+            code = StatusCodes.NotFound
           )
         // perform the rename
         numEntitiesAffected <- repository.queries.renameAttribute(workspaceId,

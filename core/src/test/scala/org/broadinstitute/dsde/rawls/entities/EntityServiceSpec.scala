@@ -429,21 +429,20 @@ class EntityServiceSpec
     }
   }
 
-  // TODO CORE-651 Update messaging behavior to be more specific, then change these tests to quicksilver
-  it should "fail to rename an attribute name to a name already in use" in withLegacyTestDataServices { services =>
+  it should "fail to rename an attribute name to a name already in use" in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
-    val ex = intercept[RawlsExceptionWithErrorReport] {
+    val ex = intercept[AttributeException] {
       Await.result(
-        services.entityService.renameAttribute(legacyTestData.wsName,
-                                               legacyTestData.pair1.entityType,
+        services.entityService.renameAttribute(testData.wsName,
+                                               testData.pair1.entityType,
                                                AttributeName.withDefaultNS("case"),
                                                AttributeRename(AttributeName.withDefaultNS("control"))
         ),
         waitDuration
       )
     }
-    ex.errorReport.message shouldBe "control already exists as an attribute name"
-    ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+    ex.message shouldBe "control already exists as an attribute name"
+    ex.code shouldBe StatusCodes.Conflict
   }
 
   it should "rename an attribute name as long as the selected name is not in use" in withTestDataServices { services =>
@@ -467,23 +466,22 @@ class EntityServiceSpec
     }
   }
 
-  // TODO CORE-651 Update messaging behavior to be more specific, then change these tests to quicksilver
-  it should "throw an error when trying to rename an attribute that does not exist" in withLegacyTestDataServices {
+  it should "throw an error when trying to rename an attribute that does not exist" in withTestDataServices {
     services =>
       val waitDuration = Duration(10, SECONDS)
-      val ex = intercept[RawlsExceptionWithErrorReport] {
+      val ex = intercept[AttributeException] {
         Await.result(
           services.entityService.renameAttribute(
-            legacyTestData.wsName,
-            legacyTestData.pair1.entityType,
+            testData.wsName,
+            testData.pair1.entityType,
             AttributeName.withDefaultNS("non-existent-attribute"),
             AttributeRename(AttributeName.withDefaultNS("any"))
           ),
           waitDuration
         )
       }
-      ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
-      ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+      ex.message shouldBe "Can't find attribute name non-existent-attribute"
+      ex.code shouldBe StatusCodes.NotFound
   }
 
   it should "do nothing when asked to delete zero entities" in withTestDataServices { services =>
