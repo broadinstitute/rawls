@@ -154,34 +154,7 @@ class WorkspaceAdminService(
   private[workspace] def recursivelyDeleteSamResource(resourceTypeName: SamResourceTypeName,
                                                       resourceId: String,
                                                       ctx: RawlsRequestContext
-  ): Future[Unit] =
-    for {
-      // Get all child resources, handle 403 and 404 errors by treating them as empty lists
-      // not having permission to list children is not an error, it means children are not allowed
-      // and can't have children if you don't exist QED
-      children <- samDAO
-        .listResourceChildren(resourceTypeName, resourceId, ctx)
-        .recover {
-          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.Forbidden) =>
-            logger.info(s"Received 403 when listing children of $resourceTypeName/$resourceId, treating as empty list")
-            Seq.empty
-          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-            logger.info(s"Received 404 when listing children of $resourceTypeName/$resourceId, treating as empty list")
-            Seq.empty
-        }
-
-      // Recursively delete each child resource
-      _ <- Future.traverse(children) { child =>
-        recursivelyDeleteSamResource(SamResourceTypeName(child.resourceTypeName), child.resourceId, ctx)
-      }
-
-      // Delete the resource itself
-      _ <- samDAO.deleteResource(resourceTypeName, resourceId, ctx).recover {
-        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-          logger.info(s"Received 404 when deleting $resourceTypeName/$resourceId, treating as no-op")
-      }
-      _ = logger.info(s"Successfully deleted SAM resource $resourceTypeName/$resourceId")
-    } yield ()
+  ): Future[Unit] = samDAO.recursiveDeleteResource(resourceTypeName, resourceId, ctx)(executionContext, logger)
 
   def getWorkspaceId(workspaceName: WorkspaceName): Future[Option[String]] =
     for {
