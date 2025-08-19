@@ -25,14 +25,18 @@ class CompactEvaluateVisitor extends TerraExpressionBaseVisitor[Seq[ExpressionLo
 
   override protected def defaultResult(): Seq[ExpressionLookup] = Seq.empty[ExpressionLookup]
 
-  override def visitEntityLookup(ctx: EntityLookupContext): Seq[ExpressionLookup] =
+  override def visitEntityLookup(ctx: EntityLookupContext): Seq[ExpressionLookup] = {
+    val attributeNameOption = Option(ctx.attributeName()).map { attrName =>
+      toDelimitedName(AntlrTerraExpressionParser.toAttributeName(attrName))
+    }
     Seq(
       ExpressionLookup(
         expression = ctx.getText,
         relations = ctx.relation().asScala.toList,
-        attributeName = Some(toDelimitedName(AntlrTerraExpressionParser.toAttributeName(ctx.attributeName())))
+        attributeName = attributeNameOption
       )
     )
+  }
 
   override def visitWorkspaceAttributeLookup(
     ctx: TerraExpressionParser.WorkspaceAttributeLookupContext
