@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
@@ -16,7 +18,12 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
+import org.broadinstitute.dsde.rawls.workspace.{
+  WorkspaceRepository,
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
+}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, spy, verify, when}
@@ -54,6 +61,27 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )(executionContext, system)
+
+    val settingService: RawlsRequestContext => WorkspaceSettingService =
+      ctx =>
+        new WorkspaceSettingService(
+          ctx,
+          spyWorkspaceSettingRepository,
+          new WorkspaceRepository(slickDataSource),
+          gcsDAO,
+          samDAO,
+          mock[GoogleStorageService[IO]],
+          entityServiceConstructor(ctx)
+        )(executionContext, global)
+
+    override val entityServiceConstructor: RawlsRequestContext => EntityService =
+      EntityService.constructor(slickDataSource,
+                                samDAO,
+                                workbenchMetricBaseName = "test",
+                                entityManager,
+                                1000,
+                                Some(settingService)
+      )
 
   }
   case class TestApiServiceForAuthDomains(dataSource: SlickDataSource,
