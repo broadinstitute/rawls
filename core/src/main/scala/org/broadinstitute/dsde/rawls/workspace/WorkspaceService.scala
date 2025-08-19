@@ -667,13 +667,17 @@ class WorkspaceService(
         gcsDAO.deleteGoogleProject(googleProjectId)
       )
       _ <- traceFutureWithParent("samDAO.deleteResource", parentContext)(_ =>
-        samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx).recover {
-          case regrets: RawlsExceptionWithErrorReport
-              if regrets.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-            logger.info(
-              s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
-            )
-        }
+        samDAO
+          .recursiveDeleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx)(executionContext,
+                                                                                                   logger
+          )
+          .recover {
+            case regrets: RawlsExceptionWithErrorReport
+                if regrets.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+              logger.info(
+                s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
+              )
+          }
       )
     } yield ()
   }
