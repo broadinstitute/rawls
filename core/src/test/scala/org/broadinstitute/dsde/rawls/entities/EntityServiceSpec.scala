@@ -121,7 +121,7 @@ class EntityServiceSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser, useLegacy: Boolean = false)(implicit
+  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
     val executionContext: ExecutionContext
   ) extends EntityApiService
       with MockUserInfoDirectivesWithUser {
@@ -153,7 +153,7 @@ class EntityServiceSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        if (useLegacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
+        spyWorkspaceSettingRepository,
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -167,15 +167,10 @@ class EntityServiceSpec
       withServices(dataSource, testData.userOwner)(testCode)
     }
 
-  def withLegacyTestDataServices[T](testCode: TestApiService => T): T =
-    withLegacyDefaultTestDatabase { dataSource: SlickDataSource =>
-      withServices(dataSource, legacyTestData.userOwner, true)(testCode)
-    }
-
-  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser, useLegacy: Boolean = false)(
+  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(
     testCode: (TestApiService) => T
   ) = {
-    val apiService = new TestApiService(dataSource, user, useLegacy)
+    val apiService = new TestApiService(dataSource, user)
     testCode(apiService)
   }
 
@@ -429,21 +424,20 @@ class EntityServiceSpec
     }
   }
 
-  // TODO CORE-651 Update messaging behavior to be more specific, then change these tests to quicksilver
-  it should "fail to rename an attribute name to a name already in use" in withLegacyTestDataServices { services =>
+  it should "fail to rename an attribute name to a name already in use" in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
-    val ex = intercept[RawlsExceptionWithErrorReport] {
+    val ex = intercept[AttributeException] {
       Await.result(
-        services.entityService.renameAttribute(legacyTestData.wsName,
-                                               legacyTestData.pair1.entityType,
+        services.entityService.renameAttribute(testData.wsName,
+                                               testData.pair1.entityType,
                                                AttributeName.withDefaultNS("case"),
                                                AttributeRename(AttributeName.withDefaultNS("control"))
         ),
         waitDuration
       )
     }
-    ex.errorReport.message shouldBe "control already exists as an attribute name"
-    ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+    ex.message shouldBe "control already exists as an attribute name"
+    ex.code shouldBe StatusCodes.Conflict
   }
 
   it should "rename an attribute name as long as the selected name is not in use" in withTestDataServices { services =>
@@ -467,23 +461,22 @@ class EntityServiceSpec
     }
   }
 
-  // TODO CORE-651 Update messaging behavior to be more specific, then change these tests to quicksilver
-  it should "throw an error when trying to rename an attribute that does not exist" in withLegacyTestDataServices {
+  it should "throw an error when trying to rename an attribute that does not exist" in withTestDataServices {
     services =>
       val waitDuration = Duration(10, SECONDS)
-      val ex = intercept[RawlsExceptionWithErrorReport] {
+      val ex = intercept[AttributeException] {
         Await.result(
           services.entityService.renameAttribute(
-            legacyTestData.wsName,
-            legacyTestData.pair1.entityType,
+            testData.wsName,
+            testData.pair1.entityType,
             AttributeName.withDefaultNS("non-existent-attribute"),
             AttributeRename(AttributeName.withDefaultNS("any"))
           ),
           waitDuration
         )
       }
-      ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
-      ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+      ex.message shouldBe "Can't find attribute name non-existent-attribute"
+      ex.code shouldBe StatusCodes.NotFound
   }
 
   it should "do nothing when asked to delete zero entities" in withTestDataServices { services =>
