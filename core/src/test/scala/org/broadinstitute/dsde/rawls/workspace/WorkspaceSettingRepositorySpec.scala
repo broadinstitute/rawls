@@ -11,8 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
   GcpLogBucketRetentionConfig,
-  SeparateSubmissionFinalOutputsConfig,
-  UseCromwellGcpBatchBackendConfig
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, GcpBucketSoftDelete}
 import org.broadinstitute.dsde.rawls.model.{
@@ -21,7 +20,6 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketSoftDeleteSetting,
   GcpLogBucketRetentionSetting,
   SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGcpBatchBackendSetting,
   Workspace,
   WorkspaceSettingTypes
 }
@@ -112,8 +110,7 @@ class WorkspaceSettingRepositorySpec
       GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(0)),
       GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
       GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(60)),
-      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
-      UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
+      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true))
     )
   }
     it should s"be able to get a ${workspaceSetting.getClass.getSimpleName}" in {

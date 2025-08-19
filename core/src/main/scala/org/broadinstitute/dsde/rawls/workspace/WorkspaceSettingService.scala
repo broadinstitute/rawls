@@ -27,7 +27,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   SamWorkspacePolicyNames,
   SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGcpBatchBackendSetting,
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
@@ -143,7 +142,6 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
               case _ => None
             }
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
-          case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
           case CompactDataTablesSetting(CompactDataTablesConfig(_))                           => None
         }
@@ -220,16 +218,13 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
-        // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting
+        // SeparateSubmissionFinalOutputsSetting and CompactDataTablesSetting
         // are not bucket settings, so we do not need to apply anything here
 
         case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
           applyCompactDataTablesSetting(WorkspaceName(workspace.namespace, workspace.name), enabled)
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
-          Future.successful(())
-
-        case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_)) =>
           Future.successful(())
       }
 

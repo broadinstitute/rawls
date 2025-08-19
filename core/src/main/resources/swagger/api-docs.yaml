@@ -5358,7 +5358,6 @@ components:
             - GcpBucketRequesterPays
             - GcpLogBucketRetention
             - SeparateSubmissionFinalOutputs
-            - UseCromwellGcpBatchBackend
             - PubliclyReadable
         config:
           description: The configuration of the workspace setting
@@ -5368,7 +5367,6 @@ components:
             - $ref: '#/components/schemas/WorkspaceSettingGcpBucketRequesterPaysConfig'
             - $ref: '#/components/schemas/WorkspaceSettingGcpLogBucketRetentionConfig'
             - $ref: '#/components/schemas/WorkspaceSettingSeparateSubmissionFinalOutputsConfig'
-            - $ref: '#/components/schemas/WorkspaceSettingUseCromwellGcpBatchBackendConfig'
             - $ref: '#/components/schemas/WorkspaceSettingPubliclyReadableConfig'
             - $ref: '#/components/schemas/WorkspaceSettingCompactDataTablesConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
@@ -5445,14 +5443,6 @@ components:
         enabled:
           type: boolean
           description: Whether submission final outputs should be separated from intermediate outputs
-    WorkspaceSettingUseCromwellGcpBatchBackendConfig:
-      required:
-        - enabled
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          description: Whether workflows submitted to Cromwell should be run using Cromwell's GCP Batch backend
     WorkspaceSettingPubliclyReadableConfig:
       required:
         - enabled
