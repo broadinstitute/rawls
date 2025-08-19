@@ -685,7 +685,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         WorkspaceSettingTypes.withName("gcpbucketlifecycle") shouldBe WorkspaceSettingTypes.GcpBucketLifecycle
         WorkspaceSettingTypes.withName("gcpbucketsoftdelete") shouldBe WorkspaceSettingTypes.GcpBucketSoftDelete
         WorkspaceSettingTypes.withName("gcpbucketrequesterpays") shouldBe WorkspaceSettingTypes.GcpBucketRequesterPays
-        WorkspaceSettingTypes.withName("ccplogbucketretention") shouldBe WorkspaceSettingTypes.GcpLogBucketRetention
+        WorkspaceSettingTypes.withName("gcplogbucketretention") shouldBe WorkspaceSettingTypes.GcpLogBucketRetention
         WorkspaceSettingTypes.withName(
           "separatesubmissionfinaloutputs"
         ) shouldBe WorkspaceSettingTypes.SeparateSubmissionFinalOutputs
