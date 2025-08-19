@@ -904,7 +904,7 @@ class CompactEntityProviderSpec
       Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
     }
 
-    exception.code shouldBe StatusCodes.BadRequest
+    exception.code shouldBe StatusCodes.Conflict
 
     // execution should short-circuit before executing a rename
     verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
@@ -930,7 +930,7 @@ class CompactEntityProviderSpec
       Await.result(provider.renameAttribute(entityType, oldName, AttributeRename(newName), testContext), atMost)
     }
 
-    exception.code shouldBe StatusCodes.BadRequest
+    exception.code shouldBe StatusCodes.NotFound
 
     // execution should short-circuit before executing a rename
     verify(mockQueries, never()).renameAttribute(any(), any(), any(), any())
