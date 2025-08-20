@@ -156,7 +156,8 @@ export GOOGLE_CLOUD_PROJECT=dsp-artifact-registry
 export GAR_LOCATION=us-central1
 export GAR_REPOSITORY_ID=libs-release-standard
 gcloud auth login <you>@broadinstitute.org
-core/src/bin/publishRelease.sh```
+core/src/bin/publishRelease.sh
+```
 
 You can view what is in the artifact registry here: 
 - releases: https://console.cloud.google.com/artifacts/maven/dsp-artifact-registry/us-central1/libs-release-standard

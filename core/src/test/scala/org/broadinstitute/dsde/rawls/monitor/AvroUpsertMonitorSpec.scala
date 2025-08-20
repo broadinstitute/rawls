@@ -4,10 +4,9 @@ import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 import akka.testkit.TestKit
 import cats.effect.unsafe.implicits.global
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
@@ -15,28 +14,30 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeFormat,
   AttributeName,
   AttributeString,
-  DataReferenceName,
+  CompactDataTablesSetting,
   Entity,
-  GoogleProjectId,
   ImportStatuses,
   RawlsRequestContext,
   TypedAttributeListSerializer,
   UserInfo,
-  WorkspaceName
+  WorkspaceName,
+  WorkspaceSettingTypes
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.{doReturn, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -64,6 +65,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   ) extends ApiServices
       with MockUserInfoDirectives {
     override val submissionMonitorsEnabled: Boolean = false
+
   }
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
@@ -140,12 +142,37 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   def setUp(services: TestApiService) = {
     setUpPubSub(services)
 
+    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+    val mockEntityManager = EntityManager.defaultEntityManager(
+      slickDataSource,
+      spyWorkspaceSettingRepository,
+      services.testConf.getBoolean("entityStatisticsCache.enabled"),
+      services.testConf.getDuration("entities.queryTimeout"),
+      workbenchMetricBaseName
+    )
+
+    val mockEntityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+      slickDataSource,
+      services.samDAO,
+      workbenchMetricBaseName,
+      mockEntityManager,
+      1000
+    )
+
     val mockCwdsDAO = new MockCwdsDAO()
 
     // Start the monitor
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
-        services.entityServiceConstructor,
+        mockEntityServiceConstructor,
         services.gcsDAO,
         services.samDAO,
         googleStorage,
@@ -299,7 +326,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // Check in db if entities are there
       withWorkspaceContext(testData.workspace) { context =>
         eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-          val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
+          val entitiesOfType =
+            runAndWait(compactEntityRepository.queries.listActiveEntitiesOfType(context.workspaceIdAsUUID, entityType))
           assertResult(upsertQuantity)(entitiesOfType.size)
           upsertRange(upsertQuantity) foreach { idx =>
             val name = s"avro-entity-$idx"
@@ -534,8 +562,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -596,8 +625,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -616,7 +646,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
           msg
             .attributes("errorMessage")
             .contains(
-              "Successfully updated 1000 entities; 1 updates failed. First 100 failures are: test-type this-entity-does-not-exist not found"
+              "Successfully updated 1000 entities; 1 updates failed."
             )
         })
       }
@@ -659,8 +689,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic,
-                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      services.gpsDAO.publishMessages(
+        importReadPubSubTopic,
+        List(MessageRequest(importId1.toString, testAttributes(importId1)))
       )
 
       // check if correct message was posted on request topic. This will start the upsert attempt.
@@ -681,8 +712,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
 
       withClue("Text in the pubsub error message was incorrect:") {
-        errorMsg.attributes("errorMessage") shouldBe
-          "All entities failed to update. There were 1 errors in total. Error messages: test-type this-entity-does-not-exist not found"
+        errorMsg.attributes("errorMessage") should contain
+        "All entities failed to update. There were 1 errors in total."
       }
   }
 

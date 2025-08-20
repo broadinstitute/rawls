@@ -310,15 +310,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
-      // Note: Usage of 'useBatchAsDefaultBackend' and 'highSecurityNetworkCromwellBackend' will be removed as part of
-      // https://broadworkbench.atlassian.net/browse/AN-518 when GCP Batch becomes the default backend.
-      useCromwellGcpBatchBackend: Boolean = currentSettings
-        .collectFirst { case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled }
-        .getOrElse(useBatchAsDefaultBackend)
-
-      cromwellSubmissionBackend =
-        if (useCromwellGcpBatchBackend) gcpBatchBackend else highSecurityNetworkCromwellBackend
-
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
         // We pass the submission root as the value for two options,
         // one for the PAPI Cromwell backend and one for the GCP Batch backend.
@@ -336,7 +327,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         deleteIntermediateOutputFiles,
         useReferenceDisks,
         memoryRetryMultiplier,
-        cromwellSubmissionBackend,
+        gcpBatchBackend,
         workflowFailureMode,
         google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
         ignoreEmptyOutputs,

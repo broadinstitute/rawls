@@ -24,9 +24,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
+  GcpLogBucketRetentionConfig,
   PubliclyReadableConfig,
-  SeparateSubmissionFinalOutputsConfig,
-  UseCromwellGcpBatchBackendConfig
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.broadinstitute.dsde.rawls.model.{
   CompactDataTablesSetting,
@@ -34,6 +34,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
+  GcpLogBucketRetentionSetting,
   PubliclyReadableSetting,
   RawlsRequestContext,
   RawlsUserEmail,
@@ -43,7 +44,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   SamWorkspacePolicyNames,
   SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGcpBatchBackendSetting,
   UserInfo,
   Workspace,
   WorkspaceName,
@@ -262,8 +262,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       GcpBucketLifecycleSetting(GcpBucketLifecycleConfig(List.empty)),
       GcpBucketSoftDeleteSetting(GcpBucketSoftDeleteConfig(7.days.toSeconds)),
       GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(true)),
-      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true)),
-      UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(true))
+      GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(60)),
+      SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(true))
     )
 
     val workspaceRepository = mock[WorkspaceRepository]
@@ -305,6 +305,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       )
     ).thenReturn(Future.successful())
     when(gcsDAO.setRequesterPays(workspace.bucketName, requesterPaysEnabled = true, workspace.googleProjectId))
+      .thenReturn(Future.successful())
+    when(gcsDAO.setLogBucketRetentionPeriod(workspace.googleProjectId, 60))
       .thenReturn(Future.successful())
 
     val service =
@@ -730,6 +732,36 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     exception.errorReport.message should include("Invalid settings requested.")
     assert(exception.errorReport.causes.exists(_.message.matches("Invalid GcpBucketSoftDelete.*retention duration.*")))
+  }
+
+  it should "require a retention duration no shorter than 1 day for GcpLogBucketRetention settings" in {
+    val shortDurationSetting = GcpLogBucketRetentionSetting(
+      GcpLogBucketRetentionConfig(0)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(shortDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 and 3650 days (10 years)."
+  }
+
+  it should "require a retention duration no more than 3650 days for GcpLogBucketRetention settings" in {
+    val longDurationSetting = GcpLogBucketRetentionSetting(
+      GcpLogBucketRetentionConfig(36912)
+    )
+
+    val service = workspaceSettingServiceConstructor()
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.setWorkspaceSettings(workspace.toWorkspaceName, List(longDurationSetting)), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    exception.errorReport.message should include("Invalid settings requested.")
+    exception.errorReport.causes.head.message shouldBe "Invalid GcpLogBucketRetention configuration: retention duration must be between 1 and 3650 days (10 years)."
   }
 
   "publicly readable setting" should "set public in sam and add all users to bucket" in {

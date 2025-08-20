@@ -11,8 +11,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
-  SeparateSubmissionFinalOutputsConfig,
-  UseCromwellGcpBatchBackendConfig
+  GcpLogBucketRetentionConfig,
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
@@ -685,12 +685,10 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         WorkspaceSettingTypes.withName("gcpbucketlifecycle") shouldBe WorkspaceSettingTypes.GcpBucketLifecycle
         WorkspaceSettingTypes.withName("gcpbucketsoftdelete") shouldBe WorkspaceSettingTypes.GcpBucketSoftDelete
         WorkspaceSettingTypes.withName("gcpbucketrequesterpays") shouldBe WorkspaceSettingTypes.GcpBucketRequesterPays
+        WorkspaceSettingTypes.withName("gcplogbucketretention") shouldBe WorkspaceSettingTypes.GcpLogBucketRetention
         WorkspaceSettingTypes.withName(
           "separatesubmissionfinaloutputs"
         ) shouldBe WorkspaceSettingTypes.SeparateSubmissionFinalOutputs
-        WorkspaceSettingTypes.withName(
-          "usecromwellgcpbatchbackend"
-        ) shouldBe WorkspaceSettingTypes.UseCromwellGcpBatchBackend
       }
 
       "should fail trying to parse an invalid workspace setting type" in {
@@ -705,8 +703,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         WorkspaceSettingTypes.GcpBucketLifecycle.toString shouldBe "GcpBucketLifecycle"
         WorkspaceSettingTypes.GcpBucketSoftDelete.toString shouldBe "GcpBucketSoftDelete"
         WorkspaceSettingTypes.GcpBucketRequesterPays.toString shouldBe "GcpBucketRequesterPays"
+        WorkspaceSettingTypes.GcpLogBucketRetention.toString shouldBe "GcpLogBucketRetention"
         WorkspaceSettingTypes.SeparateSubmissionFinalOutputs.toString shouldBe "SeparateSubmissionFinalOutputs"
-        WorkspaceSettingTypes.UseCromwellGcpBatchBackend.toString shouldBe "UseCromwellGcpBatchBackend"
       }
     }
 
@@ -1096,6 +1094,76 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       }
     }
 
+    "GcpLogBucketRetentionSetting" - {
+      "serializes properly" in {
+        val logBucketRetentionSettingJson =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {
+            |      "retentionDurationInDays": 50
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult(logBucketRetentionSettingJson) {
+          WorkspaceSettingFormat.write(
+            GcpLogBucketRetentionSetting(
+              GcpLogBucketRetentionConfig(50)
+            )
+          )
+        }
+      }
+
+      "parses log bucket retention setting with retentionDurationInDays" in {
+        val logBucketRetentionSetting =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {
+            |      "retentionDurationInDays": 60
+            |    }
+            |  }""".stripMargin.parseJson
+        assertResult {
+          GcpLogBucketRetentionSetting(
+            GcpLogBucketRetentionConfig(60)
+          )
+        } {
+          WorkspaceSettingFormat.read(logBucketRetentionSetting)
+        }
+      }
+
+      "throws an exception for missing retentionDurationInDays" in {
+        val logBucketRetentionSettingNoDuration =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {}
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(logBucketRetentionSettingNoDuration)
+        }
+      }
+
+      "throws an exception for missing config" in {
+        val logBucketRetentionSettingNoConfig =
+          """{
+            |    "settingType": "GcpLogBucketRetention"
+            |  }""".stripMargin.parseJson
+        intercept[NoSuchElementException] {
+          WorkspaceSettingFormat.read(logBucketRetentionSettingNoConfig)
+        }
+      }
+
+      "throws an exception for incorrect format" in {
+        val logBucketRetentionSettingBadConfig =
+          """{
+            |    "settingType": "GcpLogBucketRetention",
+            |    "config": {
+            |      "retentionDurationInDays": "not a number"
+            |    }
+            |  }""".stripMargin.parseJson
+        intercept[DeserializationException] {
+          WorkspaceSettingFormat.read(logBucketRetentionSettingBadConfig)
+        }
+      }
+    }
+
     "SeparateSubmissionFinalOutputsSetting" - {
       "serializes properly" in {
         val settingJson =
@@ -1156,76 +1224,6 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         val settingBadConfig =
           """{
             |    "settingType": "SeparateSubmissionFinalOutputs",
-            |    "config": {
-            |      "enabled": 0
-            |    }
-            |  }""".stripMargin.parseJson
-        intercept[DeserializationException] {
-          WorkspaceSettingFormat.read(settingBadConfig)
-        }
-      }
-    }
-
-    "UseCromwellGcpBatchBackendSetting" - {
-      "serializes properly" in {
-        val settingJson =
-          """{
-            |    "settingType": "UseCromwellGcpBatchBackend",
-            |    "config": {
-            |      "enabled": true
-            |    }
-            |  }""".stripMargin.parseJson
-        assertResult(settingJson) {
-          WorkspaceSettingFormat.write(
-            UseCromwellGcpBatchBackendSetting(
-              UseCromwellGcpBatchBackendConfig(true)
-            )
-          )
-        }
-      }
-
-      "parses setting with enabled" in {
-        val setting =
-          """{
-            |    "settingType": "UseCromwellGcpBatchBackend",
-            |    "config": {
-            |      "enabled": true
-            |    }
-            |  }""".stripMargin.parseJson
-        assertResult {
-          UseCromwellGcpBatchBackendSetting(
-            UseCromwellGcpBatchBackendConfig(true)
-          )
-        } {
-          WorkspaceSettingFormat.read(setting)
-        }
-      }
-
-      "throws an exception for missing enabled" in {
-        val settingNoEnabled =
-          """{
-            |    "settingType": "UseCromwellGcpBatchBackend",
-            |    "config": {}
-            |  }""".stripMargin.parseJson
-        intercept[DeserializationException] {
-          WorkspaceSettingFormat.read(settingNoEnabled)
-        }
-      }
-
-      "throws an exception for missing config" in {
-        val settingNoConfig =
-          """{
-            |    "settingType": "UseCromwellGcpBatchBackend"
-            |  }""".stripMargin.parseJson
-        intercept[NoSuchElementException] {
-          WorkspaceSettingFormat.read(settingNoConfig)
-        }
-      }
-
-      "throws an exception for incorrect format" in {
-        val settingBadConfig =
-          """{
-            |    "settingType": "UseCromwellGcpBatchBackend",
             |    "config": {
             |      "enabled": 0
             |    }

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{QueryTiming, ReadAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
   EntityName,
   ExpressionAndResult,
@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVis
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.RootContext
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.model.Attributable.nameReservedAttribute
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeName,
@@ -41,7 +42,9 @@ case class QueryPlan(
   expressionMappings: Map[String, Set[String]] // expression -> attributes it needs from this query
 )
 
-class CompactExpressionEvaluator(repository: CompactEntityRepository) extends ExpressionEvaluationSupport {
+class CompactExpressionEvaluator(repository: CompactEntityRepository)
+    extends ExpressionEvaluationSupport
+    with QueryTiming {
 
   /**
    * Evaluates a single expression against a specific entity and returns the resulting attribute values.
@@ -79,33 +82,37 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
     // We need to get the parse tree to use for final input
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new CompactEvaluateVisitor()
-    val parsedTree = terraExpressionParser.root()
-    val lookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
+    Try(terraExpressionParser.root()) match {
+      case Success(parsedTree) =>
+        val lookups: Seq[ExpressionLookup] = visitor.visit(parsedTree)
 
-    // Determine the queries needed to find the correct entities
-    val queryPlans = buildQueryPlans(lookups)
-    val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
-      executeQueryPlan(workspaceId, entityType, entityName, entityType, plan)
+        // Determine the queries needed to find the correct entities
+        val queryPlans = buildQueryPlans(lookups)
+        val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
+          executeQueryPlan(workspaceId, entityType, entityName, entityType, plan)
+        }
+
+        repository.dataSource
+          .inTransaction { _ =>
+            DBIO.sequence(queryActions)
+          }
+          .map { allResults =>
+            val combinedResults: Seq[ExpressionAndResult] = allResults.flatten
+
+            InputExpressionReassembler
+              .constructFinalInputValues(
+                combinedResults,
+                parsedTree,
+                Some(Seq(entityName)),
+                None
+              )
+              .getOrElse(entityName, Success(Seq.empty))
+              .get
+              .toSeq
+          }
+      case Failure(regrets) =>
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regrets))
     }
-
-    repository.dataSource
-      .inTransaction { _ =>
-        DBIO.sequence(queryActions)
-      }
-      .map { allResults =>
-        val combinedResults: Seq[ExpressionAndResult] = allResults.flatten
-
-        InputExpressionReassembler
-          .constructFinalInputValues(
-            combinedResults,
-            parsedTree,
-            Some(Seq(entityName)),
-            None
-          )
-          .getOrElse(entityName, Success(Seq.empty))
-          .get
-          .toSeq
-      }
   }
 
   /**
@@ -330,7 +337,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
           // result is Seq[AttributeLookup]
           result
         }
-      case Failure(_) => Seq.empty
+      case Failure(regrets) =>
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regrets))
     }
   }
 
@@ -420,10 +428,19 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
             )
         }
       } else {
-        repository.queries.queryRelatedRecordsWithRelationChain(workspaceId, entityType, entityName, plan.relationChain)
+        withTiming("queryRelatedRecordsWithRelationChain") {
+          repository.queries.queryRelatedRecordsWithRelationChain(workspaceId,
+                                                                  entityType,
+                                                                  entityName,
+                                                                  plan.relationChain
+          )
+        }
       }
 
     queryAction.map { entityRecords =>
+      if (entityRecords.isEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "No entities found"))
+      }
       // Validate entity types if we have entityLookups
       if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
         val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
@@ -459,7 +476,9 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
               // Group all results under the original entityName since we want results grouped by the starting entity type
               val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
                 if (
-                  attributeName == AttributeName.withDefaultNS(record.entityType + Attributable.entityIdAttributeSuffix)
+                  attributeName == AttributeName.withDefaultNS(
+                    record.entityType + Attributable.entityIdAttributeSuffix
+                  ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
                 ) {
                   Seq(AttributeString(record.name))
                 } else {
@@ -481,7 +500,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository) extends Ex
                     if (
                       attributeName == AttributeName.withDefaultNS(
                         record.entityType + Attributable.entityIdAttributeSuffix
-                      )
+                      ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
                     ) {
                       Seq(AttributeString(record.name))
                     } else {

@@ -8,4 +8,3 @@ object AuthDomainsTest extends Tag("org.broadinstitute.dsde.test.api.AuthDomains
 object BillingsTest extends Tag("org.broadinstitute.dsde.test.api.BillingsTest")
 object MethodsTest extends Tag("org.broadinstitute.dsde.test.api.MethodsTest")
 object WorkspacesTest extends Tag("org.broadinstitute.dsde.test.api.WorkspacesTest")
-

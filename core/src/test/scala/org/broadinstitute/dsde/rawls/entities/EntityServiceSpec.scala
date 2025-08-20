@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   MockBigQueryServiceFactory,
   SlickDataSource
 }
+import org.broadinstitute.dsde.rawls.entities.exceptions.AttributeException
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
@@ -26,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   RemoveAttribute,
   RemoveListMember
 }
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeEntityReference,
@@ -38,6 +40,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
   AttributeValueEmptyList,
   AttributeValueList,
+  CompactDataTablesSetting,
   Entity,
   EntityQuery,
   EntityTypeRename,
@@ -45,7 +48,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUser,
   SortDirections,
   UserInfo,
-  Workspace
+  Workspace,
+  WorkspaceSettingTypes
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.{
@@ -56,6 +60,8 @@ import org.broadinstitute.dsde.rawls.util.{
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.{doReturn, spy}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -63,7 +69,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
 import scala.concurrent.duration.{Duration, SECONDS}
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class EntityServiceSpec
     extends AnyFlatSpec
@@ -131,13 +137,23 @@ class EntityServiceSpec
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
+    val workspaceSettingRepository = new WorkspaceSettingRepository(dataSource)
+    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
+
+    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
+      .when(spyWorkspaceSettingRepository)
+      .getWorkspaceSettingOfType(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
+      )
+
     val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        new WorkspaceSettingRepository(dataSource),
+        spyWorkspaceSettingRepository,
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
@@ -151,7 +167,9 @@ class EntityServiceSpec
       withServices(dataSource, testData.userOwner)(testCode)
     }
 
-  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
+  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(
+    testCode: (TestApiService) => T
+  ) = {
     val apiService = new TestApiService(dataSource, user)
     testCode(apiService)
   }
@@ -408,7 +426,7 @@ class EntityServiceSpec
 
   it should "fail to rename an attribute name to a name already in use" in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
-    val ex = intercept[RawlsExceptionWithErrorReport] {
+    val ex = intercept[AttributeException] {
       Await.result(
         services.entityService.renameAttribute(testData.wsName,
                                                testData.pair1.entityType,
@@ -418,8 +436,8 @@ class EntityServiceSpec
         waitDuration
       )
     }
-    ex.errorReport.message shouldBe "control already exists as an attribute name"
-    ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+    ex.message shouldBe "control already exists as an attribute name"
+    ex.code shouldBe StatusCodes.Conflict
   }
 
   it should "rename an attribute name as long as the selected name is not in use" in withTestDataServices { services =>
@@ -446,18 +464,19 @@ class EntityServiceSpec
   it should "throw an error when trying to rename an attribute that does not exist" in withTestDataServices {
     services =>
       val waitDuration = Duration(10, SECONDS)
-      val ex = intercept[RawlsExceptionWithErrorReport] {
+      val ex = intercept[AttributeException] {
         Await.result(
-          services.entityService.renameAttribute(testData.wsName,
-                                                 testData.pair1.entityType,
-                                                 AttributeName.withDefaultNS("non-existent-attribute"),
-                                                 AttributeRename(AttributeName.withDefaultNS("any"))
+          services.entityService.renameAttribute(
+            testData.wsName,
+            testData.pair1.entityType,
+            AttributeName.withDefaultNS("non-existent-attribute"),
+            AttributeRename(AttributeName.withDefaultNS("any"))
           ),
           waitDuration
         )
       }
-      ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
-      ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+      ex.message shouldBe "Can't find attribute name non-existent-attribute"
+      ex.code shouldBe StatusCodes.NotFound
   }
 
   it should "do nothing when asked to delete zero entities" in withTestDataServices { services =>

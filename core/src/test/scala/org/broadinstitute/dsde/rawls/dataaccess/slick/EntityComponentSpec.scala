@@ -171,14 +171,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   it should "return false if the entity type does not exist" in withMinimalTestDatabase { _ =>
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
       assert(!pair2EntityTypeExists)
     }
   }
 
-  it should "change entity type name" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "change entity type name" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val rowsUpdated = runAndWait(entityQuery.changeEntityTypeName(context, "Pair", "Pair2"))
       assert(rowsUpdated == 2)
       val pair2EntityTypeExistsAfterUpdate = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
@@ -193,8 +193,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "list all entity types with their counts" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "list all entity types with their counts" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       assertResult(
         Map("PairSet" -> 1, "Individual" -> 2, "Sample" -> 8, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)
       ) {
@@ -203,8 +203,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "skip deleted entities when listing all entity types with their counts" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "skip deleted entities when listing all entity types with their counts" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val deleteSamples = entityQuery.findActiveEntityByType(context.workspaceIdAsUUID, "Sample").result flatMap {
         entityRecs =>
           val deleteActions = entityRecs map { rec => entityQuery.hide(context, Seq(rec.toReference)) }
@@ -218,9 +218,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "list all entity types with their attribute names" in withDefaultTestDatabase {
+  it should "list all entity types with their attribute names" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val desiredTypesAndAttrNames = Map(
         "Sample" -> Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id"),
         // "Aliquot" -> Seq(), NOTE: this is commented out because the db query doesn't return types that have no attributes.
@@ -307,8 +307,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   // may run too fast, not time out, and the test will fail. If it turns out to be flaky,
   // let's just delete this test since it is 90% testing Slick's timeout feature, and 10%
   // testing that Rawls code is set up properly to pass a timeout argument to Slick.
-  it should "time out when listing all entity types with their attribute names, if a timeout is specified" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "time out when listing all entity types with their attribute names, if a timeout is specified" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       // insert a whole lot of entities with a lot of unique attribute names
       val numEntities = 1000
       val numAttrsPerEntity = 400
@@ -318,7 +318,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           AttributeName.withDefaultNS(attrName) -> AttributeString(attrName)
         }
         val entity = Entity(s"entity$entityIdx", "unitTestType", attrs.toMap)
-        runAndWait(entityQuery.save(testData.workspace, entity))
+        runAndWait(entityQuery.save(legacyTestData.workspace, entity))
       }
 
       // now attempt to calculate attr names and types, with a timeout of 1 second
@@ -418,25 +418,25 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "get an entity" in withDefaultTestDatabase {
+  it should "get an entity" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
-      assertResult(Some(testData.pair1)) {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
+      assertResult(Some(legacyTestData.pair1)) {
         runAndWait(entityQuery.get(context, "Pair", "pair1"))
       }
-      assertResult(Some(testData.sample1)) {
+      assertResult(Some(legacyTestData.sample1)) {
         runAndWait(entityQuery.get(context, "Sample", "sample1"))
       }
-      assertResult(Some(testData.sset1)) {
+      assertResult(Some(legacyTestData.sset1)) {
         runAndWait(entityQuery.get(context, "SampleSet", "sset1"))
       }
     }
 
   }
 
-  it should "return None when an entity does not exist" in withDefaultTestDatabase {
+  it should "return None when an entity does not exist" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       assertResult(None) {
         runAndWait(entityQuery.get(context, "pair", "fnord"))
       }
@@ -447,9 +447,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "save a new entity" in withDefaultTestDatabase {
+  it should "save a new entity" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val pair2 = Entity(
         "pair2",
         "Pair",
@@ -460,15 +460,15 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       )
       runAndWait(entityQuery.save(context, pair2))
       assert {
-        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
+        runAndWait(entityQuery.get(legacyTestData.workspace, "Pair", "pair2")).isDefined
       }
     }
 
   }
 
-  it should "update a workspace's lastModified date when saving an entity" in withDefaultTestDatabase {
+  it should "update a workspace's lastModified date when saving an entity" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       // get the workspace prior to saving the entity
       val workspaceBefore = runAndWait(workspaceQuery.findById(context.workspaceId))
         .getOrElse(fail(s"could not retrieve workspace ${context.workspaceId} before saving entity"))
@@ -484,7 +484,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       )
       runAndWait(entityQuery.save(context, pair2))
       assert {
-        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
+        runAndWait(entityQuery.get(legacyTestData.workspace, "Pair", "pair2")).isDefined
       }
 
       // get the workspace after to saving the entity
@@ -500,7 +500,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "not re-update an entity's attributes over many writes if attribute do not change" in withDefaultTestDatabase {
+  it should "not re-update an entity's attributes over many writes if attribute do not change" in withLegacyDefaultTestDatabase {
     val pair2 = Entity(
       "pair2",
       "Pair",
@@ -510,28 +510,31 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       )
     )
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       runAndWait(entityQuery.save(context, pair2))
       assert {
-        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
+        runAndWait(entityQuery.get(legacyTestData.workspace, "Pair", "pair2")).isDefined
       }
     }
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val count = 20
       runMultipleAndWait(count)(_ => entityQuery.save(context, pair2))
       assert {
-        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
+        runAndWait(entityQuery.get(legacyTestData.workspace, "Pair", "pair2")).isDefined
       }
       assertResult(0) { // the additional writes should not increment this entity's version
         runAndWait(
-          entityQuery.findEntityByName(testData.workspace.workspaceIdAsUUID, "Pair", "pair2").map(_.version).result
+          entityQuery
+            .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Pair", "pair2")
+            .map(_.version)
+            .result
         ).head
       }
     }
   }
 
-  it should "update an entity's attributes many times concurrently if attributes change" in withDefaultTestDatabase {
+  it should "update an entity's attributes many times concurrently if attributes change" in withLegacyDefaultTestDatabase {
     def makeEntity(idx: Int): Entity =
       Entity("some-sample",
              "Sample",
@@ -540,14 +543,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
              )
       )
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       runAndWait(entityQuery.save(context, makeEntity(0)))
 
       // did we save the entity?
       // did we populate its all_attribute_values?
       val entityWithAllAttrs = runAndWait(
         entityQueryWithInlineAttributes
-          .findEntityByName(testData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
+          .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
           .result
       )
       entityWithAllAttrs should have length 1
@@ -556,7 +559,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       entityWithAllAttrs.head.allAttributeValues.get should include("index-0")
     }
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val count = 20
       (1 to count) foreach { idx =>
         runAndWait(entityQuery.save(context, makeEntity(idx)))
@@ -565,7 +568,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       // did we update the record versions and populate its all_attribute_values?
       val entityWithAllAttrs = runAndWait(
         entityQueryWithInlineAttributes
-          .findEntityByName(testData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
+          .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
           .result
       )
       entityWithAllAttrs should have length 1
@@ -578,10 +581,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "clone all entities from a workspace containing cycles" in withDefaultTestDatabase {
+  it should "clone all entities from a workspace containing cycles" in withLegacyDefaultTestDatabase {
     val workspaceOriginal = Workspace(
-      namespace = testData.wsName.namespace + "Original",
-      name = testData.wsName.name + "Original",
+      namespace = legacyTestData.wsName.namespace + "Original",
+      name = legacyTestData.wsName.name + "Original",
       workspaceId = UUID.randomUUID.toString,
       bucketName = "aBucket",
       workflowCollectionName = Some("workflow-collection"),
@@ -592,8 +595,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     )
 
     val workspaceClone = Workspace(
-      namespace = testData.wsName.namespace + "Clone",
-      name = testData.wsName.name + "Clone",
+      namespace = legacyTestData.wsName.namespace + "Clone",
+      name = legacyTestData.wsName.name + "Clone",
       workspaceId = UUID.randomUUID.toString,
       bucketName = "anotherBucket",
       workflowCollectionName = Some("workflow-collection"),
@@ -685,9 +688,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "throw an exception if trying to save invalid references" in withDefaultTestDatabase {
+  it should "throw an exception if trying to save invalid references" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val baz =
         Entity("wig",
                "wug",
@@ -721,9 +724,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "add cycles to entity graph" in withDefaultTestDatabase {
+  it should "add cycles to entity graph" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val sample1Copy = Entity(
         "sample1",
         "Sample",
@@ -785,13 +788,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "rename an entity" in withDefaultTestDatabase {
+  it should "rename an entity" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
-      assertResult(Option(testData.pair1))(runAndWait(entityQuery.get(context, "Pair", "pair1")))
+    withWorkspaceContext(legacyTestData.workspace) { context =>
+      assertResult(Option(legacyTestData.pair1))(runAndWait(entityQuery.get(context, "Pair", "pair1")))
       assertResult(1)(runAndWait(entityQuery.rename(context, "Pair", "pair1", "amazingPair")))
       assertResult(None)(runAndWait(entityQuery.get(context, "Pair", "pair1")))
-      assertResult(Option(testData.pair1.copy(name = "amazingPair"))) {
+      assertResult(Option(legacyTestData.pair1.copy(name = "amazingPair"))) {
         runAndWait(entityQuery.get(context, "Pair", "amazingPair"))
       }
     }
@@ -801,23 +804,27 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   /* Test case tests for cycles, cycles contained within cycles, cycles existing below other cycles, invalid
    * entity names being supplied, and multiple disjoint subtrees
    */
-  it should "get entity subtrees from a list of entities" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "get entity subtrees from a list of entities" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val sampleSet1Paths = Seq(
-        EntityPath(Seq(testData.sset1.toReference)),
-        EntityPath(Seq(testData.sset1.toReference, testData.sample1.toReference)),
-        EntityPath(Seq(testData.sset1.toReference, testData.sample1.toReference, testData.aliquot1.toReference)),
-        EntityPath(Seq(testData.sset1.toReference, testData.sample2.toReference)),
-        EntityPath(Seq(testData.sset1.toReference, testData.sample3.toReference)),
-        EntityPath(Seq(testData.sset1.toReference, testData.sample3.toReference, testData.sample1.toReference))
+        EntityPath(Seq(legacyTestData.sset1.toReference)),
+        EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample1.toReference)),
+        EntityPath(
+          Seq(legacyTestData.sset1.toReference, legacyTestData.sample1.toReference, legacyTestData.aliquot1.toReference)
+        ),
+        EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample2.toReference)),
+        EntityPath(Seq(legacyTestData.sset1.toReference, legacyTestData.sample3.toReference)),
+        EntityPath(
+          Seq(legacyTestData.sset1.toReference, legacyTestData.sample3.toReference, legacyTestData.sample1.toReference)
+        )
       )
-      val sampleSet2Paths = Seq(EntityPath(Seq(testData.sset2.toReference)),
-                                EntityPath(Seq(testData.sset2.toReference, testData.sample2.toReference))
+      val sampleSet2Paths = Seq(EntityPath(Seq(legacyTestData.sset2.toReference)),
+                                EntityPath(Seq(legacyTestData.sset2.toReference, legacyTestData.sample2.toReference))
       )
       val sampleSet3Paths = Seq(
-        EntityPath(Seq(testData.sset3.toReference)),
-        EntityPath(Seq(testData.sset3.toReference, testData.sample5.toReference)),
-        EntityPath(Seq(testData.sset3.toReference, testData.sample6.toReference))
+        EntityPath(Seq(legacyTestData.sset3.toReference)),
+        EntityPath(Seq(legacyTestData.sset3.toReference, legacyTestData.sample5.toReference)),
+        EntityPath(Seq(legacyTestData.sset3.toReference, legacyTestData.sample6.toReference))
       )
 
       val expected = sampleSet1Paths ++ sampleSet2Paths ++ sampleSet3Paths
@@ -829,9 +836,11 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       )
 
       val individual2Paths = Seq(
-        EntityPath(Seq(testData.indiv2.toReference)),
-        EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference)),
-        EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference, testData.sample2.toReference))
+        EntityPath(Seq(legacyTestData.indiv2.toReference)),
+        EntityPath(Seq(legacyTestData.indiv2.toReference, legacyTestData.sset2.toReference)),
+        EntityPath(
+          Seq(legacyTestData.indiv2.toReference, legacyTestData.sset2.toReference, legacyTestData.sample2.toReference)
+        )
       )
       assertSameElements(individual2Paths,
                          runAndWait(entityQuery.getEntitySubtrees(context, "Individual", Set("indiv2")))
@@ -841,35 +850,38 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   // the opposite of the above traversal: get all reference to these entities, traversing upward
 
-  it should "get the full set of entity references from a list of entities" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      val expected = Set(testData.sample1,
-                         testData.sample3,
-                         testData.pair1,
-                         testData.pair2,
-                         testData.sset1,
-                         testData.ps1,
-                         testData.indiv1
+  it should "get the full set of entity references from a list of entities" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
+      val expected = Set(
+        legacyTestData.sample1,
+        legacyTestData.sample3,
+        legacyTestData.pair1,
+        legacyTestData.pair2,
+        legacyTestData.sset1,
+        legacyTestData.ps1,
+        legacyTestData.indiv1
       ).map(_.toReference)
-      assertSameElements(expected,
-                         runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.sample1.toReference)))
+      assertSameElements(
+        expected,
+        runAndWait(entityQuery.getAllReferringEntities(context, Set(legacyTestData.sample1.toReference)))
       )
 
-      val expected2 = Set(testData.aliquot1,
-                          testData.aliquot2,
-                          testData.sample1,
-                          testData.sample3,
-                          testData.pair1,
-                          testData.pair2,
-                          testData.sset1,
-                          testData.ps1,
-                          testData.indiv1
+      val expected2 = Set(
+        legacyTestData.aliquot1,
+        legacyTestData.aliquot2,
+        legacyTestData.sample1,
+        legacyTestData.sample3,
+        legacyTestData.pair1,
+        legacyTestData.pair2,
+        legacyTestData.sset1,
+        legacyTestData.ps1,
+        legacyTestData.indiv1
       ).map(_.toReference)
       assertSameElements(expected2,
                          runAndWait(
                            entityQuery.getAllReferringEntities(context,
-                                                               Set(testData.aliquot1.toReference,
-                                                                   testData.aliquot2.toReference
+                                                               Set(legacyTestData.aliquot1.toReference,
+                                                                   legacyTestData.aliquot2.toReference
                                                                )
                            )
                          )
@@ -877,29 +889,36 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "not include deleted entities when getting the full set of entity references from a list of entities" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(entityQuery.hide(context, Seq(testData.indiv1.toReference, testData.pair2.toReference)))
+  it should "not include deleted entities when getting the full set of entity references from a list of entities" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
+      runAndWait(entityQuery.hide(context, Seq(legacyTestData.indiv1.toReference, legacyTestData.pair2.toReference)))
 
       val expected =
-        Set(testData.sample1, testData.sample3, testData.pair1, testData.sset1, testData.ps1).map(_.toReference)
-      assertSameElements(expected,
-                         runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.sample1.toReference)))
+        Set(legacyTestData.sample1,
+            legacyTestData.sample3,
+            legacyTestData.pair1,
+            legacyTestData.sset1,
+            legacyTestData.ps1
+        ).map(_.toReference)
+      assertSameElements(
+        expected,
+        runAndWait(entityQuery.getAllReferringEntities(context, Set(legacyTestData.sample1.toReference)))
       )
 
-      val expected2 = Set(testData.aliquot1,
-                          testData.aliquot2,
-                          testData.sample1,
-                          testData.sample3,
-                          testData.pair1,
-                          testData.sset1,
-                          testData.ps1
+      val expected2 = Set(
+        legacyTestData.aliquot1,
+        legacyTestData.aliquot2,
+        legacyTestData.sample1,
+        legacyTestData.sample3,
+        legacyTestData.pair1,
+        legacyTestData.sset1,
+        legacyTestData.ps1
       ).map(_.toReference)
       assertSameElements(expected2,
                          runAndWait(
                            entityQuery.getAllReferringEntities(context,
-                                                               Set(testData.aliquot1.toReference,
-                                                                   testData.aliquot2.toReference
+                                                               Set(legacyTestData.aliquot1.toReference,
+                                                                   legacyTestData.aliquot2.toReference
                                                                )
                            )
                          )
@@ -912,8 +931,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   val x2 = Entity("x2", "SampleSet", Map.empty)
 
   val workspace2 = Workspace(
-    namespace = testData.wsName.namespace + "2",
-    name = testData.wsName.name + "2",
+    namespace = legacyTestData.wsName.namespace + "2",
+    name = legacyTestData.wsName.name + "2",
     workspaceId = UUID.randomUUID.toString,
     bucketName = "aBucket",
     workflowCollectionName = Some("workflow-collection"),
@@ -924,8 +943,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   )
 
   val workspace3 = Workspace(
-    namespace = testData.wsName.namespace + "3",
-    name = testData.wsName.name + "3",
+    namespace = legacyTestData.wsName.namespace + "3",
+    name = legacyTestData.wsName.name + "3",
     workspaceId = UUID.randomUUID.toString,
     bucketName = "aBucket",
     workflowCollectionName = Some("workflow-collection"),
@@ -935,9 +954,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     Map.empty
   )
 
-  it should "copy entities without a conflict" in withDefaultTestDatabase {
+  it should "copy entities without a conflict" in withLegacyDefaultTestDatabase {
     runAndWait(workspaceQuery.createOrUpdate(workspace2))
-    withWorkspaceContext(testData.workspace) { context1 =>
+    withWorkspaceContext(legacyTestData.workspace) { context1 =>
       withWorkspaceContext(workspace2) { context2 =>
         runAndWait(entityQuery.save(context2, x2))
         runAndWait(entityQuery.save(context2, x1))
@@ -979,10 +998,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "copy entities without a conflict with a cycle" in withDefaultTestDatabase {
+  it should "copy entities without a conflict with a cycle" in withLegacyDefaultTestDatabase {
 
     runAndWait(workspaceQuery.createOrUpdate(workspace2))
-    withWorkspaceContext(testData.workspace) { context1 =>
+    withWorkspaceContext(legacyTestData.workspace) { context1 =>
       withWorkspaceContext(workspace2) { context2 =>
         val a = Entity("a", "test", Map.empty)
         val a6 =
@@ -1037,16 +1056,16 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "copy entities with a conflict" in withDefaultTestDatabase {
+  it should "copy entities with a conflict" in withLegacyDefaultTestDatabase {
 
-    withWorkspaceContext(testData.workspace) { context =>
-      assertResult(Set(testData.sample1.toReference)) {
-        runAndWait(entityQuery.getCopyConflicts(context, Seq(testData.sample1).map(_.toReference)))
+    withWorkspaceContext(legacyTestData.workspace) { context =>
+      assertResult(Set(legacyTestData.sample1.toReference)) {
+        runAndWait(entityQuery.getCopyConflicts(context, Seq(legacyTestData.sample1).map(_.toReference)))
           .map(_.toReference)
           .toSet
       }
 
-      assertResult(Set(EntityHardConflict(testData.sample1.entityType, testData.sample1.name))) {
+      assertResult(Set(EntityHardConflict(legacyTestData.sample1.entityType, legacyTestData.sample1.name))) {
         runAndWait(
           entityQuery.checkAndCopyEntities(context, context, "Sample", Seq("sample1"), false, testContext)
         ).hardConflicts.toSet
@@ -1055,14 +1074,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       // verify that it wasn't copied into the workspace again
       assert(
         runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, "Sample")).toList
-          .filter(entity => entity == testData.sample1)
+          .filter(entity => entity == legacyTestData.sample1)
           .size == 1
       )
     }
 
   }
 
-  it should "copy entities with a conflict in the entity subtrees and properly link already existing entities" in withDefaultTestDatabase {
+  it should "copy entities with a conflict in the entity subtrees and properly link already existing entities" in withLegacyDefaultTestDatabase {
 
     runAndWait(workspaceQuery.createOrUpdate(workspace2))
     runAndWait(workspaceQuery.createOrUpdate(workspace3))
@@ -1101,13 +1120,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "fail when putting dots in user-specified strings" in withDefaultTestDatabase {
+  it should "fail when putting dots in user-specified strings" in withLegacyDefaultTestDatabase {
     // NB: entity names allow dots, so entity names are not included in this test
     val dottyType = Entity("dottyType", "Sam.ple", Map.empty)
     val dottyAttr = Entity("dottyAttr", "Sample", Map(AttributeName.withDefaultNS("foo.bar") -> AttributeBoolean(true)))
     val dottyAttr2 = Entity("dottyAttr", "Sample", Map(AttributeName("library", "foo.bar") -> AttributeBoolean(true)))
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       intercept[RawlsException](runAndWait(entityQuery.save(context, dottyType)))
       intercept[RawlsException](runAndWait(entityQuery.save(context, dottyAttr)))
       intercept[RawlsException](runAndWait(entityQuery.save(context, dottyAttr2)))
@@ -1116,10 +1135,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   Attributable.reservedAttributeNames.foreach { reserved =>
-    it should s"fail using reserved attribute name ${reserved.name} in default namespace" in withDefaultTestDatabase {
+    it should s"fail using reserved attribute name ${reserved.name} in default namespace" in withLegacyDefaultTestDatabase {
       val e = Entity("test_sample", "Sample", Map(reserved -> AttributeString("foo")))
 
-      withWorkspaceContext(testData.workspace) { context =>
+      withWorkspaceContext(legacyTestData.workspace) { context =>
         intercept[RawlsException] {
           runAndWait(entityQuery.save(context, e))
         }
@@ -1127,30 +1146,30 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
 
     AttributeName.validNamespaces.-(AttributeName.defaultNamespace).foreach { namespace =>
-      it should s"succeed using reserved attribute name ${reserved.name} in namespace $namespace" in withDefaultTestDatabase {
+      it should s"succeed using reserved attribute name ${reserved.name} in namespace $namespace" in withLegacyDefaultTestDatabase {
         val e = Entity("test_sample", "Sample", Map(AttributeName(namespace, reserved.name) -> AttributeString("foo")))
 
-        withWorkspaceContext(testData.workspace) { context =>
+        withWorkspaceContext(legacyTestData.workspace) { context =>
           runAndWait(entityQuery.save(context, e))
         }
         assert {
-          runAndWait(entityQuery.get(testData.workspace, "Sample", "test_sample")).isDefined
+          runAndWait(entityQuery.get(legacyTestData.workspace, "Sample", "test_sample")).isDefined
         }
       }
     }
   }
 
-  it should s"fail using reserved attribute name sample_id in namespace default for sample entity type" in withDefaultTestDatabase {
+  it should s"fail using reserved attribute name sample_id in namespace default for sample entity type" in withLegacyDefaultTestDatabase {
     val e = Entity("test_sample", "Sample", Map(AttributeName.withDefaultNS("sample_id") -> AttributeString("foo")))
 
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       intercept[RawlsException] {
         runAndWait(entityQuery.save(context, e))
       }
     }
   }
 
-  it should "save a new entity with the same name as a deleted entity" in withDefaultTestDatabase {
+  it should "save a new entity with the same name as a deleted entity" in withLegacyDefaultTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace(
       "test_namespace",
@@ -1187,8 +1206,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assert(oldId != newId)
   }
 
-  it should "delete an entity type and return the total number of rows deleted (hidden)" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "delete an entity type and return the total number of rows deleted (hidden)" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val sampleCount =
         runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, "sample")).iterator.size
 
@@ -1198,44 +1217,44 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "delete a set without affecting its component entities" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      assertResult(Some(testData.sset1)) {
+  it should "delete a set without affecting its component entities" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
+      assertResult(Some(legacyTestData.sset1)) {
         runAndWait(entityQuery.get(context, "SampleSet", "sset1"))
       }
-      assertResult(Some(testData.sample1)) {
+      assertResult(Some(legacyTestData.sample1)) {
         runAndWait(entityQuery.get(context, "Sample", "sample1"))
       }
-      assertResult(Some(testData.sample2)) {
+      assertResult(Some(legacyTestData.sample2)) {
         runAndWait(entityQuery.get(context, "Sample", "sample2"))
       }
-      assertResult(Some(testData.sample3)) {
+      assertResult(Some(legacyTestData.sample3)) {
         runAndWait(entityQuery.get(context, "Sample", "sample3"))
       }
 
       assertResult(1) {
-        runAndWait(entityQuery.hide(context, Seq(testData.sset1.toReference)))
+        runAndWait(entityQuery.hide(context, Seq(legacyTestData.sset1.toReference)))
       }
 
       assertResult(None) {
         runAndWait(entityQuery.get(context, "SampleSet", "sset1"))
       }
-      assertResult(Some(testData.sample1)) {
+      assertResult(Some(legacyTestData.sample1)) {
         runAndWait(entityQuery.get(context, "Sample", "sample1"))
       }
-      assertResult(Some(testData.sample2)) {
+      assertResult(Some(legacyTestData.sample2)) {
         runAndWait(entityQuery.get(context, "Sample", "sample2"))
       }
-      assertResult(Some(testData.sample3)) {
+      assertResult(Some(legacyTestData.sample3)) {
         runAndWait(entityQuery.get(context, "Sample", "sample3"))
       }
     }
   }
 
-  it should "delete a sample without affecting its individual or any other entities" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
-      val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+  it should "delete a sample without affecting its individual or any other entities" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
+      val (entityCount1, attributeCount1) = countEntitiesAttrs(legacyTestData.workspace)
+      val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(legacyTestData.workspace)
 
       val bob = Entity(
         "Bob",
@@ -1271,8 +1290,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.get(context, "Sample", bone.name))
       }
 
-      val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
-      val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+      val (entityCount2, attributeCount2) = countEntitiesAttrs(legacyTestData.workspace)
+      val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(legacyTestData.workspace)
 
       assertResult(entityCount1 + 3)(entityCount2)
       assertResult(attributeCount1 + 6)(attributeCount2)
@@ -1293,8 +1312,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.get(context, "Sample", bone.name))
       }
 
-      val (entityCount3, attributeCount3) = countEntitiesAttrs(testData.workspace)
-      val (activeEntityCount3, activeAttributeCount3) = countActiveEntitiesAttrs(testData.workspace)
+      val (entityCount3, attributeCount3) = countEntitiesAttrs(legacyTestData.workspace)
+      val (activeEntityCount3, activeAttributeCount3) = countActiveEntitiesAttrs(legacyTestData.workspace)
 
       assertResult(entityCount2)(entityCount3)
       assertResult(attributeCount2)(attributeCount3)
@@ -1304,8 +1323,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "return only the selected attributes" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "return only the selected attributes" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val testAttribute1 = AttributeName.withDefaultNS("attr1") -> AttributeString("val1")
       val testAttribute2 = AttributeName.withDefaultNS("attr2") -> AttributeString("val2")
       val testAttribute3 = AttributeName.withDefaultNS("attr3") -> AttributeString("val3")
@@ -1341,8 +1360,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "select the all_attribute_values column when using entityQueryWithInlineAttributes and not otherwise" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
+  it should "select the all_attribute_values column when using entityQueryWithInlineAttributes and not otherwise" in withLegacyDefaultTestDatabase {
+    withWorkspaceContext(legacyTestData.workspace) { context =>
       val hasAttrs = Entity(
         "entityWithAttrs",
         "Pair",

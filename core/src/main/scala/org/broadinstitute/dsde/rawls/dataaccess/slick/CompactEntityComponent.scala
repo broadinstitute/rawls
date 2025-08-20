@@ -12,6 +12,8 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
+  AttributeEntityReference,
+  AttributeEntityReferenceList,
   AttributeName,
   AttributeRename,
   Entity,
@@ -460,23 +462,13 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
    * Get all entity attribute keys for a workspace.
    *
-   * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
-   */
-  def listEntityKeys(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
-    sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY_KEYS , JSON_TABLE(attribute_keys, '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
-      where workspace_id=$workspaceId;""".as[EntityTypeAndAttributeKey]
-
-  /**
-   * Get all entity attribute keys for a workspace.
-   *
    * execution plan:
    *    ENTITY: Using index condition (Using index condition; Using temporary); Using temporary
    *    t: Table function: json_table; Using temporary
    */
   def listEntityKeysViaEntity(workspaceId: UUID): ReadAction[Seq[EntityTypeAndAttributeKey]] =
     sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$')) t
       where workspace_id=$workspaceId and deleted = 0;""".as[EntityTypeAndAttributeKey]
 
   /**
@@ -493,7 +485,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
     concatSqlActions(
       sql"""SELECT distinct entity_type, attribute_key
-      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) PATH '$$')) t
+      FROM ENTITY, JSON_TABLE(JSON_KEYS(attributes, $slickAttrsPath), '$$[*]' COLUMNS(attribute_key VARCHAR(256) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$')) t
       where workspace_id=$workspaceId and deleted = 0 and entity_type in (""",
       inClause,
       sql""");"""
@@ -506,10 +498,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * `execution plan: Index range scan; using where. Index: idx_entity_keys_workspace_and_entity_type.`
    */
   def countEntitiesGroupedByType(workspaceId: UUID): ReadAction[Seq[EntityTypeAndCount]] =
-    // ENTITY_KEYS should be smaller than ENTITY and already excludes deleted entities
     sql"""SELECT entity_type, COUNT(*)
-      FROM ENTITY_KEYS
+      FROM ENTITY
       WHERE workspace_id = $workspaceId
+      AND deleted = 0
       GROUP BY entity_type;""".as[EntityTypeAndCount]
 
   /**
@@ -706,7 +698,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * @param startingEntityType  The type of the root entity to start the query from.
    * @param startingEntityName    The name of the root entity to start the query from.
    * @param relationChain   A chain of strings representing the relation columns between entities
-   * @return                 A `ReadAction` that resolves to a map of starting entity name to a Seq[`CompactEntityRecord`]
+   * @return                 A `ReadAction` that resolves to a map of entity name to a Seq[`CompactEntityRecord`]
    *                         that includes all entities found by traversing the specified relationships.
    */
   def queryRelatedRecordsWithRelationChain(
@@ -715,63 +707,86 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     startingEntityName: String,
     relationChain: Seq[String]
   ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
-    if (relationChain.isEmpty) {
+    if (relationChain.isEmpty) { // The method shouldn't have been called in this case
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
     } else {
-      // Build the SQL with explicit joins for each relation in the chain
-      // Start with the base entity
-      val sqlBuilder = sql"""
-        SELECT DISTINCT
-          e1.name as rootEntityName,
-          e#${relationChain.length}.id,
-          e#${relationChain.length}.name,
-          e#${relationChain.length}.entity_type,
-          e#${relationChain.length}.workspace_id,
-          e#${relationChain.length}.record_version,
-          e#${relationChain.length}.deleted,
-          e#${relationChain.length}.attributes
-        FROM ENTITY e0
-      """
+      // Start with the root entity
+      val initialEntities = Set(EntityPointer(startingEntityType, startingEntityName))
 
-      // Add joins for each relation in the chain
-      val joinsSql = relationChain.zipWithIndex.foldLeft(sqlBuilder) { case (sql, (relation, idx)) =>
-        val nextIdx = idx + 1
-        concatSqlActions(
-          sql,
-          sql"""
-          JOIN JSON_TABLE(
-            JSON_EXTRACT(e#$idx.attributes, '$$.refs'),
-            '$$[*]' COLUMNS (
-              attributeName#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
-              entityType#$idx VARCHAR(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
-              entityName#$idx VARCHAR(255) PATH '$$.n'
-            )
-          ) jt#$idx ON jt#$idx.attributeName#$idx = $relation
-          JOIN ENTITY e#$nextIdx ON e#$nextIdx.entity_type = jt#$idx.entityType#$idx
-            AND e#$nextIdx.name = jt#$idx.entityName#$idx
-            AND e#$nextIdx.workspace_id = $workspaceId
-            AND e#$nextIdx.deleted = 0
-          """
-        )
+      // First step: get the first-level entities (these will be our grouping keys)
+      traverseOneStep(workspaceId, initialEntities, relationChain.head).flatMap { firstStepEntities =>
+        if (firstStepEntities.isEmpty) {
+          DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
+        } else if (relationChain.length == 1) {
+          // Only one relation - group by first step entities
+          getEntities(workspaceId, firstStepEntities).map { entities =>
+            entities.groupBy(_.name)
+          }
+        } else {
+          // Multiple relations - traverse the rest but track which first-step entity each result came from
+          val remainingChain = relationChain.tail
+          traverseOneStepWithGrouping(workspaceId, firstStepEntities, remainingChain).flatMap { groupedFinalEntities =>
+            // Get full records for all final entities
+            val allFinalEntities = groupedFinalEntities.values.flatten.toSet
+            getEntities(workspaceId, allFinalEntities).map { entities =>
+              val entitiesByPointer = entities.groupBy(e => EntityPointer(e.entityType, e.name))
+
+              // Map each first-step entity to its corresponding final entities
+              groupedFinalEntities.view.mapValues { entityPointers =>
+                entityPointers.flatMap(entitiesByPointer.get).flatten.toSeq
+              }.toMap
+            }
+          }
+        }
       }
+    }
 
-      // Add the WHERE clause for the starting entity
-      val finalSql = concatSqlActions(
-        joinsSql,
-        sql"""
-        WHERE e0.workspace_id = $workspaceId
-          AND e0.entity_type = $startingEntityType
-          AND e0.name = $startingEntityName
-          AND e0.deleted = 0
-        """
-      )
+  private def traverseOneStepWithGrouping(
+    workspaceId: UUID,
+    firstStepEntities: Set[EntityPointer],
+    remainingChain: Seq[String]
+  ): ReadAction[Map[String, Set[EntityPointer]]] = {
+    // For each first-step entity, traverse the remaining relations independently
+    val traversalFutures = firstStepEntities.map { firstEntity =>
+      // Start with just this first entity and traverse the remaining chain
+      remainingChain
+        .foldLeft(DBIO.successful(Set(firstEntity)): ReadAction[Set[EntityPointer]]) { (entitiesFuture, relation) =>
+          entitiesFuture.flatMap { currentEntities =>
+            if (currentEntities.isEmpty) {
+              DBIO.successful(Set.empty[EntityPointer])
+            } else {
+              traverseOneStep(workspaceId, currentEntities, relation)
+            }
+          }
+        }
+        .map(finalEntities => firstEntity.entityName -> finalEntities)
+    }
 
-      case class RootNameAndEntity(rootEntityName: String, entity: CompactEntityRecord)
-      implicit val getRootNameAndEntity: GetResult[RootNameAndEntity] =
-        GetResult(r => RootNameAndEntity(r.<<, CompactEntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)))
+    // Convert Set to Seq before calling DBIO.sequence
+    DBIO.sequence(traversalFutures.toSeq).map(_.toMap)
+  }
 
-      finalSql.as[RootNameAndEntity].map { results =>
-        results.groupMap(_.rootEntityName)(_.entity)
+  private def traverseOneStep(
+    workspaceId: UUID,
+    currentEntities: Set[EntityPointer],
+    relation: String
+  ): ReadAction[Set[EntityPointer]] =
+    if (currentEntities.isEmpty) {
+      DBIO.successful(Set.empty[EntityPointer])
+    } else {
+      // retrieve the current entities to get their attributes
+      getEntities(workspaceId, currentEntities).flatMap { entities =>
+        // find all references in the specified relation attribute
+        // TODO: should this reuse CompactEntityProvider.findAllReferences ?
+        val references = entities.flatMap { entityRecord =>
+          val attrValue = entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation))
+          attrValue match {
+            case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
+            case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
+            case _                                        => Seq.empty[EntityPointer]
+          }
+        }
+        DBIO.successful(references.toSet)
       }
     }
 
@@ -978,7 +993,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * `Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+   * `execution plan: Using index condition; Using where. Index used: idx_entity_type_name`
     */
   def attributeExists(workspaceId: UUID, entityType: String, attributeName: AttributeName): ReadAction[Boolean] =
     anyAttributeExists(workspaceId, entityType, Set(attributeName))
@@ -986,23 +1001,24 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   /**
     * Determine if an attribute exists in any entity of the given type and workspace.
     *
-    * `execution plan: subquery Using index condition; Using where. Index used: idx_entity_keys_workspace_and_entity_type`
+    * `execution plan: Using index condition; Using where. Index used: idx_entity_type_name`
     */
   def anyAttributeExists(workspaceId: UUID,
                          entityType: String,
                          attributeNames: Set[AttributeName]
   ): ReadAction[Boolean] = {
-    val containsClauses = attributeNames.map { attributeName =>
-      sql"""JSON_CONTAINS(attribute_keys, JSON_QUOTE(${AttributeName.toDelimitedName(attributeName)}))"""
-    }
-    val clause = reduceSqlActionsWithDelim(containsClauses.toSeq, sql" or ")
+    // values for the attribute paths
+    val attrPaths = attributeNames.map(attr => sql"${slickAttributePath(attr)}")
 
-    val baseSql = sql"""select exists (select 1 from ENTITY_KEYS
+    val containsClause = reduceSqlActionsWithDelim(attrPaths.toSeq, sql", ")
+
+    val baseSql = sql"""select exists (select 1 from ENTITY
          where workspace_id = $workspaceId
           and entity_type = $entityType
-          and ("""
+          and deleted = 0
+          and JSON_CONTAINS_PATH(attributes, 'one', """
 
-    concatSqlActions(baseSql, clause, sql"))")
+    concatSqlActions(baseSql, containsClause, sql"))")
       .as[Boolean]
       .head
   }
@@ -1157,16 +1173,20 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    */
   private def filteredAttributesColumn(entityQuery: EntityQuery) =
     entityQuery.fields.fields match {
-      case Some(fields) =>
-        val fieldSqls = fields.map { field =>
-          sql"$field, e.attributes -> ${slickAttributePath(field)}"
+      case Some(fields) if fields.nonEmpty =>
+        // For each field, create a JSON_OBJECT that contains the field if it exists;
+        // else create an empty JSON_OBJECT. These objects are all merged together below;
+        // this ensures that if a field is missing in the db, it will not be present in the result.
+        val fieldObjects = fields.map { field =>
+          sql"IF(JSON_CONTAINS_PATH(e.attributes, 'one', ${slickAttributePath(field)}), JSON_OBJECT($field, e.attributes -> ${slickAttributePath(field)}), JSON_OBJECT())"
         }
         concatSqlActions(
           sql"""JSON_OBJECT(
                '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
                '#${CompactEntitySerialization.REFS_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.REFS_KEY}',
-               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_OBJECT(""",
-          reduceSqlActionsWithDelim(fieldSqls.toSeq, sql","),
+               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_MERGE_PATCH(
+                  JSON_OBJECT(),""",
+          reduceSqlActionsWithDelim(fieldObjects.toSeq, sql","),
           sql"))"
         )
       case _ => sql"attributes"
@@ -1205,7 +1225,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
           sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
       },
-      sql" #${SortDirections.toSql(entityQuery.sortDirection)}"
+      sql" #${SortDirections.toSql(entityQuery.sortDirection)}, name #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
 
   private def paginationClause(entityQuery: EntityQuery): SQLActionBuilder =
@@ -1225,16 +1245,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
          where workspace_id = $workspaceId
          and from_entity_type = ${from.entityType}
          and from_name = ${from.entityName}""".as[EntityPointer]
-
-  // return the ENTITY_KEYS row for a given entity
-  // `execution plan: single row constant; fully indexed by primary key`
-  @VisibleForTesting
-  protected[slick] def getKeys(entityId: Long): ReadAction[Option[KeysRecord]] = {
-    val query = sql"""select id, workspace_id, entity_type, attribute_keys, last_updated
-            from ENTITY_KEYS
-            where id = $entityId;""".as[KeysRecord]
-    uniqueResult(query)
-  }
 
   @VisibleForTesting
   protected[slick] def getDeletedEntity(workspaceId: UUID,
@@ -1260,5 +1270,17 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         and entity_type = $entityType
         and deleted = false"""
       .as[Entity]
+
+  // All entities in workspace, include deleted if deleted is true
+  @VisibleForTesting
+  def listAllEntities(workspaceId: UUID, deleted: Boolean): ReadAction[Seq[CompactEntityRecord]] = {
+    val deletedClause = if (!deleted) sql" and deleted = 0" else sql""
+    concatSqlActions(
+      sql"""#$basicCompactEntitySelect
+          from ENTITY
+          where workspace_id = $workspaceId""",
+      deletedClause
+    ).as[CompactEntityRecord]
+  }
 
 }

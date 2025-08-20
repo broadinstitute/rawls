@@ -93,7 +93,7 @@ class LocalEntityProviderSpec
   }
 
   "LocalEntityProvider" should {
-    "resolve method config inputs" in withConfigData {
+    "resolve method config inputs" in withLegacyConfigData {
       val context = workspace
 
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
@@ -147,7 +147,7 @@ class LocalEntityProviderSpec
       }
     }
 
-    "resolve empty lists into AttributeEmptyLists" in withConfigData {
+    "resolve empty lists into AttributeEmptyLists" in withLegacyConfigData {
       val context = workspace
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
@@ -156,7 +156,7 @@ class LocalEntityProviderSpec
         )
     }
 
-    "resolve empty lists into empty Array in nested WDL Struct" in withConfigData {
+    "resolve empty lists into empty Array in nested WDL Struct" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
@@ -175,7 +175,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[]},"id":101,"sample":"sample1","samples":[]}}"""
     }
 
-    "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
+    "unpack AttributeValueRawJson into WDL-arrays" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
@@ -188,7 +188,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
     }
 
-    "unpack array input expression with attribute reference into WDL-arrays" in withConfigData {
+    "unpack array input expression with attribute reference into WDL-arrays" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
@@ -201,7 +201,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"w1.aint_array":[[10,11,12],[1,2]]}"""
     }
 
-    "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
+    "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
@@ -214,7 +214,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101]}}"""
     }
 
-    "correctly unpack nested wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
+    "correctly unpack nested wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
@@ -228,7 +228,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[101]},"id":123,"sample":"sample1","samples":[101]}}"""
     }
 
-    "unpack wdl struct expression with attribute references into WDL Struct input" in withConfigData {
+    "unpack wdl struct expression with attribute references into WDL Struct input" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
@@ -241,7 +241,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"wdlStructWf.obj":{"id":101,"sample":"sample1","samples":[1,2]}}"""
     }
 
-    "unpack AttributeValueRawJson into optional WDL-arrays" in withConfigData {
+    "unpack AttributeValueRawJson into optional WDL-arrays" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
@@ -254,7 +254,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
     }
 
-    "unpack nested Array into WDL Struct" in withConfigData {
+    "unpack nested Array into WDL Struct" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
@@ -273,7 +273,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[0,1,2],[3,4,5]]},"id":101,"sample":"sample1","samples":[[0,1,2],[3,4,5]]}}"""
     }
 
-    "unpack AttributeValueRawJson into lists-of WDL-arrays" in withConfigData {
+    "unpack AttributeValueRawJson into lists-of WDL-arrays" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
@@ -286,7 +286,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}"""
     }
 
-    "unpack triple Array into WDL Struct" in withConfigData {
+    "unpack triple Array into WDL Struct" in withLegacyConfigData {
       val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
@@ -305,7 +305,7 @@ class LocalEntityProviderSpec
       wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]},"id":101,"sample":"sample1","samples":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}}"""
     }
 
-    "cast attribute numbers into strings for string inputs" in withConfigData {
+    "cast attribute numbers into strings for string inputs" in withLegacyConfigData {
       val context = workspace
       runAndWait(testResolveInputs(context, configStringArgFromNumberAttribute, sampleGood, stringWdl, this)) shouldBe
         Map(
@@ -313,7 +313,7 @@ class LocalEntityProviderSpec
         )
     }
 
-    "cast attribute numbers into strings for string inputs via a set" in withConfigData {
+    "cast attribute numbers into strings for string inputs via a set" in withLegacyConfigData {
       val context = workspace
       runAndWait(
         testResolveInputs(context, configStringArgFromNumberAttributeViaSampleSet, sampleSet2, arrayStringWdl, this)

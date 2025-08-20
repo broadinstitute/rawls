@@ -20,13 +20,13 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpBucketLifecycleSetting,
   GcpBucketRequesterPaysSetting,
   GcpBucketSoftDeleteSetting,
+  GcpLogBucketRetentionSetting,
   PubliclyReadableSetting,
   RawlsRequestContext,
   SamResourceTypeNames,
   SamWorkspaceActions,
   SamWorkspacePolicyNames,
   SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGcpBatchBackendSetting,
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
@@ -129,9 +129,19 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 )
               case _ => None
             }
-          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))                 => None
+          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_)) => None
+          case GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(retentionDuration)) =>
+            retentionDuration match {
+              case duration if duration < 1.days.toDays || duration > 3650.days.toDays =>
+                Some(
+                  validationErrorReport(
+                    setting.settingType,
+                    "retention duration must be between 1 and 3650 days (10 years)"
+                  )
+                )
+              case _ => None
+            }
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
-          case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
           case CompactDataTablesSetting(CompactDataTablesConfig(_))                           => None
         }
@@ -202,19 +212,19 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(enabled)) =>
           gcsDAO.setRequesterPays(workspace.bucketName, enabled, workspace.googleProjectId)
 
+        case GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(retentionDurationInDays)) =>
+          gcsDAO.setLogBucketRetentionPeriod(workspace.googleProjectId, retentionDurationInDays)
+
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
-        // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting
+        // SeparateSubmissionFinalOutputsSetting and CompactDataTablesSetting
         // are not bucket settings, so we do not need to apply anything here
 
         case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
           applyCompactDataTablesSetting(WorkspaceName(workspace.namespace, workspace.name), enabled)
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
-          Future.successful(())
-
-        case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_)) =>
           Future.successful(())
       }
 

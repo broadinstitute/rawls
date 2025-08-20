@@ -169,13 +169,7 @@ class WorkspaceRepository(dataSource: SlickDataSource) {
   def unlockWorkspace(workspace: Workspace)(implicit ex: ExecutionContext): Future[Boolean] =
     dataSource.inTransaction { dataAccess =>
       import dataAccess.WorkspaceExtensions
-      dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspace).flatMap {
-        case true =>
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")
-          )
-        case false => dataAccess.workspaceQuery.withWorkspaceId(workspace.workspaceIdAsUUID).unlock
-      }
+      dataAccess.workspaceQuery.withWorkspaceId(workspace.workspaceIdAsUUID).unlock
     }
 
   def updateCompletedCloneWorkspaceFileTransfer(wsId: UUID, finishTime: DateTime): Future[Int] =

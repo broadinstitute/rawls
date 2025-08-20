@@ -416,7 +416,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   // noinspection TypeAnnotation,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
-  class DefaultTestData() extends TestData {
+  class DefaultTestData(useCompact: Boolean = true) extends TestData {
     // setup workspace objects
     val userProjectOwner = RawlsUser(
       UserInfo(RawlsUserEmail("project-owner-access"),
@@ -1661,30 +1661,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         saveAllWorkspacesAction,
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             methodConfigurationQuery.create(context, agoraMethodConfigMaxWorkspaceAttributes),
             methodConfigurationQuery.create(context, agoraMethodConfigMaxEntityAttributes),
@@ -1728,12 +1756,26 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceWithRealm) { context =>
           DBIO.seq(
-            entityQuery.save(context, extraSample)
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                                 Seq(extraSample),
+                                                                 true
+              )
+            } else {
+              entityQuery.save(context, extraSample)
+            }
           )
         },
         withWorkspaceContext(workspaceWithMultiGroupAD) { context =>
           DBIO.seq(
-            entityQuery.save(context, extraSample)
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                                 Seq(extraSample),
+                                                                 true
+              )
+            } else {
+              entityQuery.save(context, extraSample)
+            }
           )
         },
         withWorkspaceContext(workspaceNoSubmissions) { context =>
@@ -1743,30 +1785,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceSuccessfulSubmission) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             methodConfigurationQuery.create(context, methodConfig2),
             submissionQuery.create(context, submissionSuccessful1),
@@ -1775,30 +1845,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceFailedSubmission) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionFailed),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -1806,30 +1904,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceSubmittedSubmission) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionSubmitted),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -1837,30 +1963,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceTerminatedSubmissions) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionAborted2),
             submissionQuery.create(context, submissionSuccessful2),
@@ -1869,30 +2023,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceMixedSubmissions) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionAborted1),
             submissionQuery.create(context, submissionMixed),
@@ -1901,30 +2083,58 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceInterleavedSubmissions) { context =>
           DBIO.seq(
-            entityQuery.save(
-              context,
-              Seq(aliquot1,
-                  aliquot2,
-                  sample1,
-                  sample2,
-                  sample3,
-                  sample4,
-                  sample5,
-                  sample6,
-                  sample7,
-                  sample8,
-                  pair1,
-                  pair2,
-                  ps1,
-                  sset1,
-                  sset2,
-                  sset3,
-                  sset4,
-                  sset_empty,
-                  indiv1,
-                  indiv2
+            if (useCompact) {
+              compactEntityRepository.queries.batchWriteEntities(
+                workspaceId = context.workspaceIdAsUUID,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                ),
+                true
               )
-            ),
+            } else {
+              entityQuery.save(
+                context,
+                Seq(aliquot1,
+                    aliquot2,
+                    sample1,
+                    sample2,
+                    sample3,
+                    sample4,
+                    sample5,
+                    sample6,
+                    sample7,
+                    sample8,
+                    pair1,
+                    pair2,
+                    ps1,
+                    sset1,
+                    sset2,
+                    sset3,
+                    sset4,
+                    sset_empty,
+                    indiv1,
+                    indiv2
+                )
+              )
+            },
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, outerSubmission),
             submissionQuery.create(context, innerSubmission),
@@ -2497,6 +2707,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     withCustomTestDatabaseInternal(emptyData)(testCode(slickDataSource))
 
   val testData = new DefaultTestData()
+  val legacyTestData = new DefaultTestData(false)
   val constantData = new ConstantTestData(false)
   val compactConstantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
@@ -2508,6 +2719,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
+
+  def withLegacyDefaultTestDatabase[T](testCode: => T): T =
+    withCustomTestDatabaseInternal(legacyTestData)(testCode)
+
+  def withLegacyDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
+    withCustomTestDatabaseInternal(legacyTestData)(testCode(slickDataSource))
 
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))

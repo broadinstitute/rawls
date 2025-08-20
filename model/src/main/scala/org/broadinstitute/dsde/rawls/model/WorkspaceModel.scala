@@ -18,18 +18,18 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketLifecycleRule,
   GcpBucketRequesterPaysConfig,
   GcpBucketSoftDeleteConfig,
+  GcpLogBucketRetentionConfig,
   PubliclyReadableConfig,
-  SeparateSubmissionFinalOutputsConfig,
-  UseCromwellGcpBatchBackendConfig
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{
   CompactDataTables,
   GcpBucketLifecycle,
   GcpBucketRequesterPays,
   GcpBucketSoftDelete,
+  GcpLogBucketRetention,
   PubliclyReadable,
   SeparateSubmissionFinalOutputs,
-  UseCromwellGcpBatchBackend,
   WorkspaceSettingType
 }
 import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
@@ -608,11 +608,11 @@ case class GcpBucketSoftDeleteSetting(override val config: GcpBucketSoftDeleteCo
 case class GcpBucketRequesterPaysSetting(override val config: GcpBucketRequesterPaysConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpBucketRequesterPays, config)
 
+case class GcpLogBucketRetentionSetting(override val config: GcpLogBucketRetentionConfig)
+    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.GcpLogBucketRetention, config)
+
 case class SeparateSubmissionFinalOutputsSetting(override val config: SeparateSubmissionFinalOutputsConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.SeparateSubmissionFinalOutputs, config)
-
-case class UseCromwellGcpBatchBackendSetting(override val config: UseCromwellGcpBatchBackendConfig)
-    extends WorkspaceSetting(settingType = WorkspaceSettingTypes.UseCromwellGcpBatchBackend, config)
 
 case class PubliclyReadableSetting(override val config: PubliclyReadableConfig)
     extends WorkspaceSetting(settingType = WorkspaceSettingTypes.PubliclyReadable, config)
@@ -630,8 +630,8 @@ object WorkspaceSettingTypes {
     case "gcpbucketlifecycle"             => GcpBucketLifecycle
     case "gcpbucketsoftdelete"            => GcpBucketSoftDelete
     case "gcpbucketrequesterpays"         => GcpBucketRequesterPays
+    case "gcplogbucketretention"          => GcpLogBucketRetention
     case "separatesubmissionfinaloutputs" => SeparateSubmissionFinalOutputs
-    case "usecromwellgcpbatchbackend"     => UseCromwellGcpBatchBackend
     case "publiclyreadable"               => PubliclyReadable
     case "compactdatatables"              => CompactDataTables
     case _                                => throw new RawlsException(s"invalid WorkspaceSetting [$name]")
@@ -643,9 +643,9 @@ object WorkspaceSettingTypes {
 
   case object GcpBucketRequesterPays extends WorkspaceSettingType
 
-  case object SeparateSubmissionFinalOutputs extends WorkspaceSettingType
+  case object GcpLogBucketRetention extends WorkspaceSettingType
 
-  case object UseCromwellGcpBatchBackend extends WorkspaceSettingType
+  case object SeparateSubmissionFinalOutputs extends WorkspaceSettingType
 
   case object PubliclyReadable extends WorkspaceSettingType
 
@@ -666,9 +666,9 @@ object WorkspaceSettingConfig {
 
   case class GcpBucketRequesterPaysConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
-  case class SeparateSubmissionFinalOutputsConfig(enabled: Boolean) extends WorkspaceSettingConfig
+  case class GcpLogBucketRetentionConfig(retentionDurationInDays: Days) extends WorkspaceSettingConfig
 
-  case class UseCromwellGcpBatchBackendConfig(enabled: Boolean) extends WorkspaceSettingConfig
+  case class SeparateSubmissionFinalOutputsConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
   case class PubliclyReadableConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
@@ -1289,13 +1289,13 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val GcpBucketRequesterPaysConfigFormat: RootJsonFormat[GcpBucketRequesterPaysConfig] = jsonFormat1(
     GcpBucketRequesterPaysConfig.apply
   )
+  implicit val GcpLogBucketRetentionConfigFormat: RootJsonFormat[GcpLogBucketRetentionConfig] = jsonFormat1(
+    GcpLogBucketRetentionConfig.apply
+  )
   implicit val SeparateSubmissionFinalOutputsConfigFormat: RootJsonFormat[SeparateSubmissionFinalOutputsConfig] =
     jsonFormat1(
       SeparateSubmissionFinalOutputsConfig.apply
     )
-  implicit val UseCromwellGcpBatchBackendConfigFormat: RootJsonFormat[UseCromwellGcpBatchBackendConfig] = jsonFormat1(
-    UseCromwellGcpBatchBackendConfig.apply
-  )
 
   implicit val PubliclyReadableConfigFormat: RootJsonFormat[PubliclyReadableConfig] = jsonFormat1(
     PubliclyReadableConfig.apply
@@ -1319,8 +1319,8 @@ class WorkspaceJsonSupport extends JsonSupport {
       case config: GcpBucketLifecycleConfig             => config.toJson
       case config: GcpBucketSoftDeleteConfig            => config.toJson
       case config: GcpBucketRequesterPaysConfig         => config.toJson
+      case config: GcpLogBucketRetentionConfig          => config.toJson
       case config: SeparateSubmissionFinalOutputsConfig => config.toJson
-      case config: UseCromwellGcpBatchBackendConfig     => config.toJson
       case config: PubliclyReadableConfig               => config.toJson
       case config: CompactDataTablesConfig              => config.toJson
     }
@@ -1346,10 +1346,10 @@ class WorkspaceJsonSupport extends JsonSupport {
         case GcpBucketSoftDelete => GcpBucketSoftDeleteSetting(fields("config").convertTo[GcpBucketSoftDeleteConfig])
         case GcpBucketRequesterPays =>
           GcpBucketRequesterPaysSetting(fields("config").convertTo[GcpBucketRequesterPaysConfig])
+        case GcpLogBucketRetention =>
+          GcpLogBucketRetentionSetting(fields("config").convertTo[GcpLogBucketRetentionConfig])
         case SeparateSubmissionFinalOutputs =>
           SeparateSubmissionFinalOutputsSetting(fields("config").convertTo[SeparateSubmissionFinalOutputsConfig])
-        case UseCromwellGcpBatchBackend =>
-          UseCromwellGcpBatchBackendSetting(fields("config").convertTo[UseCromwellGcpBatchBackendConfig])
         case PubliclyReadable =>
           PubliclyReadableSetting(fields("config").convertTo[PubliclyReadableConfig])
         case CompactDataTables =>

@@ -13,10 +13,10 @@ import scala.concurrent.ExecutionContext
 class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverComponent with RawlsTestUtils {
   import driver.api._
 
-  "withEntityRecsForExpressionEval" should "pull entity records for a single entity given no expression" in withDefaultTestDatabase {
+  "withEntityRecsForExpressionEval" should "pull entity records for a single entity given no expression" in withLegacyDefaultTestDatabase {
     val entitySupport = createEntitySupport(slickDataSource)
 
-    withWorkspaceContext(testData.workspace) { ctx =>
+    withWorkspaceContext(legacyTestData.workspace) { ctx =>
       val subRq = ExpressionEvaluationContext(
         entityType = Option("Sample"),
         entityName = Option("sample1"),
@@ -65,11 +65,11 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
       override protected val dataSource: SlickDataSource = ds
     }
 
-  it should "pull multiple entity records given an entity expression" in withDefaultTestDatabase {
+  it should "pull multiple entity records given an entity expression" in withLegacyDefaultTestDatabase {
     dataSource: SlickDataSource =>
       val entitySupport = createEntitySupport(dataSource)
 
-      withWorkspaceContext(testData.workspace) { ctx =>
+      withWorkspaceContext(legacyTestData.workspace) { ctx =>
         val subRq = ExpressionEvaluationContext(
           entityType = Option("SampleSet"),
           entityName = Option("sset1"),
