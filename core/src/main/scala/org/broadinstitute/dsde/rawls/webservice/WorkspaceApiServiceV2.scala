@@ -119,13 +119,13 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                     .map(StatusCodes.OK -> _)
                 }
               } ~
-              post {
-                complete {
-                  workspaceServiceConstructor(ctx)
-                    .repairWorkspace(workspaceName)
-                    .map(_ => StatusCodes.Accepted)
+                post {
+                  complete {
+                    workspaceServiceConstructor(ctx)
+                      .repairWorkspace(workspaceName)
+                      .map(_ => StatusCodes.Accepted)
+                  }
                 }
-              }
             }
           }
       }
