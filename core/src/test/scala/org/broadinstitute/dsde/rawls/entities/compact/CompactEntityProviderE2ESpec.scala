@@ -3,10 +3,13 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
+import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
@@ -1185,6 +1188,51 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     copiedEntities.entitiesCopied shouldBe empty
     copiedEntities.hardConflicts shouldBe empty
     copiedEntities.softConflicts shouldBe empty
+  }
+
+  behavior of "evaluateExpressions"
+
+  it should "allow `this` as a root expression" in withMinimalTestDatabase { _ =>
+    // save exemplar data
+    val typeUnderTest = "cat"
+    val fooAttribute: AttributeName = AttributeName.withDefaultNS("foo")
+    val exemplarDataWithCommonNames: Seq[Entity] =
+      Seq(
+        Entity(s"001", typeUnderTest, Map(fooAttribute -> AttributeString(s"$typeUnderTest-001"))),
+        Entity(s"002", typeUnderTest, Map(fooAttribute -> AttributeString(s"$typeUnderTest-002"))),
+        Entity(s"003", typeUnderTest, Map(fooAttribute -> AttributeString(s"$typeUnderTest-003")))
+      )
+    runAndWait(
+      compactEntityQuery.batchWriteEntities(minimalTestData.workspace.workspaceIdAsUUID,
+                                            exemplarDataWithCommonNames,
+                                            insertOnly = false
+      )
+    )
+
+    // get provider
+    val provider = defaultProvider()
+
+    // set up arguments for expression evaluation
+    val expression = Option("this") // <-- this is the root expression, important for this test
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Option(typeUnderTest), Option("002"), expression, Option(typeUnderTest))
+
+    val toolInputParameter = new ToolInputParameter()
+      .name("my-input-name")
+      .valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING))
+    val processableInputs = Set(MethodInput(toolInputParameter, "this.foo"))
+    val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+    val submissionValidationEntityInputsList =
+      Await.result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()), atMost).toList
+    submissionValidationEntityInputsList.size shouldBe 1
+
+    val entityInputs = submissionValidationEntityInputsList.head
+    entityInputs.entityName shouldBe "002"
+    entityInputs.inputResolutions.size shouldBe 1
+    entityInputs.inputResolutions.head.error shouldBe empty
+    entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+    entityInputs.inputResolutions.head.value should contain(AttributeString(s"$typeUnderTest-002"))
   }
 
   // ====================================================================================================
