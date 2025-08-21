@@ -4,6 +4,7 @@
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
     <changeSet logicalFilePath="dummy" author="lmcnatt" id="remove_all_gcpbatch_workspace_settings_again">
         <sql>
+        <!-- Deleting again for select users who opted back into Batch after GA -->
             UPDATE WORKSPACE_SETTINGS
                 SET STATUS = 'Deleted',
                     LAST_UPDATED = NOW(6)
