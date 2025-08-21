@@ -2,7 +2,7 @@
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
-    <changeSet logicalFilePath="dummy" author="lmcnatt" id="remove_all_gcpbatch_workspace_settings">
+    <changeSet logicalFilePath="dummy" author="lmcnatt" id="remove_all_gcpbatch_workspace_settings_again">
         <sql>
             UPDATE WORKSPACE_SETTINGS
                 SET STATUS = 'Deleted',
