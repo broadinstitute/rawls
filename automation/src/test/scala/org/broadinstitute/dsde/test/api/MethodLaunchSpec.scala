@@ -260,12 +260,12 @@ class MethodLaunchSpec
               ignoreEmptyOutputs = false
             )
           )
-          exception.message.parseJson.asJsObject
+          val errmsg = exception.message.parseJson.asJsObject
             .fields("message")
             .convertTo[String]
-            .contains(
-              "The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)"
-            ) shouldBe true
+
+          errmsg should include
+          "Method configuration expects an entity of type sample, but you gave us participant."
         }
       }
     }(user.makeAuthToken(billingScopes))
@@ -313,10 +313,11 @@ class MethodLaunchSpec
               ignoreEmptyOutputs = false
             )
           )
-          exception.message.parseJson.asJsObject
+          val errmsg = exception.message.parseJson.asJsObject
             .fields("message")
             .convertTo[String]
-            .contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true
+          errmsg should include
+          "Method configuration expects an entity of type participant, but you gave us participant_set."
         }
       }
     }(user.makeAuthToken(billingScopes))
