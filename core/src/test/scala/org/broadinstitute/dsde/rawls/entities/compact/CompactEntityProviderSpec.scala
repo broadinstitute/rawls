@@ -4,11 +4,14 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.Source
+import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RefMapping, _}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.compact.entityQuery.CountAndSource
 import org.broadinstitute.dsde.rawls.entities.exceptions._
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddUpdateAttribute,
   AttributeUpdateOperation,
@@ -688,10 +691,6 @@ class CompactEntityProviderSpec
       "type3" -> EntityTypeMetadata(3, "type3" + Attributable.entityIdAttributeSuffix, Seq())
     )
   }
-
-  "evaluateExpression" should "have tests" is pending
-  "evaluateExpressions" should "have tests" is pending
-  "expressionValidator" should "have tests" is pending
 
   behavior of "getEntity"
 
