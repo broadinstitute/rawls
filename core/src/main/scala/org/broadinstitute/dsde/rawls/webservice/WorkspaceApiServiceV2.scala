@@ -109,6 +109,24 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
                 }
               }
             }
+          } ~
+          pathPrefix("repair") {
+            pathEndOrSingleSlash {
+              get {
+                complete {
+                  workspaceServiceConstructor(ctx)
+                    .getRepairWorkspaceProgress(workspaceName)
+                    .map(StatusCodes.OK -> _)
+                }
+              } ~
+                post {
+                  complete {
+                    workspaceServiceConstructor(ctx)
+                      .repairWorkspace(workspaceName)
+                      .map(_ => StatusCodes.Accepted)
+                  }
+                }
+            }
           }
       }
     }

@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
+import bio.terra.buffer.model.JobModel
+import bio.terra.datarepo.model.ErrorModel
 import bio.terra.policy.model.TpsPaoGetResult
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow}
@@ -692,13 +694,17 @@ class WorkspaceService(
         gcsDAO.deleteGoogleProject(googleProjectId)
       )
       _ <- traceFutureWithParent("samDAO.deleteResource", parentContext)(_ =>
-        samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx).recover {
-          case regrets: RawlsExceptionWithErrorReport
-              if regrets.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-            logger.info(
-              s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
-            )
-        }
+        samDAO
+          .recursiveDeleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx)(executionContext,
+                                                                                                   logger
+          )
+          .recover {
+            case regrets: RawlsExceptionWithErrorReport
+                if regrets.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+              logger.info(
+                s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
+              )
+          }
       )
     } yield ()
   }
@@ -738,6 +744,96 @@ class WorkspaceService(
         case Failure(regrets) => DBIO.failed(regrets)
       }
     }
+
+  def repairWorkspace(workspaceName: WorkspaceName): Future[Unit] =
+    for {
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                       SamWorkspaceActions.own,
+                                                       Some(WorkspaceAttributeSpecs(all = false))
+      )
+      accountName = workspace.currentBillingAccountOnGoogleProject.getOrElse(
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"No billing account found for ${workspaceName.toString}")
+        )
+      )
+      _ <- gcsDAO.isBillingAccountEnabled(accountName).flatMap {
+        case true => Future.unit
+        case false =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Billing account $accountName is not enabled"
+              )
+            )
+          )
+      }
+      _ <- gcsDAO.getBucket(workspace.bucketName, Option(workspace.googleProjectId)).flatMap {
+        case Right(bucket) => Future.unit
+        case Left(message) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Workspace ${workspace.name} bucket ${workspace.bucketName} could not be repaired: $message"
+              )
+            )
+          )
+      }
+      // Grant RBS permission to re-enable APIs on the workspace project
+      _ <- gcsDAO.addPolicyBindings(
+        workspace.googleProjectId,
+        Map(
+          "roles/serviceusage.serviceUsageAdmin" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail),
+          "roles/resourcemanager.projectIamAdmin" -> Set("serviceAccount:" + resourceBufferService.serviceAccountEmail)
+        )
+      )
+
+      // This will launch an async stairway flight in RBS
+      _ <- resourceBufferService.repairGoogleProject(workspace.googleProjectId.value)
+
+    } yield ()
+
+  def getRepairWorkspaceProgress(workspaceName: WorkspaceName): Future[RepairWorkspaceResponse] =
+    for {
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                       SamWorkspaceActions.own,
+                                                       Some(WorkspaceAttributeSpecs(all = false))
+      )
+      jobResult <- resourceBufferService.getGoogleProjectRepairJobs(workspace.googleProjectId.value).flatMap { jobList =>
+        if (!jobList.isEmpty) {
+          Future.successful(jobList.get(0))
+        } else {
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.NotFound,
+                s"No repair job was started for project ${workspace.googleProjectId.value}"
+              )
+            )
+          )
+        }
+      }
+      response <- jobResult.getJobStatus match {
+        case JobModel.JobStatusEnum.FAILED =>
+          resourceBufferService
+            .getJobDetails(jobResult.getId)
+            .map { _ =>
+              // This block currently will not get called since getJobDetails always fails if the job status is FAILED
+              RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue, None)
+            }
+            .recover { case ex =>
+              RepairWorkspaceResponse(workspace.googleProjectId.value,
+                                      jobResult.getJobStatus.getValue,
+                                      Option(ex.getMessage)
+              )
+            }
+        case _ =>
+          Future.successful(
+            RepairWorkspaceResponse(workspace.googleProjectId.value, jobResult.getJobStatus.getValue, None)
+          )
+      }
+    } yield response
 
   def updateWorkspaceBillingProject(workspaceName: WorkspaceName,
                                     newBillingProjectName: String

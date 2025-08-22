@@ -1,12 +1,16 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
+import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
@@ -1185,6 +1189,95 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     copiedEntities.entitiesCopied shouldBe empty
     copiedEntities.hardConflicts shouldBe empty
     copiedEntities.softConflicts shouldBe empty
+  }
+
+  behavior of "evaluateExpressions"
+
+  List(None, Some("this")) foreach { expressionUnderTest =>
+    val entityType = "cat"
+    val fooAttribute: AttributeName = AttributeName.withDefaultNS("foo")
+    val exemplarDataWithCommonNames: Seq[Entity] =
+      Seq(
+        Entity(s"001", entityType, Map(fooAttribute -> AttributeString(s"$entityType-001"))),
+        Entity(s"002", entityType, Map(fooAttribute -> AttributeString(s"$entityType-002"))),
+        Entity(s"003", entityType, Map(fooAttribute -> AttributeString(s"$entityType-003")))
+      )
+
+    it should s"allow $expressionUnderTest as a root expression" in withMinimalTestDatabase { _ =>
+      // save exemplar data
+      runAndWait(
+        compactEntityQuery.batchWriteEntities(minimalTestData.workspace.workspaceIdAsUUID,
+                                              exemplarDataWithCommonNames,
+                                              insertOnly = false
+        )
+      )
+
+      // get provider
+      val provider = defaultProvider()
+
+      // set up arguments for expression evaluation
+      val expressionEvaluationContext =
+        ExpressionEvaluationContext(Option(entityType), Option("002"), expressionUnderTest, Option(entityType))
+
+      val toolInputParameter = new ToolInputParameter()
+        .name("my-input-name")
+        .valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING))
+      val processableInputs = Set(MethodInput(toolInputParameter, "this.foo"))
+      val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+      val submissionValidationEntityInputsList =
+        Await
+          .result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()), atMost)
+          .toList
+      submissionValidationEntityInputsList.size shouldBe 1
+
+      val entityInputs = submissionValidationEntityInputsList.head
+      entityInputs.entityName shouldBe "002"
+      entityInputs.inputResolutions.size shouldBe 1
+      entityInputs.inputResolutions.head.error shouldBe empty
+      entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+      entityInputs.inputResolutions.head.value should contain(AttributeString(s"$entityType-002"))
+    }
+
+    it should s"validate entity type even with $expressionUnderTest as a root expression" in withMinimalTestDatabase {
+      _ =>
+        // save exemplar data
+        runAndWait(
+          compactEntityQuery.batchWriteEntities(minimalTestData.workspace.workspaceIdAsUUID,
+                                                exemplarDataWithCommonNames,
+                                                insertOnly = false
+          )
+        )
+
+        // get provider
+        val provider = defaultProvider()
+
+        // set up arguments for expression evaluation
+        // note that entityType and rootEntityType do not match
+        val expressionEvaluationContext =
+          ExpressionEvaluationContext(Option(s"$entityType-doesnotmatch"),
+                                      Option("002"),
+                                      expressionUnderTest,
+                                      Option(entityType)
+          )
+
+        val toolInputParameter = new ToolInputParameter()
+          .name("my-input-name")
+          .valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING))
+        val processableInputs = Set(MethodInput(toolInputParameter, "this.foo"))
+        val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+        val actualException =
+          intercept[RawlsExceptionWithErrorReport] {
+            Await
+              .result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()), atMost)
+              .toList
+          }
+
+        actualException.errorReport.statusCode should contain(StatusCodes.BadRequest)
+        actualException.errorReport.message should include("expects an entity of type")
+    }
+
   }
 
   // ====================================================================================================

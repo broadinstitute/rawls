@@ -26,6 +26,7 @@ class CompactEvaluateVisitor extends TerraExpressionBaseVisitor[Seq[ExpressionLo
   override protected def defaultResult(): Seq[ExpressionLookup] = Seq.empty[ExpressionLookup]
 
   override def visitEntityLookup(ctx: EntityLookupContext): Seq[ExpressionLookup] = {
+    // handle nulls in ctx.attributeName()
     val attributeNameOption = Option(ctx.attributeName()).map { attrName =>
       toDelimitedName(AntlrTerraExpressionParser.toAttributeName(attrName))
     }

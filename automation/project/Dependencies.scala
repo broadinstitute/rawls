@@ -51,7 +51,7 @@ object Dependencies {
     "com.typesafe.akka"   %%  "akka-slf4j"          % akkaV,
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "v0.0.511-SNAP"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "v0.0.537-SNAP"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13"),
 

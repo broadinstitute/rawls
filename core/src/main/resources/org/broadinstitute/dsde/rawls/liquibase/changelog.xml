@@ -145,4 +145,5 @@
     <include file="changesets/20250604_entity_refs_view.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250616_remove_all_gcpbatch_workspace_settings.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250724_entity_keys_cache.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20250821_remove_all_gcpbatch_workspace_settings_again.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
