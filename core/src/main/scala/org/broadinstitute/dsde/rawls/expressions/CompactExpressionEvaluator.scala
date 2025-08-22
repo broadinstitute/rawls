@@ -182,7 +182,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
 
       case (Some(entityType), Some(entityName), Some(rootEntityType)) =>
         if (
-          expressionEvaluationContext.expression.isEmpty &&
+          // if the expression is empty or exactly "this", we expect the entityType to match the rootEntityType
+          (expressionEvaluationContext.expression.isEmpty || expressionEvaluationContext.expression.contains("this")) &&
           entityType != rootEntityType
         ) {
           val whatYouGaveUs =

@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.mock.{MockBardService, MockSamDAO, RemoteSe
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.{
   GcpBucketSoftDeleteConfig,
-  SeparateSubmissionFinalOutputsConfig,
+  SeparateSubmissionFinalOutputsConfig
 }
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -976,9 +976,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     )
 
     val workflowSubmission =
-      new TestWorkflowSubmission(slickDataSource,
-                                 workspaceSettingRepository = workspaceSettingRepository
-      ) {
+      new TestWorkflowSubmission(slickDataSource, workspaceSettingRepository = workspaceSettingRepository) {
         override val executionServiceCluster = mockExecCluster
       }
 

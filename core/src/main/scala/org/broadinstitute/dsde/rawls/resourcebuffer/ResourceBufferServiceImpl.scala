@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.resourcebuffer
 
+import bio.terra.buffer.model.{JobModel, SqlSortDirectionDescDefault}
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId, ProjectPoolType}
 
+import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
 import scala.concurrent.{ExecutionContext, Future}
 
 object ResourceBufferServiceImpl {
@@ -33,5 +35,21 @@ class ResourceBufferServiceImpl(resourceBufferDAO: ResourceBufferDAO, config: Re
 
   def serviceAccountEmail: String =
     config.saEmail
+
+  def repairGoogleProject(googleProjectId: String): Future[JobModel] =
+    resourceBufferDAO.repairResource(googleProjectId)
+
+  def getGoogleProjectRepairJobs(googleProjectId: String): Future[java.util.List[JobModel]] =
+    resourceBufferDAO
+      .enumerateJobs(
+        0,
+        10,
+        SqlSortDirectionDescDefault.DESC,
+        "bio.terra.buffer.service.resource.flight.GoogleProjectRepairFlight",
+        java.util.List.of("googleProjectId=" + googleProjectId)
+      )
+
+  def getJobDetails(jobId: String): Future[Object] =
+    resourceBufferDAO.getJobResult(jobId)
 
 }
