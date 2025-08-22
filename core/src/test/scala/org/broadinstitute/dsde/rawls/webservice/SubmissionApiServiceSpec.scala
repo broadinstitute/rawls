@@ -131,13 +131,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         "requesterPays",
         false,
         false,
-        CromwellBackend("PAPIv2"),
-        CromwellBackend("PAPIv2-CloudNAT"),
         CromwellBackend("GCPBatch"),
         methodConfigResolver,
         new MockBardService(),
-        new WorkspaceSettingRepository(slickDataSource),
-        useBatchAsDefaultBackend = false
+        new WorkspaceSettingRepository(slickDataSource)
       )
     )
 

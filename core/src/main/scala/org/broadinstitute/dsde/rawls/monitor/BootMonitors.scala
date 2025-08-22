@@ -73,13 +73,10 @@ object BootMonitors extends LazyLogging {
                    requesterPaysRole: String,
                    useWorkflowCollectionField: Boolean,
                    useWorkflowCollectionLabel: Boolean,
-                   defaultNetworkCromwellBackend: CromwellBackend,
-                   highSecurityNetworkCromwellBackend: CromwellBackend,
                    gcpBatchBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver,
                    bardService: BardService,
-                   workspaceSettingRepository: WorkspaceSettingRepository,
-                   useBatchAsDefaultBackend: Boolean
+                   workspaceSettingRepository: WorkspaceSettingRepository
   ): Unit = {
 
     if (appConfigManager.cloudProvider == WorkspaceCloudPlatform.Gcp) {
@@ -129,13 +126,10 @@ object BootMonitors extends LazyLogging {
         requesterPaysRole,
         useWorkflowCollectionField,
         useWorkflowCollectionLabel,
-        defaultNetworkCromwellBackend,
-        highSecurityNetworkCromwellBackend,
         gcpBatchBackend,
         methodConfigResolver,
         bardService,
-        workspaceSettingRepository,
-        useBatchAsDefaultBackend
+        workspaceSettingRepository
       )
 
       // Boot bucket deletion monitor
@@ -299,13 +293,10 @@ object BootMonitors extends LazyLogging {
                                             requesterPaysRole: String,
                                             useWorkflowCollectionField: Boolean,
                                             useWorkflowCollectionLabel: Boolean,
-                                            defaultNetworkCromwellBackend: CromwellBackend,
-                                            highSecurityNetworkCromwellBackend: CromwellBackend,
                                             gcpBatchBackend: CromwellBackend,
                                             methodConfigResolver: MethodConfigResolver,
                                             bardService: BardService,
-                                            workspaceSettingRepository: WorkspaceSettingRepository,
-                                            useBatchAsDefaultBackend: Boolean
+                                            workspaceSettingRepository: WorkspaceSettingRepository
   ) =
     for (i <- 0 until conf.getInt("executionservice.parallelSubmitters"))
       system.actorOf(
@@ -329,13 +320,10 @@ object BootMonitors extends LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultNetworkCromwellBackend,
-          highSecurityNetworkCromwellBackend,
           gcpBatchBackend,
           methodConfigResolver,
           bardService,
-          workspaceSettingRepository,
-          useBatchAsDefaultBackend
+          workspaceSettingRepository
         )
       )
 
