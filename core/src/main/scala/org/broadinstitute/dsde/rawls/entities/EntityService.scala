@@ -591,12 +591,26 @@ class EntityService(protected val ctx: RawlsRequestContext,
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
-        // verify owner of workspace.
+        // Is the current user an admin? Here, we define admin as having the "admin" role
+        // on the "workspace" Sam resource of type "resource_type_admin". We use the "admin_add_member"
+        // action as a proxy for the admin role, since only admins can alter policies.
+        userIsAdmin <- samDAO.admin.userHasResourceTypeAdminPermission(SamResourceTypeNames.workspace,
+                                                                       SamResourceTypeAdminActions.adminAddMember,
+                                                                       ctx
+        )
+        // If the user is an admin, just retrieve the workspace.
+        // Else, check if the user is an owner of the workspace; retrieve it if so.
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", s) { _ =>
-          getV2WorkspaceContextAndPermissions(workspaceName,
-                                              SamWorkspaceActions.own,
-                                              Some(WorkspaceAttributeSpecs(all = false))
-          )
+          if (userIsAdmin) {
+            logger.info(s"Executing Quicksilver migration as admin for $workspaceName")
+            getV2WorkspaceContext(workspaceName, Some(WorkspaceAttributeSpecs(all = false)))
+          } else {
+            logger.info(s"Executing Quicksilver migration as user for $workspaceName")
+            getV2WorkspaceContextAndPermissions(workspaceName,
+                                                SamWorkspaceActions.own,
+                                                Some(WorkspaceAttributeSpecs(all = false))
+            )
+          }
         }
         workspaceId = workspaceContext.workspaceIdAsUUID
 
