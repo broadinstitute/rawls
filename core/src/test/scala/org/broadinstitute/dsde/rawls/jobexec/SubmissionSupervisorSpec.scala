@@ -382,7 +382,7 @@ class SubmissionSupervisorSpec
 
   it should "handle getPetServiceAccountUserInfo failures gracefully and still start monitors for successful submissions" in withDefaultTestDatabase {
 
-    // Mock the SamDAO to fail for one submission and succeed for the other
+    // Mock the SamDAO
     val mockSamDAOWithFailure = mock[HttpSamDAO]
 
     // Create a new supervisor with the mocked SamDAO
@@ -422,15 +422,17 @@ class SubmissionSupervisorSpec
         .thenReturn(successfulKey) // succeed for the third submission
         .thenReturn(failedKey, failedKey) // fail for any others
 
-      val probe = TestProbe()
-
       // Send StartMonitorPass to trigger startMonitoringNewSubmissions
       supervisorWithMockSam ! StartMonitorPass
 
       // Wait for processing to complete
       Thread.sleep(1000)
 
-      // ask the supervisor how many children it has (i.e. active submission monitors)
+      // Ask the supervisor how many children it has (i.e. active submission monitors).
+      // If the supervisor failed to monitor any submissions, this will be zero.
+      // If the supervisor correctly started monitors for all submissions in `testData`, this will be 11.
+      // We expect it to be 2 because the Sam mock above only succeeds twice.
+      val probe = TestProbe()
       probe.send(supervisorWithMockSam, CountChildren)
       val expectedChildCount = 2
       probe.expectMsgPF(Duration.apply("2 seconds"), s"Expected $expectedChildCount child actors") { case count: Int =>
