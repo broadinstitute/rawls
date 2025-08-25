@@ -591,11 +591,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
-        // Is the current user an admin? Here, we define admin as having the "admin" role
-        // on the "workspace" Sam resource of type "resource_type_admin". We use the "admin_add_member"
-        // action as a proxy for the admin role, since only admins can alter policies.
+        // Is the current user a migration admin? Here, we define admin as having the "migrate" action
+        // on the "workspace" Sam resource of type "resource_type_admin".
         userIsAdmin <- samDAO.admin.userHasResourceTypeAdminPermission(SamResourceTypeNames.workspace,
-                                                                       SamResourceTypeAdminActions.adminAddMember,
+                                                                       SamResourceTypeAdminActions.migrate,
                                                                        ctx
         )
         // If the user is an admin, just retrieve the workspace.

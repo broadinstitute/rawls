@@ -103,7 +103,7 @@ object SamServicePerimeterActions {
 
 object SamResourceTypeAdminActions {
   val readSummaryInformation = SamResourceAction("admin_read_summary_information")
-  val adminAddMember = SamResourceAction("admin_add_member")
+  val migrate = SamResourceAction("migrate")
 }
 
 object SamTdrGoogleProjectActions {
