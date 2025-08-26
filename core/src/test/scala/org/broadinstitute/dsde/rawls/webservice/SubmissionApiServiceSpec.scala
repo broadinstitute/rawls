@@ -849,25 +849,26 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  it should "return 410 when calling genomics API" in withEmptyTestDataApiServices {
-    services =>
-      withStatsD {
-        Get(
-          s"/workflows/workflow_with_job_ids/genomics/operations/dummy-job-id"
-        ) ~> services.sealedInstrumentedRoutes ~>
-          check {
-            assertResult(StatusCodes.Gone, responseAs[String]) {
-              status
-            }
-            assertResult("\"This API has been removed. GCP LifeSciences API was shutdown in July 2025 and operations metadata for jobs is no longer available.\"") {
-              responseAs[String]
-            }
+  it should "return 410 when calling genomics API" in withEmptyTestDataApiServices { services =>
+    withStatsD {
+      Get(
+        s"/workflows/workflow_with_job_ids/genomics/operations/dummy-job-id"
+      ) ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Gone, responseAs[String]) {
+            status
           }
-      } { capturedMetrics =>
-        val wsPathForRequestMetrics = "workflows.redacted.genomics.redacted.redacted"
-        val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.Gone.intValue, 1)
-        assertSubsetOf(expected, capturedMetrics)
-      }
+          assertResult(
+            "\"This API has been removed. GCP LifeSciences API was shutdown in July 2025 and operations metadata for jobs is no longer available.\""
+          ) {
+            responseAs[String]
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = "workflows.redacted.genomics.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.Gone.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   private def ensureMethodConfigs(services: TestApiService,
