@@ -307,13 +307,7 @@ class WorkspaceServiceSpec
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
 
     val entityServiceConstructor =
-      EntityService.constructor(slickDataSource,
-                                samDAO,
-                                workbenchMetricBaseName = "test",
-                                entityManager,
-                                1000,
-                                Some(workspaceSettingServiceConstructor)
-      ) _
+      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000, None) _
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,

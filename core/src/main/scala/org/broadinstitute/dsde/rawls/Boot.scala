@@ -365,7 +365,7 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix,
         entityManager,
         appConfigManager.conf.getInt("entities.pageSizeLimit"),
-        Some(workspaceSettingServiceConstructor)
+        Some(workspaceSettingRepository)
       )
 
       lazy val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =

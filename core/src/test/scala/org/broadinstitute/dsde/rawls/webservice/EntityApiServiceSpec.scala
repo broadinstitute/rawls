@@ -80,7 +80,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                 workbenchMetricBaseName = "test",
                                 entityManager,
                                 1000,
-                                Some(settingService)
+                                Some(spyWorkspaceSettingRepository)
       )
 
   }

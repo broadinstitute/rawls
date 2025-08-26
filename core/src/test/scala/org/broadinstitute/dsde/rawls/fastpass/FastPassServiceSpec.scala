@@ -280,14 +280,10 @@ class FastPassServiceSpec
       mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
 
     val entityService = Mockito.spy(
-      new EntityService(ctx1,
-                        slickDataSource,
-                        samDAO,
-                        entityManager,
-                        workbenchMetricBaseName,
-                        10000,
-                        Some(workspaceSettingServiceConstructor)
-      )(executionContext, ActorSystem("mockEntityService"))
+      new EntityService(ctx1, slickDataSource, samDAO, entityManager, workbenchMetricBaseName, 10000, None)(
+        executionContext,
+        ActorSystem("mockEntityService")
+      )
     )
     val entityServiceConstructor: RawlsRequestContext => EntityService = _ => entityService
 
@@ -418,7 +414,7 @@ class FastPassServiceSpec
 
     doReturn(Future.successful(false))
       .when(services.entityService)
-      .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
+      .isCompactDataTableSettingEnabled(parentWorkspace.workspaceIdAsUUID)
 
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
@@ -1102,7 +1098,7 @@ class FastPassServiceSpec
 
     doReturn(Future.successful(false))
       .when(services.entityService)
-      .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
+      .isCompactDataTableSettingEnabled(parentWorkspace.workspaceIdAsUUID)
 
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
