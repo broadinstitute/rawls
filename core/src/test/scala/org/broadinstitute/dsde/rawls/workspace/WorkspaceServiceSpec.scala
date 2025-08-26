@@ -119,7 +119,8 @@ class WorkspaceServiceSpec
 
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
-  val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
+  val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
+  val mockWorkspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
 
   val mockLocalProvider: LocalEntityProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
 
@@ -307,7 +308,13 @@ class WorkspaceServiceSpec
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
 
     val entityServiceConstructor =
-      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000, None) _
+      EntityService.constructor(slickDataSource,
+                                samDAO,
+                                workbenchMetricBaseName = "test",
+                                entityManager,
+                                1000,
+                                Option(mockWorkspaceSettingRepository)
+      ) _
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -1914,9 +1921,10 @@ class WorkspaceServiceSpec
   "cloneWorkspace" should "create a V2 Workspace using compact data tables" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
+
     when(
-      mockWorkspaceSettingService.getWorkspaceSettingOfType(
-        baseWorkspace.toWorkspaceName,
+      services.mockWorkspaceSettingRepository.getWorkspaceSettingOfType(
+        baseWorkspace.workspaceIdAsUUID,
         CompactDataTables
       )
     ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
