@@ -39,20 +39,6 @@ import scala.jdk.CollectionConverters._
 
 class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTestUtils {
 
-  behavior of "handleByOperationIdType"
-
-  def v1Handler(opId: String) = "v1"
-  def v2alpha1Handler(opId: String) = "v2alpha1"
-  def lifeSciencesHandler(opId: String) = "lifeSciences"
-  def defaultHandler(opId: String) = "default"
-
-  val cases: List[(String, String)] = List(
-    ("operations/abc", "v1"),
-    ("projects/abc/operations/def", "v2alpha1"),
-    ("projects/abc/locations/def/operations/ghi", "lifeSciences"),
-    ("!!no match!!", "default")
-  )
-
   private def await[T](f: Future[T]): T = Await.result(f, 5 minutes)
 
   implicit val mockActorSystem: ActorSystem = ActorSystem("HttpGoogleServicesDAOSpec")

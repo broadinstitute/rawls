@@ -22,7 +22,6 @@ tags:
   - name: submissions
   - name: users
   - name: version
-  - name: workflows
   - name: workspaces
   - name: workspaces_v2
   - name: googleProjects
@@ -3359,34 +3358,6 @@ paths:
           description: |
             In all cases whether or not the workspace exists or user has access. If there were linked service accounts they were removed from the workspace but this api does not indicate that anything was done (for security reasons).
           content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-  /api/workflows/{workflowId}/genomics/{operationId}:
-    get:
-      tags:
-        - workflows
-      summary: retrieve operations info from Google Genomics API
-      description: retrieve operations info from Google Genomics API
-      operationId: genomics_operations_get
-      parameters:
-        - $ref: '#/components/parameters/workflowIdPathParam'
-        - name: operationId
-          in: path
-          description: operations job id; for PAPIv1 in the form of "operations/{id}",
-            for PAPIv2 "projects/{project}/operations/{id}"
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: operations info
-          content: {}
-        404:
-          description: workflow or jobId not found or no access
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/user/role/admin:

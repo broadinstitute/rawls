@@ -29,10 +29,8 @@ import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.directory.model.{Group, Member}
 import com.google.api.services.directory.{Directory, DirectoryScopes}
-import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
-import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
 import com.google.api.services.logging.v2.{Logging, LoggingScopes}
 import com.google.api.services.logging.v2.model.LogBucket
 import com.google.api.services.oauth2.Oauth2.Builder
@@ -62,7 +60,6 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   setTraceSpanAttribute,
@@ -130,10 +127,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val monitoringScopes = Seq(MonitoringScopes.MONITORING_READ)
-  val genomicsScopes = Seq(
-    GenomicsScopes.GENOMICS
-  ) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
-  val lifesciencesScopes = Seq(CloudLifeSciencesScopes.CLOUD_PLATFORM)
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
   val serviceUsageScopes = Seq(ServiceUsageScopes.CLOUD_PLATFORM_READ_ONLY)
   val loggingBucketScopes = Seq(LoggingScopes.LOGGING_ADMIN)
