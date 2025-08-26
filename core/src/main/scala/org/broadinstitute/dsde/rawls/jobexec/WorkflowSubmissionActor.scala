@@ -43,13 +43,10 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
-            defaultNetworkCromwellBackend: CromwellBackend,
-            highSecurityNetworkCromwellBackend: CromwellBackend,
             gcpBatchBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver,
             bardService: BardService,
-            workspaceSettingRepository: WorkspaceSettingRepository,
-            useBatchAsDefaultBackend: Boolean
+            workspaceSettingRepository: WorkspaceSettingRepository
   ): Props =
     Props(
       new WorkflowSubmissionActor(
@@ -70,13 +67,10 @@ object WorkflowSubmissionActor {
         requesterPaysRole,
         useWorkflowCollectionField,
         useWorkflowCollectionLabel,
-        defaultNetworkCromwellBackend,
-        highSecurityNetworkCromwellBackend,
         gcpBatchBackend,
         methodConfigResolver,
         bardService,
-        workspaceSettingRepository,
-        useBatchAsDefaultBackend
+        workspaceSettingRepository
       )
     )
 
@@ -108,13 +102,10 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
-                              val defaultNetworkCromwellBackend: CromwellBackend,
-                              val highSecurityNetworkCromwellBackend: CromwellBackend,
                               val gcpBatchBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver,
                               val bardService: BardService,
-                              val workspaceSettingRepository: WorkspaceSettingRepository,
-                              val useBatchAsDefaultBackend: Boolean
+                              val workspaceSettingRepository: WorkspaceSettingRepository
 ) extends Actor
     with WorkflowSubmission
     with LazyLogging {
@@ -164,13 +155,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
-  val defaultNetworkCromwellBackend: CromwellBackend
-  val highSecurityNetworkCromwellBackend: CromwellBackend
   val gcpBatchBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
   val bardService: BardService
   val workspaceSettingRepository: WorkspaceSettingRepository
-  val useBatchAsDefaultBackend: Boolean
 
   import dataSource.dataAccess.driver.api._
 

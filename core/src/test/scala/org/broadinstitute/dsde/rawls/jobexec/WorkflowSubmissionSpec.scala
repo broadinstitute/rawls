@@ -101,13 +101,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val requesterPaysRole: String = requesterPaysRole,
     val useWorkflowCollectionField: Boolean = false,
     val useWorkflowCollectionLabel: Boolean = false,
-    val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2"),
-    val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
     val gcpBatchBackend: CromwellBackend = CromwellBackend("GCPBatch"),
     val methodConfigResolver: MethodConfigResolver = methodConfigResolver,
     val bardService: BardService = mockBardService,
-    val workspaceSettingRepository: WorkspaceSettingRepository = mockWorkspaceSettingRepository,
-    val useBatchAsDefaultBackend: Boolean = true
+    val workspaceSettingRepository: WorkspaceSettingRepository = mockWorkspaceSettingRepository
   ) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
@@ -706,13 +703,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           requesterPaysRole,
           false,
           false,
-          CromwellBackend("PAPIv2"),
-          CromwellBackend("PAPIv2-CloudNAT"),
           CromwellBackend("GCPBatch"),
           methodConfigResolver,
           mockBardService,
-          mockWorkspaceSettingRepository,
-          false
+          mockWorkspaceSettingRepository
         )
       )
 
@@ -776,13 +770,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           requesterPaysRole,
           false,
           false,
-          CromwellBackend("PAPIv2"),
-          CromwellBackend("PAPIv2-CloudNAT"),
           CromwellBackend("GCPBatch"),
           methodConfigResolver,
           mockBardService,
-          mockWorkspaceSettingRepository,
-          false
+          mockWorkspaceSettingRepository
         )
       )
 

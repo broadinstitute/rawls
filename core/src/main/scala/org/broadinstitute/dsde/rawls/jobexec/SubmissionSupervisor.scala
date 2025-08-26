@@ -59,6 +59,8 @@ object SubmissionSupervisor {
   case class SaveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int],
                                      workflowStatuses: Map[WorkflowStatus, Int]
   )
+  // for unit testing
+  case object CountChildren
 
   def props(executionServiceCluster: ExecutionServiceCluster,
             datasource: DataSourceAccess,
@@ -178,6 +180,10 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
     case SaveGlobalJobExecCounts(submissionStatuses, workflowStatuses) =>
       saveGlobalJobExecCounts(submissionStatuses, workflowStatuses)
+
+    // for unit testing
+    case CountChildren =>
+      sender() ! context.children.size
   }
 
   private def scheduleInitialMonitorPass: Cancellable =
@@ -245,13 +251,18 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
         monitoredSubmissions.contains(subId.toString)
       }
 
-      unmonitoredSubmissionsWithPets <- Future.traverse(unmonitoredSubmissions) {
-        case (subId, wsName, perWorkflowCostCap, googleProjectId, submitter) =>
-          getPetServiceAccountUserInfo(googleProjectId, submitter).map(petUserInfo =>
-            (subId, wsName, perWorkflowCostCap, petUserInfo)
-          )
-      }
-      _ = unmonitoredSubmissionsWithPets.foreach { case (subId, wsName, perWorkflowCostCap, pet) =>
+      unmonitoredSubmissionsWithPets <- Future
+        .traverse(unmonitoredSubmissions) { case (subId, wsName, perWorkflowCostCap, googleProjectId, submitter) =>
+          getPetServiceAccountUserInfo(googleProjectId, submitter)
+            .map(petUserInfo => Option((subId, wsName, perWorkflowCostCap, petUserInfo)))
+            .recover { case t: Throwable =>
+              logger.error(s"Error starting submission monitor actors for new submissions: $subId -> ${t.getMessage}",
+                           t
+              )
+              None
+            }
+        }
+      _ = unmonitoredSubmissionsWithPets.flatten.foreach { case (subId, wsName, perWorkflowCostCap, pet) =>
         self ! SubmissionStarted(wsName, subId, perWorkflowCostCap, pet)
       }
     } yield SubmissionMonitorPassComplete).recover { case t: Throwable =>

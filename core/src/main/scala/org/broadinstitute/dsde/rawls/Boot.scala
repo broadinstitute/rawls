@@ -272,14 +272,8 @@ object Boot extends IOApp with LazyLogging {
         appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultNetworkCromwellBackend: CromwellBackend =
-        CromwellBackend(appConfigManager.conf.getString("executionservice.defaultNetworkBackend"))
-      val highSecurityNetworkCromwellBackend: CromwellBackend =
-        CromwellBackend(appConfigManager.conf.getString("executionservice.highSecurityNetworkBackend"))
       val gcpBatchBackend: CromwellBackend =
         CromwellBackend(appConfigManager.conf.getString("executionservice.gcpBatchBackend"))
-      val useBatchAsDefaultBackend: Boolean =
-        appConfigManager.conf.getBooleanOption("executionservice.useBatchAsDefaultBackend").getOrElse(false)
 
       val wdlParsingConfig = WDLParserConfig(appConfigManager.conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -564,13 +558,10 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultNetworkCromwellBackend,
-          highSecurityNetworkCromwellBackend,
           gcpBatchBackend,
           methodConfigResolver,
           bardService,
-          workspaceSettingRepository,
-          useBatchAsDefaultBackend
+          workspaceSettingRepository
         )
       } else
         logger.info(
