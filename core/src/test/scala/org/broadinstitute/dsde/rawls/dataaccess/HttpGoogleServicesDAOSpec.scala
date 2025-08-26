@@ -76,14 +76,6 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     "fakeResourceBufferJsonFile"
   )
 
-  cases foreach { case (opId, identification) =>
-    it should s"Correctly identify $opId as $identification" in {
-      handleByOperationIdType(opId, v1Handler, v2alpha1Handler, lifeSciencesHandler, defaultHandler) should be(
-        identification
-      )
-    }
-  }
-
   behavior of "getUserCredential"
 
   it should "get a credential for a Google user" in {

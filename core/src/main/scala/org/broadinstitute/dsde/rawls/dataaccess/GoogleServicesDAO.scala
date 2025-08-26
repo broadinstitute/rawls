@@ -164,8 +164,6 @@ trait GoogleServicesDAO extends ErrorReportable {
     executionContext: ExecutionContext
   ): Future[Boolean]
 
-  def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
-
   def getResourceBufferServiceAccountCredential: Credential
 
   def getServiceAccountUserInfo(): Future[UserInfo]
