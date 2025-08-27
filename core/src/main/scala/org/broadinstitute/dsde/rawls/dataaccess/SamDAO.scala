@@ -207,6 +207,8 @@ trait SamAdminDAO {
                            ctx: RawlsRequestContext
   ): Future[Unit]
 
+  def deletePetPerProject(userId: String, googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
+
   def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
                                          action: SamResourceAction,
                                          ctx: RawlsRequestContext

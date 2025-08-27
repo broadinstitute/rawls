@@ -139,19 +139,19 @@ object UserService {
   )(implicit ex: ExecutionContext): Future[Unit] =
     for {
       projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ctx)
-      _ <- projectUsers.toList.traverse(destroyPet(_, projectName, gcsDAO, samDAO, ctx))
+      _ <- projectUsers.toList.traverse(destroyPet(_, projectName, samDAO, ctx))
     } yield ()
 
   private def destroyPet(userIdInfo: UserIdInfo,
                          projectName: GoogleProjectId,
-                         gcsDAO: GoogleServicesDAO,
                          samDAO: SamDAO,
                          ctx: RawlsRequestContext
   )(implicit ex: ExecutionContext): Future[Unit] =
     for {
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
-      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx.copy(userInfo = petUserInfo))
+      _ <- samDAO.admin.deletePetPerProject(userIdInfo.userSubjectId,
+                                            projectName,
+                                            samDAO.rawlsSAContext.copy(otelContext = ctx.otelContext)
+      )
     } yield ()
 }
 
