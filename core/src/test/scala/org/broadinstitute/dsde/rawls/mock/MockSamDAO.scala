@@ -286,10 +286,17 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     ): Future[Unit] =
       MockSamDAO.this.removeUserFromPolicy(resourceTypeName, resourceId, policyName, memberEmail, ctx)
 
+    override def deletePetPerProject(userId: String,
+                                     googleProject: GoogleProjectId,
+                                     ctx: RawlsRequestContext
+    ): Future[Unit] =
+      ???
+
     override def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
                                                     action: SamResourceAction,
                                                     ctx: RawlsRequestContext
     ): Future[Boolean] = ???
+
   }
 
   override def setPolicyPublic(resourceTypeName: SamResourceTypeName,

@@ -96,10 +96,12 @@ class EntityServiceCompactMigrationSpec
 
     val googleStorageService = mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
 
+    val workspaceSettingRepository = new WorkspaceSettingRepository(dataSource)
+
     val workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] = Some { ctx =>
       new WorkspaceSettingService(
         ctx,
-        new WorkspaceSettingRepository(dataSource),
+        workspaceSettingRepository,
         new WorkspaceRepository(dataSource),
         new MockGoogleServicesDAO("groupsPrefix"),
         samDAO,
@@ -114,13 +116,13 @@ class EntityServiceCompactMigrationSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        new WorkspaceSettingRepository(dataSource),
+        workspaceSettingRepository,
         testConf.getBoolean("entityStatisticsCache.enabled"),
         testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )(executionContext, system),
       7, // <-- specifically, chosen to be lower than the number of samples in "workspace" within testData
-      workspaceSettingServiceConstructor
+      Option(workspaceSettingRepository)
     ) _
   }
 

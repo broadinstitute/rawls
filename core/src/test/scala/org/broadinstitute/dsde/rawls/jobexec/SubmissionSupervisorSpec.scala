@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.stream.ActorMaterializer
-import akka.testkit.TestKit
+import akka.testkit.{TestKit, TestProbe}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.credentials.FakeRawlsCredentials
@@ -15,15 +15,19 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 }
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
+  CountChildren,
   RefreshGlobalJobExecGauges,
   SaveCurrentWorkflowStatusCounts,
+  StartMonitorPass,
   SubmissionStarted
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserEmail, SubmissionStatuses, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -31,6 +35,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.time.Instant
 import java.util.UUID
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -373,5 +378,68 @@ class SubmissionSupervisorSpec
         )
       )
     }
+  }
+
+  it should "handle getPetServiceAccountUserInfo failures gracefully and still start monitors for successful submissions" in withDefaultTestDatabase {
+
+    // Mock the SamDAO
+    val mockSamDAOWithFailure = mock[HttpSamDAO]
+
+    // Create a new supervisor with the mocked SamDAO
+    val execSvcDAO = new MockExecutionServiceDAO()
+    val execCluster = MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, slickDataSource)
+    val config = SubmissionMonitorConfig(20 minutes, 30 days, true, 20000, true, true)
+
+    val supervisorWithMockSam = system.actorOf(
+      SubmissionSupervisor
+        .props(
+          execCluster,
+          new UncoordinatedDataSourceAccess(slickDataSource),
+          mockSamDAOWithFailure,
+          gcsDAO,
+          _ => mock[EntityService],
+          mockNotificationDAO,
+          config,
+          workbenchMetricBaseName
+        )
+        .withDispatcher("submission-monitor-dispatcher"),
+      "test-supervisor-with-mock-sam"
+    )
+
+    try {
+      // set up the Sam mock to only succeed on the 2nd and 4th calls; this should result in only two
+      // active submission monitors
+      val successfulKey = Future.successful("fake key")
+      val failedKey = Future.failed(new RuntimeException("Sam failure for unit test"))
+      when(
+        mockSamDAOWithFailure.getPetServiceAccountKeyForUser(
+          ArgumentMatchers.any[GoogleProjectId],
+          ArgumentMatchers.any[RawlsUserEmail]
+        )
+      )
+        .thenReturn(successfulKey) // succeed for the first submission
+        .thenReturn(failedKey) // fail for the second submission
+        .thenReturn(successfulKey) // succeed for the third submission
+        .thenReturn(failedKey, failedKey) // fail for any others
+
+      // Send StartMonitorPass to trigger startMonitoringNewSubmissions
+      supervisorWithMockSam ! StartMonitorPass
+
+      // Wait for processing to complete
+      Thread.sleep(1000)
+
+      // Ask the supervisor how many children it has (i.e. active submission monitors).
+      // If the supervisor failed to monitor any submissions, this will be zero.
+      // If the supervisor correctly started monitors for all submissions in `testData`, this will be 11.
+      // We expect it to be 2 because the Sam mock above only succeeds twice.
+      val probe = TestProbe()
+      probe.send(supervisorWithMockSam, CountChildren)
+      val expectedChildCount = 2
+      probe.expectMsgPF(Duration.apply("2 seconds"), s"Expected $expectedChildCount child actors") { case count: Int =>
+        count shouldBe expectedChildCount
+      }
+
+    } finally
+      supervisorWithMockSam ! PoisonPill
   }
 }

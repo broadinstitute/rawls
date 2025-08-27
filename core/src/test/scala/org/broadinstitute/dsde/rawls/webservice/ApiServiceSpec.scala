@@ -294,7 +294,7 @@ trait ApiServiceSpec
                                 workbenchMetricBaseName = "test",
                                 entityManager,
                                 1000,
-                                Some(workspaceSettingServiceConstructor)
+                                Some(new WorkspaceSettingRepository(slickDataSource))
       ) _
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO

@@ -119,7 +119,8 @@ class WorkspaceServiceSpec
 
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
-  val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS);
+  val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
+  val mockWorkspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
 
   val mockLocalProvider: LocalEntityProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
 
@@ -139,12 +140,19 @@ class WorkspaceServiceSpec
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    clearInvocations(mockWorkspaceSettingService, mockWorkspaceSettingRepository)
     when(
       mockWorkspaceSettingService.getWorkspaceSettingOfType(
         any[WorkspaceName],
         any[WorkspaceSettingType]
       )
     ).thenReturn(Future.successful(None))
+    when(
+      mockWorkspaceSettingRepository.getWorkspaceSettingOfType(
+        any[UUID],
+        ArgumentMatchers.eq(CompactDataTables)
+      )
+    ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
@@ -312,7 +320,7 @@ class WorkspaceServiceSpec
                                 workbenchMetricBaseName = "test",
                                 entityManager,
                                 1000,
-                                Some(workspaceSettingServiceConstructor)
+                                Option(mockWorkspaceSettingRepository)
       ) _
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
@@ -1902,6 +1910,9 @@ class WorkspaceServiceSpec
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
+    when(mockWorkspaceSettingService.setWorkspaceSettings(any[WorkspaceName], any[List[WorkspaceSetting]]))
+      .thenReturn(Future.successful(mock[WorkspaceSettingResponse]))
+
     val workspace =
       Await.result(services.workspaceService.cloneWorkspace(
                      baseWorkspace.toWorkspaceName,
@@ -1920,12 +1931,6 @@ class WorkspaceServiceSpec
   "cloneWorkspace" should "create a V2 Workspace using compact data tables" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
-    when(
-      mockWorkspaceSettingService.getWorkspaceSettingOfType(
-        baseWorkspace.toWorkspaceName,
-        CompactDataTables
-      )
-    ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
 
     when(mockWorkspaceSettingService.setWorkspaceSettings(any[WorkspaceName], any[List[WorkspaceSetting]]))
       .thenReturn(Future.successful(mock[WorkspaceSettingResponse]))

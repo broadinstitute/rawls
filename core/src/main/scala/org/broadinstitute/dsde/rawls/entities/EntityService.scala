@@ -32,7 +32,11 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   traceFutureWithParent
 }
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  WorkspaceRepository,
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
+}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import spray.json.DefaultJsonProtocol.jsonFormat3
@@ -48,7 +52,7 @@ object EntityService {
                   workbenchMetricBaseName: String,
                   entityManager: EntityManager,
                   pageSizeLimit: Int,
-                  workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
+                  workspaceSettingsRepository: Option[WorkspaceSettingRepository] =
                     None // only used for Quicksilver migration
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext, system: ActorSystem): EntityService =
     new EntityService(ctx,
@@ -57,7 +61,7 @@ object EntityService {
                       entityManager,
                       workbenchMetricBaseName,
                       pageSizeLimit,
-                      workspaceSettingServiceConstructor
+                      workspaceSettingsRepository
     )
 }
 
@@ -67,7 +71,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
                     entityManager: EntityManager,
                     override val workbenchMetricBaseName: String,
                     pageSizeLimit: Int,
-                    workspaceSettingServiceConstructor: Option[RawlsRequestContext => WorkspaceSettingService] =
+                    workspaceSettingsRepository: Option[WorkspaceSettingRepository] =
                       None // only used for Quicksilver migration
 )(implicit protected val executionContext: ExecutionContext, system: ActorSystem)
     extends WorkspaceSupport
@@ -389,8 +393,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
         _ = authDomainCheck(sourceAD.toSet, destAD.toSet)
         entityProvider <- getProviderWithTracing(destWsCtx, localContext)
 
-        sourceCompactEnabled <- isCompactDataTableSettingEnabled(entityCopyDef.sourceWorkspace)
-        destCompactEnabled <- isCompactDataTableSettingEnabled(entityCopyDef.destinationWorkspace)
+        sourceCompactEnabled <- isCompactDataTableSettingEnabled(sourceWsCtx.workspaceIdAsUUID)
+        destCompactEnabled <- isCompactDataTableSettingEnabled(destWsCtx.workspaceIdAsUUID)
         _ = if (sourceCompactEnabled != destCompactEnabled) {
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(
@@ -561,11 +565,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
   /**
    * Determine if a workspace has the CompactDataTables setting enabled.
    */
-  def isCompactDataTableSettingEnabled(workspaceName: WorkspaceName): Future[Boolean] =
-    workspaceSettingServiceConstructor match {
-      case Some(serviceConstructor) =>
-        val workspaceSettingService = serviceConstructor(ctx)
-        workspaceSettingService.getWorkspaceSettingOfType(workspaceName, CompactDataTables) map {
+  def isCompactDataTableSettingEnabled(workspaceId: UUID): Future[Boolean] =
+    workspaceSettingsRepository match {
+      case Some(repository) =>
+        repository.getWorkspaceSettingOfType(workspaceId, CompactDataTables) map {
           case Some(qs: CompactDataTablesSetting) => qs.config.enabled
           case _                                  => false
         }
@@ -614,9 +617,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
         workspaceId = workspaceContext.workspaceIdAsUUID
 
         // confirm if this is already a quicksilver workspace by checking settings
-        workspaceSettingService = workspaceSettingServiceConstructor.get.apply(ctx)
+        settingsRepo = workspaceSettingsRepository.get
         settings <- traceFutureWithParent("getWorkspaceSettings", s) { _ =>
-          workspaceSettingService.getWorkspaceSettings(workspaceName)
+          settingsRepo.getWorkspaceSettings(workspaceContext.workspaceIdAsUUID)
         }
         _ = if (
           settings
@@ -631,7 +634,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
         // If Migration is triggered from Settings, there will be "Pending" settings
         // If Migration is triggered from the Migration API, there will be no "Pending" settings unless already requested
         hasPendingSettings <- traceFutureWithParent("workspaceHasPendingSettings", s) { _ =>
-          workspaceSettingService.workspaceHasPendingSettings(workspaceName, CompactDataTables)
+          settingsRepo.hasPendingSettings(workspaceContext.workspaceIdAsUUID, CompactDataTables)
         }
 
         // If there are pending settings, it means migration has already been requested and is currently in progress.
@@ -646,9 +649,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
         // This is done before the migration starts to ensure that the workspace setting marked as "Pending"
         _ = if (!hasPendingSettings && updateWorkspaceSettings) {
           traceFutureWithParent("setWorkspaceSettings", s) { _ =>
-            workspaceSettingService.setWorkspaceSettings(
-              workspaceName,
-              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+            settingsRepo.createWorkspaceSettingsRecords(
+              workspaceContext.workspaceIdAsUUID,
+              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true))),
+              ctx.userInfo.userSubjectId
             )
           }
         }
@@ -701,6 +705,16 @@ class EntityService(protected val ctx: RawlsRequestContext,
             } yield QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted)
           }
 
+        }
+
+        // Apply the workspace setting to mark the migration as finalized
+        _ = if (updateWorkspaceSettings) {
+          traceFutureWithParent("applyWorkspaceSettings", s) { _ =>
+            settingsRepo.markWorkspaceSettingApplied(
+              workspaceContext.workspaceIdAsUUID,
+              WorkspaceSettingTypes.CompactDataTables
+            )
+          }
         }
 
         // return a count of entities updated
