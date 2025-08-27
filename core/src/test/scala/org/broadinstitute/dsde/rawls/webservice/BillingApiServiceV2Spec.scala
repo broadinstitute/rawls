@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProjectDeletion,
@@ -1046,7 +1047,17 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices {
     services =>
       val project = createProject("project")
+      val adminRequestContext: RawlsRequestContext =
+        RawlsRequestContext(
+          UserInfo(RawlsUserEmail("admin"),
+                   OAuth2BearerToken("Bearer admin token"),
+                   999,
+                   RawlsUserSubjectId("adminSubjectId")
+          )
+        )
       // wow there are a lot of sam calls in delete billing project
+      val mockSamAdminDAO = mock[SamAdminDAO]
+      when(services.samDAO.admin).thenReturn(mockSamAdminDAO)
       when(
         services.samDAO.userHasAction(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -1075,9 +1086,11 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
         )
       )
+      when(services.samDAO.rawlsSAContext).thenReturn(adminRequestContext)
       when(
-        services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
-                                                    any[RawlsRequestContext]
+        services.samDAO.admin.deletePetPerProject(anyString(),
+                                                  ArgumentMatchers.eq(project.googleProjectId),
+                                                  any[RawlsRequestContext]
         )
       )
         .thenReturn(Future.successful())
@@ -1106,8 +1119,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           }
         }
 
-      verify(services.samDAO).deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
-                                                          any[RawlsRequestContext]
+      verify(mockSamAdminDAO).deletePetPerProject(ArgumentMatchers.eq(testContext.userInfo.userSubjectId.value),
+                                                  ArgumentMatchers.eq(project.googleProjectId),
+                                                  any[RawlsRequestContext]
       )
       verify(services.samDAO).deleteResource(
         ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
