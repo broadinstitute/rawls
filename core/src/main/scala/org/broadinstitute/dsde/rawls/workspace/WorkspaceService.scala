@@ -1147,7 +1147,7 @@ class WorkspaceService(
       }
 
       compactDataTablesEnabled <- entityServiceConstructor(ctx).isCompactDataTableSettingEnabled(
-        sourceWorkspace.toWorkspaceName
+        sourceWorkspace.workspaceIdAsUUID
       )
 
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
