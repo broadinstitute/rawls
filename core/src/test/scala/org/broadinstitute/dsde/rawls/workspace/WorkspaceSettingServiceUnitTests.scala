@@ -55,11 +55,12 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt}
+import org.mockito.Mockito.times
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.must.Matchers.{contain, include}
+import org.scalatest.matchers.must.Matchers.{contain, empty, include}
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import java.util.UUID
@@ -1188,4 +1189,141 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
     error.statusCode shouldBe Some(StatusCodes.BadRequest)
     error.message should include("Cannot disable compact data tables setting once enabled.")
   }
+
+  List(Option(true), None) foreach { performMigrationArgument =>
+    it should s"trigger a migration when performMigration is $performMigrationArgument" in {
+      val workspaceId = workspace.workspaceIdAsUUID
+      val workspaceName = workspace.toWorkspaceName
+      val enableCompactDataTablesSetting =
+        CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = performMigrationArgument))
+
+      val workspaceRepository = mock[WorkspaceRepository]
+      when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+      val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+      when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+      when(
+        workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                  List(enableCompactDataTablesSetting),
+                                                                  defaultRequestContext.userInfo.userSubjectId
+        )
+      ).thenReturn(Future.successful(List(enableCompactDataTablesSetting)))
+      when(
+        workspaceSettingRepository.markWorkspaceSettingApplied(workspaceId, enableCompactDataTablesSetting.settingType)
+      )
+        .thenReturn(Future.successful(1))
+
+      val samDAO = mock[SamDAO]
+      when(samDAO.getUserStatus(any()))
+        .thenReturn(
+          Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", enabled = true)))
+        )
+      when(
+        samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.eq(workspaceId.toString),
+          ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+          any()
+        )
+      ).thenReturn(Future.successful(true))
+
+      val entityService = mock[EntityService]
+      when(
+        entityService.quicksilverMigration(
+          ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
+          any[Boolean],
+          any[Int],
+          any[Boolean]
+        )
+      ).thenReturn(Future.successful(QuicksilverMigrationResult(1, 2, 3)))
+
+      val service =
+        workspaceSettingServiceConstructor(
+          samDAO = samDAO,
+          workspaceRepository = workspaceRepository,
+          workspaceSettingRepository = workspaceSettingRepository,
+          entityService = entityService
+        )
+
+      val result =
+        Await.result(service.setWorkspaceSettings(workspaceName, List(enableCompactDataTablesSetting)), Duration.Inf)
+      result.successes shouldBe List(enableCompactDataTablesSetting)
+      result.failures shouldBe empty
+
+      verify(entityService).quicksilverMigration(
+        ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
+        anyBoolean(),
+        anyInt(),
+        ArgumentMatchers.eq(false)
+      )
+    }
+  }
+
+  it should s"not trigger a migration when performMigration is Some(false)" in {
+    val workspaceId = workspace.workspaceIdAsUUID
+    val workspaceName = workspace.toWorkspaceName
+    val enableCompactDataTablesSetting =
+      CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false)))
+
+    val workspaceRepository = mock[WorkspaceRepository]
+    when(workspaceRepository.getWorkspace(workspaceName, None)).thenReturn(Future.successful(Option(workspace)))
+
+    val workspaceSettingRepository = mock[WorkspaceSettingRepository]
+    when(workspaceSettingRepository.getWorkspaceSettings(workspaceId)).thenReturn(Future.successful(List.empty))
+    when(
+      workspaceSettingRepository.createWorkspaceSettingsRecords(workspaceId,
+                                                                List(enableCompactDataTablesSetting),
+                                                                defaultRequestContext.userInfo.userSubjectId
+      )
+    ).thenReturn(Future.successful(List(enableCompactDataTablesSetting)))
+    when(
+      workspaceSettingRepository.markWorkspaceSettingApplied(workspaceId, enableCompactDataTablesSetting.settingType)
+    )
+      .thenReturn(Future.successful(1))
+
+    val samDAO = mock[SamDAO]
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(
+        Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", enabled = true)))
+      )
+    when(
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.eq(SamWorkspaceActions.writeSettings),
+        any()
+      )
+    ).thenReturn(Future.successful(true))
+
+    val entityService = mock[EntityService]
+    when(
+      entityService.quicksilverMigration(
+        ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
+        any[Boolean],
+        any[Int],
+        any[Boolean]
+      )
+    ).thenReturn(Future.successful(QuicksilverMigrationResult(1, 2, 3)))
+
+    val service =
+      workspaceSettingServiceConstructor(
+        samDAO = samDAO,
+        workspaceRepository = workspaceRepository,
+        workspaceSettingRepository = workspaceSettingRepository,
+        entityService = entityService
+      )
+
+    val result =
+      Await.result(service.setWorkspaceSettings(workspaceName, List(enableCompactDataTablesSetting)), Duration.Inf)
+    result.successes shouldBe List(enableCompactDataTablesSetting)
+    result.failures shouldBe empty
+
+    verify(entityService, times(0)).quicksilverMigration(
+      any[WorkspaceName],
+      anyBoolean(),
+      anyInt(),
+      anyBoolean()
+    )
+  }
+
 }

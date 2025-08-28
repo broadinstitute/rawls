@@ -638,7 +638,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
           traceFutureWithParent("setWorkspaceSettings", s) { _ =>
             settingsRepo.createWorkspaceSettingsRecords(
               workspaceContext.workspaceIdAsUUID,
-              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true))),
+              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false)))),
               ctx.userInfo.userSubjectId
             )
           }

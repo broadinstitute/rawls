@@ -220,7 +220,7 @@ class WorkspaceService(
     def enableQuicksilver(workspaceId: UUID): Future[Int] = for {
       _ <- workspaceSettingsRepository.createWorkspaceSettingsRecords(
         workspaceId,
-        List(CompactDataTablesSetting(CompactDataTablesConfig(true))),
+        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false)))),
         parentContext.userInfo.userSubjectId
       )
       numApplied <- workspaceSettingsRepository.markWorkspaceSettingApplied(workspaceId,
@@ -1219,7 +1219,7 @@ class WorkspaceService(
           logger.info("enabling compact data tables on new workspace")
           workspaceSettingServiceConstructor(ctx).setWorkspaceSettings(
             destWorkspaceContext.toWorkspaceName,
-            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false))))
           )
         } else {
           Future.successful()

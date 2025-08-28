@@ -1849,7 +1849,9 @@ class WorkspaceServiceSpec
       )
     )
 
-    actual should contain(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+    actual should contain(
+      CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false)))
+    )
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
@@ -1957,7 +1959,7 @@ class WorkspaceServiceSpec
     val destWorkspaceName = WorkspaceName(testData.testProject1Name.value, newWorkspaceName)
     verify(mockWorkspaceSettingService).setWorkspaceSettings(
       destWorkspaceName,
-      List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))
+      List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false))))
     )
   }
 
