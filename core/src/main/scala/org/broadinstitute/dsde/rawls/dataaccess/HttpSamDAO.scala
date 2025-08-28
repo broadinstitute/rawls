@@ -743,18 +743,6 @@ class HttpSamDAO(baseSamServiceURL: String,
         callback.future.map(_ => ())
       }
 
-    override def deletePetPerProject(userId: String,
-                                     googleProject: GoogleProjectId,
-                                     ctx: RawlsRequestContext
-    ): Future[Unit] =
-      retry(when401or5xx) { () =>
-        val callback = new SamApiCallback[Void]("deletePetPerProject")
-
-        adminApi(ctx).deletePetPerProjectAsync(userId, googleProject.value, callback)
-
-        callback.future.map(_ => ())
-      }
-
     override def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
                                                     action: SamResourceAction,
                                                     ctx: RawlsRequestContext
@@ -765,7 +753,6 @@ class HttpSamDAO(baseSamServiceURL: String,
 
       callback.future.map(_.booleanValue())
     }
-
   }
 
   override def getStatus(): Future[SubsystemStatus] = {
