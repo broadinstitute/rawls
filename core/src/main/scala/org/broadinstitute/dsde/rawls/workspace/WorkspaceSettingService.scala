@@ -305,7 +305,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case _ =>
           Future.successful(())
       }
-    } else if (performMigration.contains(true)) {
+    } else if (performMigration.isEmpty || performMigration.contains(true)) { // default to true
       // If compact data tables setting is enabled and a migration is requested, we need to migrate the entity attributes.
       Future {
         entityService
