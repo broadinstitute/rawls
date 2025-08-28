@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -14,7 +13,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.{any, anyString, eq => mockitoEq}
+import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -287,18 +286,7 @@ class UserServiceSpec
       val petSAJson = "petJson"
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val adminRequestContext: RawlsRequestContext =
-        RawlsRequestContext(
-          UserInfo(RawlsUserEmail("admin"),
-                   OAuth2BearerToken("Bearer admin token"),
-                   999,
-                   RawlsUserSubjectId("adminSubjectId")
-          )
-        )
-
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      val mockSamAdminDAO = mock[SamAdminDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.admin).thenReturn(mockSamAdminDAO)
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
@@ -317,15 +305,7 @@ class UserServiceSpec
             Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
           )
         )
-      when(mockSamDAO.rawlsSAContext).thenReturn(adminRequestContext)
-      when(
-        mockSamAdminDAO.deletePetPerProject(
-          testContext.userInfo.userSubjectId.value,
-          project.googleProjectId,
-          adminRequestContext.copy(otelContext = testContext.otelContext)
-        )
-      ).thenReturn(Future.successful())
-
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext)).thenReturn(Future.successful())
       when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(Future.successful())
       when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext))
@@ -339,10 +319,7 @@ class UserServiceSpec
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual: Unit = userService.deleteBillingProject(defaultBillingProjectName).futureValue
 
-      verify(mockSamAdminDAO).deletePetPerProject(testContext.userInfo.userSubjectId.value,
-                                                  project.googleProjectId,
-                                                  adminRequestContext.copy(otelContext = testContext.otelContext)
-      )
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, testContext)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext)
       verify(mockGcsDAO).deleteV1Project(project.googleProjectId)
