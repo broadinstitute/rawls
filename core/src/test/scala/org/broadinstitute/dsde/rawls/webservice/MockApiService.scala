@@ -3,14 +3,13 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Directive1
+import akka.http.scaladsl.server.Directives._
 import akka.stream.Materializer
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.{
@@ -30,8 +29,8 @@ import org.broadinstitute.dsde.workbench.oauth2.OpenIDConnectConfiguration
 import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.scalatestplus.mockito.MockitoSugar.mock
 
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 import scala.language.postfixOps
 
 class MockApiService(
@@ -51,8 +50,6 @@ class MockApiService(
     mock[BillingProjectOrchestrator](RETURNS_SMART_NULLS),
   override val entityServiceConstructor: RawlsRequestContext => EntityService = _ =>
     mock[EntityService](RETURNS_SMART_NULLS),
-  override val genomicsServiceConstructor: RawlsRequestContext => GenomicsService = _ =>
-    mock[GenomicsService](RETURNS_SMART_NULLS),
   override val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = _ =>
     mock[SnapshotService](RETURNS_SMART_NULLS),
   override val statusServiceConstructor: () => StatusService = () => mock[StatusService](RETURNS_SMART_NULLS),

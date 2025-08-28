@@ -29,7 +29,6 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPassService}
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
@@ -240,11 +239,6 @@ class WorkspaceServiceSpec
       mock[NotificationDAO]
     ) _
 
-    val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
-      slickDataSource,
-      gcsDAO
-    ) _
-
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService = new MockSubmissionCostService(
       "fakeTableName",
@@ -380,7 +374,6 @@ class WorkspaceServiceSpec
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName,
         submissionCostService,
-        genomicsServiceConstructor,
         workspaceServiceConfig,
         workspaceRepository,
         workspaceSettingRepository,
