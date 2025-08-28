@@ -29,10 +29,8 @@ import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.directory.model.{Group, Member}
 import com.google.api.services.directory.{Directory, DirectoryScopes}
-import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
-import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
 import com.google.api.services.logging.v2.{Logging, LoggingScopes}
 import com.google.api.services.logging.v2.model.LogBucket
 import com.google.api.services.oauth2.Oauth2.Builder
@@ -62,7 +60,6 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   setTraceSpanAttribute,
@@ -130,10 +127,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val monitoringScopes = Seq(MonitoringScopes.MONITORING_READ)
-  val genomicsScopes = Seq(
-    GenomicsScopes.GENOMICS
-  ) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
-  val lifesciencesScopes = Seq(CloudLifeSciencesScopes.CLOUD_PLATFORM)
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
   val serviceUsageScopes = Seq(ServiceUsageScopes.CLOUD_PLATFORM_READ_ONLY)
   val loggingBucketScopes = Seq(LoggingScopes.LOGGING_ADMIN)
@@ -849,61 +842,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
-
-    def papiv1Handler(opId: String) = {
-      // PAPIv1 ids start with "operations". We have to use a direct http call instead of a client library because
-      // the client lib does not support PAPIv1 and PAPIv2 concurrently.
-      val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
-      genomicsServiceAccountCredential.refreshToken()
-      new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(genomicsServiceAccountCredential.getAccessToken))
-    }
-
-    def papiv2Alpha1Handler(opId: String) = {
-      val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
-      genomicsServiceAccountCredential.refreshToken()
-      val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential)
-        .setApplicationName(appName)
-        .build()
-      val operationRequest = genomicsApi.projects().operations().get(opId)
-      implicit val service = GoogleInstrumentedService.Genomics
-
-      retryWithRecoverWhen500orGoogleError { () =>
-        // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
-        // So, use Google's functionality to get the json string, then parse it back into a generic json object
-        Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
-      } {
-        // Recover from Google 404 errors because it's an expected return status.
-        // Here we use `None` to represent a 404 from Google.
-        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
-      }
-    }
-
-    def lifeSciencesBetaHandler(opId: String) = {
-      val lifeSciencesAccountCredential = getLifeSciencesServiceAccountCredential()
-      lifeSciencesAccountCredential.refreshToken()
-      val lifeSciencesApi = new CloudLifeSciences.Builder(httpTransport, jsonFactory, lifeSciencesAccountCredential)
-        .setApplicationName(appName)
-        .build()
-      val operationRequest = lifeSciencesApi.projects().locations().operations().get(opId)
-      implicit val service = GoogleInstrumentedService.LifeSciences
-
-      retryWithRecoverWhen500orGoogleError { () =>
-        // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
-        // So, use Google's functionality to get the json string, then parse it back into a generic json object
-        Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
-      } {
-        // Recover from Google 404 errors because it's an expected return status.
-        // Here we use `None` to represent a 404 from Google.
-        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
-      }
-    }
-
-    def noMatchHandler(opId: String) = Future.failed(new Exception(s"Operation ID '$opId' is not a supported format"))
-
-    handleByOperationIdType(opId, papiv1Handler, papiv2Alpha1Handler, lifeSciencesBetaHandler, noMatchHandler)
-  }
-
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential
@@ -1220,24 +1158,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setScopes(monitoringScopes.asJava)
       .build()
 
-  def getGenomicsServiceAccountCredential: Credential =
-    new GoogleCredential.Builder()
-      .setTransport(httpTransport)
-      .setJsonFactory(jsonFactory)
-      .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(genomicsScopes.asJava)
-      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
-      .build()
-
-  def getLifeSciencesServiceAccountCredential(): Credential =
-    new GoogleCredential.Builder()
-      .setTransport(httpTransport)
-      .setJsonFactory(jsonFactory)
-      .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(lifesciencesScopes.asJava)
-      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
-      .build()
-
   def getBillingServiceAccountCredential: Credential =
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
@@ -1387,47 +1307,12 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 }
 
 object HttpGoogleServicesDAO {
-  def handleByOperationIdType[T](opId: String,
-                                 papiV1Handler: String => T,
-                                 papiV2alpha1Handler: String => T,
-                                 lifeSciencesBetaHandler: String => T,
-                                 noMatchHandler: String => T
-  ): T = {
-    val papiv1AlphaIdRegex = "operations/[^/]*".r
-    val papiv2Alpha1IdRegex = "projects/[^/]*/operations/[^/]*".r
-    val lifeSciencesBetaIdRegex = "projects/[^/]*/locations/[^/]*/operations/[^/]*".r
-
-    opId match {
-      case papiv1AlphaIdRegex()      => papiV1Handler(opId)
-      case papiv2Alpha1IdRegex()     => papiV2alpha1Handler(opId)
-      case lifeSciencesBetaIdRegex() => lifeSciencesBetaHandler(opId)
-      case _                         => noMatchHandler(opId)
-    }
-  }
-
   private[dataaccess] def getUserCredential(userInfo: UserInfo): Option[Credential] = {
     // Use the Google token if present to build the credential
     val tokenOpt = if (userInfo.isB2C) userInfo.googleAccessTokenThroughB2C else Some(userInfo.accessToken)
     tokenOpt.map { googleToken =>
       new GoogleCredential().setAccessToken(googleToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
     }
-  }
-}
-
-class GenomicsV1DAO(implicit
-  val system: ActorSystem,
-  val materializer: Materializer,
-  val executionContext: ExecutionContext
-) extends DsdeHttpDAO {
-  val http = Http(system)
-  val httpClientUtils = HttpClientUtilsStandard()
-
-  def getOperation(opId: String, accessToken: OAuth2BearerToken): Future[Option[JsObject]] = {
-    import DefaultJsonProtocol._
-    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-    executeRequestWithToken[Option[JsObject]](accessToken)(
-      RequestBuilding.Get(s"https://genomics.googleapis.com/v1alpha2/$opId")
-    )
   }
 }
 

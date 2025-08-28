@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 import org.broadinstitute.dsde.rawls.billing.{BillingAdminService, BillingProjectOrchestrator}
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
@@ -117,10 +116,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     lazy val mockBillingAdminService: BillingAdminService = mock[BillingAdminService]
     _ => mockBillingAdminService
   }
-  val mockGenomicsServiceConstructor: RawlsRequestContext => GenomicsService = {
-    lazy val mockGenomicsService: GenomicsService = mock[GenomicsService]
-    _ => mockGenomicsService
-  }
   lazy val mockSnapshotServiceConstructor: RawlsRequestContext => SnapshotService = {
     lazy val mockSnapshotService: SnapshotService = mock[SnapshotService]
     _ => mockSnapshotService
@@ -155,7 +150,6 @@ class RawlsProviderSpec extends AnyFlatSpec with BeforeAndAfterAll with PactVeri
     mockEntityServiceConstructor,
     mockUserServiceConstructor,
     mockBillingAdminServiceConstructor,
-    mockGenomicsServiceConstructor,
     mockSnapshotServiceConstructor,
     mockSpendReportingConstructor,
     mockBillingProjectOrchestratorConstructor,

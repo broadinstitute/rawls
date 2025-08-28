@@ -20,7 +20,6 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationUtils
@@ -69,10 +68,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceAttributeSpecs,
   WorkspaceName
 }
-import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.{
-  extractOperationIdsFromCromwellMetadata,
-  getTerminalStatusDate
-}
+import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.getTerminalStatusDate
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
@@ -100,7 +96,6 @@ object SubmissionsService {
     maxActiveWorkflowsPerUser: Int,
     workbenchMetricBaseName: String,
     submissionCostService: SubmissionCostService,
-    genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
     config: WorkspaceServiceConfig,
     workspaceRepository: WorkspaceRepository,
     workspaceSettingRepository: WorkspaceSettingRepository,
@@ -122,28 +117,11 @@ object SubmissionsService {
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      genomicsServiceConstructor,
       config,
       workspaceRepository,
       workspaceSettingRepository,
       entityServiceConstructor
     )
-
-  def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
-    case class Call(jobId: Option[String])
-    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
-    implicit val callFormat = jsonFormat1(Call)
-    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
-
-    for {
-      calls <- metadataJson
-        .convertTo[OpMetadata]
-        .calls
-        .toList // toList on the Option makes the compiler like the for comp
-      call <- calls.values.flatten
-      jobId <- call.jobId
-    } yield jobId
-  }
 
   def getTerminalStatusDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
     // find all workflows that have finished
@@ -177,7 +155,6 @@ class SubmissionsService(
   maxActiveWorkflowsPerUser: Int,
   override val workbenchMetricBaseName: String,
   submissionCostService: SubmissionCostService,
-  val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
   config: WorkspaceServiceConfig,
   val workspaceRepository: WorkspaceRepository,
   workspaceSettingRepository: WorkspaceSettingRepository,
@@ -197,26 +174,6 @@ class SubmissionsService(
   // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
-
-  def getGenomicsOperationV2(workflowId: String, operationId: List[String]): Future[Option[JsObject]] =
-    // note that cromiam should only give back metadata if the user is authorized to see it
-    cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("jobId")), ctx.userInfo).flatMap {
-      metadataJson =>
-        val operationIds: Iterable[String] = extractOperationIdsFromCromwellMetadata(metadataJson)
-
-        val operationIdString = operationId.mkString("/")
-        // check that the requested operation id actually exists in the workflow
-        if (operationIds.toList.contains(operationIdString)) {
-          val genomicsServiceRef = genomicsServiceConstructor(ctx)
-          genomicsServiceRef.getOperation(operationIdString)
-        } else {
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.NotFound, s"operation id ${operationIdString} not found in workflow $workflowId")
-            )
-          )
-        }
-    }
 
   def workflowMetadata(workspaceName: WorkspaceName,
                        submissionId: String,
