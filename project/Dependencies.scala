@@ -6,7 +6,7 @@ object Dependencies {
   val slickV = "3.6.1"
 
   val googleV = "2.0.0" // service-specific client libraries
-  val googleApiV = "2.8.0" // the main google-api-client
+  val googleApiV = "2.8.1" // the main google-api-client
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
