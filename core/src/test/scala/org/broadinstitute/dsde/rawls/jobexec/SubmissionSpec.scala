@@ -16,7 +16,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryAborted
@@ -509,11 +508,6 @@ class SubmissionSpec(_system: ActorSystem)
         mock[NotificationDAO]
       ) _
 
-      val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
-        slickDataSource,
-        gcsDAO
-      ) _
-
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10
       val maxActiveWorkflowsPerUser = 2
@@ -575,7 +569,6 @@ class SubmissionSpec(_system: ActorSystem)
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName,
         mockSubmissionCostService,
-        genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
         workspaceSettingRepository,

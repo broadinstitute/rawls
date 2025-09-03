@@ -20,7 +20,6 @@ import org.broadinstitute.dsde.rawls.billing.{BillingAdminService, BillingProjec
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.googleProject.GoogleProjectRegistrationService
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
@@ -112,7 +111,6 @@ trait RawlsApiService
     with ServicePerimeterApiService
     with GoogleProjectRegistrationApiService {
 
-  val genomicsServiceConstructor: RawlsRequestContext => GenomicsService
   val submissionTimeout: FiniteDuration
   val workbenchMetricBaseName: String
   val samDAO: SamDAO
@@ -217,7 +215,6 @@ class RawlsApiServiceImpl(
   val entityServiceConstructor: RawlsRequestContext => EntityService,
   val userServiceConstructor: RawlsRequestContext => UserService,
   val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService,
-  val genomicsServiceConstructor: RawlsRequestContext => GenomicsService,
   val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
   val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
   val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,

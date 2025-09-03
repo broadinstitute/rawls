@@ -672,7 +672,8 @@ object WorkspaceSettingConfig {
 
   case class PubliclyReadableConfig(enabled: Boolean) extends WorkspaceSettingConfig
 
-  case class CompactDataTablesConfig(enabled: Boolean) extends WorkspaceSettingConfig
+  case class CompactDataTablesConfig(enabled: Boolean, performMigration: Option[Boolean] = Some(true))
+      extends WorkspaceSettingConfig
 }
 
 case class WorkspaceSettingResponse(successes: List[WorkspaceSetting], failures: Map[WorkspaceSettingType, ErrorReport])
@@ -1301,7 +1302,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     PubliclyReadableConfig.apply
   )
 
-  implicit val CompactDataTablesConfigFormat: RootJsonFormat[CompactDataTablesConfig] = jsonFormat1(
+  implicit val CompactDataTablesConfigFormat: RootJsonFormat[CompactDataTablesConfig] = jsonFormat2(
     CompactDataTablesConfig.apply
   )
 
