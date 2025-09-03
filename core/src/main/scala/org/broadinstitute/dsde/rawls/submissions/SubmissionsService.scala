@@ -486,14 +486,14 @@ class SubmissionsService(
       }
     }
 
-  private def getUserEmail: Future[RawlsUserEmail] = {
+  private def getUserEmail: Future[RawlsUserEmail] =
     for {
       // ask Sam for the email address it knows for this user
-      submitterOption <- samDAO.getUserStatus(ctx) recover {
-        case e: Throwable =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError, s"Failed to get user status from Sam: ${e.getMessage}")
-          )
+      submitterOption <- samDAO.getUserStatus(ctx) recover { case e: Throwable =>
+        throw new RawlsExceptionWithErrorReport(
+          errorReport =
+            ErrorReport(StatusCodes.InternalServerError, s"Failed to get user status from Sam: ${e.getMessage}")
+        )
       }
       submitter = submitterOption match {
         case Some(userStatus) => RawlsUserEmail(userStatus.userEmail)
@@ -509,7 +509,6 @@ class SubmissionsService(
         )
       }
     } yield submitter
-  }
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] =
     for {
@@ -1023,4 +1022,3 @@ class SubmissionsService(
         }
     } yield s"gs://${workspace.bucketName}/submissions/$intermediates$id"
 }
-  }

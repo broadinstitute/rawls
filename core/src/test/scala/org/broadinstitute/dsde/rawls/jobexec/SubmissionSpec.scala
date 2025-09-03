@@ -35,6 +35,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -460,7 +461,8 @@ class SubmissionSpec(_system: ActorSystem)
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName),
     bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory(),
     dataRepoDAO: DataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS),
-    workspaceSettingRepository: WorkspaceSettingRepository = baseSpyWorkspaceSettingRepository
+    workspaceSettingRepository: WorkspaceSettingRepository = baseSpyWorkspaceSettingRepository,
+    maybeSamDAO: Option[SamDAO] = None
   ): T = {
 
     withDataOp { dataSource =>
@@ -471,7 +473,7 @@ class SubmissionSpec(_system: ActorSystem)
         SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false, true)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
-      val samDAO = new MockSamDAO(dataSource)
+      val samDAO = maybeSamDAO.getOrElse(new MockSamDAO(dataSource))
       val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 
       val testConf = ConfigFactory.load()
@@ -593,6 +595,15 @@ class SubmissionSpec(_system: ActorSystem)
     val execSvcDAO = new MockExecutionServiceDAO()
     withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
   }
+
+  def withSubmissionsServiceMockSam[T](testCode: SamDAO => SubmissionsService => T): T = {
+    val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    withDataAndService(service => testCode(mockSamDAO)(service),
+                       withDefaultTestDatabase[T],
+                       maybeSamDAO = Option(mockSamDAO)
+    )
+  }
+
   def withSubmissionsServiceMockTimeoutExecution[T](testCode: MockExecutionServiceDAO => SubmissionsService => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO(true)
     withDataAndService(service => testCode(execSvcDAO)(service), withDefaultTestDatabase[T], execSvcDAO)
@@ -1320,6 +1331,53 @@ class SubmissionSpec(_system: ActorSystem)
       assertResult(StatusCodes.BadRequest) {
         rqComplete.errorReport.statusCode.get
       }
+  }
+
+  it should "use Sam's knowledge of the submitter's email address" in withSubmissionsServiceMockSam {
+    mockSamDAO => submissionsService =>
+      val samEmail = "fixture@unit.test"
+
+      // mocks necessary for submission success
+      when(
+        mockSamDAO.userHasAction(any[SamResourceTypeName],
+                                 any[String],
+                                 any[SamResourceAction],
+                                 any[RawlsRequestContext]
+        )
+      )
+        .thenReturn(Future(true))
+      when(mockSamDAO.getPetServiceAccountKeyForUser(any[GoogleProjectId], any[RawlsUserEmail]))
+        // same value as in MockSamDAO
+        .thenReturn(
+          Future(
+            """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
+          )
+        )
+
+      // this is the mock under test: Sam returns "fixture@unit.test" as the current user's email address
+      when(mockSamDAO.getUserStatus(any[RawlsRequestContext]))
+        .thenReturn(Future(Option(SamUserStatusResponse(userSubjectId = "123", userEmail = samEmail, enabled = true))))
+
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "GoodMethodConfig",
+        entityType = Option("Pair"),
+        entityName = Option("pair1"),
+        expression = Option("this.case"),
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
+      val newSubmissionReport =
+        Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+
+      val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
+      // not really necessary, failing to find the actor above will throw an exception and thus fail this test
+      assert(monitorActor != ActorRef.noSender)
+
+      assert(newSubmissionReport.workflows.size == 1)
+
+      val actualSubmission = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
+      actualSubmission.submitter shouldBe WorkbenchEmail(samEmail)
   }
 
   def workspaceSettingSubmissionTest[T](
