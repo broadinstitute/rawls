@@ -289,7 +289,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     override def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
                                                     action: SamResourceAction,
                                                     ctx: RawlsRequestContext
-    ): Future[Boolean] = ???
+    ): Future[Boolean] = Future.successful(false)
   }
 
   override def setPolicyPublic(resourceTypeName: SamResourceTypeName,
