@@ -6,7 +6,7 @@ import bio.terra.buffer.model.JobModel
 import bio.terra.datarepo.model.ErrorModel
 import bio.terra.policy.model.TpsPaoGetResult
 import cats.implicits._
-import cats.{Applicative, ApplicativeThrow}
+import cats.{Applicative, ApplicativeThrow, Group}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.Identity
@@ -1618,6 +1618,19 @@ class WorkspaceService(
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {
     workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.unlock, ignoreLock = true)
+    policies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
+                                               workspace.workspaceIdAsUUID.toString,
+                                               ctx
+    )
+    policyEmailsByName = policies.map(p => p.policyName -> p.email).toMap
+    policyEmails = policyEmailsByName
+      .map { case (policyName, policyEmail) =>
+        WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+      }
+      .flatten
+      .toMap
+
+    _ <- gcsDAO.updateBucketIam(GcsBucketName(workspace.bucketName), policyEmails, Option(workspace.googleProjectId))
     unlocked <- workspaceRepository.unlockWorkspace(workspace)
   } yield unlocked
 
