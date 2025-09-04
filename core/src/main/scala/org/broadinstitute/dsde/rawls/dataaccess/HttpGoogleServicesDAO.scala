@@ -205,6 +205,36 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .unsafeToFuture()
   }
 
+  override def updateBucketIamAllReaders(bucketName: GcsBucketName,
+                                         policyEmails: Set[WorkbenchEmail],
+                                         userProject: Option[GoogleProjectId],
+                                         iamPolicyVersion: Int = 1
+  ): Future[Unit] = {
+
+    val roleIdentities = policyEmails.map(email => Identity.group(email.value)).toList
+    roleIdentities.add(Identity.serviceAccount(clientEmail))
+    // Assign all emails to the custom reader role
+    val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+    val readerRoleMap: Map[StorageRole, NonEmptyList[Identity]] =
+      Map(customTerraBucketReaderRole -> NonEmptyList.fromListUnsafe(roleIdentities))
+
+    googleStorageService
+      .overrideIamPolicy(
+        bucketName,
+        readerRoleMap,
+        retryConfig = RetryPredicates.retryConfigWithPredicates(
+          RetryPredicates.standardGoogleRetryPredicate,
+          RetryPredicates.whenStatusCode(400),
+          RetryPredicates.whenStatusCode(404)
+        ),
+        bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList,
+        version = iamPolicyVersion
+      )
+      .compile
+      .drain
+      .unsafeToFuture()
+  }
+
   override def setupWorkspace(userInfo: UserInfo,
                               googleProject: GoogleProjectId,
                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],

@@ -1603,6 +1603,17 @@ class WorkspaceService(
   def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {
     workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.lock, ignoreLock = true)
     locked <- workspaceRepository.lockWorkspace(workspace)
+    policies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
+                                               workspace.workspaceIdAsUUID.toString,
+                                               ctx
+    )
+    nonReaderPolicyEmails = policies
+      .filterNot(_.policyName == SamWorkspacePolicyNames.reader)
+      .map(_.email)
+    _ <- gcsDAO.updateBucketIamAllReaders(GcsBucketName(workspace.bucketName),
+                                          nonReaderPolicyEmails,
+                                          Option(workspace.googleProjectId)
+    )
   } yield locked
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {

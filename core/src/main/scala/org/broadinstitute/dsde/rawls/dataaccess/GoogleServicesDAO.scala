@@ -41,6 +41,12 @@ trait GoogleServicesDAO extends ErrorReportable {
                       iamPolicyVersion: Int = 1
   ): Future[Unit]
 
+  def updateBucketIamAllReaders(bucketName: GcsBucketName,
+                                policyEmails: Set[WorkbenchEmail],
+                                userProject: Option[GoogleProjectId],
+                                iamPolicyVersion: Int = 1
+  ): Future[Unit]
+
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo,
                      googleProject: GoogleProjectId,
