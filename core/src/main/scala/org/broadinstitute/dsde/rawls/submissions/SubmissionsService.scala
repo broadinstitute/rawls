@@ -42,6 +42,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
+  RawlsUserEmail,
   RetriedSubmissionReport,
   SamWorkspaceActions,
   SeparateSubmissionFinalOutputsSetting,
@@ -485,8 +486,35 @@ class SubmissionsService(
       }
     }
 
+  private def getUserEmail: Future[RawlsUserEmail] =
+    for {
+      // ask Sam for the email address it knows for this user
+      submitterOption <- samDAO.getUserStatus(ctx) recover { case e: Throwable =>
+        throw new RawlsExceptionWithErrorReport(
+          errorReport =
+            ErrorReport(StatusCodes.InternalServerError, s"Failed to get user status from Sam: ${e.getMessage}")
+        )
+      }
+      submitter = submitterOption match {
+        case Some(userStatus) => RawlsUserEmail(userStatus.userEmail)
+        case None =>
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Unauthorized, "User not found in Sam")
+          )
+      }
+      // for debugging
+      _ = if (submitter != ctx.userInfo.userEmail) {
+        logger.warn(
+          s"User email in Sam is different than the one in the request context: $submitter vs ${ctx.userInfo.userEmail}"
+        )
+      }
+    } yield submitter
+
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] =
     for {
+      // ask Sam for the email address it knows for this user
+      submitter <- getUserEmail
+
       ps <- prepareSubmission(workspaceName, submissionRequest)
       submission <- saveSubmission(
         ps.workspace,
@@ -495,7 +523,8 @@ class SubmissionsService(
         ps.submissionRoot,
         ps.inputs,
         ps.failureMode,
-        ps.header
+        ps.header,
+        submitter
       )
       _ <- getSetToDelete(submissionRequest)
         .map { setToDelete =>
@@ -760,7 +789,8 @@ class SubmissionsService(
                              submissionRoot: String,
                              submissionParameters: Seq[SubmissionValidationEntityInputs],
                              workflowFailureMode: Option[WorkflowFailureMode],
-                             header: SubmissionValidationHeader
+                             header: SubmissionValidationHeader,
+                             submitter: RawlsUserEmail
   ): Future[Submission] =
     dataSource.inTransaction { dataAccess =>
       val (successes, failures) = submissionParameters.partition { entityInputs =>
@@ -807,7 +837,7 @@ class SubmissionsService(
       val submission = Submission(
         submissionId = submissionId.toString,
         submissionDate = DateTime.now(),
-        submitter = WorkbenchEmail(ctx.userInfo.userEmail.value),
+        submitter = WorkbenchEmail(submitter.value),
         methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
         methodConfigurationName = submissionRequest.methodConfigurationName,
         submissionEntity = submissionEntityOpt,
