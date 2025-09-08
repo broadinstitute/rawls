@@ -2,17 +2,9 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{QueryTiming, ReadAction}
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
-  EntityName,
-  ExpressionAndResult,
-  LookupExpression
-}
-import org.broadinstitute.dsde.rawls.entities.base.{
-  ExpressionEvaluationContext,
-  ExpressionEvaluationSupport,
-  InputExpressionReassembler
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, QueryTiming, ReadAction}
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
+import org.broadinstitute.dsde.rawls.entities.base.{ExpressionEvaluationContext, ExpressionEvaluationSupport, InputExpressionReassembler}
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, CompactEvaluateVisitor}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVisitor.ExpressionLookup
@@ -20,16 +12,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.Attributable.nameReservedAttribute
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeName,
-  AttributeString,
-  AttributeValue,
-  AttributeValueList,
-  ErrorReport,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationValue
-}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeString, AttributeValue, AttributeValueList, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio.DBIO
 
@@ -442,26 +425,29 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
       if (entityRecords.isEmpty) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "No entities found"))
       }
-      // Validate entity types if we have entityLookups
-      if (entityLookups.nonEmpty && entityRecords.nonEmpty) {
-        val actualEntityTypes = entityRecords.values.flatten.map(_.entityType).toSet
-        if (actualEntityTypes.nonEmpty && !actualEntityTypes.contains(rootEntityType)) {
-          val actualTypesStr = actualEntityTypes.mkString(", ")
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              s"The expression in your SubmissionRequest matched only entities of the wrong type. " +
-                s"(Expected type $rootEntityType, but got $actualTypesStr.)"
-            )
-          )
+
+      // Detect if we need to regroup by the parent entity (e.g., sample set)
+      def regroupIfNeeded(records: Map[String, Seq[CompactEntityRecord]]): Map[String, Seq[CompactEntityRecord]] = {
+        // If the keys are not the original entityName, but the rootEntityType matches the entityType,
+        // regroup all records under the original entityName
+        if (
+          records.size > 1 &&
+            records.keys.forall(_ != entityName) &&
+            entityType == rootEntityType
+        ) {
+          Map(entityName -> records.values.flatten.toSeq)
+        } else {
+          records
         }
       }
+
+      val groupedRecords = regroupIfNeeded(entityRecords)
 
       if (plan.expressionMappings.isEmpty) {
         // Return entities with empty input resolutions
         Seq(
           ("",
-           entityRecords.values.flatten.map { entity =>
+            groupedRecords.values.flatten.map { entity =>
              entity.name -> Success(Seq.empty[AttributeValue])
            }.toMap
           )
@@ -473,51 +459,30 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
           attributeNames.map { attrName =>
             val attributeName = AttributeName.fromDelimitedName(attrName)
 
-            val entityToAttributeValues: Map[String, Try[Seq[AttributeValue]]] = if (entityType == rootEntityType) {
+            val entityToAttributeValues: Map[String, Try[Seq[AttributeValue]]] =
+              groupedRecords.map { case (groupName, records) =>
               // Group all results under the original entityName since we want results grouped by the starting entity type
-              val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
-                if (
-                  attributeName == AttributeName.withDefaultNS(
-                    record.entityType + Attributable.entityIdAttributeSuffix
-                  ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
-                ) {
-                  Seq(AttributeString(record.name))
-                } else {
-                  record.toEntity.attributes.get(attributeName) match {
-                    case Some(avl: AttributeValueList) =>
-                      avl.list
-                    case Some(av: AttributeValue) =>
-                      Seq(av)
-                    case _ =>
-                      Seq.empty
+                val attrs: Seq[AttributeValue] = records.flatMap { record =>
+                  //              val allAttrs: Seq[AttributeValue] = entityRecords.values.flatten.toSeq.flatMap { record =>
+                  if (
+                    attributeName == AttributeName.withDefaultNS(
+                      record.entityType + Attributable.entityIdAttributeSuffix
+                    ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
+                  ) {
+                    Seq(AttributeString(record.name))
+                  } else {
+                    record.toEntity.attributes.get(attributeName) match {
+                      case Some(avl: AttributeValueList) =>
+                        avl.list
+                      case Some(av: AttributeValue) =>
+                        Seq(av)
+                      case _ =>
+                        Seq.empty
+                    }
                   }
                 }
-              }
-              Map(entityName -> Success(allAttrs))
-            } else {
-              entityRecords.flatMap { case (_, records) =>
-                records.map { record =>
-                  val attrs: Seq[AttributeValue] =
-                    if (
-                      attributeName == AttributeName.withDefaultNS(
-                        record.entityType + Attributable.entityIdAttributeSuffix
-                      ) || attributeName == AttributeName.withDefaultNS(nameReservedAttribute)
-                    ) {
-                      Seq(AttributeString(record.name))
-                    } else {
-                      record.toEntity.attributes.get(attributeName) match {
-                        case Some(avl: AttributeValueList) =>
-                          avl.list
-                        case Some(av: AttributeValue) =>
-                          Seq(av)
-                        case _ =>
-                          Seq.empty
-                      }
-                    }
-                  record.name -> Success(attrs)
+                  groupName -> Success(attrs)
                 }
-              }
-            }
             (expression, entityToAttributeValues)
           }
         }

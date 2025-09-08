@@ -121,6 +121,7 @@ The following examples assume an entity model where:
 | sample_set | this.samples | sample_set | -anything-       | ERROR -> entity expression clashes with root entity type                              |
 | sample_set | this.samples | sample | this.bam         | List((sample_name -> single bam atribute), sample2_name -> sample bam attribute)...)  |
 | sample_set | this.samples | sample | this.samples.bam | ERROR -> sample has no samples attribute                                              |
+| sample_set_set | this.sample_set | sample_set | this.samples.bam | Map((sample_set_name -> attributeValueList(bam1, bam2...)), (sample_set2_name -> attributeValueList(bam3, bam4...))) |
 
 
 ### Query Planning Process

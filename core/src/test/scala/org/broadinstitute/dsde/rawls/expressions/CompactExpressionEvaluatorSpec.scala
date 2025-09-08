@@ -571,6 +571,43 @@ class CompactExpressionEvaluatorSpec
     )
   }
 
+  it should "understand sets of sets" in withConfigData {
+    when(
+      mockQueries.queryRelatedRecordsWithRelationChain(any(),
+        any(),
+        org.mockito.ArgumentMatchers.eq(sampleSetSet.name),
+        any()
+      )
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleSet.name -> Seq(sampleGoodAsCER, sampleMissingValueAsCER),
+            sampleSet2.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
+        )
+      )
+
+    // root entity type:sample_set, given entity type: set of sets
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(sampleSetSet.entityType), Some(sampleSetSet.name), Some("this.sample_sets"), Some(sampleSet2.entityType))
+
+    val result = evalInputs(expressionEvaluationContext, configSampleSet, arrayWdl)
+
+    result should contain theSameElementsAs Seq(
+      SubmissionValidationEntityInputs(
+        sampleSet.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayNameWithWfName)
+        )
+      ),
+      SubmissionValidationEntityInputs(
+        sampleSet2.name,
+        Set(
+          SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayNameWithWfName)
+        )
+      )
+    )
+  }
+
   it should "error on root entity type/expression evaluation mismatch" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
@@ -608,18 +645,6 @@ class CompactExpressionEvaluatorSpec
                                   Some("this.samples"),
                                   Some(sampleSet2.entityType)
       )
-    val gatherInputsResult2 =
-      methodConfigResolver.gatherInputs(userInfo, configSampleSet, arrayWdl).get
-
-    val future2 = compactExpressionEvaluator
-      .evaluateExpressions(workspace.workspaceIdAsUUID, expressionEvaluationContext2, gatherInputsResult2)
-
-    val ex2 = future2.failed.futureValue
-    ex2 shouldBe a[RawlsExceptionWithErrorReport]
-    ex2.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include(
-      "matched only entities of the wrong type"
-    )
-
   }
 
   it should "error on root entity type/input entity mismatch" in withConfigData {
