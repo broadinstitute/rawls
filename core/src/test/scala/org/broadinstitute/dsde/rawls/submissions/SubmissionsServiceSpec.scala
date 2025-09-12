@@ -183,6 +183,7 @@ class SubmissionsServiceSpec
       "fakeDatePartitionColumn",
       "fakeServiceProject",
       31,
+      slickDataSource,
       bigQueryDAO
     )
     val execServiceBatchSize = 3

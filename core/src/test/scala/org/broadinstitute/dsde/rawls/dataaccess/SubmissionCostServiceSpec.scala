@@ -21,6 +21,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
     "fakeDatePartitionColumn",
     "fakeServiceProject",
     31,
+    slickDataSource,
     mockBigQueryDAO
   )
 
@@ -170,8 +171,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
   it should "bypass BigQuery with no workflow IDs" in
     assertResult(Map.empty) {
       Await.result(
-        submissionCostService.getSubmissionCosts("submission-id",
-                                                 Seq.empty,
+        submissionCostService.getSubmissionCosts(Seq.empty,
                                                  GoogleProjectId("test"),
                                                  new DateTime(DateTimeZone.UTC),
                                                  Option(new DateTime(DateTimeZone.UTC))

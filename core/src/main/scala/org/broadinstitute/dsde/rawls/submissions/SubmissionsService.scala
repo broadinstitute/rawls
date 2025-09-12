@@ -379,7 +379,7 @@ class SubmissionsService(
         }
       }
 
-    traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
+    traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { _ =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
         // determine which workflows are eligible for actual-cost lookup
         val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
@@ -391,8 +391,7 @@ class SubmissionsService(
           val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
           getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
             toFutureTry(
-              submissionCostService.getSubmissionCosts(submissionId,
-                                                       workflowIdsForCostQuery,
+              submissionCostService.getSubmissionCosts(workflowIdsForCostQuery,
                                                        workspace.googleProjectId,
                                                        submission.submissionDate,
                                                        submissionDoneDate,

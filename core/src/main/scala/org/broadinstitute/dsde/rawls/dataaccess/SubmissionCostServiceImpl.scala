@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.services.bigquery.model._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowActualCostRecord
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -17,12 +18,14 @@ object SubmissionCostServiceImpl {
                   defaultDatePartitionColumn: String,
                   serviceProject: String,
                   billingSearchWindowDays: Int,
+                  dataSource: SlickDataSource,
                   bigQueryDAO: GoogleBigQueryDAO
   )(implicit executionContext: ExecutionContext) =
     new SubmissionCostServiceImpl(defaultTableName,
                                   defaultDatePartitionColumn,
                                   serviceProject,
                                   billingSearchWindowDays,
+                                  dataSource,
                                   bigQueryDAO
     )
 }
@@ -31,6 +34,7 @@ class SubmissionCostServiceImpl(defaultTableName: String,
                                 defaultDatePartitionColumn: String,
                                 serviceProject: String,
                                 billingSearchWindowDays: Int,
+                                dataSource: SlickDataSource,
                                 bigQueryDAO: GoogleBigQueryDAO
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging
@@ -38,50 +42,114 @@ class SubmissionCostServiceImpl(defaultTableName: String,
 
   val stringParamType = new QueryParameterType().setType("STRING")
 
-  def getSubmissionCosts(submissionId: String,
-                         workflowIds: Seq[String],
+  /**
+   * Retrieve actual costs for multiple workflows.
+   */
+  def getSubmissionCosts(workflowIds: Seq[String],
                          googleProjectId: GoogleProjectId,
                          submissionDate: DateTime,
                          terminalStatusDate: Option[DateTime],
                          tableNameOpt: Option[String] = Option(defaultTableName)
-  ): Future[Map[String, Float]] = {
-    val tableName = tableNameOpt.getOrElse(defaultTableName)
-    val datePartitionColumn = if (tableName == defaultTableName) Some(defaultDatePartitionColumn) else None
-
+  ): Future[Map[String, Float]] =
     if (workflowIds.isEmpty) {
       Future.successful(Map.empty[String, Float])
     } else {
       for {
-        // Lookup-only costs for the requested workflow IDs
-        workflowCosts <- executeWorkflowCostsQuery(
-          workflowIds,
-          googleProjectId,
-          submissionDate,
-          terminalStatusDate,
-          tableName,
-          datePartitionColumn
-        )
-      } yield extractCostResults(workflowCosts)
+        // ask WORKFLOW_ACTUAL_COST table for any cached costs
+        cachedResults: Map[String, Option[Float]] <- retrieveCostsFromLocalDb(workflowIds)
+        // determine which of the requested workflows were not found in WORKFLOW_ACTUAL_COST
+        uncachedWorkflows = workflowIds.toSet diff cachedResults.keySet
+        // ask BigQuery for any workflows which weren't found in WORKFLOW_ACTUAL_COST
+        liveResults <-
+          if (uncachedWorkflows.nonEmpty) {
+            retrieveCostsFromBigQuery(uncachedWorkflows.toSeq,
+                                      googleProjectId,
+                                      submissionDate,
+                                      terminalStatusDate,
+                                      tableNameOpt
+            )
+          } else {
+            Future.successful(Map.empty[String, Float])
+          }
+        // determine which of the uncachedWorkflows did not have a hit in BigQuery
+        notFoundWorkflows = uncachedWorkflows diff liveResults.keySet
+        // persist BigQuery results back to WORKFLOW_ACTUAL_COST
+        writeBack <- writeCostsToLocalDb(liveResults, notFoundWorkflows)
+      } yield {
+        // extract from the cached results only those workflows which actually have a cost
+        val cachedResultsWithCost = cachedResults.collect {
+          case (externalId: String, maybeCost: Option[Float]) if maybeCost.isDefined => (externalId, maybeCost.get)
+        }
+        // return the union of WORKFLOW_ACTUAL_COST and BigQuery results
+        cachedResultsWithCost ++ liveResults
+      }
     }
-  }
 
+  /**
+   * Retrieve the actual cost for a single workflow.
+   */
   def getWorkflowCost(workflowId: String,
                       googleProjectId: GoogleProjectId,
                       submissionDate: DateTime,
                       terminalStatusDate: Option[DateTime],
                       tableNameOpt: Option[String] = Option(defaultTableName)
+  ): Future[Map[String, Float]] =
+    getSubmissionCosts(Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableNameOpt)
+
+  // ask WORKFLOW_ACTUAL_COST table for specific workflows
+  protected[dataaccess] def retrieveCostsFromLocalDb(
+    workflowIds: Seq[String]
+  ): Future[Map[String, Option[Float]]] = {
+    import dataSource.dataAccess.driver.api._
+    dataSource
+      .inTransaction { dataAccess =>
+        dataAccess.workflowActualCostQuery.filter(row => row.externalId.inSetBind(workflowIds)).result
+      }
+      .map { costs =>
+        costs.map { cost =>
+          cost.externalId -> cost.cost.map(_.floatValue)
+        }.toMap
+      }
+  }
+
+  // modular method ask BigQuery for specific workflows
+  protected[dataaccess] def retrieveCostsFromBigQuery(workflowIds: Seq[String],
+                                                      googleProjectId: GoogleProjectId,
+                                                      submissionDate: DateTime,
+                                                      terminalStatusDate: Option[DateTime],
+                                                      tableNameOpt: Option[String] = Option(defaultTableName)
   ): Future[Map[String, Float]] = {
     val tableName = tableNameOpt.getOrElse(defaultTableName)
     val datePartitionColumn = if (tableName == defaultTableName) Some(defaultDatePartitionColumn) else None
+    for {
+      // Lookup-only costs for the requested workflow IDs
+      workflowCosts <- executeWorkflowCostsQuery(
+        workflowIds,
+        googleProjectId,
+        submissionDate,
+        terminalStatusDate,
+        tableName,
+        datePartitionColumn
+      )
+    } yield extractCostResults(workflowCosts)
+  }
 
-    executeWorkflowCostsQuery(
-      Seq(workflowId),
-      googleProjectId,
-      submissionDate,
-      terminalStatusDate,
-      tableName,
-      datePartitionColumn
-    ) map extractCostResults
+  // modular method to save rows to WORKFLOW_ACTUAL_COST
+  protected[dataaccess] def writeCostsToLocalDb(costs: Map[String, Float],
+                                                notFoundWorkflows: Set[String]
+  ): Future[Int] = {
+    // generate records for the found costs
+    val foundCosts: Seq[WorkflowActualCostRecord] = costs.map { case (externalId: String, cost: Float) =>
+      WorkflowActualCostRecord(externalId, Option(cost))
+    }.toSeq
+    // generate records for the not-found costs
+    val notFoundCosts: Seq[WorkflowActualCostRecord] = notFoundWorkflows.toSeq.map { externalId =>
+      WorkflowActualCostRecord(externalId, None)
+    }
+
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workflowActualCostRawSqlQuery.safeInsert(foundCosts ++ notFoundCosts)
+    }
   }
 
   /*

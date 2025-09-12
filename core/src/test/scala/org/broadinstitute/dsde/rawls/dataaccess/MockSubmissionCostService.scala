@@ -10,19 +10,20 @@ class MockSubmissionCostService(defaultTableName: String,
                                 defaultDatePartitionColumn: String,
                                 serviceProject: String,
                                 billingSearchWindowDays: Int,
+                                dataSource: SlickDataSource,
                                 bigQueryDAO: GoogleBigQueryDAO
 )(implicit executionContext: ExecutionContext)
     extends SubmissionCostServiceImpl(defaultTableName,
                                       defaultDatePartitionColumn,
                                       serviceProject,
                                       billingSearchWindowDays,
+                                      dataSource,
                                       bigQueryDAO
     ) {
 
   val fixedCost = 1.23f
 
-  override def getSubmissionCosts(submissionId: String,
-                                  workflowIds: Seq[String],
+  override def getSubmissionCosts(workflowIds: Seq[String],
                                   googleProjectId: GoogleProjectId,
                                   submissionDate: DateTime,
                                   submissionDoneDate: Option[DateTime],
