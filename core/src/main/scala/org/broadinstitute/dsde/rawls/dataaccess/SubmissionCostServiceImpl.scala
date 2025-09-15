@@ -62,6 +62,7 @@ class SubmissionCostServiceImpl(defaultTableName: String,
         // ask BigQuery for any workflows which weren't found in WORKFLOW_ACTUAL_COST
         liveResults <-
           if (uncachedWorkflows.nonEmpty) {
+            logger.info(s"getSubmissionCosts: ${uncachedWorkflows.size} workflows not found in cache; asking BigQuery")
             retrieveCostsFromBigQuery(uncachedWorkflows.toSeq,
                                       googleProjectId,
                                       submissionDate,
@@ -69,6 +70,7 @@ class SubmissionCostServiceImpl(defaultTableName: String,
                                       tableNameOpt
             )
           } else {
+            logger.info(s"getSubmissionCosts: all workflows found in cache; bypassing BigQuery")
             Future.successful(Map.empty[String, Float])
           }
         // determine which of the uncachedWorkflows did not have a hit in BigQuery
