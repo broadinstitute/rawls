@@ -8,7 +8,10 @@ import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import scala.concurrent.ExecutionContext
 
 object SubmissionCostServiceFactory {
-  def createSubmissionCostService(appConfigManager: RawlsConfigManager, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO)(implicit
+  def createSubmissionCostService(appConfigManager: RawlsConfigManager,
+                                  dataSource: SlickDataSource,
+                                  bigQueryDAO: GoogleBigQueryDAO
+  )(implicit
     executionContext: ExecutionContext
   ): SubmissionCostService =
     appConfigManager.gcsConfig match {
