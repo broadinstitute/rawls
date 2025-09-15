@@ -187,6 +187,8 @@ trait SamDAO {
   )
 
   def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail]
+
+  def forgetProject(project: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
 }
 
 trait SamAdminDAO {

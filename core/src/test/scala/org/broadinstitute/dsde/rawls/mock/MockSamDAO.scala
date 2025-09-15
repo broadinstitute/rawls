@@ -301,6 +301,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail] = ???
 
+  override def forgetProject(project: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] = Future.successful(())
+
   override def addResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                      resourceId: String,
                                      authDomain: Set[String],

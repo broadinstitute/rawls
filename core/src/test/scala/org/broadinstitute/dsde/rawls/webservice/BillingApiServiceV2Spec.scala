@@ -1056,14 +1056,11 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.listAllResourceMemberIds(
-          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-          ArgumentMatchers.eq(project.projectName.value),
-          ArgumentMatchers.argThat(userInfoEq(testContext))
+        services.samDAO.forgetProject(ArgumentMatchers.eq(project.googleProjectId),
+                                      ArgumentMatchers.argThat(userInfoEq(testContext))
         )
-      ).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, None))))
-      when(services.samDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail))
-        .thenReturn(Future.successful("petSAJson"))
+      )
+        .thenReturn(Future.successful())
       when(
         services.samDAO.listResourceChildren(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -1076,23 +1073,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       )
       when(
-        services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
-                                                    any[RawlsRequestContext]
-        )
-      )
-        .thenReturn(Future.successful())
-      when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(project.projectName.value),
-          ArgumentMatchers.argThat(userInfoEq(testContext))
-        )
-      )
-        .thenReturn(Future.successful())
-      when(
-        services.samDAO.deleteResource(
-          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-          ArgumentMatchers.eq(project.googleProjectId.value),
           ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       )
@@ -1106,13 +1089,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           }
         }
 
-      verify(services.samDAO).deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
-                                                          any[RawlsRequestContext]
-      )
-      verify(services.samDAO).deleteResource(
-        ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-        ArgumentMatchers.eq(project.googleProjectId.value),
-        ArgumentMatchers.argThat(userInfoEq(testContext))
+      verify(services.samDAO).forgetProject(ArgumentMatchers.eq(project.googleProjectId),
+                                            ArgumentMatchers.argThat(userInfoEq(testContext))
       )
   }
   it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
