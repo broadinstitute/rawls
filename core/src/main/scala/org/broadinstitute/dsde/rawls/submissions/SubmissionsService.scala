@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.submissions
 import akka.http.scaladsl.model.StatusCodes
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -503,7 +504,7 @@ class SubmissionsService(
           )
       }
       // for debugging
-      _ = if (submitter != ctx.userInfo.userEmail) {
+      _ = if (!StringUtils.equalsIgnoreCase(submitter.value, ctx.userInfo.userEmail.value)) {
         logger.warn(
           s"User email in Sam is different than the one in the request context: $submitter vs ${ctx.userInfo.userEmail}"
         )
