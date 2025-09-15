@@ -41,6 +41,16 @@ trait WorkflowActualCostComponent {
   object workflowActualCostRawSqlQuery extends RawSqlQuery {
     val driver: JdbcProfile = WorkflowActualCostComponent.this.driver
 
+    /**
+     * Insert rows into WORKFLOW_ACTUAL_COST, ignoring any conflicts on duplicate EXTERNAL_ID values.
+     * Because this method may be called concurrently by multiple users for the same workflows,
+     * it can try to insert the same rows multiple times. These rows are a cache of the value
+     * already in BigQuery, which should not change - therefore, we can ignore any duplicates here
+     * on the assumption they will have the same values.
+     *
+     * @param rows the rows to insert
+     * @return count of rows affected
+     */
     def safeInsert(rows: Seq[WorkflowActualCostRecord]): ReadWriteAction[Int] = {
 
       // generate parameters for each row
@@ -51,9 +61,9 @@ trait WorkflowActualCostComponent {
       val paramSql = reduceSqlActionsWithDelim(rowParams, sql",")
 
       val startSql = sql"""
-            insert into WORKFLOW_ACTUAL_COSTS(EXTERNAL_ID, COST)
-            values("""
-      val endSql = sql""") on conflict do nothing;"""
+            insert into WORKFLOW_ACTUAL_COST(EXTERNAL_ID, COST)
+            values """
+      val endSql = sql""" on duplicate key update COST=COST;"""
 
       concatSqlActions(startSql, paramSql, endSql).asUpdate
     }

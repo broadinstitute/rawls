@@ -1,19 +1,38 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import com.google.api.services.bigquery.model.{TableCell, TableRow}
+import com.google.api.services.bigquery.model.{
+  GetQueryResultsResponse,
+  Job,
+  JobReference,
+  QueryParameter,
+  QueryParameterType,
+  QueryParameterValue,
+  TableCell,
+  TableRow
+}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowActualCostRecord
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.{DateTime, DateTimeZone}
+import org.mockito.ArgumentCaptor
 import org.scalatest.flatspec.AnyFlatSpec
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{spy, times, verify, when}
 
-import scala.concurrent.Await
+import java.util.UUID
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
+import scala.math.BigDecimal.RoundingMode
+import scala.util.Random
 
-class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
+class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with MockitoTestUtils {
   implicit val actorSystem: ActorSystem = ActorSystem("SubmissionCostServiceSpec")
   val mockBigQueryDAO = new MockGoogleBigQueryDAO
   val submissionCostService = SubmissionCostServiceImpl.constructor(
@@ -179,4 +198,135 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         1 minute
       )
     }
+
+  behavior of "actual-cost caching"
+
+  // helper: the Google project id used for all tests
+  val defaultGoogleProjectId = GoogleProjectId("doesnotmatter")
+  // helper: create a SubmissionCostServiceImpl using a mockito mock for BigQuery
+  def getMockitoSubmissionCostService(bqCosts: Map[String, Float]) = {
+    val mockitoGoogleBigQueryDAO = mock[GoogleBigQueryDAO]
+    val testJobReference: JobReference = new JobReference().setJobId("test job id")
+    val testJob: Job = new Job().setJobReference(testJobReference)
+    when(
+      mockitoGoogleBigQueryDAO.startParameterizedQuery(any[GoogleProject],
+                                                       any[String],
+                                                       any[List[QueryParameter]],
+                                                       any[String]
+      )
+    )
+      .thenReturn(Future.successful(testJobReference))
+    when(mockitoGoogleBigQueryDAO.getQueryStatus(any[JobReference]))
+      .thenReturn(Future.successful(testJob))
+    returnCostsFrom(mockitoGoogleBigQueryDAO, bqCosts)
+    val costService = SubmissionCostServiceImpl.constructor(
+      "fakeTableName",
+      "fakeDatePartitionColumn",
+      "fakeServiceProject",
+      31,
+      slickDataSource,
+      mockitoGoogleBigQueryDAO
+    )
+    (costService, mockitoGoogleBigQueryDAO)
+  }
+  // helper: generate some randomized workflow ids and costs
+  def generateWorkflowCosts(quantity: Int): Map[String, Float] = Range(0, quantity).map { _ =>
+    // ensure floats have precision 2
+    UUID.randomUUID().toString -> BigDecimal(Random.nextFloat() * 10)
+      .setScale(2, RoundingMode.HALF_UP)
+      .toFloat
+  }.toMap
+  // helper: return the supplied costs for the supplied workflows from mock BigQuery
+  def returnCostsFrom(bigQuery: GoogleBigQueryDAO, costs: Map[String, Float]) = {
+    val rows = costs
+      .map { case (wfid, cost) =>
+        new TableRow().setF(
+          List(new TableCell().setV("wfKey"), new TableCell().setV(wfid), new TableCell().setV(cost)).asJava
+        )
+      }
+      .toList
+      .asJava
+
+    val bqResponse = new GetQueryResultsResponse
+    bqResponse.setRows(rows)
+
+    when(bigQuery.getQueryResult(any[Job]))
+      .thenReturn(Future.successful(bqResponse))
+  }
+  // helper:
+  def assertWorkflowParams(params: ArgumentCaptor[List[QueryParameter]], workflowIds: Iterable[String]) = {
+    val stringParamType = new QueryParameterType().setType("STRING")
+    // expected params are the google project id + all workflows
+    val googleProjectIdParam = new QueryParameter()
+      .setParameterType(stringParamType)
+      .setParameterValue(new QueryParameterValue().setValue(defaultGoogleProjectId.value))
+    val workflowParams = workflowIds.toList map { workflowId =>
+      new QueryParameter()
+        .setParameterType(stringParamType)
+        .setParameterValue(new QueryParameterValue().setValue(s"%$workflowId%"))
+    }
+    params.getValue should contain theSameElementsAs (workflowParams ++ Seq(googleProjectIdParam))
+  }
+
+  it should "ask BigQuery for all workflows if nothing is cached" in withEmptyTestDatabase {
+    dataSource: SlickDataSource =>
+      // 10 workflows, none cached
+      val costs = generateWorkflowCosts(10)
+      val uncachedCosts = costs
+      // get the mocked service
+      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+      // execute getSubmissionCosts
+      val actual = Await.result(
+        costService.getSubmissionCosts(
+          costs.keySet.toSeq,
+          defaultGoogleProjectId,
+          DateTime.now().minusDays(7),
+          Option(DateTime.now().minusDays(5))
+        ),
+        Duration.Inf
+      )
+      // verify correct results
+      actual shouldBe costs
+      // verify call to BigQuery
+      val paramsCaptor = captor[List[QueryParameter]]
+      verify(bigQuery).startParameterizedQuery(any[GoogleProject], any[String], paramsCaptor.capture(), any[String])
+      assertWorkflowParams(paramsCaptor, uncachedCosts.keySet)
+  }
+
+  it should "ask BigQuery for uncached workflows if some are cached" in withEmptyTestDatabase {
+    dataSource: SlickDataSource =>
+      // 10 workflows, with 4 being cached
+      val costs = generateWorkflowCosts(10)
+      val cachedCosts = costs.take(4)
+      val uncachedCosts = costs -- cachedCosts.keySet
+      // persist cachedCosts
+      val rows = cachedCosts.map { case (externalId, cost) =>
+        WorkflowActualCostRecord(externalId, Option(cost))
+      }
+      runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
+      // get the mocked service
+      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+      // execute getSubmissionCosts
+      val actual = Await.result(
+        costService.getSubmissionCosts(
+          costs.keySet.toSeq,
+          defaultGoogleProjectId,
+          DateTime.now().minusDays(7),
+          Option(DateTime.now().minusDays(5))
+        ),
+        Duration.Inf
+      )
+      // verify correct results
+      actual shouldBe costs
+      // verify call to BigQuery
+      val paramsCaptor = captor[List[QueryParameter]]
+      verify(bigQuery).startParameterizedQuery(any[GoogleProject], any[String], paramsCaptor.capture(), any[String])
+      assertWorkflowParams(paramsCaptor, uncachedCosts.keySet)
+  }
+
+  it should "bypass BigQuery if all workflows are cached" is pending
+
+  it should "write BigQuery results back to cache" is pending
+
+  it should "write nulls to cache when BigQuery has no results" is pending
 }
