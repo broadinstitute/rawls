@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.workbench.client.sam.model.{
   FilteredHierarchicalResource,
   FilteredHierarchicalResourcePolicy,
   FilteredResourcesHierarchicalResponse,
+  ForgetGoogleProject200Response,
   ListResourcesV2200Response
 }
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
@@ -797,6 +798,15 @@ class HttpSamDAO(baseSamServiceURL: String,
 
     callback.future.map(WorkbenchEmail)
   }
+
+  override def forgetProject(project: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[ForgetGoogleProject200Response]("forgetGoogleProject")
+
+      googleApi(ctx).forgetGoogleProjectAsync(project.value, callback)
+
+      callback.future.map(_ => ())
+    }
 }
 
 class OtelContextSettingInterceptor(otelContext: Context) extends Interceptor {
