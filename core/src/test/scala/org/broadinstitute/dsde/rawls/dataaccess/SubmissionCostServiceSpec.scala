@@ -22,7 +22,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.mockito.ArgumentCaptor
 import org.scalatest.flatspec.AnyFlatSpec
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{spy, times, verify, when}
+import org.mockito.Mockito.{never, spy, times, verify, when}
 
 import java.util.UUID
 import scala.concurrent.{Await, Future}
@@ -324,9 +324,152 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
       assertWorkflowParams(paramsCaptor, uncachedCosts.keySet)
   }
 
-  it should "bypass BigQuery if all workflows are cached" is pending
+  it should "bypass BigQuery if all workflows are cached" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    // 10 workflows, all are cached
+    val costs = generateWorkflowCosts(10)
+    logger.info(s"***** costs is: $costs")
+    val cachedCosts = costs
+    logger.info(s"***** cachedCosts is: $cachedCosts")
+    val uncachedCosts = Map.empty[String, Float]
+    // persist cachedCosts
+    val rows = cachedCosts.map { case (externalId, cost) =>
+      WorkflowActualCostRecord(externalId, Option(cost))
+    }
+    runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
+    // get the mocked service
+    val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+    // execute getSubmissionCosts
+    val actual = Await.result(
+      costService.getSubmissionCosts(
+        costs.keySet.toSeq,
+        defaultGoogleProjectId,
+        DateTime.now().minusDays(7),
+        Option(DateTime.now().minusDays(5))
+      ),
+      Duration.Inf
+    )
+    // verify correct results
+    actual shouldBe costs
+    // verify we didn't call BigQuery
+    verify(bigQuery, never).startParameterizedQuery(any[GoogleProject],
+                                                    any[String],
+                                                    any[List[QueryParameter]],
+                                                    any[String]
+    )
+  }
 
-  it should "write BigQuery results back to cache" is pending
+  it should "write BigQuery results back to cache" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    import dataSource.dataAccess.driver.api._
 
-  it should "write nulls to cache when BigQuery has no results" is pending
+    // 10 workflows, with 4 being cached
+    val costs = generateWorkflowCosts(10)
+    val cachedCosts = costs.take(4)
+    val uncachedCosts = costs -- cachedCosts.keySet
+    // persist cachedCosts
+    val rows = cachedCosts.map { case (externalId, cost) =>
+      WorkflowActualCostRecord(externalId, Option(cost))
+    }
+    runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
+
+    // validate what's in the cache before running getSubmissionCosts
+    val actualCacheBefore = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+    actualCacheBefore should contain theSameElementsAs rows
+
+    // get the mocked service
+    val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+    // execute getSubmissionCosts
+    val actual = Await.result(
+      costService.getSubmissionCosts(
+        costs.keySet.toSeq,
+        defaultGoogleProjectId,
+        DateTime.now().minusDays(7),
+        Option(DateTime.now().minusDays(5))
+      ),
+      Duration.Inf
+    )
+
+    // validate what's in the cache after running getSubmissionCosts
+    val actualCacheAfter = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+    val expectedCacheAfter = costs.map { case (externalId, cost) =>
+      WorkflowActualCostRecord(externalId, Option(cost))
+    }
+    actualCacheAfter should contain theSameElementsAs expectedCacheAfter
+  }
+
+  it should "write nulls to cache when nothing cached and BigQuery has no results" in withEmptyTestDatabase {
+    dataSource: SlickDataSource =>
+      import dataSource.dataAccess.driver.api._
+
+      // 3 workflows; none cached, and none found in BigQuery
+      val costs = generateWorkflowCosts(3)
+      val uncachedCosts = Map.empty[String, Float]
+
+      // validate what's in the cache before running getSubmissionCosts
+      val cacheBefore = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+      cacheBefore shouldBe empty
+
+      // get the mocked service
+      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+      // execute getSubmissionCosts
+      Await.result(
+        costService.getSubmissionCosts(
+          costs.keySet.toSeq,
+          defaultGoogleProjectId,
+          DateTime.now().minusDays(7),
+          Option(DateTime.now().minusDays(5))
+        ),
+        Duration.Inf
+      )
+
+      // validate what's in the cache after running getSubmissionCosts
+      val actualCacheAfter = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+      val expectedCacheAfter = costs.map { case (externalId, cost) =>
+        WorkflowActualCostRecord(externalId, None)
+      }
+      actualCacheAfter should contain theSameElementsAs expectedCacheAfter
+  }
+
+  it should "write nulls to cache when some cached and BigQuery has no results" in withEmptyTestDatabase {
+    dataSource: SlickDataSource =>
+      import dataSource.dataAccess.driver.api._
+
+      // 5 workflows; 2 cached, and none found in BigQuery
+      val costs = generateWorkflowCosts(5)
+      val cachedCosts = costs.take(2)
+      val uncachedCosts = Map.empty[String, Float]
+
+      // persist cachedCosts
+      val rows = cachedCosts.map { case (externalId, cost) =>
+        WorkflowActualCostRecord(externalId, Option(cost))
+      }
+      runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
+
+      // validate what's in the cache before running getSubmissionCosts
+      val actualCacheBefore = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+      actualCacheBefore should contain theSameElementsAs rows
+
+      // get the mocked service
+      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+      // execute getSubmissionCosts
+      Await.result(
+        costService.getSubmissionCosts(
+          costs.keySet.toSeq,
+          defaultGoogleProjectId,
+          DateTime.now().minusDays(7),
+          Option(DateTime.now().minusDays(5))
+        ),
+        Duration.Inf
+      )
+
+      // validate what's in the cache after running getSubmissionCosts
+      val actualCacheAfter = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+      val nullRows = costs -- cachedCosts.keySet
+      val expectedCacheAfter = cachedCosts.map { case (externalId, cost) =>
+        WorkflowActualCostRecord(externalId, Option(cost))
+      } ++ nullRows.map { case (externalId, cost) =>
+        WorkflowActualCostRecord(externalId, None)
+      }
+      actualCacheAfter should contain theSameElementsAs expectedCacheAfter
+  }
+
 }

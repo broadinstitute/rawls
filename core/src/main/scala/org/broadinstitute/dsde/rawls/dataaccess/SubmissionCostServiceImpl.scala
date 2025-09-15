@@ -74,7 +74,11 @@ class SubmissionCostServiceImpl(defaultTableName: String,
         // determine which of the uncachedWorkflows did not have a hit in BigQuery
         notFoundWorkflows = uncachedWorkflows diff liveResults.keySet
         // persist BigQuery results back to WORKFLOW_ACTUAL_COST
-        writeBack <- writeCostsToLocalDb(liveResults, notFoundWorkflows)
+        _ <-
+          if (liveResults.nonEmpty || notFoundWorkflows.nonEmpty)
+            writeCostsToLocalDb(liveResults, notFoundWorkflows)
+          else
+            Future.successful(())
       } yield {
         // extract from the cached results only those workflows which actually have a cost
         val cachedResultsWithCost = cachedResults.collect {

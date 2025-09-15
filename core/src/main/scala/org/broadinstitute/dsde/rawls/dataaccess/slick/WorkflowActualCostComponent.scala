@@ -51,22 +51,25 @@ trait WorkflowActualCostComponent {
      * @param rows the rows to insert
      * @return count of rows affected
      */
-    def safeInsert(rows: Seq[WorkflowActualCostRecord]): ReadWriteAction[Int] = {
+    def safeInsert(rows: Seq[WorkflowActualCostRecord]): ReadWriteAction[Int] =
+      // prevent syntax errors if no rows
+      if (rows.isEmpty)
+        DBIO.successful(0)
+      else {
+        // generate parameters for each row
+        val rowParams: Seq[SQLActionBuilder] = rows.map { row =>
+          sql"""(${row.externalId}, ${row.cost})"""
+        }
 
-      // generate parameters for each row
-      val rowParams: Seq[SQLActionBuilder] = rows.map { row =>
-        sql"""(${row.externalId}, ${row.cost})"""
-      }
+        val paramSql = reduceSqlActionsWithDelim(rowParams, sql",")
 
-      val paramSql = reduceSqlActionsWithDelim(rowParams, sql",")
-
-      val startSql = sql"""
+        val startSql = sql"""
             insert into WORKFLOW_ACTUAL_COST(EXTERNAL_ID, COST)
             values """
-      val endSql = sql""" on duplicate key update COST=COST;"""
+        val endSql = sql""" on duplicate key update COST=COST;"""
 
-      concatSqlActions(startSql, paramSql, endSql).asUpdate
-    }
+        concatSqlActions(startSql, paramSql, endSql).asUpdate
+      }
 
   }
 
