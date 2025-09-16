@@ -205,7 +205,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   ): Future[Unit] = {
 
     val roleIdentities =
-      policyEmails.map(email => Identity.group(email.value)).toList :+ Identity.serviceAccount(clientEmail)
+      policyEmails.map(email => Identity.group(email.value)).toList
     // Assign all emails to the custom reader role
     val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
     val readerRoleMap: Map[StorageRole, NonEmptyList[Identity]] =
