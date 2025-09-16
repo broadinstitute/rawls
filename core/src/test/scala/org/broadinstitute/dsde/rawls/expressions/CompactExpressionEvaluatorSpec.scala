@@ -235,7 +235,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet"),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -248,7 +249,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet2"),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -261,7 +263,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet4"),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -317,7 +320,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -377,7 +381,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(testData.indiv1.name),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -472,7 +477,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -509,7 +515,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet"),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -628,6 +635,7 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSetSet.name),
+        any(),
         any()
       )
     )
@@ -678,7 +686,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -702,18 +711,18 @@ class CompactExpressionEvaluatorSpec
 
     // root entity type:set, no entity expression, input expression: this.samples.something
     // SVV with error Expected single value for workflow input, but evaluated result set had multiple values
-//    val expressionEvaluationContext =
-//      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
-//
-//    val result = evalInputs(expressionEvaluationContext, configSampleSetSingleInput, stringWdl)
-//
-//    val errorResult = result
-//      .find(_.entityName == sampleSet2.name)
-//      .flatMap(_.inputResolutions.find(v => v.inputName == stringArgNameWithWfName && v.error.isDefined))
-//
-//    errorResult shouldBe defined
-//    val errorMessage = errorResult.get.error.get
-//    errorMessage should include("Expected single value")
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Some(sampleSet2.entityType), Some(sampleSet2.name), None, Some(sampleSet2.entityType))
+
+    val result = evalInputs(expressionEvaluationContext, configSampleSetSingleInput, stringWdl)
+
+    val errorResult = result
+      .find(_.entityName == sampleSet2.name)
+      .flatMap(_.inputResolutions.find(v => v.inputName == stringArgNameWithWfName && v.error.isDefined))
+
+    errorResult shouldBe defined
+    val errorMessage = errorResult.get.error.get
+    errorMessage should include("Expected single value")
 
     // root entity type: set, entity expression: this.samples, input expression: this.samples.something
     // "The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample_set.)
@@ -742,7 +751,8 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet"),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
@@ -852,12 +862,13 @@ class CompactExpressionEvaluatorSpec
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-                                                       any()
+                                                       any(),
+        any()
       )
     )
       .thenReturn(
         DBIO.successful(
-          Map(sampleGood.name -> Seq(sampleGoodAsCER), sampleGood2.name -> Seq(sampleGood2AsCER))
+          Map(sampleSet2.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
         )
       )
     val context =
@@ -883,7 +894,8 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name),
-        org.mockito.ArgumentMatchers.eq(List("samples"))
+        org.mockito.ArgumentMatchers.eq(List("samples")),
+        any()
       )
     )
       .thenReturn(
@@ -930,7 +942,8 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct2.name),
-        org.mockito.ArgumentMatchers.eq(List("samples"))
+        org.mockito.ArgumentMatchers.eq(List("samples")),
+        any()
       )
     )
       .thenReturn(
@@ -978,7 +991,8 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
-        org.mockito.ArgumentMatchers.eq(List("samples"))
+        org.mockito.ArgumentMatchers.eq(List("samples")),
+        any()
       )
     )
       .thenReturn(
@@ -1086,7 +1100,8 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-        org.mockito.ArgumentMatchers.eq(List("samples"))
+        org.mockito.ArgumentMatchers.eq(List("samples")),
+        any()
       )
     )
       .thenReturn(
@@ -1128,7 +1143,8 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.entityType),
         org.mockito.ArgumentMatchers.eq(sampleForWdlStruct.name),
-        org.mockito.ArgumentMatchers.eq(List("samples"))
+        org.mockito.ArgumentMatchers.eq(List("samples")),
+        any()
       )
     )
       .thenReturn(
@@ -1192,7 +1208,8 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet2.name),
-        org.mockito.ArgumentMatchers.eq(List("samples"))
+        org.mockito.ArgumentMatchers.eq(List("samples")),
+        any()
       )
     )
       .thenReturn(
@@ -1303,6 +1320,7 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet.name),
+        any(),
         any()
       )
     ).thenReturn(
@@ -1381,6 +1399,7 @@ class CompactExpressionEvaluatorSpec
         any(),
         org.mockito.ArgumentMatchers.eq(sampleSet.entityType),
         org.mockito.ArgumentMatchers.eq(sampleSet.name),
+        any(),
         any()
       )
     ).thenReturn(
@@ -1451,7 +1470,7 @@ class CompactExpressionEvaluatorSpec
     val queryPlan = QueryPlan(List("samples"), Map(expression -> Set("blah")))
 
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any(), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -1478,7 +1497,7 @@ class CompactExpressionEvaluatorSpec
       QueryPlan(List("samples"), Map(expression1 -> Set("rawJsonDoubleArray"), expression2 -> Set("blah")))
 
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any(), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -1508,7 +1527,7 @@ class CompactExpressionEvaluatorSpec
     val queryPlan = QueryPlan(List("samples"), Map(expression -> Set("blah")))
 
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any(), any())
     )
       .thenReturn(
         DBIO.successful(
@@ -1544,7 +1563,7 @@ class CompactExpressionEvaluatorSpec
       compactExpressionEvaluator
         .executeQueryPlan(workspace.workspaceIdAsUUID, "sample", sampleGood.name, "sample", queryPlan)
     )
-    verify(mockQueries, never()).queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
+    verify(mockQueries, never()).queryRelatedRecordsWithRelationChain(any(), any(), any(), any(), any())
     result.size shouldBe 1
     //  type ExpressionAndResult = (LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])
     result should contain theSameElementsAs Seq(
@@ -1596,7 +1615,7 @@ class CompactExpressionEvaluatorSpec
     val queryPlan = QueryPlan(List("samples"), Map(expression1 -> Set("name"), expression2 -> Set("Sample_id")))
 
     when(
-      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any())
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any(), any())
     )
       .thenReturn(
         DBIO.successful(
