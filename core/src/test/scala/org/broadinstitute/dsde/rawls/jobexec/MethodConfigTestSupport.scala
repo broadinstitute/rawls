@@ -593,6 +593,13 @@ trait MethodConfigTestSupport {
     )
   )
 
+  val sampleSetSet = Entity("setOfSets",
+    "SampleSetSet",
+    Map(
+      AttributeName.withDefaultNS("sample_sets") -> AttributeEntityReferenceList(
+        Seq(sampleSet.toReference, sampleSet2.toReference)
+      )))
+
   val dummyMethod = AgoraMethod("method_namespace", "test_method", 1)
 
   val configGood = MethodConfiguration("config_namespace",
@@ -830,7 +837,8 @@ trait MethodConfigTestSupport {
               entityQuery.save(context, sampleSet3),
               entityQuery.save(context, sampleSet4),
               entityQuery.save(context, sampleForWdlStruct),
-              entityQuery.save(context, sampleForWdlStruct2)
+              entityQuery.save(context, sampleForWdlStruct2),
+              entityQuery.save(context, sampleSetSet)
             )
           } else {
             compactEntityRepository.queries.batchWriteEntities(
@@ -845,7 +853,8 @@ trait MethodConfigTestSupport {
                 sampleSet3,
                 sampleSet4,
                 sampleForWdlStruct,
-                sampleForWdlStruct2
+                sampleForWdlStruct2,
+                sampleSetSet
               ),
               true
             )

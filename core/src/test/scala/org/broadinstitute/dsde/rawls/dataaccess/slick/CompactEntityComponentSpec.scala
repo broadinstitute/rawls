@@ -3277,6 +3277,46 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
   }
 
+  behavior of "determineEntityTypeAtEndOfChain"
+
+  it should "get the types of a chain" in withMinimalTestDatabase { _ =>
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGetAll(Seq(sample, set))
+    //this.samples
+    val result = runAndWait(q.determineEntityTypeAtEndOfChain(workspaceId, set.entityType, set.name, List("samples")))
+
+    result shouldBe Some("sample")
+
+    val setSet = Entity(
+      "setSet",
+      "sample_set_set",
+      Map(AttributeName.withDefaultNS("ssets") -> AttributeEntityReference("sample_set", "set1"))
+    )
+
+    insertAndGet(setSet)
+
+    //this.ssets.samples
+    val result2 = runAndWait(q.determineEntityTypeAtEndOfChain(workspaceId, setSet.entityType, setSet.name, List("ssets", "samples")))
+
+    result2 shouldBe Some("sample")
+
+
+  }
+
   // ====================================================================================================
   //  helpers for tests
   // ====================================================================================================
