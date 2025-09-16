@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
@@ -174,11 +173,6 @@ class FastPassMonitorSpec
       testConf.getString("gcs.pathToCredentialJson"),
       servicePerimeterService,
       mock[NotificationDAO]
-    ) _
-
-    val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
-      slickDataSource,
-      gcsDAO
     ) _
 
     val bigQueryDAO = new MockGoogleBigQueryDAO

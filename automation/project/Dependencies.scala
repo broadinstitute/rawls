@@ -5,7 +5,8 @@ object Dependencies {
 
   val akkaV         = "2.6.8"
   val akkaHttpV     = "10.2.0"
-  val jacksonV      = "2.19.2"
+  val jacksonV      = "2.20.0"
+  val jacksonAnnotationsV = "2.20"
 
   val workbenchLibsHash = "80e4b8d"
   val serviceTestV = s"5.0-${workbenchLibsHash}"
@@ -31,7 +32,7 @@ object Dependencies {
   val rootDependencies = Seq(
     // proactively pull in latest versions of Jackson libs, instead of relying on the versions
     // specified as transitive dependencies, due to OWASP DependencyCheck warnings for earlier versions.
-    "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonV,
+    "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonAnnotationsV,
     "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV,
     "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
     "com.fasterxml.jackson.module" % ("jackson-module-scala_" + scalaV) % jacksonV,

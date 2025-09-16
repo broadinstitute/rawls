@@ -38,7 +38,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.tps.HttpTpsDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.googleProject.{
   GoogleProjectRegistrationRepository,
   GoogleProjectRegistrationService
@@ -244,9 +243,6 @@ object Boot extends IOApp with LazyLogging {
       )
       val policyService = new PolicyService(tpsDAO)
 
-      val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
-        GenomicsServiceFactory.createGenomicsService(appConfigManager, slickDataSource, gcsDAO)
-
       val submissionCostService =
         SubmissionCostServiceFactory.createSubmissionCostService(appConfigManager, bigQueryDAO)
 
@@ -442,7 +438,6 @@ object Boot extends IOApp with LazyLogging {
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
-        genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
         new WorkspaceSettingRepository(slickDataSource),
@@ -509,7 +504,6 @@ object Boot extends IOApp with LazyLogging {
         entityServiceConstructor,
         userServiceConstructor,
         billingAdminServiceConstructor,
-        genomicsServiceConstructor,
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
         billingProjectOrchestratorConstructor,

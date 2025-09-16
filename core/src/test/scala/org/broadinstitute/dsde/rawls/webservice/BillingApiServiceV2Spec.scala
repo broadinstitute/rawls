@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProjectDeletion,
@@ -1047,17 +1046,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices {
     services =>
       val project = createProject("project")
-      val adminRequestContext: RawlsRequestContext =
-        RawlsRequestContext(
-          UserInfo(RawlsUserEmail("admin"),
-                   OAuth2BearerToken("Bearer admin token"),
-                   999,
-                   RawlsUserSubjectId("adminSubjectId")
-          )
-        )
       // wow there are a lot of sam calls in delete billing project
-      val mockSamAdminDAO = mock[SamAdminDAO]
-      when(services.samDAO.admin).thenReturn(mockSamAdminDAO)
       when(
         services.samDAO.userHasAction(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -1067,14 +1056,11 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.listAllResourceMemberIds(
-          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-          ArgumentMatchers.eq(project.projectName.value),
-          ArgumentMatchers.argThat(userInfoEq(testContext))
+        services.samDAO.forgetProject(ArgumentMatchers.eq(project.googleProjectId),
+                                      ArgumentMatchers.argThat(userInfoEq(testContext))
         )
-      ).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, None))))
-      when(services.samDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail))
-        .thenReturn(Future.successful("petSAJson"))
+      )
+        .thenReturn(Future.successful())
       when(
         services.samDAO.listResourceChildren(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -1086,26 +1072,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
         )
       )
-      when(services.samDAO.rawlsSAContext).thenReturn(adminRequestContext)
-      when(
-        services.samDAO.admin.deletePetPerProject(anyString(),
-                                                  ArgumentMatchers.eq(project.googleProjectId),
-                                                  any[RawlsRequestContext]
-        )
-      )
-        .thenReturn(Future.successful())
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(project.projectName.value),
-          ArgumentMatchers.argThat(userInfoEq(testContext))
-        )
-      )
-        .thenReturn(Future.successful())
-      when(
-        services.samDAO.deleteResource(
-          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-          ArgumentMatchers.eq(project.googleProjectId.value),
           ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       )
@@ -1119,14 +1089,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           }
         }
 
-      verify(mockSamAdminDAO).deletePetPerProject(ArgumentMatchers.eq(testContext.userInfo.userSubjectId.value),
-                                                  ArgumentMatchers.eq(project.googleProjectId),
-                                                  any[RawlsRequestContext]
-      )
-      verify(services.samDAO).deleteResource(
-        ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-        ArgumentMatchers.eq(project.googleProjectId.value),
-        ArgumentMatchers.argThat(userInfoEq(testContext))
+      verify(services.samDAO).forgetProject(ArgumentMatchers.eq(project.googleProjectId),
+                                            ArgumentMatchers.argThat(userInfoEq(testContext))
       )
   }
   it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>

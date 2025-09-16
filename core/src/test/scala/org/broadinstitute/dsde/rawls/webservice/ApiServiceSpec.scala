@@ -27,7 +27,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassServiceImpl
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.googleProject.{
   GoogleProjectRegistrationRepository,
@@ -223,11 +222,6 @@ trait ApiServiceSpec
       policyService
     )
 
-    override val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
-      slickDataSource,
-      gcsDAO
-    ) _
-
     override val billingAdminServiceConstructor: RawlsRequestContext => BillingAdminService =
       new BillingAdminService(samDAO, billingRepository, new WorkspaceRepository(slickDataSource), _)(
         testExecutionContext
@@ -389,7 +383,6 @@ trait ApiServiceSpec
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      genomicsServiceConstructor,
       workspaceServiceConfig,
       new WorkspaceRepository(slickDataSource),
       new WorkspaceSettingRepository(slickDataSource),

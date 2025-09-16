@@ -93,6 +93,8 @@ object UserService {
                                  ctx: RawlsRequestContext,
                                  deleteGoogleProjectWithGoogle: Boolean = true
   )(implicit ex: ExecutionContext): Future[Unit] = {
+
+    /** helper: does the project exist in Google, as far as Rawls can see? */
     def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId) =
       gcsDAO.getGoogleProject(projectId) transform {
         case Success(_) => Success(true)
@@ -105,13 +107,9 @@ object UserService {
 
     def F = Applicative[Future]
 
-    def deleteResourcesInGoogle(projectId: GoogleProjectId) =
-      for {
-        _ <- deletePetsInProject(projectId, gcsDAO, samDAO, ctx)
-        _ <- F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId))
-      } yield ()
-
     val projectId = GoogleProjectId(projectName.value)
+
+    // does this `billing-project` Sam resource have a child `google-project` of the same name?
     samDAO.listResourceChildren(SamResourceTypeNames.billingProject,
                                 projectName.value,
                                 ctx.copy(userInfo = userInfoForSam)
@@ -122,37 +120,16 @@ object UserService {
         )
       )(
         for {
-          _ <- rawlsCreatedGoogleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
-          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject,
-                                     projectName.value,
-                                     ctx.copy(userInfo = userInfoForSam)
-          )
+          // if the project exists in the cloud, delete the project from the cloud
+          _ <- rawlsCreatedGoogleProjectExists(projectId)
+            .ifM(F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId)), F.unit)
+          // delete the project from Sam
+          _ <- samDAO.forgetProject(projectId, ctx)
         } yield ()
       )
     }
   }
 
-  private def deletePetsInProject(projectName: GoogleProjectId,
-                                  gcsDAO: GoogleServicesDAO,
-                                  samDAO: SamDAO,
-                                  ctx: RawlsRequestContext
-  )(implicit ex: ExecutionContext): Future[Unit] =
-    for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ctx)
-      _ <- projectUsers.toList.traverse(destroyPet(_, projectName, samDAO, ctx))
-    } yield ()
-
-  private def destroyPet(userIdInfo: UserIdInfo,
-                         projectName: GoogleProjectId,
-                         samDAO: SamDAO,
-                         ctx: RawlsRequestContext
-  )(implicit ex: ExecutionContext): Future[Unit] =
-    for {
-      _ <- samDAO.admin.deletePetPerProject(userIdInfo.userSubjectId,
-                                            projectName,
-                                            samDAO.rawlsSAContext.copy(otelContext = ctx.otelContext)
-      )
-    } yield ()
 }
 
 class UserService(

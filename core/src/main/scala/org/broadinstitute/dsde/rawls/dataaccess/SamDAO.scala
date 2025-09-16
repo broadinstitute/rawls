@@ -187,6 +187,8 @@ trait SamDAO {
   )
 
   def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail]
+
+  def forgetProject(project: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
 }
 
 trait SamAdminDAO {
@@ -206,8 +208,6 @@ trait SamAdminDAO {
                            memberEmail: String,
                            ctx: RawlsRequestContext
   ): Future[Unit]
-
-  def deletePetPerProject(userId: String, googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
 
   def userHasResourceTypeAdminPermission(resourceTypeName: SamResourceTypeName,
                                          action: SamResourceAction,

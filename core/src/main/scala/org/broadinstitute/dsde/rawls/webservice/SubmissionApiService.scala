@@ -180,16 +180,13 @@ trait SubmissionApiService extends UserInfoDirectives {
             }
           }
       } ~
-      path("workflows" / Segment / "genomics" / Segments) { (workflowId, operationId) =>
+      path("workflows" / Segment / "genomics" / Segments) { (_, _) =>
         get {
-          complete {
-            submissionsServiceConstructor(ctx).getGenomicsOperationV2(workflowId, operationId).map {
-              case Some(jsobj) =>
-                implicit val printer = PrettyPrinter
-                StatusCodes.OK -> jsobj
-              case None => StatusCodes.NotFound -> JsString(s"jobId ${operationId.mkString("/")} not found.")
-            }
-          }
+          complete(
+            StatusCodes.Gone -> JsString(
+              "This API has been removed. GCP LifeSciences API was shutdown in July 2025 and operations metadata for jobs is no longer available."
+            )
+          )
         }
       }
   }
