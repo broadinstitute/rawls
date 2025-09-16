@@ -40,7 +40,7 @@ class SubmissionCostServiceImpl(defaultTableName: String,
     extends LazyLogging
     with SubmissionCostService {
 
-  val stringParamType = new QueryParameterType().setType("STRING")
+  val stringParamType: QueryParameterType = new QueryParameterType().setType("STRING")
 
   /**
    * Retrieve actual costs for multiple workflows.
@@ -103,7 +103,7 @@ class SubmissionCostServiceImpl(defaultTableName: String,
     getSubmissionCosts(Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableNameOpt)
 
   // ask WORKFLOW_ACTUAL_COST table for specific workflows
-  protected[dataaccess] def retrieveCostsFromLocalDb(
+  private def retrieveCostsFromLocalDb(
     workflowIds: Seq[String]
   ): Future[Map[String, Option[Float]]] = {
     import dataSource.dataAccess.driver.api._
@@ -119,11 +119,11 @@ class SubmissionCostServiceImpl(defaultTableName: String,
   }
 
   // modular method ask BigQuery for specific workflows
-  protected[dataaccess] def retrieveCostsFromBigQuery(workflowIds: Seq[String],
-                                                      googleProjectId: GoogleProjectId,
-                                                      submissionDate: DateTime,
-                                                      terminalStatusDate: Option[DateTime],
-                                                      tableNameOpt: Option[String] = Option(defaultTableName)
+  private def retrieveCostsFromBigQuery(workflowIds: Seq[String],
+                                        googleProjectId: GoogleProjectId,
+                                        submissionDate: DateTime,
+                                        terminalStatusDate: Option[DateTime],
+                                        tableNameOpt: Option[String] = Option(defaultTableName)
   ): Future[Map[String, Float]] = {
     val tableName = tableNameOpt.getOrElse(defaultTableName)
     val datePartitionColumn = if (tableName == defaultTableName) Some(defaultDatePartitionColumn) else None
@@ -141,9 +141,7 @@ class SubmissionCostServiceImpl(defaultTableName: String,
   }
 
   // modular method to save rows to WORKFLOW_ACTUAL_COST
-  protected[dataaccess] def writeCostsToLocalDb(costs: Map[String, Float],
-                                                notFoundWorkflows: Set[String]
-  ): Future[Int] = {
+  private def writeCostsToLocalDb(costs: Map[String, Float], notFoundWorkflows: Set[String]): Future[Int] = {
     // generate records for the found costs
     val foundCosts: Seq[WorkflowActualCostRecord] = costs.map { case (externalId: String, cost: Float) =>
       WorkflowActualCostRecord(externalId, Option(cost))
@@ -188,34 +186,6 @@ class SubmissionCostServiceImpl(defaultTableName: String,
       .toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
 
     s"""AND $datePartitionColumn BETWEEN "$windowStartDate" AND "$windowEndDate""""
-  }
-
-  private def executeSubmissionCostsQuery(submissionId: String,
-                                          googleProjectId: GoogleProjectId,
-                                          submissionDate: DateTime,
-                                          terminalStatusDate: Option[DateTime],
-                                          tableName: String,
-                                          datePartitionColumn: Option[String]
-  ): Future[util.List[TableRow]] = {
-
-    val querySql: String =
-      generateSubmissionCostsQuery(submissionId, submissionDate, terminalStatusDate, tableName, datePartitionColumn)
-
-    val namespaceParam =
-      new QueryParameter()
-        .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(googleProjectId.value))
-
-    val queryParameters: List[QueryParameter] = List(namespaceParam)
-
-    executeBigQuery(querySql, queryParameters) map { result =>
-      val rowsReturned = Option(result.getTotalRows).getOrElse(0)
-      val bytesProcessed = Option(result.getTotalBytesProcessed).getOrElse(0)
-      logger.debug(
-        s"Queried for costs of submission $submissionId: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed."
-      )
-      Option(result.getRows).getOrElse(List.empty[TableRow].asJava)
-    }
   }
 
   /*
