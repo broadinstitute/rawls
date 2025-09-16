@@ -716,20 +716,25 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "call updateBucketIamAllReaders with non-reader policy emails when locking a workspace" in withTestDataServicesCustomSam { services =>
-    populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
-    Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName), Duration.Inf)
+  it should "call updateBucketIamAllReaders with non-reader policy emails when locking a workspace" in withTestDataServicesCustomSam {
+    services =>
+      populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
+      Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+                   Duration.Inf
+      )
 
-    verify(services.gcsDAO).updateBucketIamAllReaders(
-      GcsBucketName(testData.workspaceNoSubmissions.bucketName),
-      Set(WorkbenchEmail(testData.userOwner.userEmail.value), WorkbenchEmail(testData.userWriter.userEmail.value)),
-      Some(testData.workspaceNoSubmissions.googleProjectId)
-    )
+      verify(services.gcsDAO).updateBucketIamAllReaders(
+        GcsBucketName(testData.workspaceNoSubmissions.bucketName),
+        Set(WorkbenchEmail(testData.userOwner.userEmail.value), WorkbenchEmail(testData.userWriter.userEmail.value)),
+        Some(testData.workspaceNoSubmissions.googleProjectId)
+      )
   }
 
   it should "call updateBucketIam when unlocking a workspace" in withTestDataServicesCustomSam { services =>
     populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
-    Await.result(services.workspaceService.unlockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName), Duration.Inf)
+    Await.result(services.workspaceService.unlockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+                 Duration.Inf
+    )
 
     val expectedPolicyEmails = Map(
       WorkspaceAccessLevels.Owner -> WorkbenchEmail("owner@example.com"),
