@@ -190,7 +190,8 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
   it should "bypass BigQuery with no workflow IDs" in
     assertResult(Map.empty) {
       Await.result(
-        submissionCostService.getSubmissionCosts(Seq.empty,
+        submissionCostService.getSubmissionCosts("submission-id",
+                                                 Seq.empty,
                                                  GoogleProjectId("test"),
                                                  new DateTime(DateTimeZone.UTC),
                                                  Option(new DateTime(DateTimeZone.UTC))
@@ -229,6 +230,11 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
     )
     (costService, mockitoGoogleBigQueryDAO)
   }
+  // helper: generate a random cost with precision 2
+  def randomCost: Float = BigDecimal(Random.nextFloat() * 100)
+    .setScale(2, RoundingMode.HALF_UP)
+    .toFloat
+
   // helper: generate some randomized workflow ids and costs
   def generateWorkflowCosts(quantity: Int): Map[String, Float] = Range(0, quantity).map { _ =>
     // ensure floats have precision 2
@@ -268,79 +274,77 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
     params.getValue should contain theSameElementsAs (workflowParams ++ Seq(googleProjectIdParam))
   }
 
-  it should "ask BigQuery for all workflows if nothing is cached" in withEmptyTestDatabase {
-    dataSource: SlickDataSource =>
-      // 10 workflows, none cached
-      val costs = generateWorkflowCosts(10)
-      val uncachedCosts = costs
-      // get the mocked service
-      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
-      // execute getSubmissionCosts
-      val actual = Await.result(
-        costService.getSubmissionCosts(
-          costs.keySet.toSeq,
-          defaultGoogleProjectId,
-          DateTime.now().minusDays(7),
-          Option(DateTime.now().minusDays(5))
-        ),
-        Duration.Inf
-      )
-      // verify correct results
-      actual shouldBe costs
-      // verify call to BigQuery
-      val paramsCaptor = captor[List[QueryParameter]]
-      verify(bigQuery).startParameterizedQuery(any[GoogleProject], any[String], paramsCaptor.capture(), any[String])
-      assertWorkflowParams(paramsCaptor, uncachedCosts.keySet)
-  }
-
-  it should "ask BigQuery for uncached workflows if some are cached" in withEmptyTestDatabase {
-    dataSource: SlickDataSource =>
-      // 10 workflows, with 4 being cached
-      val costs = generateWorkflowCosts(10)
-      val cachedCosts = costs.take(4)
-      val uncachedCosts = costs -- cachedCosts.keySet
-      // persist cachedCosts
-      val rows = cachedCosts.map { case (externalId, cost) =>
-        WorkflowActualCostRecord(externalId, Option(cost))
-      }
-      runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
-      // get the mocked service
-      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
-      // execute getSubmissionCosts
-      val actual = Await.result(
-        costService.getSubmissionCosts(
-          costs.keySet.toSeq,
-          defaultGoogleProjectId,
-          DateTime.now().minusDays(7),
-          Option(DateTime.now().minusDays(5))
-        ),
-        Duration.Inf
-      )
-      // verify correct results
-      actual shouldBe costs
-      // verify call to BigQuery
-      val paramsCaptor = captor[List[QueryParameter]]
-      verify(bigQuery).startParameterizedQuery(any[GoogleProject], any[String], paramsCaptor.capture(), any[String])
-      assertWorkflowParams(paramsCaptor, uncachedCosts.keySet)
-  }
-
-  it should "bypass BigQuery if all workflows are cached" in withEmptyTestDatabase { dataSource: SlickDataSource =>
-    // 10 workflows, all are cached
-    val costs = generateWorkflowCosts(10)
-    logger.info(s"***** costs is: $costs")
-    val cachedCosts = costs
-    logger.info(s"***** cachedCosts is: $cachedCosts")
-    val uncachedCosts = Map.empty[String, Float]
-    // persist cachedCosts
-    val rows = cachedCosts.map { case (externalId, cost) =>
-      WorkflowActualCostRecord(externalId, Option(cost))
-    }
-    runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
+  it should "ask BigQuery for all workflows if nothing is cached" in withDefaultTestDatabase { _: SlickDataSource =>
+    val submission = testData.costedSubmission1
+    // 3 workflows, none cached
+    val costs = submission.workflows.map(wf => wf.workflowId.get -> randomCost).toMap
+    val uncachedCosts = costs
     // get the mocked service
     val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
     // execute getSubmissionCosts
     val actual = Await.result(
       costService.getSubmissionCosts(
+        submission.submissionId,
+        costs.keySet.toSeq,
+        defaultGoogleProjectId,
+        DateTime.now().minusDays(7),
+        Option(DateTime.now().minusDays(5))
+      ),
+      Duration.Inf
+    )
+    // verify correct results
+    actual shouldBe costs
+    // verify call to BigQuery
+    val paramsCaptor = captor[List[QueryParameter]]
+    verify(bigQuery).startParameterizedQuery(any[GoogleProject], any[String], paramsCaptor.capture(), any[String])
+    assertWorkflowParams(paramsCaptor, uncachedCosts.keySet)
+  }
+
+  it should "ask BigQuery for uncached workflows if some are cached" in withDefaultTestDatabase { _: SlickDataSource =>
+    val submission = testData.costedSubmission1
+    val submissionUuid = UUID.fromString(submission.submissionId)
+    // 3 workflows, with 1 being cached
+    val costs = submission.workflows.map(wf => wf.workflowId.get -> randomCost).toMap
+    val cachedCosts = costs.take(1)
+    val uncachedCosts = costs -- cachedCosts.keySet
+    // get the mocked service
+    val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+    // persist cachedCosts
+    Await.result(costService.writeCostsToLocalDb(submissionUuid, cachedCosts, Set()), Duration.Inf)
+    // execute getSubmissionCosts
+    val actual = Await.result(
+      costService.getSubmissionCosts(
+        testData.costedSubmission1.submissionId,
+        costs.keySet.toSeq,
+        defaultGoogleProjectId,
+        DateTime.now().minusDays(7),
+        Option(DateTime.now().minusDays(5))
+      ),
+      Duration.Inf
+    )
+    // verify correct results
+    actual shouldBe costs
+    // verify call to BigQuery
+    val paramsCaptor = captor[List[QueryParameter]]
+    verify(bigQuery).startParameterizedQuery(any[GoogleProject], any[String], paramsCaptor.capture(), any[String])
+    assertWorkflowParams(paramsCaptor, uncachedCosts.keySet)
+  }
+
+  it should "bypass BigQuery if all workflows are cached" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val submission = testData.costedSubmission1
+    val submissionUuid = UUID.fromString(submission.submissionId)
+    // 3 workflows, all are cached
+    val costs = submission.workflows.map(wf => wf.workflowId.get -> randomCost).toMap
+    val cachedCosts = costs
+    val uncachedCosts = Map.empty[String, Float]
+    // get the mocked service
+    val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
+    // persist cachedCosts
+    Await.result(costService.writeCostsToLocalDb(submissionUuid, cachedCosts, Set()), Duration.Inf)
+    // execute getSubmissionCosts
+    val actual = Await.result(
+      costService.getSubmissionCosts(
+        testData.costedSubmission1.submissionId,
         costs.keySet.toSeq,
         defaultGoogleProjectId,
         DateTime.now().minusDays(7),
@@ -358,28 +362,28 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
     )
   }
 
-  it should "write BigQuery results back to cache" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  it should "write BigQuery results back to cache" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     import dataSource.dataAccess.driver.api._
 
-    // 10 workflows, with 4 being cached
-    val costs = generateWorkflowCosts(10)
-    val cachedCosts = costs.take(4)
+    val submission = testData.costedSubmission1
+    val submissionUuid = UUID.fromString(submission.submissionId)
+    // 3 workflows, with 1 being cached
+    val costs = submission.workflows.map(wf => wf.workflowId.get -> randomCost).toMap
+    val cachedCosts = costs.take(1)
     val uncachedCosts = costs -- cachedCosts.keySet
+    // get the mocked service
+    val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
     // persist cachedCosts
-    val rows = cachedCosts.map { case (externalId, cost) =>
-      WorkflowActualCostRecord(externalId, Option(cost))
-    }
-    runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
+    Await.result(costService.writeCostsToLocalDb(submissionUuid, cachedCosts, Set()), Duration.Inf)
 
     // validate what's in the cache before running getSubmissionCosts
     val actualCacheBefore = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
-    actualCacheBefore should contain theSameElementsAs rows
+    actualCacheBefore.map(_.externalId) should contain theSameElementsAs cachedCosts.keySet
 
-    // get the mocked service
-    val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
     // execute getSubmissionCosts
-    val actual = Await.result(
+    Await.result(
       costService.getSubmissionCosts(
+        testData.costedSubmission1.submissionId,
         costs.keySet.toSeq,
         defaultGoogleProjectId,
         DateTime.now().minusDays(7),
@@ -388,31 +392,35 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
       Duration.Inf
     )
 
-    // validate what's in the cache after running getSubmissionCosts
+    // validate what's in the cache after running getSubmissionCosts; ignore the WORKFLOW_ID column
+    // because that is non-deterministic (it's an auto-increment column and is tested elsewhere)
     val actualCacheAfter = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+      .map(rec => rec.externalId -> rec.cost)
     val expectedCacheAfter = costs.map { case (externalId, cost) =>
-      WorkflowActualCostRecord(externalId, Option(cost))
+      externalId -> Option(cost)
     }
     actualCacheAfter should contain theSameElementsAs expectedCacheAfter
   }
 
-  it should "write nulls to cache when nothing cached and BigQuery has no results" in withEmptyTestDatabase {
+  it should "write nulls to cache when nothing cached and BigQuery has no results" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       import dataSource.dataAccess.driver.api._
 
+      val submission = testData.costedSubmission1
       // 3 workflows; none cached, and none found in BigQuery
-      val costs = generateWorkflowCosts(3)
+      val costs = submission.workflows.map(wf => wf.workflowId.get -> randomCost).toMap
       val uncachedCosts = Map.empty[String, Float]
+      // get the mocked service
+      val (costService, _) = getMockitoSubmissionCostService(uncachedCosts)
 
       // validate what's in the cache before running getSubmissionCosts
       val cacheBefore = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
       cacheBefore shouldBe empty
 
-      // get the mocked service
-      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
       // execute getSubmissionCosts
       Await.result(
         costService.getSubmissionCosts(
+          testData.costedSubmission1.submissionId,
           costs.keySet.toSeq,
           defaultGoogleProjectId,
           DateTime.now().minusDays(7),
@@ -421,38 +429,40 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
         Duration.Inf
       )
 
-      // validate what's in the cache after running getSubmissionCosts
+      // validate what's in the cache after running getSubmissionCosts; ignore the WORKFLOW_ID column
+      // because that is non-deterministic (it's an auto-increment column and is tested elsewhere)
       val actualCacheAfter = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+        .map(rec => rec.externalId -> rec.cost)
       val expectedCacheAfter = costs.map { case (externalId, cost) =>
-        WorkflowActualCostRecord(externalId, None)
+        externalId -> None
       }
       actualCacheAfter should contain theSameElementsAs expectedCacheAfter
   }
 
-  it should "write nulls to cache when some cached and BigQuery has no results" in withEmptyTestDatabase {
+  it should "write nulls to cache when some cached and BigQuery has no results" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       import dataSource.dataAccess.driver.api._
 
-      // 5 workflows; 2 cached, and none found in BigQuery
-      val costs = generateWorkflowCosts(5)
-      val cachedCosts = costs.take(2)
+      val submission = testData.costedSubmission1
+      val submissionUuid = UUID.fromString(submission.submissionId)
+      // 3 workflows, with 1 being cached, and none found in BigQuery
+      val costs = submission.workflows.map(wf => wf.workflowId.get -> randomCost).toMap
+      val cachedCosts = costs.take(1)
       val uncachedCosts = Map.empty[String, Float]
-
+      // get the mocked service
+      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
       // persist cachedCosts
-      val rows = cachedCosts.map { case (externalId, cost) =>
-        WorkflowActualCostRecord(externalId, Option(cost))
-      }
-      runAndWait(dataSource.dataAccess.workflowActualCostRawSqlQuery.safeInsert(rows.toSeq))
+      Await.result(costService.writeCostsToLocalDb(submissionUuid, cachedCosts, Set()), Duration.Inf)
 
       // validate what's in the cache before running getSubmissionCosts
       val actualCacheBefore = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
-      actualCacheBefore should contain theSameElementsAs rows
+        .map(_.externalId)
+      actualCacheBefore should contain theSameElementsAs cachedCosts.keySet
 
-      // get the mocked service
-      val (costService, bigQuery) = getMockitoSubmissionCostService(uncachedCosts)
       // execute getSubmissionCosts
       Await.result(
         costService.getSubmissionCosts(
+          testData.costedSubmission1.submissionId,
           costs.keySet.toSeq,
           defaultGoogleProjectId,
           DateTime.now().minusDays(7),
@@ -461,15 +471,62 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils with Moc
         Duration.Inf
       )
 
-      // validate what's in the cache after running getSubmissionCosts
+      // validate what's in the cache after running getSubmissionCosts; ignore the WORKFLOW_ID column
+      // because that is non-deterministic (it's an auto-increment column and is tested elsewhere)
       val actualCacheAfter = runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+        .map(rec => rec.externalId -> rec.cost)
       val nullRows = costs -- cachedCosts.keySet
       val expectedCacheAfter = cachedCosts.map { case (externalId, cost) =>
-        WorkflowActualCostRecord(externalId, Option(cost))
+        externalId -> Option(cost)
       } ++ nullRows.map { case (externalId, cost) =>
-        WorkflowActualCostRecord(externalId, None)
+        externalId -> None
       }
       actualCacheAfter should contain theSameElementsAs expectedCacheAfter
   }
 
+  behavior of "writeCostsToLocalDb"
+
+  it should "persist rows, including the foreign key to WORKFLOW" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      import dataSource.dataAccess.driver.api._
+
+      val submission = testData.costedSubmission1
+      val submissionUuid = UUID.fromString(submission.submissionId)
+      // find existing workflows; assert all workflows have an external id
+      submission.workflows.foreach { workflow =>
+        workflow.workflowId should not be empty
+      }
+      // generate some random costs for these workflows
+      val costs = submission.workflows.map { workflow =>
+        workflow.workflowId.get -> // ensure floats have precision 2
+          BigDecimal(Random.nextFloat() * 10)
+            .setScale(2, RoundingMode.HALF_UP)
+            .toFloat
+      }.toMap
+      // get the mocked service
+      val (costService, _) = getMockitoSubmissionCostService(Map())
+      // execute the writeCostsToLocalDb method
+      val actualWrite = Await.result(
+        costService.writeCostsToLocalDb(submissionUuid, costs, Set()),
+        Duration.Inf
+      )
+      actualWrite shouldBe costs.size
+      // retrieve the workflows, then retrieve the cached costs, and compare them
+      val actualWorkflows =
+        runAndWait(dataSource.dataAccess.workflowQuery.findWorkflowsBySubmissionId(submissionUuid).result)
+          .map(rec => rec.id -> rec.externalId)
+          .toMap
+      val actualCostRecords =
+        runAndWait(dataSource.dataAccess.workflowActualCostQuery.result)
+
+      actualCostRecords.foreach { costRecord =>
+        // the cost record's id should exist in the workflow table
+        actualWorkflows.get(costRecord.id) should not be empty
+        // the cost record's id->externalId pair should be the same as in the workflow table
+        actualWorkflows(costRecord.id) shouldBe Option(costRecord.externalId)
+        // the cost record's cost should be what we asked to insert
+        costRecord.cost shouldBe Option(costs(costRecord.externalId))
+      }
+
+  }
 }

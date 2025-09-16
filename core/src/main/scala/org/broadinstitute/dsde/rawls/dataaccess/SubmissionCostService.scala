@@ -11,14 +11,16 @@ trait SubmissionCostService {
 
   val stringParamType: QueryParameterType
 
-  def getSubmissionCosts(workflowIds: Seq[String],
+  def getSubmissionCosts(submissionId: String,
+                         workflowIds: Seq[String],
                          googleProjectId: GoogleProjectId,
                          submissionDate: DateTime,
                          terminalStatusDate: Option[DateTime],
                          tableNameOpt: Option[String]
   ): Future[Map[String, Float]]
 
-  def getWorkflowCost(workflowId: String,
+  def getWorkflowCost(submissionId: String,
+                      workflowId: String,
                       googleProjectId: GoogleProjectId,
                       submissionDate: DateTime,
                       terminalStatusDate: Option[DateTime],

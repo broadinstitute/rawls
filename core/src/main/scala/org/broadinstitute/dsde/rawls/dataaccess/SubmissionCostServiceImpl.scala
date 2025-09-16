@@ -1,17 +1,21 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.StatusCodes
 import com.google.api.services.bigquery.model._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowActualCostRecord
-import org.broadinstitute.dsde.rawls.model.GoogleProjectId
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId}
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 
 import java.util
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 object SubmissionCostServiceImpl {
   def constructor(defaultTableName: String,
@@ -45,7 +49,8 @@ class SubmissionCostServiceImpl(defaultTableName: String,
   /**
    * Retrieve actual costs for multiple workflows.
    */
-  def getSubmissionCosts(workflowIds: Seq[String],
+  def getSubmissionCosts(submissionIdStr: String,
+                         workflowIds: Seq[String],
                          googleProjectId: GoogleProjectId,
                          submissionDate: DateTime,
                          terminalStatusDate: Option[DateTime],
@@ -54,11 +59,16 @@ class SubmissionCostServiceImpl(defaultTableName: String,
     if (workflowIds.isEmpty) {
       Future.successful(Map.empty[String, Float])
     } else {
+      val submissionId = Try(UUID.fromString(submissionIdStr)).getOrElse(
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, "invalid submission id; must be a UUID.")
+        )
+      )
       for {
         // ask WORKFLOW_ACTUAL_COST table for any cached costs
-        cachedResults: Map[String, Option[Float]] <- retrieveCostsFromLocalDb(workflowIds)
+        cachedResults: Seq[WorkflowActualCostRecord] <- retrieveCostsFromLocalDb(workflowIds)
         // determine which of the requested workflows were not found in WORKFLOW_ACTUAL_COST
-        uncachedWorkflows = workflowIds.toSet diff cachedResults.keySet
+        uncachedWorkflows = workflowIds.toSet diff cachedResults.map(_.externalId).toSet
         // ask BigQuery for any workflows which weren't found in WORKFLOW_ACTUAL_COST
         liveResults <-
           if (uncachedWorkflows.nonEmpty) {
@@ -78,14 +88,15 @@ class SubmissionCostServiceImpl(defaultTableName: String,
         // persist BigQuery results back to WORKFLOW_ACTUAL_COST
         _ <-
           if (liveResults.nonEmpty || notFoundWorkflows.nonEmpty)
-            writeCostsToLocalDb(liveResults, notFoundWorkflows)
+            writeCostsToLocalDb(submissionId, liveResults, notFoundWorkflows)
           else
-            Future.successful(())
+            Future.successful(-1)
       } yield {
         // extract from the cached results only those workflows which actually have a cost
         val cachedResultsWithCost = cachedResults.collect {
-          case (externalId: String, maybeCost: Option[Float]) if maybeCost.isDefined => (externalId, maybeCost.get)
-        }
+          case r: WorkflowActualCostRecord if r.cost.isDefined =>
+            (r.externalId, r.cost.get)
+        }.toMap
         // return the union of WORKFLOW_ACTUAL_COST and BigQuery results
         cachedResultsWithCost ++ liveResults
       }
@@ -94,27 +105,23 @@ class SubmissionCostServiceImpl(defaultTableName: String,
   /**
    * Retrieve the actual cost for a single workflow.
    */
-  def getWorkflowCost(workflowId: String,
+  def getWorkflowCost(submissionId: String,
+                      workflowId: String,
                       googleProjectId: GoogleProjectId,
                       submissionDate: DateTime,
                       terminalStatusDate: Option[DateTime],
                       tableNameOpt: Option[String] = Option(defaultTableName)
   ): Future[Map[String, Float]] =
-    getSubmissionCosts(Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableNameOpt)
+    getSubmissionCosts(submissionId, Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableNameOpt)
 
   // ask WORKFLOW_ACTUAL_COST table for specific workflows
   private def retrieveCostsFromLocalDb(
     workflowIds: Seq[String]
-  ): Future[Map[String, Option[Float]]] = {
+  ): Future[Seq[WorkflowActualCostRecord]] = {
     import dataSource.dataAccess.driver.api._
     dataSource
       .inTransaction { dataAccess =>
         dataAccess.workflowActualCostQuery.filter(row => row.externalId.inSetBind(workflowIds)).result
-      }
-      .map { costs =>
-        costs.map { cost =>
-          cost.externalId -> cost.cost.map(_.floatValue)
-        }.toMap
       }
   }
 
@@ -141,18 +148,35 @@ class SubmissionCostServiceImpl(defaultTableName: String,
   }
 
   // modular method to save rows to WORKFLOW_ACTUAL_COST
-  private def writeCostsToLocalDb(costs: Map[String, Float], notFoundWorkflows: Set[String]): Future[Int] = {
-    // generate records for the found costs
-    val foundCosts: Seq[WorkflowActualCostRecord] = costs.map { case (externalId: String, cost: Float) =>
-      WorkflowActualCostRecord(externalId, Option(cost))
-    }.toSeq
-    // generate records for the not-found costs
-    val notFoundCosts: Seq[WorkflowActualCostRecord] = notFoundWorkflows.toSeq.map { externalId =>
-      WorkflowActualCostRecord(externalId, None)
-    }
-
+  protected[dataaccess] def writeCostsToLocalDb(submissionId: UUID,
+                                                costs: Map[String, Float],
+                                                notFoundWorkflows: Set[String]
+  ): Future[Int] = {
+    val allExternalIds = costs.keySet ++ notFoundWorkflows
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workflowActualCostRawSqlQuery.safeInsert(foundCosts ++ notFoundCosts)
+      import dataAccess.driver.api._
+      for {
+        // look up the internal workflow ids (Longs) for these external ids (Strings)
+        workflowRecords <- dataAccess.workflowQuery
+          .findWorkflowByExternalIdsAndSubmissionId(allExternalIds, submissionId)
+          .result
+        // map this submission's external ids to internal ids
+        internalIdMap: Map[String, Long] = workflowRecords
+          .filter(_.externalId.isDefined)
+          .map(r => r.externalId.get -> r.id)
+          .toMap
+        // generate records for the found costs
+        foundCosts: Seq[WorkflowActualCostRecord] = costs.map {
+          case (externalId: String, cost: Float) if internalIdMap.contains(externalId) =>
+            WorkflowActualCostRecord(internalIdMap(externalId), externalId, Option(cost))
+        }.toSeq
+        // generate records for the not-found costs
+        notFoundCosts: Seq[WorkflowActualCostRecord] = notFoundWorkflows.toSeq.map {
+          case externalId if internalIdMap.contains(externalId) =>
+            WorkflowActualCostRecord(internalIdMap(externalId), externalId, None)
+        }
+        numRowsWritten <- dataAccess.workflowActualCostRawSqlQuery.safeInsert(foundCosts ++ notFoundCosts)
+      } yield numRowsWritten
     }
   }
 

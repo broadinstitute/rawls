@@ -23,7 +23,8 @@ class MockSubmissionCostService(defaultTableName: String,
 
   val fixedCost = 1.23f
 
-  override def getSubmissionCosts(workflowIds: Seq[String],
+  override def getSubmissionCosts(submissionId: String,
+                                  workflowIds: Seq[String],
                                   googleProjectId: GoogleProjectId,
                                   submissionDate: DateTime,
                                   submissionDoneDate: Option[DateTime],
@@ -31,7 +32,8 @@ class MockSubmissionCostService(defaultTableName: String,
   ): Future[Map[String, Float]] =
     Future(workflowIds.map(_ -> fixedCost).toMap)
 
-  override def getWorkflowCost(workflowId: String,
+  override def getWorkflowCost(submissionId: String,
+                               workflowId: String,
                                googleProjectId: GoogleProjectId,
                                submissionDate: DateTime,
                                submissionDoneDate: Option[DateTime],

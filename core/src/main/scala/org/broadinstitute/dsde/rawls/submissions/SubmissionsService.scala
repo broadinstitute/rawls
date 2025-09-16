@@ -312,7 +312,8 @@ class SubmissionsService(
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, ctx.userInfo, optExecId)
       submissionDoneDate = getTerminalStatusDate(submission, Option(workflowId))
-      costs <- submissionCostService.getWorkflowCost(workflowId,
+      costs <- submissionCostService.getWorkflowCost(submissionId,
+                                                     workflowId,
                                                      workspace.googleProjectId,
                                                      submission.submissionDate,
                                                      submissionDoneDate,
@@ -392,7 +393,8 @@ class SubmissionsService(
           val submissionDoneDate: Option[DateTime] = getTerminalStatusDate(submission, None)
           getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
             toFutureTry(
-              submissionCostService.getSubmissionCosts(workflowIdsForCostQuery,
+              submissionCostService.getSubmissionCosts(submissionId,
+                                                       workflowIdsForCostQuery,
                                                        workspace.googleProjectId,
                                                        submission.submissionDate,
                                                        submissionDoneDate,

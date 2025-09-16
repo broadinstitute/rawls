@@ -17,7 +17,7 @@ import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 import java.sql.Timestamp
 import java.util.UUID
 
-case class WorkflowActualCostRecord(externalId: String, cost: Option[Float])
+case class WorkflowActualCostRecord(id: Long, externalId: String, cost: Option[Float])
 
 trait WorkflowActualCostComponent {
   this: DriverComponent =>
@@ -25,10 +25,12 @@ trait WorkflowActualCostComponent {
   import driver.api._
 
   class WorkflowActualCostTable(tag: Tag) extends Table[WorkflowActualCostRecord](tag, "WORKFLOW_ACTUAL_COST") {
+    def id = column[Long]("WORKFLOW_ID", O.PrimaryKey)
     def externalId = column[String]("EXTERNAL_ID", O.SqlType("CHAR(36)"))
     def cost = column[Option[Float]]("COST")
 
     def * = (
+      id,
       externalId,
       cost
     ) <> (WorkflowActualCostRecord.tupled, WorkflowActualCostRecord.unapply)
@@ -58,13 +60,13 @@ trait WorkflowActualCostComponent {
       else {
         // generate parameters for each row
         val rowParams: Seq[SQLActionBuilder] = rows.map { row =>
-          sql"""(${row.externalId}, ${row.cost})"""
+          sql"""(${row.id}, ${row.externalId}, ${row.cost})"""
         }
 
         val paramSql = reduceSqlActionsWithDelim(rowParams, sql",")
 
         val startSql = sql"""
-            insert into WORKFLOW_ACTUAL_COST(EXTERNAL_ID, COST)
+            insert into WORKFLOW_ACTUAL_COST(WORKFLOW_ID, EXTERNAL_ID, COST)
             values """
         val endSql = sql""" on duplicate key update COST=COST;"""
 

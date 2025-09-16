@@ -5,8 +5,16 @@
     <changeSet logicalFilePath="dummy" author="davidan" id="workflow_actual_cost">
         <!-- create WORKFLOW_COST table -->
         <createTable tableName="WORKFLOW_ACTUAL_COST">
+            <column name="WORKFLOW_ID" type="bigint(19)">
+                <constraints nullable="false"
+                             unique="true"
+                             referencedTableName="WORKFLOW"
+                             referencedColumnNames="ID"
+                             foreignKeyName="FK_WORKFLOW_ACTUAL_COST_WORKFLOW"
+                             deleteCascade="true"/>
+            </column>
             <column name="EXTERNAL_ID" type="char(36)">
-                <constraints primaryKey="true"/>
+                <constraints unique="true"/>
             </column>
             <column name="COST" type="NUMBER(10,2)">
                 <constraints nullable="true"/>
