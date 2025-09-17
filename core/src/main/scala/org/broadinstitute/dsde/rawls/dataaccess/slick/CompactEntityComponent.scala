@@ -703,108 +703,83 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *                         that includes all entities found by traversing the specified relationships.
    */
   def queryRelatedRecordsWithRelationChain(
-    workspaceId: UUID,
-    startingEntityType: String,
-    startingEntityName: String,
-    relationChain: Seq[String],
-    rootEntityType: String
-  ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
-    if (relationChain.isEmpty) { // The method shouldn't have been called in this case
+                                            workspaceId: UUID,
+                                            startingEntityType: String,
+                                            startingEntityName: String,
+                                            relationChain: Seq[String],
+                                            rootEntityType: String
+                                          ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
+    if (relationChain.isEmpty) {
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
     } else {
-      // Start with the root entity
-      val initialEntities = Set(EntityPointer(startingEntityType, startingEntityName))
+      case class Path(entities: List[EntityPointer]) {
+        def lastEntity: EntityPointer = entities.last
+        def addEntity(entity: EntityPointer): Path = Path(entities :+ entity)
 
-      // Traverse the chain, tracking entity type at each step
+        // Find the last entity in this path that matches rootEntityType
+        def findRootEntity: Option[EntityPointer] =
+          entities.findLast(_.entityType == rootEntityType)
+      }
+
+      val initialPath = Path(List(EntityPointer(startingEntityType, startingEntityName)))
+
       def traverse(
-        currentEntities: Set[EntityPointer],
-        remainingChain: Seq[String]
-      ): ReadAction[Map[String, Seq[EntityPointer]]] =
+                    currentPaths: Set[Path],
+                    remainingChain: Seq[String]
+                  ): ReadAction[Set[Path]] = {
         if (remainingChain.isEmpty) {
-          // End of chain, group by current entity names
-          DBIO.successful(currentEntities.groupBy(_.entityName).view.mapValues(_.toSeq).toMap)
+          DBIO.successful(currentPaths)
         } else {
-          val nextRelation = remainingChain.head
-          // Traverse one step to get next entities and their type
-          getEntityTypeForRelation(workspaceId, currentEntities, nextRelation).flatMap { case (_, nextEntityType) =>
-            getAllReferencesForRelation(workspaceId, currentEntities, nextRelation).flatMap { nextEntities =>
-              if (nextEntities.isEmpty) {
-                DBIO.successful(Map.empty)
-              } else if (nextEntityType == rootEntityType) {
-                // Group by rootEntityType at this step
-                val grouped = nextEntities.groupBy(_.entityName).view.mapValues(_.toSeq).toMap
-                if (remainingChain.tail.isEmpty) {
-                  DBIO.successful(grouped)
-                } else {
-                  // For each group, continue traversing the rest of the chain
-                  val rest = remainingChain.tail
-                  DBIO
-                    .sequence(
-                      grouped.map { case (groupName, groupEntities) =>
-                        traverse(groupEntities.toSet, rest).map { subGroup =>
-                          // Flatten the subgroups and keep the grouping by groupName
-                          // subGroup: Map[String, Seq[EntityPointer]]
-                          // We want to collect all the values (Seq[EntityPointer]) into one Seq for this groupName
-                          groupName -> subGroup.values.flatten.toSeq
-                        }
-                      }.toSeq
-                    )
-                    .map(_.toMap)
-                }
-              } else {
-                // Not at rootEntityType yet, keep traversing
-                traverse(nextEntities, remainingChain.tail)
-              }
+          val relation = remainingChain.head
+
+          // For each path, get the next entities and extend the path
+          val pathTraversals = currentPaths.map { path =>
+            traverseOneStep(workspaceId, Set(path.lastEntity), relation).map { nextEntities =>
+              nextEntities.map(nextEntity => path.addEntity(nextEntity))
+            }
+          }
+
+          DBIO.sequence(pathTraversals.toSeq).flatMap { pathSets =>
+            val allExtendedPaths = pathSets.flatten.toSet
+            if (allExtendedPaths.isEmpty) {
+              DBIO.successful(Set.empty[Path])
+            } else {
+              traverse(allExtendedPaths, remainingChain.tail)
             }
           }
         }
-
-      // Traverse and get entity pointers grouped by rootEntityType
-      traverse(initialEntities, relationChain).flatMap { groupedPointers =>
-        // Fetch full records for all final entities
-        val allPointers = groupedPointers.values.flatten.toSet
-        getEntities(workspaceId, allPointers).map { entities =>
-          val entitiesByPointer = entities.groupBy(e => EntityPointer(e.entityType, e.name))
-          groupedPointers.map { case (groupName, pointers) =>
-            groupName -> pointers.flatMap(entitiesByPointer.get).flatten.toSeq
-          }
-        }
       }
-    }
 
-  // Helper: fetch all referenced entities for a given relation from a set of entities
-  private def getAllReferencesForRelation(
-    workspaceId: UUID,
-    currentEntities: Set[EntityPointer],
-    relation: String
-  ): ReadAction[Set[EntityPointer]] =
-    if (currentEntities.isEmpty) {
-      DBIO.successful(Set.empty[EntityPointer])
-    } else {
-      getEntities(workspaceId, currentEntities).map { entities =>
-        entities.flatMap { entityRecord =>
-          val attrValue = entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation))
-          attrValue match {
-            case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
-            case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
-            case _                                        => Seq.empty[EntityPointer]
-          }
-        }.toSet
+      traverse(Set(initialPath), relationChain).flatMap { finalPaths =>
+        // Group paths by their root entity (the entity that matches rootEntityType)
+        val pathsByRoot: Map[String, Set[Path]] = finalPaths
+          .groupBy(_.findRootEntity.map(_.entityName))
+          .collect { case (Some(rootName), paths) => rootName -> paths }
+
+        // Get all final entities (leaf entities from all paths)
+        val allFinalPointers = finalPaths.map(_.lastEntity).toSet
+
+        getEntities(workspaceId, allFinalPointers).map { entities =>
+          val entitiesByPointer = entities.groupBy(e => EntityPointer(e.entityType, e.name))
+
+          pathsByRoot.view.mapValues { paths =>
+            paths.flatMap(path => entitiesByPointer.get(path.lastEntity)).flatten.toSeq.distinct
+          }.toMap
+        }
       }
     }
 
   private def traverseOneStep(
-    workspaceId: UUID,
-    currentEntities: Set[EntityPointer],
-    relation: String
-  ): ReadAction[Set[EntityPointer]] =
+                               workspaceId: UUID,
+                               currentEntities: Set[EntityPointer],
+                               relation: String
+                             ): ReadAction[Set[EntityPointer]] =
     if (currentEntities.isEmpty) {
       DBIO.successful(Set.empty[EntityPointer])
     } else {
       // retrieve the current entities to get their attributes
       getEntities(workspaceId, currentEntities).flatMap { entities =>
         // find all references in the specified relation attribute
-        // TODO: should this reuse CompactEntityProvider.findAllReferences ?
         val references = entities.flatMap { entityRecord =>
           val attrValue = entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation))
           attrValue match {

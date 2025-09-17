@@ -19,14 +19,12 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.CompactEvaluateVis
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.RootContext
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.Attributable.nameReservedAttribute
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
   AttributeName,
   AttributeString,
   AttributeValue,
   AttributeValueList,
-  EntityPointer,
   ErrorReport,
   SubmissionValidationEntityInputs,
   SubmissionValidationValue
@@ -237,7 +235,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
           }
 
           val queryActions: Seq[ReadAction[Seq[ExpressionAndResult]]] = queryPlans.map { plan =>
-            executeQueryPlan(workspaceId, entityType, entityName, rootEntityType, plan, entityLookups)
+            executeQueryPlan(workspaceId, entityType, entityName, rootEntityType, plan)
           }
 
           repository.dataSource
@@ -427,8 +425,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
                        entityType: String,
                        entityName: String,
                        rootEntityType: String,
-                       plan: QueryPlan,
-                       entityLookups: Seq[ExpressionLookup] = Seq.empty
+                       plan: QueryPlan
   )(implicit
     executionContext: ExecutionContext
   ): ReadAction[Seq[ExpressionAndResult]] = {
@@ -543,7 +540,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(
               StatusCodes.BadRequest,
-              s"The relation chain ${entityRelationChain.mkString(".")} is invalid starting from entity ${startingEntityType}"
+              s"The relation chain ${entityRelationChain.mkString(".")} is invalid starting from entity $startingEntityType"
             )
           )
         case Some(entityType) =>

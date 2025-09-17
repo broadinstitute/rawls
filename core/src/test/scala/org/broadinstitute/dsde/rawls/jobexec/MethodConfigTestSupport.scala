@@ -17,7 +17,6 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 
 import java.util.UUID
-import scala.collection.immutable.Map
 
 trait MethodConfigTestSupport {
   this: TestDriverComponent =>

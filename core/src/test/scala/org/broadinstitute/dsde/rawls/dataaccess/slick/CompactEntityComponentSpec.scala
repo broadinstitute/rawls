@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
-  AttributeNull,
   AttributeNumber,
   AttributeRename,
   AttributeString,
@@ -26,7 +25,6 @@ import org.scalatest.Inspectors.forEvery
 import slick.dbio.Effect.Read
 import slick.jdbc.GetResult
 import slick.sql.SqlStreamingAction
-import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.sql.SQLIntegrityConstraintViolationException
@@ -750,7 +748,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
     )
 
-    insertAndGetAll(Seq(sample1, sample2, set))
+    val insertedSample1 = insertAndGet(sample1)
+    val insertedSample2 = insertAndGet(sample2)
+
+    insertAndGet(set)
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
@@ -768,6 +769,19 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     result(participant2.name) should contain theSameElementsAs Seq(insertedParticipant2)
     result(participant3.name) should contain theSameElementsAs Seq(insertedParticipant3)
     result(participant4.name) should contain theSameElementsAs Seq(insertedParticipant4)
+
+    val result2 = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
+          "samples"
+        ),
+        /* root entity type */ "sample_set"
+      )
+    )
+    result2(set.name) should contain theSameElementsAs Seq(insertedSample1, insertedSample2)
   }
 
   it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
