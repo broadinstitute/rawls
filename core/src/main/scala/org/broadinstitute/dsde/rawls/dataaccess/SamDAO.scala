@@ -1,8 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.Async
 import cats.effect.kernel.Resource
+import com.typesafe.scalalogging.Logger
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   RawlsRequestContext,
@@ -15,7 +18,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamPolicySyncStatus,
   SamPolicyWithNameAndEmail,
   SamResourceAction,
-  SamResourceIdWithPolicyName,
   SamResourcePolicyName,
   SamResourceRole,
   SamResourceTypeName,
@@ -26,10 +28,10 @@ import org.broadinstitute.dsde.rawls.model.{
   UserIdInfo,
   UserInfo
 }
-import org.broadinstitute.dsde.workbench.client.sam.model.{FilteredFlatResource, FilteredHierarchicalResource}
+import org.broadinstitute.dsde.workbench.client.sam.model.FilteredFlatResource
 import org.broadinstitute.dsde.workbench.model._
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by mbemis on 9/11/17.
@@ -185,6 +187,8 @@ trait SamDAO {
   )
 
   def getAllUsersGroup(ctx: RawlsRequestContext): Future[WorkbenchEmail]
+
+  def forgetProject(project: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
 }
 
 trait SamAdminDAO {
@@ -222,6 +226,7 @@ object SamDAO {
   )
 
   implicit class SamExtensions(samDAO: SamDAO) {
+
     def asResourceAdmin[A, F[_]](resourceTypeName: SamResourceTypeName,
                                  resourceId: String,
                                  policyName: SamResourcePolicyName,
@@ -236,5 +241,45 @@ object SamDAO {
         .make(invoke(samDAO.admin.addUserToPolicy))(_ => invoke(samDAO.admin.removeUserFromPolicy))
         .use(_ => runAsAdmin)
     }
+
+    /**
+     * Recursively delete a SAM resource and all its children
+     * @param resourceTypeName the resource type
+     * @param resourceId the resource ID
+     * @param ctx the request context
+     * @return Future[Unit]
+     */
+    def recursiveDeleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext)(
+      implicit
+      executionContext: ExecutionContext,
+      logger: Logger
+    ): Future[Unit] = for {
+      // Get all child resources, handle 403 and 404 errors by treating them as empty lists
+      // not having permission to list children is not an error, it means children are not allowed
+      // and can't have children if you don't exist QED
+      children <- samDAO
+        .listResourceChildren(resourceTypeName, resourceId, ctx)
+        .recover {
+          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.Forbidden) =>
+            logger.info(s"Received 403 when listing children of $resourceTypeName/$resourceId, treating as empty list")
+            Seq.empty
+          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.info(s"Received 404 when listing children of $resourceTypeName/$resourceId, treating as empty list")
+            Seq.empty
+        }
+
+      // Recursively delete each child resource
+      _ <- Future.traverse(children) { child =>
+        recursiveDeleteResource(SamResourceTypeName(child.resourceTypeName), child.resourceId, ctx)
+      }
+
+      // Delete the resource itself
+      _ <- samDAO.deleteResource(resourceTypeName, resourceId, ctx).recover {
+        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+          logger.info(s"Received 404 when deleting $resourceTypeName/$resourceId, treating as no-op")
+      }
+      _ = logger.info(s"Successfully deleted SAM resource $resourceTypeName/$resourceId")
+    } yield ()
+
   }
 }

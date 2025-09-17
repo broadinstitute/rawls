@@ -294,34 +294,32 @@ class UserServiceSpec
                                  testContext
         )
       ).thenReturn(Future.successful(true))
-      when(
-        mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
-      ).thenReturn(Future.successful(Set(userIdInfo)))
-      when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail))
-        .thenReturn(Future.successful(petSAJson))
       when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(
           Future.successful(
             Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
           )
         )
-      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext)).thenReturn(Future.successful())
+      when(mockSamDAO.forgetProject(project.googleProjectId, testContext)).thenReturn(Future.successful(()))
       when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
-        .thenReturn(Future.successful())
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext))
         .thenReturn(Future.successful())
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(userInfo))
       when(mockGcsDAO.deleteV1Project(project.googleProjectId)).thenReturn(Future.successful())
       when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project()))
 
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual: Unit = userService.deleteBillingProject(defaultBillingProjectName).futureValue
 
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, testContext)
+      verify(mockGcsDAO, never()).getUserInfoUsingJson(petSAJson)
+      verify(mockSamDAO, never()).listAllResourceMemberIds(SamResourceTypeNames.billingProject,
+                                                           project.projectName.value,
+                                                           testContext
+      )
+      verify(mockSamDAO, never()).getPetServiceAccountKeyForUser(any[GoogleProjectId], any[RawlsUserEmail])
+      verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, testContext)
+      verify(mockSamDAO).forgetProject(project.googleProjectId, testContext)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext)
       verify(mockGcsDAO).deleteV1Project(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
@@ -343,9 +341,6 @@ class UserServiceSpec
                                  testContext
         )
       ).thenReturn(Future.successful(true))
-      when(
-        mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
-      ).thenReturn(Future.successful(Set(userIdInfo)))
       when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(
           Future.successful(
@@ -354,8 +349,7 @@ class UserServiceSpec
         )
       when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(Future.successful())
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext))
-        .thenReturn(Future.successful())
+      when(mockSamDAO.forgetProject(project.googleProjectId, testContext)).thenReturn(Future.successful(()))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(
@@ -368,9 +362,15 @@ class UserServiceSpec
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual: Unit = userService.deleteBillingProject(defaultBillingProjectName).futureValue
 
+      verify(mockGcsDAO, never()).getUserInfoUsingJson(petSAJson)
+      verify(mockSamDAO, never()).listAllResourceMemberIds(SamResourceTypeNames.billingProject,
+                                                           project.projectName.value,
+                                                           testContext
+      )
+      verify(mockSamDAO, never()).getPetServiceAccountKeyForUser(any[GoogleProjectId], any[RawlsUserEmail])
       verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, testContext)
+      verify(mockSamDAO).forgetProject(project.googleProjectId, testContext)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext)
       verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty

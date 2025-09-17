@@ -27,7 +27,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   SamWorkspacePolicyNames,
   SeparateSubmissionFinalOutputsSetting,
-  UseCromwellGcpBatchBackendSetting,
   Workspace,
   WorkspaceName,
   WorkspaceSetting,
@@ -143,9 +142,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
               case _ => None
             }
           case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) => None
-          case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_))         => None
           case PubliclyReadableSetting(PubliclyReadableConfig(_))                             => None
-          case CompactDataTablesSetting(CompactDataTablesConfig(_))                           => None
+          case CompactDataTablesSetting(CompactDataTablesConfig(_, _))                        => None
         }
       }
 
@@ -220,16 +218,13 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case PubliclyReadableSetting(PubliclyReadableConfig(enabled)) =>
           applyPublicReadableSetting(workspace, enabled)
 
-        // SeparateSubmissionFinalOutputsSetting, UseCromwellGcpBatchBackendSetting, and CompactDataTablesSetting
+        // SeparateSubmissionFinalOutputsSetting and CompactDataTablesSetting
         // are not bucket settings, so we do not need to apply anything here
 
-        case CompactDataTablesSetting(CompactDataTablesConfig(enabled)) =>
-          applyCompactDataTablesSetting(WorkspaceName(workspace.namespace, workspace.name), enabled)
+        case CompactDataTablesSetting(CompactDataTablesConfig(enabled, performMigration)) =>
+          applyCompactDataTablesSetting(WorkspaceName(workspace.namespace, workspace.name), enabled, performMigration)
 
         case SeparateSubmissionFinalOutputsSetting(SeparateSubmissionFinalOutputsConfig(_)) =>
-          Future.successful(())
-
-        case UseCromwellGcpBatchBackendSetting(UseCromwellGcpBatchBackendConfig(_)) =>
           Future.successful(())
       }
 
@@ -296,19 +291,22 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
   /**
    * Call to handle entity attributes migration when compact data tables setting enabled.
    */
-  private def applyCompactDataTablesSetting(workspaceName: WorkspaceName, enabled: Boolean): Future[Unit] =
+  private def applyCompactDataTablesSetting(workspaceName: WorkspaceName,
+                                            enabled: Boolean,
+                                            performMigration: Option[Boolean]
+  ): Future[Unit] =
     if (!enabled) {
       // Check if the setting is already enabled in the database
       getWorkspaceSettingOfType(workspaceName, CompactDataTables).flatMap {
-        case Some(CompactDataTablesSetting(CompactDataTablesConfig(true))) =>
+        case Some(CompactDataTablesSetting(CompactDataTablesConfig(true, _))) =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest, "Cannot disable compact data tables setting once enabled.")
           )
         case _ =>
           Future.successful(())
       }
-    } else {
-      // If compact data tables setting is enabled, we need to migrate the entity attributes.
+    } else if (performMigration.isEmpty || performMigration.contains(true)) { // default to true
+      // If compact data tables setting is enabled and a migration is requested, we need to migrate the entity attributes.
       Future {
         entityService
           .quicksilverMigration(workspaceName = workspaceName, updateWorkspaceSettings = false)
@@ -319,5 +317,8 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             )
           }
       }.flatten
+    } else {
+      // no action necessary; no migration was requested
+      Future.successful(())
     }
 }

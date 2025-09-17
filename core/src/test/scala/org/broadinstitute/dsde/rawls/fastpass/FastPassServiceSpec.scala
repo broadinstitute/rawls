@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
-import org.broadinstitute.dsde.rawls.genomics.GenomicsServiceImpl
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
@@ -208,11 +207,6 @@ class FastPassServiceSpec
       mock[NotificationDAO]
     ) _
 
-    val genomicsServiceConstructor = GenomicsServiceImpl.constructor(
-      slickDataSource,
-      gcsDAO
-    ) _
-
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService = new MockSubmissionCostService(
       "fakeTableName",
@@ -280,14 +274,10 @@ class FastPassServiceSpec
       mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
 
     val entityService = Mockito.spy(
-      new EntityService(ctx1,
-                        slickDataSource,
-                        samDAO,
-                        entityManager,
-                        workbenchMetricBaseName,
-                        10000,
-                        Some(workspaceSettingServiceConstructor)
-      )(executionContext, ActorSystem("mockEntityService"))
+      new EntityService(ctx1, slickDataSource, samDAO, entityManager, workbenchMetricBaseName, 10000, None)(
+        executionContext,
+        ActorSystem("mockEntityService")
+      )
     )
     val entityServiceConstructor: RawlsRequestContext => EntityService = _ => entityService
 
@@ -418,7 +408,7 @@ class FastPassServiceSpec
 
     doReturn(Future.successful(false))
       .when(services.entityService)
-      .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
+      .isCompactDataTableSettingEnabled(parentWorkspace.workspaceIdAsUUID)
 
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
@@ -1102,7 +1092,7 @@ class FastPassServiceSpec
 
     doReturn(Future.successful(false))
       .when(services.entityService)
-      .isCompactDataTableSettingEnabled(parentWorkspace.toWorkspaceName)
+      .isCompactDataTableSettingEnabled(parentWorkspace.workspaceIdAsUUID)
 
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))

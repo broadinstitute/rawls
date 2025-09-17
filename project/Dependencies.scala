@@ -6,7 +6,7 @@ object Dependencies {
   val slickV = "3.6.1"
 
   val googleV = "2.0.0" // service-specific client libraries
-  val googleApiV = "2.8.0" // the main google-api-client
+  val googleApiV = "2.8.1" // the main google-api-client
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -36,7 +36,7 @@ object Dependencies {
   // allowing for Rawls to upgrade its Scala version without requiring any changes to this artifact.
   val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-8b413b45f-SNAP"
 
-  val bardClient: ModuleID = "bio.terra" % "bard-client-resttemplate" % "1.0.9" exclude("org.springframework", "spring-aop") exclude("org.springframework", "spring-jcl")
+  val bardClient: ModuleID = "bio.terra" % "bard-client-resttemplate" % "1.0.10" exclude("org.springframework", "spring-aop") exclude("org.springframework", "spring-jcl")
   val httpComponents5: ModuleID = "org.apache.httpcomponents.client5" % "httpclient5" % "5.5" // Needed for connection pooling with the Bard client
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleApiV)
@@ -63,10 +63,10 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.19.2"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.20.0"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.14.0"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.4"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.18.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.20.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.18"
@@ -82,7 +82,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.4.0" exclude("com.google.protobuf", "protobuf-java")
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.33.0"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
-  val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.10"
+  val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.11"
   val janino: ModuleID = "org.codehaus.janino" % "janino" % "3.1.12" // For if-else logic in logging config
 
   val workbenchLibsHash = "80e4b8d"
@@ -106,14 +106,14 @@ object Dependencies {
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.128.1" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.128.3" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.16.3"
-  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.18.1"
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.17.0"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.19.0"
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
@@ -130,11 +130,11 @@ object Dependencies {
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
-  val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.150-SNAPSHOT")
+  val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.153-SNAPSHOT")
   val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "1.1.42-SNAPSHOT" classifier "plain"))
-  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.415")
+  val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.423")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
-  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.23-SNAPSHOT")
+  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.28-SNAPSHOT")
 
   // OpenTelemetry
   val openTelemetryInstrumentationVersion = "2.0.0"
@@ -148,7 +148,7 @@ object Dependencies {
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.3").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
-  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.31"
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.32"
 
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included

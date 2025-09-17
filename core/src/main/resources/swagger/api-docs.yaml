@@ -22,7 +22,6 @@ tags:
   - name: submissions
   - name: users
   - name: version
-  - name: workflows
   - name: workspaces
   - name: workspaces_v2
   - name: googleProjects
@@ -3361,34 +3360,6 @@ paths:
           content: {}
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/workflows/{workflowId}/genomics/{operationId}:
-    get:
-      tags:
-        - workflows
-      summary: retrieve operations info from Google Genomics API
-      description: retrieve operations info from Google Genomics API
-      operationId: genomics_operations_get
-      parameters:
-        - $ref: '#/components/parameters/workflowIdPathParam'
-        - name: operationId
-          in: path
-          description: operations job id; for PAPIv1 in the form of "operations/{id}",
-            for PAPIv2 "projects/{project}/operations/{id}"
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: operations info
-          content: {}
-        404:
-          description: workflow or jobId not found or no access
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
   /api/user/role/admin:
     get:
       tags:
@@ -3948,6 +3919,77 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/repair:
+    get:
+      tags:
+        - workspaces_v2
+      summary: Get status of repair workspace
+      description: Check the status of a workspace repair job that was started asynchronously
+      operationId: getRepairWorkspaceStatus
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RepairWorkspaceResponse'
+        400:
+          description: Error repairing workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: User does not have access to this workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: workspaceRequest
+    post:
+      tags:
+        - workspaces_v2
+      summary: Repair workspace
+      description: Repair a workspace asynchronously
+      operationId: repairWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        202:
+          description: A request to repair this workspace has successfully been submitted
+        400:
+          description: Error repairing workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: User does not have access to this workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: workspaceRequest
   /api/googleProjects:
     get:
       tags:
@@ -5358,7 +5400,6 @@ components:
             - GcpBucketRequesterPays
             - GcpLogBucketRetention
             - SeparateSubmissionFinalOutputs
-            - UseCromwellGcpBatchBackend
             - PubliclyReadable
         config:
           description: The configuration of the workspace setting
@@ -5368,7 +5409,6 @@ components:
             - $ref: '#/components/schemas/WorkspaceSettingGcpBucketRequesterPaysConfig'
             - $ref: '#/components/schemas/WorkspaceSettingGcpLogBucketRetentionConfig'
             - $ref: '#/components/schemas/WorkspaceSettingSeparateSubmissionFinalOutputsConfig'
-            - $ref: '#/components/schemas/WorkspaceSettingUseCromwellGcpBatchBackendConfig'
             - $ref: '#/components/schemas/WorkspaceSettingPubliclyReadableConfig'
             - $ref: '#/components/schemas/WorkspaceSettingCompactDataTablesConfig'
     WorkspaceSettingGcpBucketLifecycleConfig:
@@ -5445,14 +5485,6 @@ components:
         enabled:
           type: boolean
           description: Whether submission final outputs should be separated from intermediate outputs
-    WorkspaceSettingUseCromwellGcpBatchBackendConfig:
-      required:
-        - enabled
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          description: Whether workflows submitted to Cromwell should be run using Cromwell's GCP Batch backend
     WorkspaceSettingPubliclyReadableConfig:
       required:
         - enabled
@@ -6502,6 +6534,18 @@ components:
         message:
             type: string
             description: informational message about the project
+    RepairWorkspaceResponse:
+      type: object
+      properties:
+        googleProjectId:
+          type: string
+          description: the id of the google project
+        status:
+          type: string
+          description: the status of the repair operation in RBS
+        message:
+          type: string
+          description: an optional error message about the repair operation
   parameters:
     billingProjectActionPathParam:
       name: action

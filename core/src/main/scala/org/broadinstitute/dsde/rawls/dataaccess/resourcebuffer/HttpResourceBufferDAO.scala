@@ -3,15 +3,16 @@ package org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.buffer.api.BufferApi
+import bio.terra.buffer.api.{BufferApi, JobsApi, ResourceApi}
 import bio.terra.buffer.client.{ApiClient, ApiException}
-import bio.terra.buffer.model.{HandoutRequestBody, ResourceInfo}
+import bio.terra.buffer.model.{HandoutRequestBody, JobModel, ResourceInfo, SqlSortDirectionDescDefault}
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId}
 import org.broadinstitute.dsde.rawls.util.Retry
 
+import java.util
 import scala.concurrent.{ExecutionContext, Future}
 
 class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCreds: Credential)(implicit
@@ -50,8 +51,46 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
                                                       poolId
     )
 
+  override def repairResource(googleProjectId: String): Future[JobModel] = {
+    clientServiceAccountCreds.refreshToken()
+    val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
+    // This does not retry so that multiple repair flights do not get launched
+    Future {
+      getResourceApi(accessToken).repairResource(googleProjectId, new util.HashMap[String, Any]())
+    }
+  }
+
+  override def enumerateJobs(offset: Integer,
+                             limit: Integer,
+                             direction: SqlSortDirectionDescDefault,
+                             className: String,
+                             inputs: java.util.List[String]
+  ): Future[java.util.List[JobModel]] = {
+    clientServiceAccountCreds.refreshToken()
+    val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
+    retry(when500) { () =>
+      Future {
+        getJobsApi(accessToken).enumerateJobs(offset, limit, direction, className, inputs)
+      }
+    }
+  }
+
+  override def getJobResult(jobId: String): Future[Object] = {
+    clientServiceAccountCreds.refreshToken()
+    val accessToken = OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)
+    Future {
+      getJobsApi(accessToken).retrieveJobResult(jobId)
+    }
+  }
+
   private def getResourceBufferApi(accessToken: OAuth2BearerToken) =
     new BufferApi(getApiClient(accessToken.token))
+
+  private def getResourceApi(accessToken: OAuth2BearerToken) =
+    new ResourceApi(getApiClient(accessToken.token))
+
+  private def getJobsApi(accessToken: OAuth2BearerToken) =
+    new JobsApi(getApiClient(accessToken.token))
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()

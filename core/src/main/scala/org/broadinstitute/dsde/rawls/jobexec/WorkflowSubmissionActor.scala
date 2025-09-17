@@ -43,13 +43,10 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
-            defaultNetworkCromwellBackend: CromwellBackend,
-            highSecurityNetworkCromwellBackend: CromwellBackend,
             gcpBatchBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver,
             bardService: BardService,
-            workspaceSettingRepository: WorkspaceSettingRepository,
-            useBatchAsDefaultBackend: Boolean
+            workspaceSettingRepository: WorkspaceSettingRepository
   ): Props =
     Props(
       new WorkflowSubmissionActor(
@@ -70,13 +67,10 @@ object WorkflowSubmissionActor {
         requesterPaysRole,
         useWorkflowCollectionField,
         useWorkflowCollectionLabel,
-        defaultNetworkCromwellBackend,
-        highSecurityNetworkCromwellBackend,
         gcpBatchBackend,
         methodConfigResolver,
         bardService,
-        workspaceSettingRepository,
-        useBatchAsDefaultBackend
+        workspaceSettingRepository
       )
     )
 
@@ -108,13 +102,10 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
-                              val defaultNetworkCromwellBackend: CromwellBackend,
-                              val highSecurityNetworkCromwellBackend: CromwellBackend,
                               val gcpBatchBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver,
                               val bardService: BardService,
-                              val workspaceSettingRepository: WorkspaceSettingRepository,
-                              val useBatchAsDefaultBackend: Boolean
+                              val workspaceSettingRepository: WorkspaceSettingRepository
 ) extends Actor
     with WorkflowSubmission
     with LazyLogging {
@@ -164,13 +155,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
-  val defaultNetworkCromwellBackend: CromwellBackend
-  val highSecurityNetworkCromwellBackend: CromwellBackend
   val gcpBatchBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
   val bardService: BardService
   val workspaceSettingRepository: WorkspaceSettingRepository
-  val useBatchAsDefaultBackend: Boolean
 
   import dataSource.dataAccess.driver.api._
 
@@ -310,15 +298,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // - final_workflow_outputs_dir = submissions/final-outputs
       // - final_workflow_outputs_mode = "copy".
 
-      // Note: Usage of 'useBatchAsDefaultBackend' and 'highSecurityNetworkCromwellBackend' will be removed as part of
-      // https://broadworkbench.atlassian.net/browse/AN-518 when GCP Batch becomes the default backend.
-      useCromwellGcpBatchBackend: Boolean = currentSettings
-        .collectFirst { case backendSetting: UseCromwellGcpBatchBackendSetting => backendSetting.config.enabled }
-        .getOrElse(useBatchAsDefaultBackend)
-
-      cromwellSubmissionBackend =
-        if (useCromwellGcpBatchBackend) gcpBatchBackend else highSecurityNetworkCromwellBackend
-
       executionServiceWorkflowOptions = ExecutionServiceWorkflowOptions(
         // We pass the submission root as the value for two options,
         // one for the PAPI Cromwell backend and one for the GCP Batch backend.
@@ -336,7 +315,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         deleteIntermediateOutputFiles,
         useReferenceDisks,
         memoryRetryMultiplier,
-        cromwellSubmissionBackend,
+        gcpBatchBackend,
         workflowFailureMode,
         google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
         ignoreEmptyOutputs,

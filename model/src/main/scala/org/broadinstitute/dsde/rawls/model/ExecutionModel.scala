@@ -118,8 +118,7 @@ case class ExecutionServiceWorkflowOptions(
   monitoring_image_script: Option[String] = None
 )
 
-// Current possible backends are "PAPIv2-beta" (not in current use),
-// "PAPIv2-CloudNAT", and "GCPBatch".
+// Currently only possible backend is "GCPBatch"
 final case class CromwellBackend(value: String) extends ValueObject
 
 case class ExecutionServiceLabelResponse(

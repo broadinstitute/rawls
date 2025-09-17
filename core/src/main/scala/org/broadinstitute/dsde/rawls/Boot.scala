@@ -38,7 +38,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.tps.HttpTpsDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.googleProject.{
   GoogleProjectRegistrationRepository,
   GoogleProjectRegistrationService
@@ -244,9 +243,6 @@ object Boot extends IOApp with LazyLogging {
       )
       val policyService = new PolicyService(tpsDAO)
 
-      val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
-        GenomicsServiceFactory.createGenomicsService(appConfigManager, slickDataSource, gcsDAO)
-
       val submissionCostService =
         SubmissionCostServiceFactory.createSubmissionCostService(appConfigManager, bigQueryDAO)
 
@@ -276,14 +272,8 @@ object Boot extends IOApp with LazyLogging {
         appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         appConfigManager.conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultNetworkCromwellBackend: CromwellBackend =
-        CromwellBackend(appConfigManager.conf.getString("executionservice.defaultNetworkBackend"))
-      val highSecurityNetworkCromwellBackend: CromwellBackend =
-        CromwellBackend(appConfigManager.conf.getString("executionservice.highSecurityNetworkBackend"))
       val gcpBatchBackend: CromwellBackend =
         CromwellBackend(appConfigManager.conf.getString("executionservice.gcpBatchBackend"))
-      val useBatchAsDefaultBackend: Boolean =
-        appConfigManager.conf.getBooleanOption("executionservice.useBatchAsDefaultBackend").getOrElse(false)
 
       val wdlParsingConfig = WDLParserConfig(appConfigManager.conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -371,7 +361,7 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix,
         entityManager,
         appConfigManager.conf.getInt("entities.pageSizeLimit"),
-        Some(workspaceSettingServiceConstructor)
+        Some(workspaceSettingRepository)
       )
 
       lazy val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
@@ -448,7 +438,6 @@ object Boot extends IOApp with LazyLogging {
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
-        genomicsServiceConstructor,
         workspaceServiceConfig,
         new WorkspaceRepository(slickDataSource),
         new WorkspaceSettingRepository(slickDataSource),
@@ -515,7 +504,6 @@ object Boot extends IOApp with LazyLogging {
         entityServiceConstructor,
         userServiceConstructor,
         billingAdminServiceConstructor,
-        genomicsServiceConstructor,
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
         billingProjectOrchestratorConstructor,
@@ -570,13 +558,10 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultNetworkCromwellBackend,
-          highSecurityNetworkCromwellBackend,
           gcpBatchBackend,
           methodConfigResolver,
           bardService,
-          workspaceSettingRepository,
-          useBatchAsDefaultBackend
+          workspaceSettingRepository
         )
       } else
         logger.info(
