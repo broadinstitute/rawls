@@ -782,6 +782,21 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
     )
     result2(set.name) should contain theSameElementsAs Seq(insertedSample1, insertedSample2)
+
+    val result3 = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
+          "samples",
+          "participant"
+        ),
+        /* root entity type */ "sample"
+      )
+    )
+    result3(sample1.name) should contain theSameElementsAs Seq(insertedParticipant1, insertedParticipant3)
+    result3(sample2.name) should contain theSameElementsAs Seq(insertedParticipant2, insertedParticipant4)
   }
 
   it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
