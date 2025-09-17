@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationUtils
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -918,7 +919,9 @@ class SubmissionsService(
                                    execLogs: ExecutionServiceLogs,
                                    workflowId: String
   ): WorkflowOutputs = {
-    val outs = execOuts.outputs
+    // execOuts.outputs  will be None if Cromwell has archived this workflow's metadata; in that case, treat it as an
+    // empty map here
+    val outs = execOuts.outputs.getOrElse(Map.empty[String, OutputType])
     val logs = execLogs.calls getOrElse Map()
 
     // Cromwell workflow outputs look like workflow_name.task_name.output_name.
@@ -928,7 +931,7 @@ class SubmissionsService(
 
     val taskMap =
       (outsByTask.keySet ++ logs.keySet).map(key => key -> TaskOutput(logs.get(key), outsByTask.get(key))).toMap
-    WorkflowOutputs(workflowId, taskMap)
+    WorkflowOutputs(workflowId, taskMap, execOuts.message, execOuts.metadataArchiveStatus)
   }
 
   /**

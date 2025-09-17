@@ -416,7 +416,9 @@ class SubmissionSpec(_system: ActorSystem)
           ),
           Some(Map("wf.x.four" -> Left(AttributeNumber(4)), "wf.x.five" -> Left(AttributeNumber(4))))
         )
-      )
+      ),
+      None,
+      None
     )
 
     override def save() =
@@ -1808,17 +1810,21 @@ class SubmissionSpec(_system: ActorSystem)
     assertResult(
       ExecutionServiceOutputs(
         workflowId,
-        Map(
-          "aggregate_data_workflow.aggregate_data.output_array" -> Left(
-            AttributeValueRawJson(
-              JsArray(
-                Vector(JsArray(Vector(JsString("foo"), JsString("bar"))),
-                       JsArray(Vector(JsString("baz"), JsString("qux")))
+        Option(
+          Map(
+            "aggregate_data_workflow.aggregate_data.output_array" -> Left(
+              AttributeValueRawJson(
+                JsArray(
+                  Vector(JsArray(Vector(JsString("foo"), JsString("bar"))),
+                         JsArray(Vector(JsString("baz"), JsString("qux")))
+                  )
                 )
               )
             )
           )
-        )
+        ),
+        None,
+        None
       )
     ) {
 
