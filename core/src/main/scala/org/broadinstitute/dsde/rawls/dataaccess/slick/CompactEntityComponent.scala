@@ -703,12 +703,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *                         that includes all entities found by traversing the specified relationships.
    */
   def queryRelatedRecordsWithRelationChain(
-                                            workspaceId: UUID,
-                                            startingEntityType: String,
-                                            startingEntityName: String,
-                                            relationChain: Seq[String],
-                                            rootEntityType: String
-                                          ): ReadAction[Map[String, Seq[CompactEntityRecord]]] = {
+    workspaceId: UUID,
+    startingEntityType: String,
+    startingEntityName: String,
+    relationChain: Seq[String],
+    rootEntityType: String
+  ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
     if (relationChain.isEmpty) {
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
     } else {
@@ -720,16 +720,17 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           Map("" -> Set(initialPointer))
 
       def traverseGroups(
-                          groupedEntities: Map[String, Set[EntityPointer]],
-                          currentEntityType: String,
-                          remainingChain: Seq[String],
-                          grouped: Boolean
-                        ): ReadAction[Map[String, Set[EntityPointer]]] = {
+        groupedEntities: Map[String, Set[EntityPointer]],
+        currentEntityType: String,
+        remainingChain: Seq[String],
+        grouped: Boolean
+      ): ReadAction[Map[String, Set[EntityPointer]]] =
         if (remainingChain.isEmpty) DBIO.successful(groupedEntities)
         else {
           val relation = remainingChain.head
-            // For each group, get all referenced entities for this relation
-            val nextGroupsF = DBIO.sequence(groupedEntities.map { case (groupKey, pointers) =>
+          // For each group, get all referenced entities for this relation
+          val nextGroupsF = DBIO
+            .sequence(groupedEntities.map { case (groupKey, pointers) =>
               getEntities(workspaceId, pointers).map { entities =>
                 val nextPointers = entities.flatMap { entityRecord =>
                   entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation)) match {
@@ -740,25 +741,24 @@ class CompactEntityQuery(driverComponent: DriverComponent)
                 }.toSet
                 groupKey -> nextPointers
               }
-            }.toSeq).map(_.toMap)
+            }.toSeq)
+            .map(_.toMap)
 
-
-            nextGroupsF.flatMap { nextGroups =>
-              val allNextPointers = nextGroups.values.flatten.toSet
-              val nextEntityType = allNextPointers.headOption.map(_.entityType).getOrElse(currentEntityType)
-              val shouldGroup = !grouped && nextEntityType == rootEntityType
-              val regrouped =
-                if (shouldGroup) {
-                  // Start grouping by entity name
-                  allNextPointers.groupBy(_.entityName)
-                } else {
-                  // Maintain current grouping
-                  nextGroups
-                }
-              traverseGroups(regrouped, nextEntityType, remainingChain.tail, grouped || shouldGroup)
-            }
+          nextGroupsF.flatMap { nextGroups =>
+            val allNextPointers = nextGroups.values.flatten.toSet
+            val nextEntityType = allNextPointers.headOption.map(_.entityType).getOrElse(currentEntityType)
+            val shouldGroup = !grouped && nextEntityType == rootEntityType
+            val regrouped =
+              if (shouldGroup) {
+                // Start grouping by entity name
+                allNextPointers.groupBy(_.entityName)
+              } else {
+                // Maintain current grouping
+                nextGroups
+              }
+            traverseGroups(regrouped, nextEntityType, remainingChain.tail, grouped || shouldGroup)
+          }
         }
-      }
 
       traverseGroups(initialGrouped, startingEntityType, relationChain, grouped = startingEntityType == rootEntityType)
         .flatMap { groupedPointers =>
@@ -771,7 +771,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           }
         }
     }
-  }
 
   /**
    * Traverse the entity relation chain to determine the final entity type.
