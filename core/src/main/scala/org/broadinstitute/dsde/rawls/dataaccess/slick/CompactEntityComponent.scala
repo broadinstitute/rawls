@@ -703,12 +703,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    *                         that includes all entities found by traversing the specified relationships.
    */
   def queryRelatedRecordsWithRelationChain(
-                                            workspaceId: UUID,
-                                            startingEntityType: String,
-                                            startingEntityName: String,
-                                            relationChain: Seq[String],
-                                            rootEntityType: String
-                                          ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
+    workspaceId: UUID,
+    startingEntityType: String,
+    startingEntityName: String,
+    relationChain: Seq[String],
+    rootEntityType: String
+  ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
     if (relationChain.isEmpty) {
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
     } else {
@@ -724,9 +724,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       val initialPath = Path(List(EntityPointer(startingEntityType, startingEntityName)))
 
       def traverse(
-                    currentPaths: Set[Path],
-                    remainingChain: Seq[String]
-                  ): ReadAction[Set[Path]] = {
+        currentPaths: Set[Path],
+        remainingChain: Seq[String]
+      ): ReadAction[Set[Path]] =
         if (remainingChain.isEmpty) {
           DBIO.successful(currentPaths)
         } else {
@@ -748,7 +748,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             }
           }
         }
-      }
 
       traverse(Set(initialPath), relationChain).flatMap { finalPaths =>
         // Group paths by their root entity (the entity that matches rootEntityType)
@@ -770,10 +769,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     }
 
   private def traverseOneStep(
-                               workspaceId: UUID,
-                               currentEntities: Set[EntityPointer],
-                               relation: String
-                             ): ReadAction[Set[EntityPointer]] =
+    workspaceId: UUID,
+    currentEntities: Set[EntityPointer],
+    relation: String
+  ): ReadAction[Set[EntityPointer]] =
     if (currentEntities.isEmpty) {
       DBIO.successful(Set.empty[EntityPointer])
     } else {
