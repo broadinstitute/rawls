@@ -73,7 +73,9 @@ case class UnsupportedOutputType(json: JsValue)
 
 case class ExecutionServiceOutputs(
   id: String,
-  outputs: Map[String, OutputType]
+  outputs: Option[Map[String, OutputType]],
+  message: Option[String],
+  metadataArchiveStatus: Option[String]
 )
 
 case class ExecutionServiceLogs(
@@ -162,7 +164,9 @@ case class TaskOutput(
 
 case class WorkflowOutputs(
   workflowId: String,
-  tasks: Map[String, TaskOutput]
+  tasks: Map[String, TaskOutput],
+  message: Option[String],
+  metadataArchiveStatus: Option[String]
 )
 
 case class WorkflowCost(
@@ -481,7 +485,7 @@ trait ExecutionJsonSupport extends JsonSupport {
     ExecutionServiceValidation
   )
 
-  implicit val ExecutionServiceOutputsFormat: RootJsonFormat[ExecutionServiceOutputs] = jsonFormat2(
+  implicit val ExecutionServiceOutputsFormat: RootJsonFormat[ExecutionServiceOutputs] = jsonFormat4(
     ExecutionServiceOutputs
   )
 
@@ -501,7 +505,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val TaskOutputFormat: RootJsonFormat[TaskOutput] = jsonFormat2(TaskOutput)
 
-  implicit val WorkflowOutputsFormat: RootJsonFormat[WorkflowOutputs] = jsonFormat2(WorkflowOutputs)
+  implicit val WorkflowOutputsFormat: RootJsonFormat[WorkflowOutputs] = jsonFormat4(WorkflowOutputs)
 
   implicit val WorkflowCostFormat: RootJsonFormat[WorkflowCost] = jsonFormat2(WorkflowCost)
 
