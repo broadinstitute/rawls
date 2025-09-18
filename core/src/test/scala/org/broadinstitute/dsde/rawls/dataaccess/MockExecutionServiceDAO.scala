@@ -64,7 +64,7 @@ class MockExecutionServiceDAO(timeout: Boolean = false, val identifier: String =
   )
 
   override def outputs(id: String, userInfo: UserInfo) =
-    Future.successful(ExecutionServiceOutputs(id, Map("foo" -> Left(AttributeString("bar")))))
+    Future.successful(ExecutionServiceOutputs(id, Option(Map("foo" -> Left(AttributeString("bar")))), None, None))
 
   override def abort(id: String, userInfo: UserInfo) = Future.successful(Success(ExecutionServiceStatus(id, "Aborted")))
 

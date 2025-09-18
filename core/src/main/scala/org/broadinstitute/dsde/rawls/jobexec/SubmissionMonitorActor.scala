@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.{attributeCount, safePrint, AttributeMap}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -826,7 +827,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                     ignoreEmptyOutputs: Boolean
   ): Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] =
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
-      val outputs = outputsResponse.outputs
+      // outputsResponse.outputs will be None if Cromwell has archived this workflow's metadata. This should never
+      // happen for a running submission, but here's a sanity check:
+      val outputs = outputsResponse.outputs.getOrElse(
+        throw new RawlsFatalExceptionWithErrorReport(
+          ErrorReport(
+            s"""Unable to read workflow outputs for workflow ${workflowRecord.externalId}: ${outputsResponse.message
+                .getOrElse("")}"""
+          )
+        )
+      )
       logger.debug(
         s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId
             .getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap.size} expressions, ${outputs.size} attribute values"

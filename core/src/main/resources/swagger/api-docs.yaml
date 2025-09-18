@@ -4730,6 +4730,12 @@ components:
         workflowId:
           type: string
           description: The id of this workflow
+        message:
+          type: string
+          description: Informational message from Cromwell, if available
+        metadataArchiveStatus:
+          type: string
+          description: Present if this workflow's metadata has been archived
       description: Outputs and logs from all tasks in a workflow
     WorkflowQueueStatusByUserResponse:
       required:
