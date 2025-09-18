@@ -10,12 +10,14 @@ class MockSubmissionCostService(defaultTableName: String,
                                 defaultDatePartitionColumn: String,
                                 serviceProject: String,
                                 billingSearchWindowDays: Int,
+                                dataSource: SlickDataSource,
                                 bigQueryDAO: GoogleBigQueryDAO
 )(implicit executionContext: ExecutionContext)
     extends SubmissionCostServiceImpl(defaultTableName,
                                       defaultDatePartitionColumn,
                                       serviceProject,
                                       billingSearchWindowDays,
+                                      dataSource,
                                       bigQueryDAO
     ) {
 
@@ -30,7 +32,8 @@ class MockSubmissionCostService(defaultTableName: String,
   ): Future[Map[String, Float]] =
     Future(workflowIds.map(_ -> fixedCost).toMap)
 
-  override def getWorkflowCost(workflowId: String,
+  override def getWorkflowCost(submissionId: String,
+                               workflowId: String,
                                googleProjectId: GoogleProjectId,
                                submissionDate: DateTime,
                                submissionDoneDate: Option[DateTime],

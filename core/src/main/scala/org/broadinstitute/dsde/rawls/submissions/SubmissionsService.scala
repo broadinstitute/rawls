@@ -312,7 +312,8 @@ class SubmissionsService(
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, ctx.userInfo, optExecId)
       submissionDoneDate = getTerminalStatusDate(submission, Option(workflowId))
-      costs <- submissionCostService.getWorkflowCost(workflowId,
+      costs <- submissionCostService.getWorkflowCost(submissionId,
+                                                     workflowId,
                                                      workspace.googleProjectId,
                                                      submission.submissionDate,
                                                      submissionDoneDate,
@@ -380,7 +381,7 @@ class SubmissionsService(
         }
       }
 
-    traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
+    traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { _ =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
         // determine which workflows are eligible for actual-cost lookup
         val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
