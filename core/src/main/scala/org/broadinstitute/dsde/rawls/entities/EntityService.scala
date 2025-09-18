@@ -721,31 +721,37 @@ class EntityService(protected val ctx: RawlsRequestContext,
             Failure(t)
           }
 
-        // Apply the workspace setting to mark the migration as finalized
-        finalResult = userResult match {
+        // Apply the workspace setting to mark the migration as finalized, or roll it back if the migration failed
+        finalResult <- userResult match {
           case Success(result) =>
-            if (updateWorkspaceSettings) {
+            val applyFuture = if (updateWorkspaceSettings) {
               traceFutureWithParent("applyWorkspaceSettings", s) { _ =>
                 settingsRepo.markWorkspaceSettingApplied(
                   workspaceContext.workspaceIdAsUUID,
                   WorkspaceSettingTypes.CompactDataTables
                 )
               }
+            } else {
+              Future.successful(())
             }
-            result
+            applyFuture map (_ => result)
           case Failure(t) =>
-            if (updateWorkspaceSettings) {
-              logger.warn(
-                s"Quicksilver migration $workspaceId: FAILED with ${t.getClass.getSimpleName}: ${t.getMessage}"
-              )
+            logger.warn(
+              s"Quicksilver migration $workspaceId: FAILED with ${t.getClass.getSimpleName}: ${t.getMessage}"
+            )
+            val rollbackFuture = if (updateWorkspaceSettings) {
               traceFutureWithParent("rollBackWorkspaceSettings", s) { _ =>
                 settingsRepo.removePendingSetting(
                   workspaceContext.workspaceIdAsUUID,
                   WorkspaceSettingTypes.CompactDataTables
-                )
+                ) map { _ =>
+                  logger.warn(
+                    s"Quicksilver migration $workspaceId: rolled back CompactDataTables workspace setting."
+                  )
+                }
               }
-            }
-            throw t
+            } else Future.successful(())
+            rollbackFuture map (_ => throw t)
         }
 
         // return a count of entities updated
