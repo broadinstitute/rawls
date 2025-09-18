@@ -83,6 +83,7 @@ class SubmissionSpec(_system: ActorSystem)
     "fakeDatePartitionColumn",
     "fakeServiceProject",
     31,
+    slickDataSource,
     bigQueryDAO
   )
 
