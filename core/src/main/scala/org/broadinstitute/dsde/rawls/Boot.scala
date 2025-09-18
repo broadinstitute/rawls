@@ -244,7 +244,7 @@ object Boot extends IOApp with LazyLogging {
       val policyService = new PolicyService(tpsDAO)
 
       val submissionCostService =
-        SubmissionCostServiceFactory.createSubmissionCostService(appConfigManager, bigQueryDAO)
+        SubmissionCostServiceFactory.createSubmissionCostService(appConfigManager, slickDataSource, bigQueryDAO)
 
       val methodRepoDAO =
         MethodRepoDAOFactory.createMethodRepoDAO(appConfigManager, metricsPrefix)
