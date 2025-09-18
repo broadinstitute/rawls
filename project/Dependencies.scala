@@ -137,7 +137,7 @@ object Dependencies {
   val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.28-SNAPSHOT")
 
   // OpenTelemetry
-  val openTelemetryInstrumentationVersion = "2.0.0"
+  val openTelemetryInstrumentationVersion = "2.20.0"
   val otelInstrumentationResources: ModuleID =
     "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryInstrumentationVersion + "-alpha")
 
