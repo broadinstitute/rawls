@@ -38,8 +38,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSetting
+import org.broadinstitute.dsde.rawls.model.{SamResourcePolicyName, WorkspaceSetting, _}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.policy.PolicyService
@@ -716,19 +715,123 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "call updateBucketIamAllReaders with non-reader policy emails when locking a workspace" in withTestDataServicesCustomSam {
+  it should "call updateBucketIamAllReaders when locking a workspace" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
+    when(
+      services.samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
+                                            testData.workspaceNoSubmissions.workspaceId,
+                                            testContext
+      )
+    )
+      .thenReturn(Future.successful(Seq.empty))
+    val workspaceProjectOwnersEmail = "projectOwners@gmail.com"
+    val workspaceOwnersEmail = "owners@gmail.com"
+    val workspaceWritersEmail = "writers@gmail.com"
+    val workspaceReadersEmail = "readers@gmail.com"
+    mockListPoliciesForResource(
+      services.samDAO,
+      testData.workspaceNoSubmissions,
+      Map(
+        SamWorkspacePolicyNames.projectOwner -> workspaceProjectOwnersEmail,
+        SamWorkspacePolicyNames.owner -> workspaceOwnersEmail,
+        SamWorkspacePolicyNames.writer -> workspaceWritersEmail,
+        SamWorkspacePolicyNames.reader -> workspaceReadersEmail
+      )
+    )
+    val billingOwnerEmail = "billing@gmail.com"
+    mockGetBillingProjectOwnerEmail(services.samDAO, testData.workspaceNoSubmissions.namespace, billingOwnerEmail)
+
+    Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName), Duration.Inf)
+    verify(services.gcsDAO).updateBucketIamAllReaders(
+      GcsBucketName(testData.workspaceNoSubmissions.bucketName),
+      Set(WorkbenchEmail(billingOwnerEmail),
+          WorkbenchEmail(workspaceOwnersEmail),
+          WorkbenchEmail(workspaceWritersEmail),
+          WorkbenchEmail(workspaceReadersEmail)
+      ),
+      Some(testData.workspaceNoSubmissions.googleProjectId)
+    )
+  }
+
+  it should "call updateBucketIamAllReaders when locking a workspace with an auth domain" in withTestDataServicesCustomSam {
     services =>
       populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
+      when(services.samDAO.getResourceAuthDomain(any(), any(), any()))
+        .thenReturn(Future.successful(Seq("fakeAuthDomain@test.firecloud.org")))
+
+      val workspaceProjectOwnersEmail = "projectOwners@gmail.com"
+      val workspaceOwnersEmail = "owners@gmail.com"
+      val workspaceWritersEmail = "writers@gmail.com"
+      val workspaceReadersEmail = "readers@gmail.com"
+      mockListPoliciesForResource(
+        services.samDAO,
+        testData.workspaceNoSubmissions,
+        Map(
+          SamWorkspacePolicyNames.projectOwner -> workspaceProjectOwnersEmail,
+          SamWorkspacePolicyNames.owner -> workspaceOwnersEmail,
+          SamWorkspacePolicyNames.writer -> workspaceWritersEmail,
+          SamWorkspacePolicyNames.reader -> workspaceReadersEmail
+        )
+      )
+      val billingOwnerEmail = "billing@gmail.com"
+      mockGetBillingProjectOwnerEmail(services.samDAO, testData.workspaceNoSubmissions.namespace, billingOwnerEmail)
+
       Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
                    Duration.Inf
       )
 
       verify(services.gcsDAO).updateBucketIamAllReaders(
         GcsBucketName(testData.workspaceNoSubmissions.bucketName),
-        Set(WorkbenchEmail(testData.userOwner.userEmail.value), WorkbenchEmail(testData.userWriter.userEmail.value)),
+        Set(
+          WorkbenchEmail(workspaceProjectOwnersEmail),
+          WorkbenchEmail(workspaceOwnersEmail),
+          WorkbenchEmail(workspaceWritersEmail),
+          WorkbenchEmail(workspaceReadersEmail)
+        ),
         Some(testData.workspaceNoSubmissions.googleProjectId)
       )
   }
+
+  def mockListPoliciesForResource(samDAO: CustomizableMockSamDAO,
+                                  workspace: Workspace,
+                                  policyEmails: Map[SamResourcePolicyName, String]
+  ): Unit = {
+    val policies = policyEmails.map { case (policyName, email) =>
+      SamPolicyWithNameAndEmail(
+        policyName,
+        SamPolicy(Set.empty, Set.empty, Set.empty),
+        WorkbenchEmail(email)
+      )
+    }.toSet
+
+    when(
+      samDAO.listPoliciesForResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        any
+      )
+    ).thenReturn(Future.successful(policies))
+  }
+
+  private def mockGetBillingProjectOwnerEmail(samDAO: CustomizableMockSamDAO,
+                                              workspaceNamespace: String,
+                                              billingOwnerEmail: String
+  ) =
+    when(
+      samDAO.getPolicySyncStatus(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(workspaceNamespace),
+        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner),
+        any
+      )
+    ).thenReturn(
+      Future.successful(
+        SamPolicySyncStatus(
+          "",
+          WorkbenchEmail(billingOwnerEmail)
+        )
+      )
+    )
 
   it should "call updateBucketIam when unlocking a workspace" in withTestDataServicesCustomSam { services =>
     populateWorkspacePolicies(services, testData.workspaceNoSubmissions)

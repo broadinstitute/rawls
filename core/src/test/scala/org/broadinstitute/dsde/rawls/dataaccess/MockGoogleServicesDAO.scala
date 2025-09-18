@@ -95,14 +95,14 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
-                               iamPolicyVersion: Int = 1
+                               iamPolicyVersion: Int = 3
   ): Future[Unit] =
     Future.unit
 
   override def updateBucketIamAllReaders(bucketName: GcsBucketName,
                                          policyEmails: Set[WorkbenchEmail],
                                          userProject: Option[GoogleProjectId],
-                                         iamPolicyVersion: Int = 1
+                                         iamPolicyVersion: Int = 3
   ): Future[Unit] = Future.unit
 
   override def setupWorkspace(userInfo: UserInfo,

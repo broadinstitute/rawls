@@ -1605,6 +1605,7 @@ class WorkspaceService(
     locked <- workspaceRepository.lockWorkspace(workspace)
     policyEmails <- getBucketPolicyEmails(workspace)
 
+    _ <- fastPassServiceConstructor(ctx).removeFastPassGrantsForWorkspace(workspace)
     _ <- gcsDAO.updateBucketIamAllReaders(GcsBucketName(workspace.bucketName),
                                           policyEmails.values.toSet,
                                           Option(workspace.googleProjectId)
@@ -1615,6 +1616,7 @@ class WorkspaceService(
     workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.unlock, ignoreLock = true)
     policyEmails <- getBucketPolicyEmails(workspace)
     _ <- gcsDAO.updateBucketIam(GcsBucketName(workspace.bucketName), policyEmails, Option(workspace.googleProjectId))
+    _ <- fastPassServiceConstructor(ctx).syncFastPassesForUserInWorkspace(workspace)
     unlocked <- workspaceRepository.unlockWorkspace(workspace)
   } yield unlocked
 
