@@ -659,45 +659,15 @@ class WorkspaceService(
   private def deleteGoogleProject(googleProjectId: GoogleProjectId,
                                   parentContext: RawlsRequestContext
   ): Future[Unit] = {
-    def destroyPet(userIdInfo: UserIdInfo, projectName: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
-      for {
-        petSAJson <- traceFutureWithParent("getPetServiceAccountKeyForUser", ctx)(_ =>
-          samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
-        )
-        petUserInfo <- traceFutureWithParent("getUserInfoUsingJson", ctx)(_ => gcsDAO.getUserInfoUsingJson(petSAJson))
-        _ <- traceFutureWithParent("deleteUserPetServiceAccount", ctx)(_ =>
-          samDAO.deleteUserPetServiceAccount(projectName, ctx.copy(userInfo = petUserInfo))
-        )
-      } yield ()
-
-    def deletePetsInProject(projectName: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
-      for {
-        projectUsers <- traceFutureWithParent("listAllResourceMemberIds", ctx)(_ =>
-          samDAO
-            .listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, ctx)
-            .recover {
-              case regrets: RawlsExceptionWithErrorReport
-                  if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
-                logger.info(
-                  s"google-project resource ${projectName.value} not found in Sam. Continuing with workspace deletion"
-                )
-                Set[UserIdInfo]()
-            }
-        )
-        _ <- projectUsers.toList.traverse(destroyPet(_, projectName, parentContext))
-      } yield ()
     for {
-      _ <- traceFutureWithParent("deletePetsInProject", parentContext)(innerCtx =>
-        deletePetsInProject(googleProjectId, innerCtx)
-      )
+      // delete the project from the cloud
       _ <- traceFutureWithParent("gcsDAO.deleteGoogleProject", parentContext)(_ =>
         gcsDAO.deleteGoogleProject(googleProjectId)
       )
-      _ <- traceFutureWithParent("samDAO.deleteResource", parentContext)(_ =>
+      // delete the project, its children, and its pets from Sam
+      _ <- traceFutureWithParent("samDAO.forgetProject", parentContext)(_ =>
         samDAO
-          .recursiveDeleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx)(executionContext,
-                                                                                                   logger
-          )
+          .forgetProject(googleProjectId, ctx)
           .recover {
             case regrets: RawlsExceptionWithErrorReport
                 if regrets.errorReport.statusCode.contains(StatusCodes.NotFound) =>

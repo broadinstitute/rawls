@@ -577,15 +577,6 @@ class HttpSamDAO(baseSamServiceURL: String,
       callback.future
     }
 
-  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
-    retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[Void]("deletePetServiceAccount")
-
-      googleApi(ctx).deletePetServiceAccountAsync(googleProject.value, callback)
-
-      callback.future.map(_ => ())
-    }
-
   override def getDefaultPetServiceAccountKeyForUser(ctx: RawlsRequestContext): Future[String] =
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[String]("getArbitraryPetServiceAccountKey")
