@@ -1620,6 +1620,24 @@ class WorkspaceService(
     unlocked <- workspaceRepository.unlockWorkspace(workspace)
   } yield unlocked
 
+  private def getPolicyEmails(policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
+                              authDomain: Option[Seq[String]],
+                              billingProjectOwnerPolicyEmail: WorkbenchEmail
+  ): Map[WorkspaceAccessLevel, WorkbenchEmail] =
+    policyEmailsByName
+      .map { case (policyName, policyEmail) =>
+        if (policyName == SamWorkspacePolicyNames.projectOwner && authDomain.isEmpty) {
+          // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+          // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+          // the limit of 2000
+          Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
+        } else {
+          WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+        }
+      }
+      .flatten
+      .toMap
+
   // The project owner policy email on a workspace is not necessarily used for bucket IAM.
   // If the workspace has no auth domain, the billing project owner policy email is used instead.
   // This function returns the correct mapping of WorkspaceAccessLevels to policy emails.
@@ -1637,19 +1655,7 @@ class WorkspaceService(
       )
       .map(_.email)
     policyEmailsByName = policies.map(p => p.policyName -> p.email).toMap
-    policyEmails = policyEmailsByName
-      .map { case (policyName, policyEmail) =>
-        if (policyName == SamWorkspacePolicyNames.projectOwner && authDomain.isEmpty) {
-          // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-          // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-          // the limit of 2000
-          Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
-        } else {
-          WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-        }
-      }
-      .flatten
-      .toMap
+    policyEmails = getPolicyEmails(policyEmailsByName, Some(authDomain), billingProjectOwnerPolicyEmail)
   } yield policyEmails
 
   /**
@@ -2493,23 +2499,7 @@ class WorkspaceService(
       // the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
       // will never change, which would eliminate the call to sam entirely
       policyEmails <- DBIO.successful(
-        policyEmailsByName
-          .map { case (policyName, policyEmail) =>
-            if (
-              policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain
-                .getOrElse(Set.empty)
-                .isEmpty
-            ) {
-              // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-              // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-              // the limit of 2000
-              Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
-            } else {
-              WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-            }
-          }
-          .flatten
-          .toMap
+        getPolicyEmails(policyEmailsByName, workspaceRequest.authorizationDomain, billingProjectOwnerPolicyEmail)
       )
 
       workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentContext)(_ =>
