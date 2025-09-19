@@ -22,7 +22,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.samplers.Sampler
 import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
-import io.opentelemetry.semconv.ResourceAttributes
+import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
