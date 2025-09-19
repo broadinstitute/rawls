@@ -30,6 +30,7 @@ import spray.json._
 import java.sql.SQLIntegrityConstraintViolationException
 import java.util.UUID
 import scala.util.Random
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 
 class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
@@ -1000,6 +1001,45 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       )
     )
     result(sample.name) should contain(insertedSample)
+  }
+
+  it should "throw a user-friendly error if the relation chain is invalid" in withMinimalTestDatabase { _ =>
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    // Create two entities of different types
+    val sample1 = Entity("sample1", "sample", Map())
+    val donor1 = Entity("donor1", "donor", Map())
+
+    // Create a set entity that references both sample1 and donor1 in the same attribute
+    val set = Entity(
+      "set1",
+      "set",
+      Map(
+        AttributeName.withDefaultNS("members") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("sample", "sample1"),
+            AttributeEntityReference("donor", "donor1")
+          )
+        )
+      )
+    )
+
+    insertAndGetAll(Seq(sample1, donor1, set))
+
+    // Attempt to follow a relation chain that is ambiguous
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      runAndWait(
+        q.queryRelatedRecordsWithRelationChain(
+          workspaceId,
+          set.entityType,
+          set.name,
+          Seq("members"),
+          rootEntityType = "set"
+        )
+      )
+    }
+
+    ex.getMessage should include("Multiple entity types referenced by relation")
   }
 
   behavior of "listEntityKeysViaEntity"
@@ -2398,7 +2438,10 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         )
       )
     val entity4 =
-      Entity(UUID.randomUUID().toString, entityType1, Map(testAttrName -> AttributeString("foo"), sortAttrName -> AttributeNumber(Random.nextInt())))
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName -> AttributeString("foo"), sortAttrName -> AttributeNumber(Random.nextInt()))
+      )
     insertAndGet(entity1)
     insertAndGet(entity2)
     insertAndGet(entity3)
@@ -2409,7 +2452,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       q.queryEntitiesWithColumnFilter(
         wsid,
         entityType1,
-        EntityQuery(1, 10, toDelimitedName(sortAttrName), SortDirections.Ascending, None, columnFilter = Some(columnFilter)
+        EntityQuery(1,
+                    10,
+                    toDelimitedName(sortAttrName),
+                    SortDirections.Ascending,
+                    None,
+                    columnFilter = Some(columnFilter)
         ),
         columnFilter
       )
@@ -3411,7 +3459,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     )
 
     insertAndGetAll(Seq(sample, set))
-    //this.samples
+    // this.samples
     val result = runAndWait(q.determineEntityTypeAtEndOfChain(workspaceId, set.entityType, set.name, List("samples")))
 
     result shouldBe Some("sample")
@@ -3424,11 +3472,12 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     insertAndGet(setSet)
 
-    //this.ssets.samples
-    val result2 = runAndWait(q.determineEntityTypeAtEndOfChain(workspaceId, setSet.entityType, setSet.name, List("ssets", "samples")))
+    // this.ssets.samples
+    val result2 = runAndWait(
+      q.determineEntityTypeAtEndOfChain(workspaceId, setSet.entityType, setSet.name, List("ssets", "samples"))
+    )
 
     result2 shouldBe Some("sample")
-
 
   }
 

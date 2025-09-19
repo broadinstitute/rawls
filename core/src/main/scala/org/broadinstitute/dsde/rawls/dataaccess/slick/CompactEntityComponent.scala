@@ -27,6 +27,9 @@ import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import slick.sql.SqlStreamingAction
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.ErrorReport
+
 import spray.json._
 
 import scala.concurrent.ExecutionContext
@@ -746,17 +749,28 @@ class CompactEntityQuery(driverComponent: DriverComponent)
 
           nextGroupsF.flatMap { nextGroups =>
             val allNextPointers = nextGroups.values.flatten.toSet
-            val nextEntityType = allNextPointers.headOption.map(_.entityType).getOrElse(currentEntityType)
-            val shouldGroup = !grouped && nextEntityType == rootEntityType
-            val regrouped =
-              if (shouldGroup) {
-                // Start grouping by entity name
-                allNextPointers.groupBy(_.entityName)
-              } else {
-                // Maintain current grouping
-                nextGroups
-              }
-            traverseGroups(regrouped, nextEntityType, remainingChain.tail, grouped || shouldGroup)
+            if (allNextPointers.map(_.entityType).size > 1) {
+              DBIO.failed(
+                new RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.BadRequest,
+                    s"Multiple entity types referenced by relation '$relation': ${allNextPointers.map(_.entityType)}"
+                  )
+                )
+              )
+            } else {
+              val nextEntityType = allNextPointers.headOption.map(_.entityType).getOrElse(currentEntityType)
+              val shouldGroup = !grouped && nextEntityType == rootEntityType
+              val regrouped =
+                if (shouldGroup) {
+                  // Start grouping by entity name
+                  allNextPointers.groupBy(_.entityName)
+                } else {
+                  // Maintain current grouping
+                  nextGroups
+                }
+              traverseGroups(regrouped, nextEntityType, remainingChain.tail, grouped || shouldGroup)
+            }
           }
         }
 
@@ -802,9 +816,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         .foldLeft(DBIO.successful((initialEntities, startingEntityType)): ReadAction[(Set[EntityPointer], String)]) {
           case (previousStep, relation) =>
             previousStep.flatMap { case (currentEntities, _) =>
-              println("previousstep entities: ")
-              currentEntities.foreach(e => print(s"${e.entityType}/${e.entityName} "))
-              println(s"\nTraversing relation: $relation")
               if (currentEntities.isEmpty) {
                 DBIO.successful((Set.empty[EntityPointer], ""))
               } else {
@@ -827,7 +838,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     currentEntities: Set[EntityPointer],
     relation: String
   ): ReadAction[(Set[EntityPointer], String)] = {
-    currentEntities.foreach(e => print(s"${e.entityType}/${e.entityName} "))
     // Query just enough to get the type from the first entity that has the relation
     val query = concatSqlActions(
       sql"""select e.entity_type, e.name, jt.ref_entity_type, jt.ref_name
@@ -862,7 +872,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         // Group results by referenced entity type
         val groupedByType = results.groupBy(_.refEntityType)
         if (groupedByType.size > 1) {
-          // If there are multiple entity types referenced, log a warning but continue with the first type
+          // This shouldn't happen, as the limit 1 should ensure we only get one type back
           logger.warn(s"Multiple entity types referenced by relation '$relation': ${groupedByType.keys.mkString(", ")}")
         }
 

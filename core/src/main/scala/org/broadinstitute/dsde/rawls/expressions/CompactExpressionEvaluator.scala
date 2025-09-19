@@ -221,8 +221,6 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
 
           // If we have an entitylookup, prepend its chain to the relation chain of the query
           val queryPlans = if (entityType != rootEntityType && entityLookups.nonEmpty) {
-//            val entityRelationChain: List[String] = entityLookups.flatMap(_.relations.map(_.attributeName()).map(_.getText)).toList
-//            val updatedRelationChain = entityRelationChain ++ entityLookups.flatMap(_.attributeName).toList
             if (inputExpressionData.isEmpty) {
               Seq(QueryPlan(updatedRelationChain, Map.empty))
             } else {
@@ -533,26 +531,28 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
                                  startingEntityType: String,
                                  startingEntityName: String
   )(implicit executionContext: ExecutionContext): ReadAction[Unit] =
-    repository.queries
-      .determineEntityTypeAtEndOfChain(workspaceId, startingEntityType, startingEntityName, entityRelationChain)
-      .map {
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              s"The relation chain ${entityRelationChain.mkString(".")} is invalid starting from entity $startingEntityType"
-            )
-          )
-        case Some(entityType) =>
-          if (entityType != rootEntityType) {
+    withTiming("determineEntityTypeAtEndOfChain") {
+      repository.queries
+        .determineEntityTypeAtEndOfChain(workspaceId, startingEntityType, startingEntityName, entityRelationChain)
+        .map {
+          case None =>
             throw new RawlsExceptionWithErrorReport(
               ErrorReport(
                 StatusCodes.BadRequest,
-                s"The expression in your SubmissionRequest matched only entities of the wrong type. " +
-                  s"(Expected type $rootEntityType, but got $entityType.)"
+                s"Could not find the requested entities by following the path '${entityRelationChain.mkString(".")}' starting from the $startingEntityType named '$startingEntityName'. Please check that all referenced attributes and relationships exist and are spelled correctly."
               )
             )
-          }
-      }
+          case Some(entityType) =>
+            if (entityType != rootEntityType) {
+              throw new RawlsExceptionWithErrorReport(
+                ErrorReport(
+                  StatusCodes.BadRequest,
+                  s"The expression in your SubmissionRequest matched only entities of the wrong type. " +
+                    s"(Expected type $rootEntityType, but got $entityType.)"
+                )
+              )
+            }
+        }
+    }
 
 }
