@@ -656,9 +656,7 @@ class WorkspaceService(
     WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
   }
 
-  private def deleteGoogleProject(googleProjectId: GoogleProjectId,
-                                  parentContext: RawlsRequestContext
-  ): Future[Unit] = {
+  private def deleteGoogleProject(googleProjectId: GoogleProjectId, parentContext: RawlsRequestContext): Future[Unit] =
     for {
       // delete the project from the cloud
       _ <- traceFutureWithParent("gcsDAO.deleteGoogleProject", parentContext)(_ =>
@@ -677,7 +675,6 @@ class WorkspaceService(
           }
       )
     } yield ()
-  }
 
   def updateWorkspace(workspaceName: WorkspaceName,
                       operations: Seq[AttributeUpdateOperation]
