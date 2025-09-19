@@ -1621,12 +1621,12 @@ class WorkspaceService(
   } yield unlocked
 
   private def getPolicyEmails(policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
-                              authDomain: Option[Seq[String]],
+                              authDomainIsEmpty: Boolean,
                               billingProjectOwnerPolicyEmail: WorkbenchEmail
   ): Map[WorkspaceAccessLevel, WorkbenchEmail] =
     policyEmailsByName
       .map { case (policyName, policyEmail) =>
-        if (policyName == SamWorkspacePolicyNames.projectOwner && authDomain.isEmpty) {
+        if (policyName == SamWorkspacePolicyNames.projectOwner && authDomainIsEmpty) {
           // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
           // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
           // the limit of 2000
@@ -1655,7 +1655,7 @@ class WorkspaceService(
       )
       .map(_.email)
     policyEmailsByName = policies.map(p => p.policyName -> p.email).toMap
-    policyEmails = getPolicyEmails(policyEmailsByName, Some(authDomain), billingProjectOwnerPolicyEmail)
+    policyEmails = getPolicyEmails(policyEmailsByName, authDomain.isEmpty, billingProjectOwnerPolicyEmail)
   } yield policyEmails
 
   /**
@@ -2499,7 +2499,10 @@ class WorkspaceService(
       // the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
       // will never change, which would eliminate the call to sam entirely
       policyEmails <- DBIO.successful(
-        getPolicyEmails(policyEmailsByName, workspaceRequest.authorizationDomain, billingProjectOwnerPolicyEmail)
+        getPolicyEmails(policyEmailsByName,
+                        workspaceRequest.authorizationDomain.isEmpty,
+                        billingProjectOwnerPolicyEmail
+        )
       )
 
       workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentContext)(_ =>
