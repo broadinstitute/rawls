@@ -236,7 +236,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet"),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -250,7 +250,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet2"),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -264,7 +264,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet4"),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -321,7 +321,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -339,8 +339,7 @@ class CompactExpressionEvaluatorSpec
       )
     )
       .thenReturn(
-        DBIO.successful(
-          Some("Sample"))
+        DBIO.successful(Some("Sample"))
       )
 
     val expressionEvaluationContext =
@@ -382,7 +381,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(testData.indiv1.name),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -404,8 +403,7 @@ class CompactExpressionEvaluatorSpec
       )
     )
       .thenReturn(
-        DBIO.successful(
-          Some("Sample"))
+        DBIO.successful(Some("Sample"))
       )
 
     val expressionEvaluationContext =
@@ -459,8 +457,7 @@ class CompactExpressionEvaluatorSpec
       )
     )
       .thenReturn(
-        DBIO.successful(
-          Some("Sample"))
+        DBIO.successful(Some("Sample"))
       )
 
     val context =
@@ -478,7 +475,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -516,7 +513,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet"),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -534,8 +531,7 @@ class CompactExpressionEvaluatorSpec
       )
     )
       .thenReturn(
-        DBIO.successful(
-          Some("Sample"))
+        DBIO.successful(Some("Sample"))
       )
 
     val methodConf = MethodConfiguration("namespace",
@@ -633,16 +629,17 @@ class CompactExpressionEvaluatorSpec
   it should "understand sets of sets" in withConfigData {
     when(
       mockQueries.queryRelatedRecordsWithRelationChain(any(),
-        any(),
-        org.mockito.ArgumentMatchers.eq(sampleSetSet.name),
-        any(),
-        any()
+                                                       any(),
+                                                       org.mockito.ArgumentMatchers.eq(sampleSetSet.name),
+                                                       any(),
+                                                       any()
       )
     )
       .thenReturn(
         DBIO.successful(
           Map(sampleSet.name -> Seq(sampleGoodAsCER, sampleMissingValueAsCER),
-            sampleSet2.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
+              sampleSet2.name -> Seq(sampleGoodAsCER, sampleGood2AsCER)
+          )
         )
       )
 
@@ -655,13 +652,16 @@ class CompactExpressionEvaluatorSpec
       )
     )
       .thenReturn(
-        DBIO.successful(
-          Some("SampleSet"))
-        )
+        DBIO.successful(Some("SampleSet"))
+      )
 
     // root entity type:sample_set, given entity type: set of sets
     val expressionEvaluationContext =
-      ExpressionEvaluationContext(Some(sampleSetSet.entityType), Some(sampleSetSet.name), Some("this.sample_sets"), Some(sampleSet2.entityType))
+      ExpressionEvaluationContext(Some(sampleSetSet.entityType),
+                                  Some(sampleSetSet.name),
+                                  Some("this.sample_sets"),
+                                  Some(sampleSet2.entityType)
+      )
 
     val result = evalInputs(expressionEvaluationContext, configSampleSet, arrayWdl)
 
@@ -675,7 +675,10 @@ class CompactExpressionEvaluatorSpec
       SubmissionValidationEntityInputs(
         sampleSet2.name,
         Set(
-          SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayNameWithWfName)
+          SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))),
+                                    None,
+                                    intArrayNameWithWfName
+          )
         )
       )
     )
@@ -687,7 +690,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -705,8 +708,7 @@ class CompactExpressionEvaluatorSpec
       )
     )
       .thenReturn(
-        DBIO.successful(
-          Some("samples"))
+        DBIO.successful(Some("samples"))
       )
 
     // root entity type:set, no entity expression, input expression: this.samples.something
@@ -752,7 +754,7 @@ class CompactExpressionEvaluatorSpec
                                                        any(),
                                                        org.mockito.ArgumentMatchers.eq("daSampleSet"),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(
@@ -863,7 +865,7 @@ class CompactExpressionEvaluatorSpec
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.entityType),
                                                        org.mockito.ArgumentMatchers.eq(sampleSet2.name),
                                                        any(),
-        any()
+                                                       any()
       )
     )
       .thenReturn(

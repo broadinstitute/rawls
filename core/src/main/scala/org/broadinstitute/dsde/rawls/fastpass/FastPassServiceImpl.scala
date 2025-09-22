@@ -290,6 +290,7 @@ class FastPassServiceImpl(protected val ctx: RawlsRequestContext,
         case Success(_) => Success()
       }
   }
+
   def syncFastPassesForUserInWorkspace(workspace: Workspace): Future[Unit] =
     syncFastPassesForUserInWorkspace(workspace, ctx.userInfo.userEmail.value)
 

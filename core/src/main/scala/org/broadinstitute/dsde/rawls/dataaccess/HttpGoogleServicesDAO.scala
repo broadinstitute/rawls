@@ -142,7 +142,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   override def updateBucketIam(bucketName: GcsBucketName,
                                policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                                userProject: Option[GoogleProjectId],
-                               iamPolicyVersion: Int = 1
+                               iamPolicyVersion: Int = 3
   ): Future[Unit] = {
     // default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
     // do not have separate permissions that deviate from the bucket-level permissions.
@@ -189,6 +189,36 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate,
                                                                 RetryPredicates.whenStatusCode(400),
                                                                 RetryPredicates.whenStatusCode(404)
+        ),
+        bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList,
+        version = iamPolicyVersion
+      )
+      .compile
+      .drain
+      .unsafeToFuture()
+  }
+
+  override def updateBucketIamAllReaders(bucketName: GcsBucketName,
+                                         policyEmails: Set[WorkbenchEmail],
+                                         userProject: Option[GoogleProjectId],
+                                         iamPolicyVersion: Int = 3
+  ): Future[Unit] = {
+
+    val roleIdentities =
+      policyEmails.map(email => Identity.group(email.value)).toList
+    // Assign all emails to the custom reader role
+    val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+    val readerRoleMap: Map[StorageRole, NonEmptyList[Identity]] =
+      Map(customTerraBucketReaderRole -> NonEmptyList.fromListUnsafe(roleIdentities))
+
+    googleStorageService
+      .overrideIamPolicy(
+        bucketName,
+        readerRoleMap,
+        retryConfig = RetryPredicates.retryConfigWithPredicates(
+          RetryPredicates.standardGoogleRetryPredicate,
+          RetryPredicates.whenStatusCode(400),
+          RetryPredicates.whenStatusCode(404)
         ),
         bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList,
         version = iamPolicyVersion

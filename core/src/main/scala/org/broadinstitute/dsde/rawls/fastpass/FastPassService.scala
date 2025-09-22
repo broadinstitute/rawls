@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.fastpass
 
 import org.broadinstitute.dsde.rawls.model.Workspace
+
 import scala.concurrent.Future
 
 trait FastPassService {
