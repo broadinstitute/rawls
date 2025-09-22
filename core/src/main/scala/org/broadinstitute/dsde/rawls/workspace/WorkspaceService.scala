@@ -2500,7 +2500,7 @@ class WorkspaceService(
       // will never change, which would eliminate the call to sam entirely
       policyEmails <- DBIO.successful(
         getPolicyEmails(policyEmailsByName,
-                        workspaceRequest.authorizationDomain.isEmpty,
+                        workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty,
                         billingProjectOwnerPolicyEmail
         )
       )
