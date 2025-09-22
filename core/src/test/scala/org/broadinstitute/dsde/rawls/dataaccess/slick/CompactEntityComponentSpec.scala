@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
-  AttributeNull,
   AttributeNumber,
   AttributeRename,
   AttributeString,
@@ -26,12 +25,12 @@ import org.scalatest.Inspectors.forEvery
 import slick.dbio.Effect.Read
 import slick.jdbc.GetResult
 import slick.sql.SqlStreamingAction
-import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.sql.SQLIntegrityConstraintViolationException
 import java.util.UUID
 import scala.util.Random
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 
 class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
@@ -453,10 +452,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        wsid,
-        "sample_set",
-        "set1",
-        List("samples")
+        /* workspace id */ wsid,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List("samples"),
+        /* root entity type */ "sample"
       )
     )
 
@@ -496,12 +496,13 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
           "samples"
-        )
+        ),
+        /* root entity type */ "sample"
       )
     )
     result(sample1.name) should contain(insertedSample1)
@@ -535,13 +536,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
           "samples",
           "participant"
-        )
+        ),
+        /* root entity type */ "sample"
       )
     )
     result(sample.name) should contain(insertedParticipant)
@@ -591,13 +593,14 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
           "samples",
           "participant"
-        )
+        ),
+        /* root entity type */ "sample"
       )
     )
     result(sample1.name) should contain(insertedParticipant1)
@@ -670,17 +673,131 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
           "samples",
           "participant"
-        )
+        ),
+        /* root entity type */ "sample"
       )
     )
     result(sample1.name) should contain theSameElementsAs Seq(insertedParticipant1, insertedParticipant3)
     result(sample2.name) should contain theSameElementsAs Seq(insertedParticipant2, insertedParticipant4)
+  }
+
+  it should "group by the given root entity type" in withMinimalTestDatabase { _ =>
+    // sample_set -> sample -> participant
+
+    val participant1 = Entity(
+      "p1",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("b"))
+    )
+
+    val participant2 = Entity(
+      "p2",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    val participant3 = Entity(
+      "p3",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("c"))
+    )
+
+    val participant4 = Entity(
+      "p4",
+      "participant",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("d"))
+    )
+
+    val insertedParticipant1 = insertAndGet(participant1)
+    val insertedParticipant2 = insertAndGet(participant2)
+    val insertedParticipant3 = insertAndGet(participant3)
+    val insertedParticipant4 = insertAndGet(participant4)
+
+    val sample1 = Entity(
+      "s1",
+      "sample",
+      Map(
+        AttributeName.withDefaultNS("participant") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("participant", "p1"), AttributeEntityReference("participant", "p3"))
+        )
+      )
+    )
+
+    val sample2 = Entity(
+      "s2",
+      "sample",
+      Map(
+        AttributeName.withDefaultNS("participant") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("participant", "p2"), AttributeEntityReference("participant", "p4"))
+        )
+      )
+    )
+
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(
+          List(AttributeEntityReference("sample", "s1"), AttributeEntityReference("sample", "s2"))
+        )
+      )
+    )
+
+    val insertedSample1 = insertAndGet(sample1)
+    val insertedSample2 = insertAndGet(sample2)
+
+    insertAndGet(set)
+
+    val result = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
+          "samples",
+          "participant"
+        ),
+        /* root entity type */ "participant"
+      )
+    )
+    result(participant1.name) should contain theSameElementsAs Seq(insertedParticipant1)
+    result(participant2.name) should contain theSameElementsAs Seq(insertedParticipant2)
+    result(participant3.name) should contain theSameElementsAs Seq(insertedParticipant3)
+    result(participant4.name) should contain theSameElementsAs Seq(insertedParticipant4)
+
+    val result2 = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
+          "samples"
+        ),
+        /* root entity type */ "sample_set"
+      )
+    )
+    result2(set.name) should contain theSameElementsAs Seq(insertedSample1, insertedSample2)
+
+    val result3 = runAndWait(
+      q.queryRelatedRecordsWithRelationChain(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
+          "samples",
+          "participant"
+        ),
+        /* root entity type */ "sample"
+      )
+    )
+    result3(sample1.name) should contain theSameElementsAs Seq(insertedParticipant1, insertedParticipant3)
+    result3(sample2.name) should contain theSameElementsAs Seq(insertedParticipant2, insertedParticipant4)
   }
 
   it should "only get records from the given workspace" in withMinimalTestDatabase { _ =>
@@ -713,10 +830,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        wsid,
-        "sample_set",
-        "set1",
-        List("samples")
+        /* workspace id */ wsid,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List("samples"),
+        /* root entity type */ "sample"
       )
     )
     result(sample1.name) should contain(insertedSampleWS1)
@@ -743,10 +861,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Note we're searching for capital Sample_set when only lowercase exists
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        wsid,
-        "Sample_set",
-        "set1",
-        List("samples")
+        /* workspace id */ wsid,
+        /* starting entity type */ "Sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List("samples"),
+        /* root entity type */ "sample"
       )
     )
     result.get(sample.name) shouldBe None
@@ -778,39 +897,42 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // Note we're looking for capital Samples and/or Participant when only lowercase exists
     val result1 = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
           "Samples",
           "participant"
-        )
+        ),
+        /* root entity type */ "participant"
       )
     )
     result1.get(participant.name) shouldBe None
 
     val result2 = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
           "Samples",
           "Participant"
-        )
+        ),
+        /* root entity type */ "participant"
       )
     )
     result2.get(participant.name) shouldBe None
 
     val result3 = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        minimalTestData.workspace.workspaceIdAsUUID,
-        "sample_set",
-        "set1",
-        List(
+        /* workspace id */ minimalTestData.workspace.workspaceIdAsUUID,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List(
           "samples",
           "Participant"
-        )
+        ),
+        /* root entity type */ "participant"
       )
     )
     result3.get(participant.name) shouldBe None
@@ -839,10 +961,11 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     // For entity names, capital and lowercase differences shouldn't matter
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        wsid,
-        "sample_set",
-        "Set1",
-        List("samples")
+        /* workspace id */ wsid,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "Set1",
+        /* relation chain */ List("samples"),
+        /* root entity type */ "sample"
       )
     )
     result(sample.name) should contain(insertedSample)
@@ -870,13 +993,53 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
     val result = runAndWait(
       q.queryRelatedRecordsWithRelationChain(
-        wsid,
-        "sample_set",
-        "set1",
-        List("set_namespace:samples")
+        /* workspace id */ wsid,
+        /* starting entity type */ "sample_set",
+        /* starting entity name */ "set1",
+        /* relation chain */ List("set_namespace:samples"),
+        /* root entity type */ "sample"
       )
     )
     result(sample.name) should contain(insertedSample)
+  }
+
+  it should "throw a user-friendly error if the relation chain is invalid" in withMinimalTestDatabase { _ =>
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    // Create two entities of different types
+    val sample1 = Entity("sample1", "sample", Map())
+    val donor1 = Entity("donor1", "donor", Map())
+
+    // Create a set entity that references both sample1 and donor1 in the same attribute
+    val set = Entity(
+      "set1",
+      "set",
+      Map(
+        AttributeName.withDefaultNS("members") -> AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("sample", "sample1"),
+            AttributeEntityReference("donor", "donor1")
+          )
+        )
+      )
+    )
+
+    insertAndGetAll(Seq(sample1, donor1, set))
+
+    // Attempt to follow a relation chain that is ambiguous
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      runAndWait(
+        q.queryRelatedRecordsWithRelationChain(
+          workspaceId,
+          set.entityType,
+          set.name,
+          Seq("members"),
+          rootEntityType = "set"
+        )
+      )
+    }
+
+    ex.getMessage should include("Multiple entity types referenced by relation")
   }
 
   behavior of "listEntityKeysViaEntity"
@@ -3275,6 +3438,47 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
       RefMapping(entity1.toPointer, Set(entity2.toPointer)),
       RefMapping(entity2.toPointer, Set(entity1.toPointer))
     )
+  }
+
+  behavior of "determineEntityTypeAtEndOfChain"
+
+  it should "get the types of a chain" in withMinimalTestDatabase { _ =>
+    val workspaceId = minimalTestData.workspace.workspaceIdAsUUID
+
+    val sample = Entity(
+      "sample1",
+      "sample",
+      Map(AttributeName.withDefaultNS("type") -> AttributeString("a"))
+    )
+
+    // Referencing entity
+    val set = Entity(
+      "set1",
+      "sample_set",
+      Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReference("sample", "sample1"))
+    )
+
+    insertAndGetAll(Seq(sample, set))
+    // this.samples
+    val result = runAndWait(q.determineEntityTypeAtEndOfChain(workspaceId, set.entityType, set.name, List("samples")))
+
+    result shouldBe Some("sample")
+
+    val setSet = Entity(
+      "setSet",
+      "sample_set_set",
+      Map(AttributeName.withDefaultNS("ssets") -> AttributeEntityReference("sample_set", "set1"))
+    )
+
+    insertAndGet(setSet)
+
+    // this.ssets.samples
+    val result2 = runAndWait(
+      q.determineEntityTypeAtEndOfChain(workspaceId, setSet.entityType, setSet.name, List("ssets", "samples"))
+    )
+
+    result2 shouldBe Some("sample")
+
   }
 
   // ====================================================================================================
