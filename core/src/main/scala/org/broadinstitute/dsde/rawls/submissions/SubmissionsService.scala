@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationUtils
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -312,7 +313,8 @@ class SubmissionsService(
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, ctx.userInfo, optExecId)
       submissionDoneDate = getTerminalStatusDate(submission, Option(workflowId))
-      costs <- submissionCostService.getWorkflowCost(workflowId,
+      costs <- submissionCostService.getWorkflowCost(submissionId,
+                                                     workflowId,
                                                      workspace.googleProjectId,
                                                      submission.submissionDate,
                                                      submissionDoneDate,
@@ -380,7 +382,7 @@ class SubmissionsService(
         }
       }
 
-    traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
+    traceFutureWithParent("submissionWithoutCostsAndWorkspace", parentContext) { _ =>
       submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
         // determine which workflows are eligible for actual-cost lookup
         val workflowIdsForCostQuery: Seq[String] = filterActualCostWorkflowCandidates(submission.workflows)
@@ -918,7 +920,9 @@ class SubmissionsService(
                                    execLogs: ExecutionServiceLogs,
                                    workflowId: String
   ): WorkflowOutputs = {
-    val outs = execOuts.outputs
+    // execOuts.outputs  will be None if Cromwell has archived this workflow's metadata; in that case, treat it as an
+    // empty map here
+    val outs = execOuts.outputs.getOrElse(Map.empty[String, OutputType])
     val logs = execLogs.calls getOrElse Map()
 
     // Cromwell workflow outputs look like workflow_name.task_name.output_name.
@@ -928,7 +932,7 @@ class SubmissionsService(
 
     val taskMap =
       (outsByTask.keySet ++ logs.keySet).map(key => key -> TaskOutput(logs.get(key), outsByTask.get(key))).toMap
-    WorkflowOutputs(workflowId, taskMap)
+    WorkflowOutputs(workflowId, taskMap, execOuts.message, execOuts.metadataArchiveStatus)
   }
 
   /**

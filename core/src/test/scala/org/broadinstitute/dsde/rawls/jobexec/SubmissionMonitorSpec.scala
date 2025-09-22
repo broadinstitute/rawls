@@ -125,7 +125,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
               scala.util.Success(
                 Option(
                   (workflowRec.copy(status = WorkflowStatuses.Succeeded.toString, cost = Option(BigDecimal.valueOf(0))),
-                   Some(ExecutionServiceOutputs(workflowRec.externalId.get, Map("o1" -> Left(AttributeString("foo")))))
+                   Some(
+                     ExecutionServiceOutputs(workflowRec.externalId.get,
+                                             Option(Map("o1" -> Left(AttributeString("foo")))),
+                                             None,
+                                             None
+                     )
+                   )
                   )
                 )
               )
@@ -465,22 +471,35 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   private val outputs = ExecutionServiceOutputs(
     "foo",
-    Map(
-      "output" -> Left(AttributeString("hello world!")),
-      "output2" -> Left(AttributeString("hello world.")),
-      "output3" -> Left(AttributeString("hello workspace.")),
-      "extra" -> Left(AttributeString("hello world!"))
-    )
+    Option(
+      Map(
+        "output" -> Left(AttributeString("hello world!")),
+        "output2" -> Left(AttributeString("hello world.")),
+        "output3" -> Left(AttributeString("hello workspace.")),
+        "extra" -> Left(AttributeString("hello world!"))
+      )
+    ),
+    None,
+    None
   )
-  private val emptyOutputs = ExecutionServiceOutputs("foo",
-                                                     Map("output" -> Left(AttributeString("")),
-                                                         "output2" -> Left(AttributeString("")),
-                                                         "output3" -> Left(AttributeNull),
-                                                         "extra" -> Left(AttributeNull)
-                                                     )
+  private val emptyOutputs = ExecutionServiceOutputs(
+    "foo",
+    Option(
+      Map("output" -> Left(AttributeString("")),
+          "output2" -> Left(AttributeString("")),
+          "output3" -> Left(AttributeNull),
+          "extra" -> Left(AttributeNull)
+      )
+    ),
+    None,
+    None
   )
   private val partiallyEmptyOutputs =
-    ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello")), "output2" -> Left(AttributeNull)))
+    ExecutionServiceOutputs("foo",
+                            Option(Map("output" -> Left(AttributeString("hello")), "output2" -> Left(AttributeNull))),
+                            None,
+                            None
+    )
 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
@@ -807,7 +826,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                                         None
     )
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] =
-      Seq((workflowRecord, ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello world!"))))))
+      Seq(
+        (workflowRecord,
+         ExecutionServiceOutputs("foo", Option(Map("output" -> Left(AttributeString("hello world!")))), None, None)
+        )
+      )
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("missing" -> "this.bar")
 
@@ -871,7 +894,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     runAndWait(
       monitor.handleOutputs(
         workflowRecs.map(r =>
-          (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
+          (r,
+           ExecutionServiceOutputs(r.externalId.get, Option(Map("o1" -> Left(AttributeString("result")))), None, None)
+          )
         ),
         this,
         RawlsTracingContext(Option.empty)
@@ -938,7 +963,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait(
         monitor.handleOutputs(
           workflowRecs.map(r =>
-            (r, ExecutionServiceOutputs(r.externalId.get, Map("o1_lib" -> Left(AttributeString("result")))))
+            (r,
+             ExecutionServiceOutputs(r.externalId.get,
+                                     Option(Map("o1_lib" -> Left(AttributeString("result")))),
+                                     None,
+                                     None
+             )
+            )
           ),
           this,
           RawlsTracingContext(Option.empty)
@@ -998,7 +1029,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait(
         monitor2.handleOutputs(
           workflowRecs2.map(r =>
-            (r, ExecutionServiceOutputs(r.externalId.get, Map("o2_lib" -> Left(AttributeString("result2")))))
+            (r,
+             ExecutionServiceOutputs(r.externalId.get,
+                                     Option(Map("o2_lib" -> Left(AttributeString("result2")))),
+                                     None,
+                                     None
+             )
+            )
           ),
           this,
           RawlsTracingContext(Option.empty)
@@ -1038,7 +1075,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           (r,
            ExecutionServiceOutputs(
              r.externalId.get,
-             Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))
+             Option(Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))),
+             None,
+             None
            )
           )
         ),
@@ -1087,7 +1126,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r,
              ExecutionServiceOutputs(
                r.externalId.get,
-               Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))
+               Option(Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))),
+               None,
+               None
              )
             )
           ),
@@ -1120,9 +1161,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         "o1" -> Left(AttributeValueList(Vector(AttributeString("123"), AttributeString("456"), AttributeString("789"))))
       )
       runAndWait(
-        monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))),
-                              this,
-                              RawlsTracingContext(Option.empty)
+        monitor.handleOutputs(
+          workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Option(newOutputs), None, None))),
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1166,11 +1208,15 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r,
              ExecutionServiceOutputs(
                r.externalId.get,
-               Map(
-                 "o1" -> Left(
-                   AttributeValueList(Vector(AttributeString("abc"), AttributeString("def"), AttributeString("xyz")))
+               Option(
+                 Map(
+                   "o1" -> Left(
+                     AttributeValueList(Vector(AttributeString("abc"), AttributeString("def"), AttributeString("xyz")))
+                   )
                  )
-               )
+               ),
+               None,
+               None
              )
             )
           ),
@@ -1204,7 +1250,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           workflowRecs.map(r =>
             (r,
              ExecutionServiceOutputs(r.externalId.get,
-                                     Map("o1" -> Left(AttributeValueList(Vector(AttributeString("123")))))
+                                     Option(Map("o1" -> Left(AttributeValueList(Vector(AttributeString("123")))))),
+                                     None,
+                                     None
              )
             )
           ),
@@ -1346,7 +1394,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                 scala.util.Success(
                   Option(
                     (r.copy(status = status.toString),
-                     Option(ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
+                     Option(
+                       ExecutionServiceOutputs(r.externalId.get,
+                                               Option(Map("o1" -> Left(AttributeString("result")))),
+                                               None,
+                                               None
+                       )
+                     )
                     )
                   )
                 )
@@ -1811,9 +1865,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUnboundExpr.submissionId))).head
 
       runAndWait(
-        monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))),
-                              this,
-                              RawlsTracingContext(Option.empty)
+        monitor.handleOutputs(
+          Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, Option(execOutputs), None, None))),
+          this,
+          RawlsTracingContext(Option.empty)
         )
       )
 
@@ -1898,7 +1953,13 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait(
         monitor.handleOutputs(
           workflowRecs.map(r =>
-            (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))
+            (r,
+             ExecutionServiceOutputs(r.externalId.get,
+                                     Option(Map("bad1" -> Left(AttributeString("result")))),
+                                     None,
+                                     None
+             )
+            )
           ),
           this,
           RawlsTracingContext(Option.empty)
@@ -1971,7 +2032,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       )
 
       val outputs = Map("o1" -> Left(AttributeString("result")))
-      val executionServiceOutputs = ExecutionServiceOutputs(workflowRecBefore.externalId.get, outputs)
+      val executionServiceOutputs =
+        ExecutionServiceOutputs(workflowRecBefore.externalId.get, Option(outputs), None, None)
       val executionServiceStatusResponse =
         ExecutionServiceStatusResponse(Seq(Try(Option(workflowRecBefore -> Option(executionServiceOutputs)))))
 
@@ -2028,25 +2090,29 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r,
              ExecutionServiceOutputs(
                r.externalId.get,
-               Map(
-                 "o1" -> Left(
-                   AttributeValueList(
-                     Vector(
-                       AttributeString("entry 1"),
-                       AttributeString("entry 2"),
-                       AttributeString("entry 3"),
-                       AttributeString("entry 4"),
-                       AttributeString("entry 5"),
-                       AttributeString("entry 6"),
-                       AttributeString("entry 7"),
-                       AttributeString("entry 8"),
-                       AttributeString("entry 9"),
-                       AttributeString("entry 10"),
-                       AttributeString("entry 11")
+               Option(
+                 Map(
+                   "o1" -> Left(
+                     AttributeValueList(
+                       Vector(
+                         AttributeString("entry 1"),
+                         AttributeString("entry 2"),
+                         AttributeString("entry 3"),
+                         AttributeString("entry 4"),
+                         AttributeString("entry 5"),
+                         AttributeString("entry 6"),
+                         AttributeString("entry 7"),
+                         AttributeString("entry 8"),
+                         AttributeString("entry 9"),
+                         AttributeString("entry 10"),
+                         AttributeString("entry 11")
+                       )
                      )
                    )
                  )
-               )
+               ),
+               None,
+               None
              )
             )
           ),
@@ -2102,25 +2168,29 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             (r,
              ExecutionServiceOutputs(
                r.externalId.get,
-               Map(
-                 "o1" -> Left(
-                   AttributeValueList(
-                     Vector(
-                       AttributeString("entry 1"),
-                       AttributeString("entry 2"),
-                       AttributeString("entry 3"),
-                       AttributeString("entry 4"),
-                       AttributeString("entry 5"),
-                       AttributeString("entry 6"),
-                       AttributeString("entry 7"),
-                       AttributeString("entry 8"),
-                       AttributeString("entry 9"),
-                       AttributeString("entry 10"),
-                       AttributeString("entry 11")
+               Option(
+                 Map(
+                   "o1" -> Left(
+                     AttributeValueList(
+                       Vector(
+                         AttributeString("entry 1"),
+                         AttributeString("entry 2"),
+                         AttributeString("entry 3"),
+                         AttributeString("entry 4"),
+                         AttributeString("entry 5"),
+                         AttributeString("entry 6"),
+                         AttributeString("entry 7"),
+                         AttributeString("entry 8"),
+                         AttributeString("entry 9"),
+                         AttributeString("entry 10"),
+                         AttributeString("entry 11")
+                       )
                      )
                    )
                  )
-               )
+               ),
+               None,
+               None
              )
             )
           ),
@@ -2474,7 +2544,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String, workflowCost:
   ) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
 
   override def outputs(id: String, userInfo: UserInfo) =
-    Future.successful(ExecutionServiceOutputs(id, Map("o1" -> Left(AttributeString("foo")))))
+    Future.successful(ExecutionServiceOutputs(id, Option(Map("o1" -> Left(AttributeString("foo")))), None, None))
 
   override def logs(id: String, userInfo: UserInfo) = Future.successful(
     ExecutionServiceLogs(id, Option(Map("task1" -> Seq(ExecutionServiceCallLogs(stdout = "foo", stderr = "bar")))))

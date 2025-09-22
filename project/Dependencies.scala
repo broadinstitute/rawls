@@ -131,13 +131,13 @@ object Dependencies {
 
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.153-SNAPSHOT")
-  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "1.1.42-SNAPSHOT" classifier "plain"))
+  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "1.1.50-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.423")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
   val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.28-SNAPSHOT")
 
   // OpenTelemetry
-  val openTelemetryInstrumentationVersion = "2.0.0"
+  val openTelemetryInstrumentationVersion = "2.20.0"
   val otelInstrumentationResources: ModuleID =
     "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryInstrumentationVersion + "-alpha")
 
