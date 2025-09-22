@@ -592,12 +592,15 @@ trait MethodConfigTestSupport {
     )
   )
 
-  val sampleSetSet = Entity("setOfSets",
+  val sampleSetSet = Entity(
+    "setOfSets",
     "SampleSetSet",
     Map(
       AttributeName.withDefaultNS("sample_sets") -> AttributeEntityReferenceList(
         Seq(sampleSet.toReference, sampleSet2.toReference)
-      )))
+      )
+    )
+  )
 
   val dummyMethod = AgoraMethod("method_namespace", "test_method", 1)
 
