@@ -27,6 +27,9 @@ import slick.dbio.Effect.Read
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc._
 import slick.sql.SqlStreamingAction
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.ErrorReport
+
 import spray.json._
 
 import scala.concurrent.ExecutionContext
@@ -695,9 +698,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
    * This method supports recursive traversal of relationships, handling both arrays and objects in JSON attributes.
    *
    * @param workspaceId      The UUID of the workspace containing the entities.
-   * @param startingEntityType  The type of the root entity to start the query from.
-   * @param startingEntityName    The name of the root entity to start the query from.
+   * @param startingEntityType  The type of the entity to start the query from.
+   * @param startingEntityName    The name of the entity to start the query from.
    * @param relationChain   A chain of strings representing the relation columns between entities
+   * @param rootEntityType The entity type to group the results by
    * @return                 A `ReadAction` that resolves to a map of entity name to a Seq[`CompactEntityRecord`]
    *                         that includes all entities found by traversing the specified relationships.
    */
@@ -705,90 +709,186 @@ class CompactEntityQuery(driverComponent: DriverComponent)
     workspaceId: UUID,
     startingEntityType: String,
     startingEntityName: String,
-    relationChain: Seq[String]
+    relationChain: Seq[String],
+    rootEntityType: String
   ): ReadAction[Map[String, Seq[CompactEntityRecord]]] =
-    if (relationChain.isEmpty) { // The method shouldn't have been called in this case
+    if (relationChain.isEmpty) {
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
+    } else {
+      val initialPointer = EntityPointer(startingEntityType, startingEntityName)
+      val initialGrouped: Map[String, Set[EntityPointer]] =
+        if (startingEntityType == rootEntityType)
+          Map(startingEntityName -> Set(initialPointer))
+        else
+          Map("" -> Set(initialPointer))
+
+      def traverseGroups(
+        groupedEntities: Map[String, Set[EntityPointer]],
+        currentEntityType: String,
+        remainingChain: Seq[String],
+        grouped: Boolean
+      ): ReadAction[Map[String, Set[EntityPointer]]] =
+        if (remainingChain.isEmpty) DBIO.successful(groupedEntities)
+        else {
+          val relation = remainingChain.head
+          // For each group, get all referenced entities for this relation
+          val nextGroupsF = DBIO
+            .sequence(groupedEntities.map { case (groupKey, pointers) =>
+              getEntities(workspaceId, pointers).map { entities =>
+                val nextPointers = entities.flatMap { entityRecord =>
+                  entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation)) match {
+                    case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
+                    case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
+                    case _                                        => Seq.empty[EntityPointer]
+                  }
+                }.toSet
+                groupKey -> nextPointers
+              }
+            }.toSeq)
+            .map(_.toMap)
+
+          nextGroupsF.flatMap { nextGroups =>
+            val allNextPointers = nextGroups.values.flatten.toSet
+            if (allNextPointers.map(_.entityType).size > 1) {
+              DBIO.failed(
+                new RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.BadRequest,
+                    s"Multiple entity types referenced by relation '$relation': ${allNextPointers.map(_.entityType)}"
+                  )
+                )
+              )
+            } else {
+              val nextEntityType = allNextPointers.headOption.map(_.entityType).getOrElse(currentEntityType)
+              val shouldGroup = !grouped && nextEntityType == rootEntityType
+              val regrouped =
+                if (shouldGroup) {
+                  // Start grouping by entity name
+                  allNextPointers.groupBy(_.entityName)
+                } else {
+                  // Maintain current grouping
+                  nextGroups
+                }
+              traverseGroups(regrouped, nextEntityType, remainingChain.tail, grouped || shouldGroup)
+            }
+          }
+        }
+
+      traverseGroups(initialGrouped, startingEntityType, relationChain, grouped = startingEntityType == rootEntityType)
+        .flatMap { groupedPointers =>
+          val allPointers = groupedPointers.values.flatten.toSet
+          getEntities(workspaceId, allPointers).map { entities =>
+            val entitiesByPointer = entities.groupBy(e => EntityPointer(e.entityType, e.name))
+            groupedPointers.map { case (groupName, pointers) =>
+              groupName -> pointers.flatMap(entitiesByPointer.get).flatten.toSeq
+            }
+          }
+        }
+    }
+
+  /**
+   * Traverse the entity relation chain to determine the final entity type.
+   * This method follows the entity relationships defined by the relation chain
+   * but only returns the entity type information, not the full entities.
+   *
+   * @param workspaceId The UUID of the workspace containing the entities.
+   * @param startingEntityType The type of the entity to start the traversal from.
+   * @param startingEntityName The name of the specific entity to start from.
+   * @param entityRelationChain A list of attribute names to traverse (e.g., ["samples", "participant"]).
+   * @return A ReadAction that resolves to the entity type found at the end of the traversal chain,
+   *         or None if no entity is found or the relation chain doesn't exist.
+   */
+  def determineEntityTypeAtEndOfChain(
+    workspaceId: UUID,
+    startingEntityType: String,
+    startingEntityName: String,
+    entityRelationChain: List[String]
+  ): ReadAction[Option[String]] =
+    if (entityRelationChain.isEmpty) {
+      // No traversal needed, return the starting type
+      DBIO.successful(Some(startingEntityType))
     } else {
       // Start with the root entity
       val initialEntities = Set(EntityPointer(startingEntityType, startingEntityName))
 
-      // First step: get the first-level entities (these will be our grouping keys)
-      traverseOneStep(workspaceId, initialEntities, relationChain.head).flatMap { firstStepEntities =>
-        if (firstStepEntities.isEmpty) {
-          DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
-        } else if (relationChain.length == 1) {
-          // Only one relation - group by first step entities
-          getEntities(workspaceId, firstStepEntities).map { entities =>
-            entities.groupBy(_.name)
-          }
-        } else {
-          // Multiple relations - traverse the rest but track which first-step entity each result came from
-          val remainingChain = relationChain.tail
-          traverseOneStepWithGrouping(workspaceId, firstStepEntities, remainingChain).flatMap { groupedFinalEntities =>
-            // Get full records for all final entities
-            val allFinalEntities = groupedFinalEntities.values.flatten.toSet
-            getEntities(workspaceId, allFinalEntities).map { entities =>
-              val entitiesByPointer = entities.groupBy(e => EntityPointer(e.entityType, e.name))
-
-              // Map each first-step entity to its corresponding final entities
-              groupedFinalEntities.view.mapValues { entityPointers =>
-                entityPointers.flatMap(entitiesByPointer.get).flatten.toSeq
-              }.toMap
+      // Follow the relation chain to get the entity type at each step
+      entityRelationChain
+        .foldLeft(DBIO.successful((initialEntities, startingEntityType)): ReadAction[(Set[EntityPointer], String)]) {
+          case (previousStep, relation) =>
+            previousStep.flatMap { case (currentEntities, _) =>
+              if (currentEntities.isEmpty) {
+                DBIO.successful((Set.empty[EntityPointer], ""))
+              } else {
+                // For each entity, find the relation attribute and determine its entity type
+                // We only need to determine the type of the first valid reference
+                getEntityTypeForRelation(workspaceId, currentEntities, relation)
+              }
             }
-          }
         }
-      }
+        .map { case (entities, entityType) =>
+          if (entities.isEmpty) None else Some(entityType)
+        }
     }
 
-  private def traverseOneStepWithGrouping(
-    workspaceId: UUID,
-    firstStepEntities: Set[EntityPointer],
-    remainingChain: Seq[String]
-  ): ReadAction[Map[String, Set[EntityPointer]]] = {
-    // For each first-step entity, traverse the remaining relations independently
-    val traversalFutures = firstStepEntities.map { firstEntity =>
-      // Start with just this first entity and traverse the remaining chain
-      remainingChain
-        .foldLeft(DBIO.successful(Set(firstEntity)): ReadAction[Set[EntityPointer]]) { (entitiesFuture, relation) =>
-          entitiesFuture.flatMap { currentEntities =>
-            if (currentEntities.isEmpty) {
-              DBIO.successful(Set.empty[EntityPointer])
-            } else {
-              traverseOneStep(workspaceId, currentEntities, relation)
-            }
-          }
-        }
-        .map(finalEntities => firstEntity.entityName -> finalEntities)
-    }
-
-    // Convert Set to Seq before calling DBIO.sequence
-    DBIO.sequence(traversalFutures.toSeq).map(_.toMap)
-  }
-
-  private def traverseOneStep(
+  /**
+   * Helper method to determine the entity type for a given relation without fetching all entity data.
+   */
+  private def getEntityTypeForRelation(
     workspaceId: UUID,
     currentEntities: Set[EntityPointer],
     relation: String
-  ): ReadAction[Set[EntityPointer]] =
-    if (currentEntities.isEmpty) {
-      DBIO.successful(Set.empty[EntityPointer])
-    } else {
-      // retrieve the current entities to get their attributes
-      getEntities(workspaceId, currentEntities).flatMap { entities =>
-        // find all references in the specified relation attribute
-        // TODO: should this reuse CompactEntityProvider.findAllReferences ?
-        val references = entities.flatMap { entityRecord =>
-          val attrValue = entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation))
-          attrValue match {
-            case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
-            case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
-            case _                                        => Seq.empty[EntityPointer]
-          }
+  ): ReadAction[(Set[EntityPointer], String)] = {
+    // Query just enough to get the type from the first entity that has the relation
+    val query = concatSqlActions(
+      sql"""select e.entity_type, e.name, jt.ref_entity_type, jt.ref_name
+         from ENTITY e
+         join JSON_TABLE(
+           e.attributes,
+           '$$.refs[*]' COLUMNS (
+             ref_attr_name varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+             ref_entity_type varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+             ref_name varchar(254) PATH '$$.n'
+           )
+         ) jt
+         where e.workspace_id = $workspaceId
+         and e.deleted = 0
+         and jt.ref_attr_name = $relation
+         and (""",
+      reduceSqlActionsWithDelim(
+        currentEntities.map(e => sql"(e.entity_type = ${e.entityType} and e.name = ${e.entityName})").toSeq,
+        sql" or "
+      ),
+      sql""") limit 1"""
+    )
+
+    case class TypeRelation(entityType: String, entityName: String, refEntityType: String, refName: String)
+    implicit val getTypeRelation: GetResult[TypeRelation] =
+      GetResult(r => TypeRelation(r.<<, r.<<, r.<<, r.<<))
+
+    query.as[TypeRelation].map { results =>
+      if (results.isEmpty) {
+        (Set.empty[EntityPointer], "")
+      } else {
+        // Group results by referenced entity type
+        val groupedByType = results.groupBy(_.refEntityType)
+        if (groupedByType.size > 1) {
+          // This shouldn't happen, as the limit 1 should ensure we only get one type back
+          logger.warn(s"Multiple entity types referenced by relation '$relation': ${groupedByType.keys.mkString(", ")}")
         }
-        DBIO.successful(references.toSet)
+
+        // Use the first entity type we find
+        val firstType = results.head.refEntityType
+
+        // Create EntityPointers for all entities of this type
+        val entityPointers = results
+          .filter(_.refEntityType == firstType)
+          .map(r => EntityPointer(r.refEntityType, r.refName))
+          .toSet
+
+        (entityPointers, firstType)
       }
     }
+  }
 
   /**
    * Renames an entity in the ENTITY table.
