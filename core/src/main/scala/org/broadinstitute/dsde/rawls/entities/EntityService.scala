@@ -591,7 +591,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
   def quicksilverMigration(workspaceName: WorkspaceName,
                            cleanup: Boolean = false,
                            batchSize: Int = 50000,
-                           updateWorkspaceSettings: Boolean = true
+                           updateWorkspaceSettings: Boolean = true,
+                           sortBufferSize: Long = 8388608L // 8M
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
@@ -678,7 +679,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
               s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
             )
 
-            withIncreasedSortMemory(dataAccess) {
+            withIncreasedSortMemory(dataAccess, sortBufferSize) {
               for {
                 // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
                 // for each batch. later queries will use those boundaries to migrate entities in batches, which
@@ -774,14 +775,14 @@ class EntityService(protected val ctx: RawlsRequestContext,
 
   /** Executes a database operation `op` in a session using 8MB of `sort_buffer_size` memory,
     * then resets the sort buffer size back to its original value */
-  private def withIncreasedSortMemory[T](dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] =
+  private def withIncreasedSortMemory[T](dataAccess: DataAccess, sortBufferSize: Long)(op: => ReadWriteAction[T]): ReadWriteAction[T] =
     for {
       // get the current value of MySQL sort_buffer_size
       defaultSortBufferSize <- dataAccess.compactEntityQuery.getSortBufferSetting
       // set sort buffer size to 8MB; this avoids MySQL errors during migration
       // with an "Out of sort memory, consider increasing server sort buffer size" message.
       // see also https://bugs.mysql.com/bug.php?id=103225
-      _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(8388608L)
+      _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(sortBufferSize)
       // execute the requested operation, then reset sort buffer size to its original value
       result <- op andFinally dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
     } yield result
