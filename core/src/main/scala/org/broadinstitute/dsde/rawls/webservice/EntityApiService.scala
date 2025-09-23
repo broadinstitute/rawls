@@ -348,7 +348,10 @@ trait EntityApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "quicksilverMigration") { (workspaceNamespace, workspaceName) =>
         post {
           // read the "cleanup" query parameter, defaulting to false if not specified
-          parameters("cleanup".as[Boolean].withDefault(false)) { cleanup =>
+          parameters(
+            "cleanup".as[Boolean].withDefault(false),
+            "sortBufferSize".as[Long].withDefault(8388608L)
+          ) { (cleanup, sortBufferSize) =>
             entity(as[String]) { postBody =>
               if (postBody != "I understand that this API will delete all my data tables.") {
                 complete(StatusCodes.BadRequest -> "You must consent to use this API.")
@@ -357,7 +360,10 @@ trait EntityApiService extends UserInfoDirectives {
                   jsonFormat3(QuicksilverMigrationResult)
                 complete {
                   entityServiceConstructor(ctx)
-                    .quicksilverMigration(WorkspaceName(workspaceNamespace, workspaceName), cleanup)
+                    .quicksilverMigration(workspaceName = WorkspaceName(workspaceNamespace, workspaceName),
+                                          cleanup = cleanup,
+                                          sortBufferSize = sortBufferSize
+                    )
                 }
               }
             }
