@@ -2141,6 +2141,14 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: sortBufferSize
+          in: query
+          description: |
+            What value the MySQL sort_buffer_size should be set to during this migration. Default is 88388608L bytes (8M).
+          schema:
+            type: integer
+            format: int64
+            default: 88388608
       requestBody:
         description: Consent to execute
         content:
