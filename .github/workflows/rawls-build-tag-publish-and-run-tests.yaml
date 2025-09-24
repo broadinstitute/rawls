@@ -124,37 +124,37 @@ jobs:
     permissions:
       id-token: 'write'
 
-#  # Create a BEE to be used by swat tests.
-#  create-bee-workflow:
-#    strategy:
-#      matrix:
-#        terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
-#    runs-on: ubuntu-latest
-#    needs:
-#      - rawls-build-publish-job
-#    permissions:
-#      contents: 'read'
-#      id-token: 'write'
-#    steps:
-#      - name: Echo Rawls version
-#        run: |
-#          echo '${{ needs.rawls-build-publish-job.outputs.custom-version-json }}'
-#
-#      - name: dispatch to terra-github-workflows
-#        uses: broadinstitute/workflow-dispatch@v4.0.0
-#        with:
-#          run-name: "${{ env.BEE_CREATE_RUN_NAME }}-${{ matrix.terra-env }}"
-#          workflow: bee-create
-#          repo: broadinstitute/terra-github-workflows
-#          ref: refs/heads/main
-#          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
-#          # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
-#          inputs: '{
-#            "run-name": "${{ env.BEE_CREATE_RUN_NAME }}-${{ matrix.terra-env }}",
-#            "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
-#            "version-template": "${{ matrix.terra-env }}",
-#            "custom-version-json": "${{ needs.rawls-build-publish-job.outputs.custom-version-json }}"
-#          }'
+  # Create a BEE to be used by swat tests.
+  create-bee-workflow:
+    strategy:
+      matrix:
+        terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
+    runs-on: ubuntu-latest
+    needs:
+      - rawls-build-publish-job
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: Echo Rawls version
+        run: |
+          echo '${{ needs.rawls-build-publish-job.outputs.custom-version-json }}'
+
+      - name: dispatch to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v4.0.0
+        with:
+          run-name: "${{ env.BEE_CREATE_RUN_NAME }}-${{ matrix.terra-env }}"
+          workflow: bee-create
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+          # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
+          inputs: '{
+            "run-name": "${{ env.BEE_CREATE_RUN_NAME }}-${{ matrix.terra-env }}",
+            "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
+            "version-template": "${{ matrix.terra-env }}",
+            "custom-version-json": "${{ needs.rawls-build-publish-job.outputs.custom-version-json }}"
+          }'
 
   # Run swat tests. This kicks off multiple parallel jobs for Workflows and Workspaces tests, which run against the BEE
   # we just created.
@@ -162,7 +162,7 @@ jobs:
     strategy:
       # set fail-fast: false. We want all test jobs to complete, so we can see their results. If fail-fast were true,
       # the first test jobs failure would cancel the other test jobs.
-      fail-fast: false
+      fail-fast: true
       matrix:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
         testing-env: [ qa ] # what env resources to use, e.g. SA keys
@@ -178,7 +178,7 @@ jobs:
     name: ${{ matrix.test-group.group_name }}-owned tests
     runs-on: ubuntu-latest
     needs:
-#      - create-bee-workflow
+      - create-bee-workflow
       - init-github-context
     permissions:
       contents: 'read'
@@ -199,7 +199,7 @@ jobs:
           inputs: '{
             "additional-args": "{\"logging\":\"true\",\"java-version\":\"17\",\"billing-project\":\"\"}",
             "run-name": "${{ env.RAWLS_SWAT_TESTS_RUN_NAME }}-${{ matrix.terra-env }}-${{ matrix.testing-env }}-${{ matrix.test-group.group_name }}",
-            "bee-name": "rawls-17981961029-1-dev-${{ matrix.terra-env }}",
+            "bee-name": "${{ env.BEE_NAME }}-${{ matrix.terra-env }}",
             "ENV": "${{ matrix.testing-env }}",
             "test-group-name": "${{ matrix.test-group.group_name }}",
             "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}",
