@@ -36,10 +36,12 @@ class SearchStrategy(override val repository: CompactEntityRepository,
         repository.queries.countEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, filterTerms)
       }
       .flatMap { count =>
-        EntityUtils
-          .retryWithSortMemory[Seq[Entity]](repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
-            repository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, filterTerms)
-          } map { sourceQueryMaterializedResult =>
+        withSortMemoryRetries[Seq[Entity]](entityQuery,
+                                           entityType,
+                                           isolationLevel = TransactionIsolation.ReadCommitted
+        ) {
+          repository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, filterTerms)
+        } map { sourceQueryMaterializedResult =>
           val source = Source(sourceQueryMaterializedResult)
           CountAndSource(
             count,

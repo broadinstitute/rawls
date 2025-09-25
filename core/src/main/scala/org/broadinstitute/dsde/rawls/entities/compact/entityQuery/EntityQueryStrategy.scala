@@ -2,12 +2,13 @@ package org.broadinstitute.dsde.rawls.entities.compact.entityQuery
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, Entity, EntityColumnFilter, EntityQuery}
 import slick.dbio.Effect
 import slick.jdbc.TransactionIsolation.ReadCommitted
-import slick.jdbc.{ResultSetConcurrency, ResultSetType}
+import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 import slick.sql.SqlStreamingAction
 
 import java.util.UUID
@@ -42,6 +43,24 @@ trait EntityQueryStrategy {
       )
     }
   }
+
+  protected def withSortMemoryRetries[T](entityQuery: EntityQuery,
+                                         entityType: String,
+                                         isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead
+  )(op: => ReadWriteAction[T])(implicit
+    executionContext: ExecutionContext
+  ): Future[T] =
+    // is this a sort by name/id? If so, no need to retry with extra sort memory.
+    entityQuery.sortField match {
+      case Attributable.nameReservedAttribute =>
+        repository.dataSource.inTransaction(isolationLevel)(_ => op)
+      case _ =>
+        EntityUtils
+          .retryWithSortMemory[T](repository.dataSource, isolationLevel = isolationLevel) {
+            op
+          }
+    }
+
 }
 
 object EntityQueryStrategy {

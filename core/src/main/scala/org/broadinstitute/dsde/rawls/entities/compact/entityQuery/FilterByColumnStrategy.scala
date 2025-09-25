@@ -26,10 +26,12 @@ class FilterByColumnStrategy(override val repository: CompactEntityRepository,
         repository.queries.countEntitiesWithColumnFilter(workspaceId, entityType, columnFilter)
       }
       .flatMap { count =>
-        EntityUtils
-          .retryWithSortMemory[Seq[Entity]](repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
-            repository.queries.queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)
-          } map { sourceQueryMaterializedResult =>
+        withSortMemoryRetries[Seq[Entity]](entityQuery,
+                                           entityType,
+                                           isolationLevel = TransactionIsolation.ReadCommitted
+        ) {
+          repository.queries.queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)
+        } map { sourceQueryMaterializedResult =>
           val source = Source(sourceQueryMaterializedResult)
           CountAndSource(
             count,

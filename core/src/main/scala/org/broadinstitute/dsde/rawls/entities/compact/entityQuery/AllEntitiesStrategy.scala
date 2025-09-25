@@ -22,9 +22,7 @@ class AllEntitiesStrategy(override val repository: CompactEntityRepository,
 ) extends EntityQueryStrategy {
 
   override def getCountAndSource: Future[CountAndSource] =
-    EntityUtils.retryWithSortMemory[Seq[Entity]](repository.dataSource,
-                                                 isolationLevel = TransactionIsolation.ReadCommitted
-    ) {
+    withSortMemoryRetries[Seq[Entity]](entityQuery, entityType, isolationLevel = TransactionIsolation.ReadCommitted) {
       repository.queries.queryEntitiesWithNoFilter(workspaceId, entityType, entityQuery)
     } map { sourceQueryMaterializedResult =>
       val source = Source(sourceQueryMaterializedResult)
