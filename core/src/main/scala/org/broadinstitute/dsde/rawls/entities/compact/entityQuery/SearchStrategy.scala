@@ -6,7 +6,7 @@ import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
-import org.broadinstitute.dsde.rawls.model.{EntityQuery, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.{Entity, EntityQuery, ErrorReport}
 import org.broadinstitute.dsde.rawls.webservice.RawlsApiService.logger
 import slick.jdbc.TransactionIsolation
 import slick.jdbc.TransactionIsolation.ReadCommitted
@@ -36,9 +36,10 @@ class SearchStrategy(override val repository: CompactEntityRepository,
         repository.queries.countEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, filterTerms)
       }
       .flatMap { count =>
-        EntityUtils.retryWithSortMemory(repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
-          repository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, filterTerms)
-        } map { sourceQueryMaterializedResult =>
+        EntityUtils
+          .retryWithSortMemory[Seq[Entity]](repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
+            repository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, filterTerms)
+          } map { sourceQueryMaterializedResult =>
           val source = Source(sourceQueryMaterializedResult)
           CountAndSource(
             count,

@@ -3,9 +3,8 @@ package org.broadinstitute.dsde.rawls.entities.compact.entityQuery
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
-import org.broadinstitute.dsde.rawls.model.EntityQuery
+import org.broadinstitute.dsde.rawls.model.{Entity, EntityQuery}
 import slick.jdbc.TransactionIsolation
-import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -23,7 +22,9 @@ class AllEntitiesStrategy(override val repository: CompactEntityRepository,
 ) extends EntityQueryStrategy {
 
   override def getCountAndSource: Future[CountAndSource] =
-    EntityUtils.retryWithSortMemory(repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
+    EntityUtils.retryWithSortMemory[Seq[Entity]](repository.dataSource,
+                                                 isolationLevel = TransactionIsolation.ReadCommitted
+    ) {
       repository.queries.queryEntitiesWithNoFilter(workspaceId, entityType, entityQuery)
     } map { sourceQueryMaterializedResult =>
       val source = Source(sourceQueryMaterializedResult)

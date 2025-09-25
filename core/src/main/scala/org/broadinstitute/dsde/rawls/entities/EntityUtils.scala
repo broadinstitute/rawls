@@ -1,13 +1,12 @@
 package org.broadinstitute.dsde.rawls.entities
 
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.StringValidationUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.model.{AttributeName, Entity, ErrorReportSource}
-import slick.dbio.Effect
-import slick.jdbc.{ResultSetConcurrency, TransactionIsolation}
-import slick.sql.SqlStreamingAction
+import slick.jdbc.TransactionIsolation
 
 import java.sql.SQLException
 import scala.concurrent.{ExecutionContext, Future}
@@ -50,8 +49,11 @@ object EntityUtils extends StringValidationUtils with LazyLogging {
     executionContext: ExecutionContext
   ): Future[T] = {
 
+    // generate a short id to uniquely identify this query attempt; this is purely for nice log messages
+    val queryId = RandomStringUtils.insecure().nextAlphanumeric(8)
+
     // helper method to actually execute the query
-    def tryQuery(sortBufferSize: Long): Future[T] =
+    def tryQuery(sortBufferSize: Long, retryIndex: Int): Future[(T, Int)] =
       dataSource
         .inTransaction(isolationLevel) { dataAccess =>
           for {
@@ -61,7 +63,7 @@ object EntityUtils extends StringValidationUtils with LazyLogging {
             _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(sortBufferSize)
             // execute the requested operation, then reset sort buffer size to its original value
             result <- op andFinally dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
-          } yield result
+          } yield (result, retryIndex)
         }
         .recoverWith {
           // TODO CORE-708: register some Prometheus metrics?
@@ -70,16 +72,23 @@ object EntityUtils extends StringValidationUtils with LazyLogging {
             val nextMemoryAllocation = Math.round(sortBufferSize * multiplier)
             if (nextMemoryAllocation > maxSortBufferSize) {
               logger.warn(
-                s"Out of retries for SQL query; requested sort memory allocation $nextMemoryAllocation is greater than allowed maximum $maxSortBufferSize"
+                s"Out of retries for SQL query [$queryId] after ${retryIndex + 1} attempt(s); requested sort memory allocation $nextMemoryAllocation is greater than allowed maximum $maxSortBufferSize"
               )
               Future.failed(sqlEx)
             } else {
-              logger.warn(s"Retrying SQL query with sort memory allocation $sortBufferSize")
-              tryQuery(nextMemoryAllocation)
+              logger.info(
+                s"SQL query [$queryId] retry attempt #${retryIndex + 1} with sort memory allocation $sortBufferSize"
+              )
+              tryQuery(nextMemoryAllocation, retryIndex + 1)
             }
         }
 
-    tryQuery(startingSortBufferSize)
+    tryQuery(startingSortBufferSize, 0) map { case (result, retryIndex: Int) =>
+      if (retryIndex > 0) {
+        logger.info(s"SQL query [$queryId] succeeded after $retryIndex retries.")
+      }
+      result
+    }
   }
 
 }

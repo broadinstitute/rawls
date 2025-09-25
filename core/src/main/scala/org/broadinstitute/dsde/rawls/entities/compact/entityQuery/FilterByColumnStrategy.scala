@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.compact.entityQuery
 import akka.stream.scaladsl.Source
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
-import org.broadinstitute.dsde.rawls.model.EntityQuery
+import org.broadinstitute.dsde.rawls.model.{Entity, EntityQuery}
 import slick.jdbc.TransactionIsolation
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
@@ -26,9 +26,10 @@ class FilterByColumnStrategy(override val repository: CompactEntityRepository,
         repository.queries.countEntitiesWithColumnFilter(workspaceId, entityType, columnFilter)
       }
       .flatMap { count =>
-        EntityUtils.retryWithSortMemory(repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
-          repository.queries.queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)
-        } map { sourceQueryMaterializedResult =>
+        EntityUtils
+          .retryWithSortMemory[Seq[Entity]](repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
+            repository.queries.queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)
+          } map { sourceQueryMaterializedResult =>
           val source = Source(sourceQueryMaterializedResult)
           CountAndSource(
             count,
