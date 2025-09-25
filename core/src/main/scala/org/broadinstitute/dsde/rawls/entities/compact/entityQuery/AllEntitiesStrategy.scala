@@ -1,10 +1,14 @@
 package org.broadinstitute.dsde.rawls.entities.compact.entityQuery
 
+import akka.stream.scaladsl.Source
+import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
 import org.broadinstitute.dsde.rawls.model.EntityQuery
+import slick.jdbc.TransactionIsolation
+import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.util.UUID
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Paginated query without any filters.
@@ -14,15 +18,20 @@ class AllEntitiesStrategy(override val repository: CompactEntityRepository,
                           entityType: String,
                           entityQuery: EntityQuery,
                           unfilteredCount: Int
+)(implicit
+  executionContext: ExecutionContext
 ) extends EntityQueryStrategy {
 
   override def getCountAndSource: Future[CountAndSource] =
-    // there is no filter so we can just use the unfiltered count
-    Future.successful(
+    EntityUtils.retryWithSortMemory(repository.dataSource, isolationLevel = TransactionIsolation.ReadCommitted) {
+      repository.queries.queryEntitiesWithNoFilter(workspaceId, entityType, entityQuery)
+    } map { sourceQueryMaterializedResult =>
+      val source = Source(sourceQueryMaterializedResult)
+      // there is no filter so we can just use the unfiltered count
       CountAndSource(
         unfilteredCount,
-        streamQuery(unfilteredCount, repository.queries.queryEntitiesWithNoFilter(workspaceId, entityType, entityQuery))
+        source
       )
-    )
+    }
 
 }
