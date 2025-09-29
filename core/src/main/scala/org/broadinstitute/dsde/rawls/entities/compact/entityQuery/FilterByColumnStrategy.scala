@@ -16,7 +16,8 @@ import scala.concurrent.{ExecutionContext, Future}
 class FilterByColumnStrategy(override val repository: CompactEntityRepository,
                              workspaceId: UUID,
                              entityType: String,
-                             entityQuery: EntityQuery
+                             entityQuery: EntityQuery,
+                             override val workbenchMetricBaseName: String
 )(implicit val executionContext: ExecutionContext)
     extends EntityQueryStrategy {
   override def getCountAndSource: Future[CountAndSource] = {
@@ -27,7 +28,7 @@ class FilterByColumnStrategy(override val repository: CompactEntityRepository,
       }
       .flatMap { count =>
         withSortMemoryRetries[Seq[Entity]](entityQuery,
-                                           entityType,
+                                           this.getClass.getSimpleName,
                                            isolationLevel = TransactionIsolation.ReadCommitted
         ) {
           repository.queries.queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)

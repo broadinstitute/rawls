@@ -32,7 +32,7 @@ class AllEntitiesStrategySpec
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, None)
     val workspaceId = UUID.randomUUID()
     val entityType = "testType"
-    val strategy = new AllEntitiesStrategy(mockRepository, workspaceId, entityType, entityQuery, 10)
+    val strategy = new AllEntitiesStrategy(mockRepository, workspaceId, entityType, entityQuery, 10, "testMetricPrefix")
 
     when(mockRepository.queries.queryEntitiesWithNoFilter(workspaceId, entityType, entityQuery))
       .thenReturn(sql"SELECT 1".as[Entity])

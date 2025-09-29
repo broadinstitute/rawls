@@ -22,7 +22,8 @@ class SearchStrategy(override val repository: CompactEntityRepository,
                      workspaceId: UUID,
                      entityType: String,
                      entityQuery: EntityQuery,
-                     filterTerms: Seq[String]
+                     filterTerms: Seq[String],
+                     override val workbenchMetricBaseName: String
 )(implicit val executionContext: ExecutionContext)
     extends EntityQueryStrategy {
   override def getCountAndSource: Future[CountAndSource] = {
@@ -37,7 +38,7 @@ class SearchStrategy(override val repository: CompactEntityRepository,
       }
       .flatMap { count =>
         withSortMemoryRetries[Seq[Entity]](entityQuery,
-                                           entityType,
+                                           this.getClass.getSimpleName,
                                            isolationLevel = TransactionIsolation.ReadCommitted
         ) {
           repository.queries.queryEntitiesWithFilterTerms(workspaceId, entityType, entityQuery, filterTerms)

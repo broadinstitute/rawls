@@ -14,7 +14,8 @@ import scala.concurrent.{ExecutionContext, Future}
 class FilterByNameStrategy(override val repository: CompactEntityRepository,
                            workspaceId: UUID,
                            entityType: String,
-                           entityQuery: EntityQuery
+                           entityQuery: EntityQuery,
+                           override val workbenchMetricBaseName: String
 )(implicit val executionContext: ExecutionContext)
     extends EntityQueryStrategy {
   override def getCountAndSource: Future[CountAndSource] = {

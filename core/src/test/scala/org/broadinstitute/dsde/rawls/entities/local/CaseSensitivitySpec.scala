@@ -64,7 +64,7 @@ class CaseSensitivitySpec
 
   val testConf: Config = ConfigFactory.load()
 
-  private val providerBuilder = new CompactEntityProviderBuilder(slickDataSource)
+  private val providerBuilder = new CompactEntityProviderBuilder(slickDataSource, "testMetricPrefix")
 
   // ===================================================================================================================
   // exemplar data used in multiple tests

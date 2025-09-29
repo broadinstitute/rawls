@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.base
 
 import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.common.{AttributeKey, Attributes}
-import io.opentelemetry.api.metrics.{DoubleHistogram, LongCounter}
+import io.opentelemetry.api.metrics.{DoubleHistogram, LongCounter, LongHistogram}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 
 import scala.jdk.CollectionConverters._
@@ -35,6 +35,22 @@ trait EntityProviderMetrics extends RawlsInstrumented {
       .setUnit("error")
       .build()
 
+  private def sortMemoryRetryAttempts: LongHistogram =
+    meter
+      .histogramBuilder(s"${PREFIX}_sortmemretry_retries")
+      .ofLongs()
+      .setDescription("Number of sort-memory retries required to complete a query")
+      .setUnit("retries")
+      .build()
+
+  private def sortMemoryRetryAllocation: LongHistogram =
+    meter
+      .histogramBuilder(s"${PREFIX}_sortmemretry_allocation")
+      .ofLongs()
+      .setDescription("Sort memory allocation required to complete a query")
+      .setUnit("bytes")
+      .build()
+
   private def nameOf(provider: EntityProvider): String = provider.getClass.getSimpleName
 
   private def nameOf(error: Throwable): String = error.getClass.getSimpleName
@@ -61,4 +77,12 @@ trait EntityProviderMetrics extends RawlsInstrumented {
     entityProviderErrorCount.add(1, attrs)
   }
 
+  def recordSortMemoryRetryResult(functionName: String, numRetries: Long, byteAllocation: Long): Unit = {
+    val attrs = Attributes.of(
+      FunctionKey,
+      functionName
+    )
+    sortMemoryRetryAttempts.record(numRetries, attrs)
+    sortMemoryRetryAllocation.record(byteAllocation, attrs)
+  }
 }

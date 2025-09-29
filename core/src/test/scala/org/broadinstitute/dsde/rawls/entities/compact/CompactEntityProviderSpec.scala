@@ -1973,11 +1973,11 @@ class CompactEntityProviderSpec
                                 requestArguments: EntityRequestArguments,
                                 config: CompactEntityProviderConfig
   ): CompactEntityProvider =
-    new CompactEntityProvider(requestArguments, repository, config)(ec, system)
+    new CompactEntityProvider(requestArguments, repository, "testMetricPrefix", config)(ec, system)
 
   private def providerWithMocks(repository: CompactEntityRepository,
                                 requestArguments: EntityRequestArguments
   ): CompactEntityProvider =
-    new CompactEntityProvider(requestArguments, repository)(ec, system)
+    new CompactEntityProvider(requestArguments, repository, "testMetricPrefix")(ec, system)
 
 }

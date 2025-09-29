@@ -32,7 +32,7 @@ class FilterByNameStrategySpec
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, None, columnFilter = Some(columnFilter))
     val workspaceId = UUID.randomUUID()
     val entityType = "testType"
-    val strategy = new FilterByNameStrategy(mockRepository, workspaceId, entityType, entityQuery)
+    val strategy = new FilterByNameStrategy(mockRepository, workspaceId, entityType, entityQuery, "testMetricPrefix")
 
     when(mockRepository.queries.getEntity(workspaceId, entityType, entityName))
       .thenReturn(DBIO.successful(Some(testValue)))
@@ -57,7 +57,7 @@ class FilterByNameStrategySpec
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, None, columnFilter = Some(columnFilter))
     val workspaceId = UUID.randomUUID()
     val entityType = "testType"
-    val strategy = new FilterByNameStrategy(mockRepository, workspaceId, entityType, entityQuery)
+    val strategy = new FilterByNameStrategy(mockRepository, workspaceId, entityType, entityQuery, "testMetricPrefix")
 
     when(mockRepository.queries.getEntity(workspaceId, entityType, entityName))
       .thenReturn(DBIO.successful(None))

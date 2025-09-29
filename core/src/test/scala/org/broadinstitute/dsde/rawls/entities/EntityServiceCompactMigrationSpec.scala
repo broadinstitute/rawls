@@ -180,6 +180,7 @@ class EntityServiceCompactMigrationSpec
 
         val compactProvider = new CompactEntityProvider(requestArguments,
                                                         new CompactEntityRepository(slickDataSource),
+                                                        "testMetricPrefix",
                                                         CompactEntityProviderConfig()
         )
 
@@ -266,6 +267,7 @@ class EntityServiceCompactMigrationSpec
 
     val compactProvider = new CompactEntityProvider(requestArguments,
                                                     new CompactEntityRepository(slickDataSource),
+                                                    "testMetricPrefix",
                                                     CompactEntityProviderConfig()
     )
 
@@ -351,6 +353,7 @@ class EntityServiceCompactMigrationSpec
 
     val compactProvider = new CompactEntityProvider(requestArguments,
                                                     new CompactEntityRepository(slickDataSource),
+                                                    "testMetricPrefix",
                                                     CompactEntityProviderConfig()
     )
 

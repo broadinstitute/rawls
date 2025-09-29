@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider}
+import org.broadinstitute.dsde.rawls.entities.compact.SortMemoryRetry
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
@@ -79,7 +80,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     with EntitySupport
     with AttributeSupport
     with LazyLogging
-    with RawlsInstrumented
+    with SortMemoryRetry
     with JsonFilterUtils
     with StringValidationUtils {
 
@@ -669,54 +670,56 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
 
         // start a transaction; here's where we do a bunch of writes
-        userResult <- EntityUtils
-          .retryWithSortMemory(dataSource, startingSortBufferSize = sortBufferSize.toInt) {
-            val dataAccess = dataSource.dataAccess
-            val shardId: String = dataAccess.determineShard(workspaceId)
+        userResult <- retryWithSortMemory(dataSource,
+                                          "quicksilverMigration",
+                                          startingSortBufferSize = sortBufferSize.toInt
+        ) {
+          val dataAccess = dataSource.dataAccess
+          val shardId: String = dataAccess.determineShard(workspaceId)
 
-            val stopwatch = StopWatch.createStarted()
+          val stopwatch = StopWatch.createStarted()
 
-            logger.info(
-              s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
-            )
+          logger.info(
+            s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
+          )
 
-            for {
-              // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
-              // for each batch. later queries will use those boundaries to migrate entities in batches, which
-              // prevents the temp tables from growing too large.
-              batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
-              // niceties for logging
-              indexedBoundaries = batchBoundaries.zipWithIndex
+          for {
+            // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
+            // for each batch. later queries will use those boundaries to migrate entities in batches, which
+            // prevents the temp tables from growing too large.
+            batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
+            // niceties for logging
+            indexedBoundaries = batchBoundaries.zipWithIndex
 
-              // for each batch, migrate the entities in that batch
-              updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
-                quicksilverMigrateBatch(workspaceId,
-                                        shardId,
-                                        boundary,
-                                        dataAccess,
-                                        idx,
-                                        indexedBoundaries.size,
-                                        stopwatch,
-                                        s
-                )
-              })
-              numEntitiesUpdated = updateCounts.sum
-
-              (numAttributesDeleted, numEntitiesDeleted) <-
-                if (cleanup) {
-                  // hard delete legacy data if requested
-                  hardDeleteLegacyData(workspaceId, shardId, dataAccess)
-                } else {
-                  // otherwise, just log that we did not delete legacy data
-                  DBIO.successful((0, 0))
-                }
-
-              _ = logger.info(
-                s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+            // for each batch, migrate the entities in that batch
+            updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
+              quicksilverMigrateBatch(workspaceId,
+                                      shardId,
+                                      boundary,
+                                      dataAccess,
+                                      idx,
+                                      indexedBoundaries.size,
+                                      stopwatch,
+                                      s
               )
-            } yield Success(QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted))
+            })
+            numEntitiesUpdated = updateCounts.sum
 
-          }
+            (numAttributesDeleted, numEntitiesDeleted) <-
+              if (cleanup) {
+                // hard delete legacy data if requested
+                hardDeleteLegacyData(workspaceId, shardId, dataAccess)
+              } else {
+                // otherwise, just log that we did not delete legacy data
+                DBIO.successful((0, 0))
+              }
+
+            _ = logger.info(
+              s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+            )
+          } yield Success(QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted))
+
+        }
           .recover { case t: Throwable =>
             Failure(t)
           }

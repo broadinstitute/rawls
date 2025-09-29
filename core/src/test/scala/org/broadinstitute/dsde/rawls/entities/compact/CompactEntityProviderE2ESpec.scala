@@ -326,7 +326,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     val repository = new CompactEntityRepository(slickDataSource)
     val config = CompactEntityProviderConfig(batchUpsertBatchSize = 250) // pretty small to force batching
 
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, repository, config)(ec, system)
+    val provider =
+      new CompactEntityProvider(defaultEntityRequestArguments, repository, "testMetricPrefix", config)(ec, system)
 
     val metadataBefore = Await.result(provider.entityTypeMetadata(useCache = false, defaultRequestContext), atMost)
     metadataBefore shouldBe empty
@@ -356,7 +357,8 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     val repository = new CompactEntityRepository(slickDataSource)
     val config = CompactEntityProviderConfig(batchUpsertBatchSize = 1) // should execute one update per batch
 
-    val provider = new CompactEntityProvider(defaultEntityRequestArguments, repository, config)(ec, system)
+    val provider =
+      new CompactEntityProvider(defaultEntityRequestArguments, repository, "testMetricPrefix", config)(ec, system)
 
     // the fourth update in this list has an unsupported character in its name and will cause a SQL error
     val updates: Seq[EntityUpdateDefinition] = Seq(
@@ -888,10 +890,12 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
   it should "delete attributes from entities" in withMinimalTestDatabase { _ =>
     // create providers for workspace1 and workspace2
     val repository = new CompactEntityRepository(slickDataSource)
-    val ws1Provider = new CompactEntityProvider(defaultEntityRequestArguments, repository)(ec, system)
+    val ws1Provider =
+      new CompactEntityProvider(defaultEntityRequestArguments, repository, "testMetricPrefix")(ec, system)
     val ws2Provider = new CompactEntityProvider(
       defaultEntityRequestArguments.copy(workspace = minimalTestData.workspace2),
-      repository
+      repository,
+      "testMetricPrefix"
     )(ec, system)
 
     // define attributes
@@ -974,10 +978,12 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
   it should "delete attributes containing references" in withMinimalTestDatabase { _ =>
     // create providers for workspace1 and workspace2
     val repository = new CompactEntityRepository(slickDataSource)
-    val ws1Provider = new CompactEntityProvider(defaultEntityRequestArguments, repository)(ec, system)
+    val ws1Provider =
+      new CompactEntityProvider(defaultEntityRequestArguments, repository, "testMetricPrefix")(ec, system)
     val ws2Provider = new CompactEntityProvider(
       defaultEntityRequestArguments.copy(workspace = minimalTestData.workspace2),
-      repository
+      repository,
+      "testMetricPrefix"
     )(ec, system)
 
     // insert target entities into both workspaces
@@ -1070,12 +1076,14 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     val sourceProvider = new CompactEntityProvider(
       defaultEntityRequestArguments.copy(workspace = sourceWorkspace),
-      new CompactEntityRepository(slickDataSource)
+      new CompactEntityRepository(slickDataSource),
+      "testMetricPrefix"
     )(ec, system)
 
     val destinationProvider = new CompactEntityProvider(
       defaultEntityRequestArguments.copy(workspace = destinationWorkspace),
-      new CompactEntityRepository(slickDataSource)
+      new CompactEntityRepository(slickDataSource),
+      "testMetricPrefix"
     )(ec, system)
 
     // insert entities to be copied to source workspace
@@ -1285,7 +1293,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
   // ====================================================================================================
   def defaultProvider(): CompactEntityProvider = {
     val repository = new CompactEntityRepository(slickDataSource)
-    new CompactEntityProvider(defaultEntityRequestArguments, repository)(ec, system)
+    new CompactEntityProvider(defaultEntityRequestArguments, repository, "testMetricPrefix")(ec, system)
   }
 
 }
