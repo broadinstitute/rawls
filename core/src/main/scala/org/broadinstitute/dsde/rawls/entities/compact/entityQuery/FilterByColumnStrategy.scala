@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities.compact.entityQuery
 
+import akka.stream.scaladsl.Source
+import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
-import org.broadinstitute.dsde.rawls.model.EntityQuery
+import org.broadinstitute.dsde.rawls.model.{Entity, EntityQuery}
+import slick.jdbc.TransactionIsolation
 import slick.jdbc.TransactionIsolation.ReadCommitted
 
 import java.util.UUID
@@ -13,7 +16,8 @@ import scala.concurrent.{ExecutionContext, Future}
 class FilterByColumnStrategy(override val repository: CompactEntityRepository,
                              workspaceId: UUID,
                              entityType: String,
-                             entityQuery: EntityQuery
+                             entityQuery: EntityQuery,
+                             override val workbenchMetricBaseName: String
 )(implicit val executionContext: ExecutionContext)
     extends EntityQueryStrategy {
   override def getCountAndSource: Future[CountAndSource] = {
@@ -22,14 +26,19 @@ class FilterByColumnStrategy(override val repository: CompactEntityRepository,
       .inTransaction(ReadCommitted) { _ =>
         repository.queries.countEntitiesWithColumnFilter(workspaceId, entityType, columnFilter)
       }
-      .map { count =>
-        CountAndSource(
-          count,
-          streamQuery(count,
-                      repository.queries
-                        .queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)
+      .flatMap { count =>
+        withSortMemoryRetries[Seq[Entity]](entityQuery,
+                                           this.getClass.getSimpleName,
+                                           isolationLevel = TransactionIsolation.ReadCommitted
+        ) {
+          repository.queries.queryEntitiesWithColumnFilter(workspaceId, entityType, entityQuery, columnFilter)
+        } map { sourceQueryMaterializedResult =>
+          val source = Source(sourceQueryMaterializedResult)
+          CountAndSource(
+            count,
+            source
           )
-        )
+        }
       }
   }
 }

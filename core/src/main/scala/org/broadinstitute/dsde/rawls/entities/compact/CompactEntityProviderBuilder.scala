@@ -9,7 +9,7 @@ import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
 import scala.util.{Success, Try}
 
-class CompactEntityProviderBuilder(dataSource: SlickDataSource)(implicit
+class CompactEntityProviderBuilder(dataSource: SlickDataSource, metricsPrefix: String)(implicit
   protected val executionContext: ExecutionContext,
   actorSystem: ActorSystem
 ) extends EntityProviderBuilder[CompactEntityProvider] {
@@ -21,5 +21,5 @@ class CompactEntityProviderBuilder(dataSource: SlickDataSource)(implicit
   /** create the EntityProvider this builder knows how to create.
     */
   override def build(requestArguments: EntityRequestArguments): Try[CompactEntityProvider] =
-    Success(new CompactEntityProvider(requestArguments, new CompactEntityRepository(dataSource)))
+    Success(new CompactEntityProvider(requestArguments, new CompactEntityRepository(dataSource), metricsPrefix))
 }

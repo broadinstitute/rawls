@@ -67,6 +67,7 @@ import scala.util.Try
   */
 class CompactEntityProvider(requestArguments: EntityRequestArguments,
                             val repository: CompactEntityRepository,
+                            metricsPrefix: String,
                             config: CompactEntityProviderConfig = CompactEntityProviderConfig()
 )(implicit
   protected val executionContext: ExecutionContext,
@@ -561,7 +562,7 @@ class CompactEntityProvider(requestArguments: EntityRequestArguments,
         Future.successful((EntityQueryResultMetadata(0, 0, 0), Source.empty))
       } else {
         EntityQueryStrategy
-          .choose(repository, workspaceId, entityType, entityQuery, unfilteredCount)
+          .choose(repository, workspaceId, entityType, entityQuery, unfilteredCount, metricsPrefix)
           .getCountAndSource
           .map(prepareQueryEntitiesResult(entityQuery, unfilteredCount, _))
       }
