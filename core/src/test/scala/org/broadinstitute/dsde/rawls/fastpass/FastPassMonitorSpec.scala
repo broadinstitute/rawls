@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverCom
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
-import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
@@ -242,6 +242,8 @@ class FastPassMonitorSpec
 
     val entityServiceConstructor: RawlsRequestContext => EntityService = _ => mock[EntityService](RETURNS_SMART_NULLS)
 
+    val bardService: BardService = new MockBardService()
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -265,7 +267,8 @@ class FastPassMonitorSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     def cleanupSupervisor =

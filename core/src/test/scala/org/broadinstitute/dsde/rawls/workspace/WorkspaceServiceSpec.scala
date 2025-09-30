@@ -317,6 +317,7 @@ class WorkspaceServiceSpec
                                 Option(mockWorkspaceSettingRepository)
       ) _
 
+    val bardService = new MockBardService();
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -340,7 +341,8 @@ class WorkspaceServiceSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(

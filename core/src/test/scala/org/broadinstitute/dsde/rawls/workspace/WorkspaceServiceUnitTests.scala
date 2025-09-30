@@ -9,6 +9,8 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
+import org.broadinstitute.dsde.rawls.metrics.BardService
+import org.broadinstitute.dsde.rawls.mock.MockBardService
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.GcpBucketRequesterPaysConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.GcpBucketRequesterPays
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
@@ -108,7 +110,8 @@ class WorkspaceServiceUnitTests
     policyService: PolicyService = mock[PolicyService](RETURNS_SMART_NULLS),
     workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
       mock[WorkspaceSettingService](RETURNS_SMART_NULLS),
-    entityServiceConstructor: RawlsRequestContext => EntityService = _ => mock[EntityService](RETURNS_SMART_NULLS)
+    entityServiceConstructor: RawlsRequestContext => EntityService = _ => mock[EntityService](RETURNS_SMART_NULLS),
+    bardService: BardService = new MockBardService()
   ): RawlsRequestContext => WorkspaceService = info =>
     new WorkspaceService(
       info,
@@ -138,7 +141,8 @@ class WorkspaceServiceUnitTests
       workspaceSettingRepository,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     )(scala.concurrent.ExecutionContext.global)
 
   behavior of "getWorkspaceById"

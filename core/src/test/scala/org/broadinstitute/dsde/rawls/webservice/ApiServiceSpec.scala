@@ -318,6 +318,7 @@ trait ApiServiceSpec
       terraBucketWriterRole = "fakeTerraBucketWriterRole"
     ) _
 
+    val bardService = new MockBardService();
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -341,7 +342,8 @@ trait ApiServiceSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
