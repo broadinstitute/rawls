@@ -29,7 +29,8 @@ class EntityQueryStrategySpec
   it should "choose the SearchStrategy when filterTerms is defined" in {
     val repository = mock[CompactEntityRepository]
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, Some("test"))
-    val strategy = EntityQueryStrategy.choose(repository, UUID.randomUUID(), "testType", entityQuery, 0)
+    val strategy =
+      EntityQueryStrategy.choose(repository, UUID.randomUUID(), "testType", entityQuery, 0, "metricsPrefix")
 
     strategy shouldBe a[SearchStrategy]
   }
@@ -46,7 +47,8 @@ class EntityQueryStrategySpec
       columnFilter =
         Some(EntityColumnFilter(AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix), "test"))
     )
-    val strategy = EntityQueryStrategy.choose(repository, UUID.randomUUID(), entityType, entityQuery, 1)
+    val strategy =
+      EntityQueryStrategy.choose(repository, UUID.randomUUID(), entityType, entityQuery, 1, "metricsPrefix")
 
     strategy shouldBe a[FilterByNameStrategy]
   }
@@ -60,7 +62,8 @@ class EntityQueryStrategySpec
                                   None,
                                   columnFilter = Some(EntityColumnFilter(AttributeName.withDefaultNS("foo"), "test"))
     )
-    val strategy = EntityQueryStrategy.choose(repository, UUID.randomUUID(), "testType", entityQuery, 1)
+    val strategy =
+      EntityQueryStrategy.choose(repository, UUID.randomUUID(), "testType", entityQuery, 1, "metricsPrefix")
 
     strategy shouldBe a[FilterByColumnStrategy]
   }
@@ -68,7 +71,8 @@ class EntityQueryStrategySpec
   it should "choose the SearchStrategy when neither filterTerms nor columnFilter is defined" in {
     val repository = mock[CompactEntityRepository]
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, None)
-    val strategy = EntityQueryStrategy.choose(repository, UUID.randomUUID(), "testType", entityQuery, 0)
+    val strategy =
+      EntityQueryStrategy.choose(repository, UUID.randomUUID(), "testType", entityQuery, 0, "metricsPrefix")
 
     strategy shouldBe a[AllEntitiesStrategy]
   }
@@ -77,6 +81,7 @@ class EntityQueryStrategySpec
 
   it should "return an empty source when count is 0" in {
     val strategy = new EntityQueryStrategy {
+      val workbenchMetricBaseName: String = "testMetricPrefix"
       override val repository: CompactEntityRepository = mock[CompactEntityRepository]
       override def getCountAndSource: Future[CountAndSource] =
         // the null will cause a NPE if streamQuery tries to use it which it shouldn't
@@ -92,6 +97,7 @@ class EntityQueryStrategySpec
     implicit val testCompactEntityGetter: GetResult[Entity] = GetResult(_ => testValue)
 
     val strategy = new EntityQueryStrategy {
+      val workbenchMetricBaseName: String = "testMetricPrefix"
       override val repository: CompactEntityRepository = mock[CompactEntityRepository]
       override def getCountAndSource: Future[CountAndSource] = {
         when(repository.dataSource).thenReturn(slickDataSource)

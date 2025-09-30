@@ -128,7 +128,7 @@ object EntityManager {
                                      queryTimeout,
                                      metricsPrefix
       ) // implicit executionContext, system
-    val compactEntityProviderBuilder = new CompactEntityProviderBuilder(dataSource)
+    val compactEntityProviderBuilder = new CompactEntityProviderBuilder(dataSource, metricsPrefix)
 
     new EntityManager(
       Set(defaultEntityProviderBuilder, compactEntityProviderBuilder),

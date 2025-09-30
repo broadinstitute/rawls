@@ -2,12 +2,12 @@ package org.broadinstitute.dsde.rawls.entities.compact.entityQuery
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityRecord
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityRepository
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
+import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityRepository, SortMemoryRetry}
 import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, Entity, EntityColumnFilter, EntityQuery}
 import slick.dbio.Effect
 import slick.jdbc.TransactionIsolation.ReadCommitted
-import slick.jdbc.{ResultSetConcurrency, ResultSetType}
+import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 import slick.sql.SqlStreamingAction
 
 import java.util.UUID
@@ -15,7 +15,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 case class CountAndSource(count: Int, source: Source[Entity, _])
 
-trait EntityQueryStrategy {
+trait EntityQueryStrategy extends SortMemoryRetry {
   val repository: CompactEntityRepository
 
   def getCountAndSource: Future[CountAndSource]
@@ -42,6 +42,23 @@ trait EntityQueryStrategy {
       )
     }
   }
+
+  protected def withSortMemoryRetries[T](entityQuery: EntityQuery,
+                                         functionName: String,
+                                         isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead
+  )(op: => ReadWriteAction[T])(implicit
+    executionContext: ExecutionContext
+  ): Future[T] =
+    // is this a sort by name/id? If so, no need to retry with extra sort memory.
+    entityQuery.sortField match {
+      case Attributable.nameReservedAttribute =>
+        repository.dataSource.inTransaction(isolationLevel)(_ => op)
+      case _ =>
+        retryWithSortMemory[T](repository.dataSource, functionName, isolationLevel = isolationLevel) {
+          op
+        }
+    }
+
 }
 
 object EntityQueryStrategy {
@@ -58,19 +75,26 @@ object EntityQueryStrategy {
              workspaceId: UUID,
              entityType: String,
              entityQuery: EntityQuery,
-             unfilteredCount: Int
+             unfilteredCount: Int,
+             metricsPrefix: String
   )(implicit executionContext: ExecutionContext): EntityQueryStrategy = {
     val idAttributeName = AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix)
 
     (entityQuery.filterTerms, entityQuery.columnFilter) match {
       case (Some(filterTerms), _) =>
-        new SearchStrategy(repository, workspaceId, entityType, entityQuery, filterTerms.split(" ").toSeq)
+        new SearchStrategy(repository,
+                           workspaceId,
+                           entityType,
+                           entityQuery,
+                           filterTerms.split(" ").toSeq,
+                           metricsPrefix
+        )
       case (_, Some(EntityColumnFilter(`idAttributeName`, _))) =>
-        new FilterByNameStrategy(repository, workspaceId, entityType, entityQuery)
+        new FilterByNameStrategy(repository, workspaceId, entityType, entityQuery, metricsPrefix)
       case (_, Some(_)) =>
-        new FilterByColumnStrategy(repository, workspaceId, entityType, entityQuery)
+        new FilterByColumnStrategy(repository, workspaceId, entityType, entityQuery, metricsPrefix)
       case _ =>
-        new AllEntitiesStrategy(repository, workspaceId, entityType, entityQuery, unfilteredCount)
+        new AllEntitiesStrategy(repository, workspaceId, entityType, entityQuery, unfilteredCount, metricsPrefix)
     }
   }
 }
