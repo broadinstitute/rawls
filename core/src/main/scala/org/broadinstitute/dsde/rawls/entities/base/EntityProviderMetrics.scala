@@ -45,15 +45,14 @@ trait EntityProviderMetrics extends RawlsInstrumented {
       .setUnit("retries")
       .build()
 
+  // bucket boundaries are powers of 2, starting at 2Mb and ending with 512Mb
+  private val allocationBuckets: List[java.lang.Long] =
+    List(1, 2, 4, 8, 16, 32, 64, 128, 256).map(multiplier => 2 * 1024 * 1024 * multiplier)
   private def sortMemoryRetryAllocation: LongHistogram =
     meter
       .histogramBuilder(s"${PREFIX}_sortmemretry_allocation")
       .ofLongs()
-      // bucket boundaries are powers of 2, starting at 2Mb and ending with 512Mb
-      .setExplicitBucketBoundariesAdvice(
-        List[java.lang.Long](2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456,
-                             536870912).asJava
-      )
+      .setExplicitBucketBoundariesAdvice(allocationBuckets.asJava)
       .setDescription("Sort memory allocation required to complete a query")
       .setUnit("bytes")
       .build()
