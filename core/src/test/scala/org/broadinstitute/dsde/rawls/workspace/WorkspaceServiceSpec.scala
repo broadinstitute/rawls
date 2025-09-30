@@ -32,7 +32,8 @@ import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPass
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
-import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
+import org.broadinstitute.dsde.rawls.metrics.logEvents.WorkspaceDeleteEvent
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
@@ -48,12 +49,7 @@ import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  RawlsTestUtils,
-  TestExecutionContext
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, RawlsTestUtils, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
@@ -317,7 +313,7 @@ class WorkspaceServiceSpec
                                 Option(mockWorkspaceSettingRepository)
       ) _
 
-    val bardService = new MockBardService();
+    val bardService = mock[BardService](RETURNS_SMART_NULLS)
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -1373,6 +1369,19 @@ class WorkspaceServiceSpec
     assertResult(Some(StatusCodes.BadRequest)) {
       error.errorReport.statusCode
     }
+  }
+
+  it should "log to bard when deleting workspace" in withTestDataServices { services =>
+      // delete the workspace
+      Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+      val deleteEvent = WorkspaceDeleteEvent(
+        testData.workspaceNoSubmissions.workspaceId,
+        testData.workspaceNoSubmissions.namespace,
+        testData.workspaceNoSubmissions.name,
+        testContext.userInfo.userSubjectId.value
+      )
+      verify(services.bardService).sendEvent(deleteEvent, testContext.userInfo)
   }
 
   behavior of "getTags"
