@@ -39,6 +39,8 @@ trait EntityProviderMetrics extends RawlsInstrumented {
     meter
       .histogramBuilder(s"${PREFIX}_sortmemretry_retries")
       .ofLongs()
+      // this counts the number of query attempts, so we can be pretty sure of the bucket boundaries
+      .setExplicitBucketBoundariesAdvice(java.util.List.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
       .setDescription("Number of sort-memory retries required to complete a query")
       .setUnit("retries")
       .build()
@@ -47,6 +49,11 @@ trait EntityProviderMetrics extends RawlsInstrumented {
     meter
       .histogramBuilder(s"${PREFIX}_sortmemretry_allocation")
       .ofLongs()
+      // bucket boundaries are powers of 2, starting at 2Mb and ending with 512Mb
+      .setExplicitBucketBoundariesAdvice(
+        List[java.lang.Long](2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456,
+                             536870912).asJava
+      )
       .setDescription("Sort memory allocation required to complete a query")
       .setUnit("bytes")
       .build()
