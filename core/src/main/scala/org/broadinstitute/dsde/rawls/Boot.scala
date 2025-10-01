@@ -364,6 +364,12 @@ object Boot extends IOApp with LazyLogging {
         Some(workspaceSettingRepository)
       )
 
+      val bardService = new BardService(
+        appConfigManager.conf.getBoolean("bard.enabled"),
+        appConfigManager.conf.getString("bard.bardUrl"),
+        appConfigManager.conf.getInt("bard.connectionPoolSize")
+      )
+
       lazy val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
         (ctx: RawlsRequestContext) =>
           new WorkspaceSettingService(ctx,
@@ -403,7 +409,8 @@ object Boot extends IOApp with LazyLogging {
         fastPassServiceConstructor,
         policyService,
         workspaceSettingServiceConstructor,
-        entityServiceConstructor
+        entityServiceConstructor,
+        bardService
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
@@ -526,12 +533,6 @@ object Boot extends IOApp with LazyLogging {
 
       if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
-
-        val bardService = new BardService(
-          appConfigManager.conf.getBoolean("bard.enabled"),
-          appConfigManager.conf.getString("bard.bardUrl"),
-          appConfigManager.conf.getInt("bard.connectionPoolSize")
-        )
 
         BootMonitors.bootMonitors(
           system,

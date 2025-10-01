@@ -23,7 +23,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
-import org.broadinstitute.dsde.rawls.metrics.{MetricsHelper, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.{BardService, MetricsHelper, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.logEvents.WorkspaceDeleteEvent
 import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceIdAttribute, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -95,7 +96,8 @@ object WorkspaceService {
                   fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService,
                   policyService: PolicyService,
                   workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
-                  entityServiceConstructor: RawlsRequestContext => EntityService
+                  entityServiceConstructor: RawlsRequestContext => EntityService,
+                  bardService: BardService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -127,7 +129,8 @@ object WorkspaceService {
       new WorkspaceSettingRepository(dataSource),
       policyService,
       (context: RawlsRequestContext) => workspaceSettingServiceConstructor(context),
-      (context: RawlsRequestContext) => entityServiceConstructor(context)
+      (context: RawlsRequestContext) => entityServiceConstructor(context),
+      bardService: BardService
     )
 
   val SECURITY_LABEL_KEY: String = "security"
@@ -177,7 +180,8 @@ class WorkspaceService(
   val workspaceSettingsRepository: WorkspaceSettingRepository,
   policyService: PolicyService,
   workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService,
-  entityServiceConstructor: RawlsRequestContext => EntityService
+  entityServiceConstructor: RawlsRequestContext => EntityService,
+  bardService: BardService
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with UserWiths
@@ -653,6 +657,13 @@ class WorkspaceService(
         logger.info(s"failure aborting workflows while deleting workspace ${workspace.toWorkspaceName}", t)
       case _ => /* ok */
     }
+    val workspaceDeleteEvent = WorkspaceDeleteEvent(
+      workspaceId = workspace.workspaceId,
+      workspaceNamespace = workspace.namespace,
+      workspaceName = workspace.name,
+      userSubjectId = ctx.userInfo.userSubjectId.value
+    )
+    bardService.sendEvent(workspaceDeleteEvent, ctx.userInfo)
     WorkspaceDeletionResult.fromGcpBucketName(workspace.bucketName)
   }
 

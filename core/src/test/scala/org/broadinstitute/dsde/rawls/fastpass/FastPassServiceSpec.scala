@@ -282,6 +282,8 @@ class FastPassServiceSpec
     )
     val entityServiceConstructor: RawlsRequestContext => EntityService = _ => entityService
 
+    val bardService = new MockBardService();
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -305,7 +307,8 @@ class FastPassServiceSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     def cleanupSupervisor =

@@ -32,7 +32,8 @@ import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPass
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
-import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
+import org.broadinstitute.dsde.rawls.metrics.logEvents.WorkspaceDeleteEvent
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
@@ -317,6 +318,7 @@ class WorkspaceServiceSpec
                                 Option(mockWorkspaceSettingRepository)
       ) _
 
+    val bardService = mock[BardService](RETURNS_SMART_NULLS)
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -340,7 +342,8 @@ class WorkspaceServiceSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(
@@ -1371,6 +1374,19 @@ class WorkspaceServiceSpec
     assertResult(Some(StatusCodes.BadRequest)) {
       error.errorReport.statusCode
     }
+  }
+
+  it should "log to bard when deleting workspace" in withTestDataServices { services =>
+    // delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    val deleteEvent = WorkspaceDeleteEvent(
+      testData.workspaceNoSubmissions.workspaceId,
+      testData.workspaceNoSubmissions.namespace,
+      testData.workspaceNoSubmissions.name,
+      services.ctx1.userInfo.userSubjectId.value
+    )
+    verify(services.bardService).sendEvent(deleteEvent, services.ctx1.userInfo)
   }
 
   behavior of "getTags"
