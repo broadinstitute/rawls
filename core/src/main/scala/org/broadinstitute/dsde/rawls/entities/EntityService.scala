@@ -635,7 +635,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
             .exists(_.config.enabled)
         ) {
           throw new RawlsExceptionWithErrorReport(
-            ErrorReport(s"Quicksilver migration $workspaceId failed: Quicksilver already enabled for this workspace")
+            ErrorReport(StatusCodes.Conflict,
+                        s"Quicksilver migration $workspaceId failed: Quicksilver already enabled for this workspace"
+            )
           )
         }
 
