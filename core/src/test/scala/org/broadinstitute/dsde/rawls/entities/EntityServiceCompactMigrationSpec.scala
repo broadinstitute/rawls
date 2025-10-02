@@ -8,7 +8,12 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{QuicksilverMigrationResult, RawSqlQuery, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  QuicksilverAlreadyMigratedException,
+  QuicksilverMigrationResult,
+  RawSqlQuery,
+  TestDriverComponent
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
@@ -449,6 +454,23 @@ class EntityServiceCompactMigrationSpec
     Await.result(repo.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, CompactDataTables),
                  Duration.Inf
     ) shouldBe empty
+
+  }
+
+  it should s"throw QuicksilverAlreadyMigratedException if the workspace has already been migrated" in withTestDataServices {
+    apiService =>
+      val workspace = legacyTestData.workspace // has some entities we can use to test references
+
+      // perform migration
+      val migrationResult =
+        Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+
+      migrationResult shouldBe QuicksilverMigrationResult(18, 0, 0)
+
+      // perform migration again
+      intercept[QuicksilverAlreadyMigratedException] {
+        Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+      }
 
   }
 

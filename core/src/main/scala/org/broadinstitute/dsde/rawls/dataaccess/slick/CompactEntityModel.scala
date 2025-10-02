@@ -97,3 +97,5 @@ case class QuicksilverMigrationResult(
   numEntitiesDeleted: Int,
   numAttributesDeleted: Int
 )
+
+class QuicksilverAlreadyMigratedException extends Exception

@@ -10,7 +10,7 @@ import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import io.opentelemetry.context.Context
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.QuicksilverMigrationResult
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{QuicksilverAlreadyMigratedException, QuicksilverMigrationResult}
 import org.broadinstitute.dsde.rawls.entities.{EntityService, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
@@ -364,6 +364,13 @@ trait EntityApiService extends UserInfoDirectives {
                                           cleanup = cleanup,
                                           sortBufferSize = sortBufferSize
                     )
+                    .map { result =>
+                      StatusCodes.OK -> Option(result)
+                    }
+                    .recover { case _: QuicksilverAlreadyMigratedException =>
+                      // this workspace was already Quicksilver-enabled. Treat this as a noop success.
+                      StatusCodes.NoContent -> None
+                    }
                 }
               }
             }
