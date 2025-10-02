@@ -10,7 +10,9 @@ import org.broadinstitute.dsde.workbench.client.leonardo.{ApiException, ApiExcep
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   AppStatus,
   ClusterStatus,
+  DiskStatus,
   ListAppResponse,
+  ListPersistentDiskResponse,
   ListRuntimeResponse
 }
 
@@ -72,6 +74,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
       case _                      => false
     }
 
+  // TODO: Refactor to use getAllApps
   def listNonErroredApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListAppResponse]] =
@@ -89,6 +92,49 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
           nonErroredApps
         }
       }
+    }
+
+  private def getAllApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[ListAppResponse]] =
+    retry(when500OrProcessingException) { () =>
+      Future {
+        blocking {
+          leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+        }
+      }
+    }
+
+  def listRunningApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[ListAppResponse]] =
+    getAllApps(workspace, ctx).map { allApps =>
+      val statuses = Set(AppStatus.RUNNING, AppStatus.PROVISIONING, AppStatus.STARTING, AppStatus.DELETING);
+      allApps.filter(app => statuses.contains(app.getStatus));
+    }
+
+  private def getAllRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[ListRuntimeResponse]] =
+    retry(when500OrProcessingException) { () =>
+      Future {
+        blocking {
+          leonardoDAO.listRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+        }
+      }
+    }
+
+  def listRunningRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[ListRuntimeResponse]] =
+    getAllRuntimes(workspace, ctx).map { allRuntimes =>
+      val statuses = Set(ClusterStatus.RUNNING,
+                         ClusterStatus.STARTING,
+                         ClusterStatus.CREATING,
+                         ClusterStatus.UPDATING,
+                         ClusterStatus.DELETING
+      );
+      allRuntimes.filter(runtime => statuses.contains(runtime.getStatus));
     }
 
   def listNonErroredAzureRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
@@ -109,6 +155,39 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
         }
       }
     }
+
+  private def getAllDisks(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[ListPersistentDiskResponse]] =
+    retry(when500OrProcessingException) { () =>
+      Future {
+        blocking {
+          val allDisks = leonardoDAO.listDisks(ctx.userInfo.accessToken.token, null);
+          allDisks.filter { disk =>
+            val cloudContext = disk.getCloudContext
+            cloudContext.getCloudResource == workspace.googleProjectId.value &&
+            cloudContext.getCloudProvider == "GCP"
+          }
+        }
+      }
+    }
+
+  private def listRunningDisks(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[ListPersistentDiskResponse]] =
+    getAllDisks(workspace, ctx).map { allDisks =>
+      val statuses = Set(DiskStatus.CREATING, DiskStatus.READY, DiskStatus.RESTORING, DiskStatus.DELETING);
+      allDisks.filter(disk => statuses.contains(disk.getStatus));
+    }
+
+  def hasActiveResources(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+    ec: ExecutionContext
+  ): Future[Boolean] =
+    for {
+      runtimes <- listRunningRuntimes(workspace, ctx)
+      apps <- listRunningApps(workspace, ctx)
+      disks <- listRunningDisks(workspace, ctx)
+    } yield runtimes.nonEmpty || apps.nonEmpty || disks.nonEmpty
 
   def deleteApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] =
     retry(when500OrProcessingException) { () =>
