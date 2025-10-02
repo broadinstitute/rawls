@@ -9,6 +9,7 @@ import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
+  QuicksilverAlreadyMigratedException,
   QuicksilverMigrationResult,
   ReadAction,
   ReadWriteAction
@@ -634,11 +635,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
             .asInstanceOf[Option[CompactDataTablesSetting]]
             .exists(_.config.enabled)
         ) {
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.Conflict,
-                        s"Quicksilver migration $workspaceId failed: Quicksilver already enabled for this workspace"
-            )
-          )
+          logger.info(s"Quicksilver migration $workspaceId skipped: Quicksilver already enabled for this workspace")
+          throw new QuicksilverAlreadyMigratedException
         }
 
         // Check if there are any pending compactDataTables settings for this workspace
