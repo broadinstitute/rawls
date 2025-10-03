@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.{ApiException, ApiException => LeoApiException}
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   AppStatus,
+  CloudProvider,
   ClusterStatus,
   DiskStatus,
   ListAppResponse,
@@ -130,6 +131,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     getAllRuntimes(workspace, ctx).map { allRuntimes =>
       val statuses = Set(ClusterStatus.RUNNING,
                          ClusterStatus.STARTING,
+                         ClusterStatus.STOPPING,
                          ClusterStatus.CREATING,
                          ClusterStatus.UPDATING,
                          ClusterStatus.DELETING
@@ -165,14 +167,15 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
           val allDisks = leonardoDAO.listDisks(ctx.userInfo.accessToken.token, null);
           allDisks.filter { disk =>
             val cloudContext = disk.getCloudContext
+            cloudContext != null &&
             cloudContext.getCloudResource == workspace.googleProjectId.value &&
-            cloudContext.getCloudProvider == "GCP"
+            cloudContext.getCloudProvider == CloudProvider.GCP
           }
         }
       }
     }
 
-  private def listRunningDisks(workspace: Workspace, ctx: RawlsRequestContext)(implicit
+  def listRunningDisks(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListPersistentDiskResponse]] =
     getAllDisks(workspace, ctx).map { allDisks =>

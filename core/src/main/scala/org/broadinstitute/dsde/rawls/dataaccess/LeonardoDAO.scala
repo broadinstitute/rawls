@@ -4,7 +4,11 @@ import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsApi
 import scala.concurrent.{ExecutionContext, Future}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, WorkspaceName}
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListPersistentDiskResponse, ListRuntimeResponse}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{
+  ListAppResponse,
+  ListPersistentDiskResponse,
+  ListRuntimeResponse
+}
 
 import java.util.UUID
 
@@ -23,13 +27,13 @@ trait LeonardoDAO {
 
   def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse]
 
+  def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse]
+
   def listRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
 
   def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
 
   def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit
-
-  def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse]
 
   @throws(classOf[ApiException])
   def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit
