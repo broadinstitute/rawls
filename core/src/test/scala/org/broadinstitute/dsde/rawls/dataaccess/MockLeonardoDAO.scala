@@ -23,11 +23,11 @@ class MockLeonardoDAO extends LeonardoDAO {
 
   override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit = ???
 
-  override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] = ???
+  override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] = ???
 
-  override def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse] = ???
+  override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] = ???
 
-  override def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse] = ???
+  override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] = ???
 
   override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] = ???
 

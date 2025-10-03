@@ -51,11 +51,11 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
   override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean) =
     getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId.toString, deleteDisk)
 
-  override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
-    getAppsV2LeonardoApi(token).listAppsV2(workspaceId.toString, null, false, null, null).asScala.toSeq
+  override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
+    getAppsV2LeonardoApi(token).listAppByProject(googleProjectId.value, null, false, null, null).asScala.toSeq
 
-  override def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse] =
-    getRuntimesV2LeonardoApi(token).listRuntimes(labels, false).asScala.toSeq
+  override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] =
+    getRuntimesV2LeonardoApi(token).listRuntimesByProject(googleProjectId.value, null, false).asScala.toSeq
 
   override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
     getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, false, null).asScala.toSeq
@@ -63,8 +63,8 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
   override def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit =
     getRuntimesV2LeonardoApi(token).deleteAllRuntimesV2(workspaceId.toString, deleteDisk)
 
-  override def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse] =
-    getDisksLeonardoApi(token).listDisks(labels, false, null, null).asScala.toSeq
+  override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] =
+    getDisksLeonardoApi(token).listDisksByProject(googleProjectId.value, null, false, null, null).asScala.toSeq
 
   override def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID] = None): Unit =
     createApp(token, workspaceId, s"wds-$workspaceId", leonardoConfig.wdsType, sourceWorkspaceId)

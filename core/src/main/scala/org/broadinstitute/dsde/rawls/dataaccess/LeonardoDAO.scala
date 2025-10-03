@@ -25,11 +25,11 @@ trait LeonardoDAO {
 
   def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit
 
-  def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse]
+  def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse]
 
-  def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse]
+  def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse]
 
-  def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse]
+  def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse]
 
   def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
 

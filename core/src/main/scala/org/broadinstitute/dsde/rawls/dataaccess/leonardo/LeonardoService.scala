@@ -82,7 +82,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          val allApps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val allApps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.googleProjectId)
           val nonErroredApps = allApps.filter(_.getStatus != AppStatus.ERROR)
           val erroredAppCount = allApps.size - nonErroredApps.size
           if (erroredAppCount > 0) {
@@ -101,7 +101,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.googleProjectId)
         }
       }
     }
@@ -120,8 +120,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          val allRuntimes = leonardoDAO.listRuntimes(ctx.userInfo.accessToken.token, null)
-          allRuntimes.filter(runtime => runtime.getWorkspaceId == workspace.workspaceId)
+          leonardoDAO.listRuntimes(ctx.userInfo.accessToken.token, workspace.googleProjectId)
         }
       }
     }
@@ -165,7 +164,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          val allDisks = leonardoDAO.listDisks(ctx.userInfo.accessToken.token, null);
+          val allDisks = leonardoDAO.listDisks(ctx.userInfo.accessToken.token, workspace.googleProjectId);
           allDisks.filter { disk =>
             val cloudContext = disk.getCloudContext
             cloudContext != null &&

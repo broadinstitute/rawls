@@ -140,46 +140,46 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
     val erroredAppResponse = new ListAppResponse()
     erroredAppResponse.setStatus(AppStatus.ERROR)
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
+      override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
         Seq(deletingAppResponse, erroredAppResponse)
     })
 
     val action = new LeonardoService(leoDAO)
 
     Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf) shouldBe false
-    verify(leoDAO).listApps(anyString(), any[UUID])
+    verify(leoDAO).listApps(anyString(), any[GoogleProjectId])
   }
 
   it should "poll and return true when all apps are in the error state" in {
     val erroredAppResponse = new ListAppResponse()
     erroredAppResponse.setStatus(AppStatus.ERROR)
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
+      override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
         Seq(erroredAppResponse, erroredAppResponse)
     })
 
     val action = new LeonardoService(leoDAO)
 
     Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf) shouldBe true
-    verify(leoDAO).listApps(anyString(), any[UUID])
+    verify(leoDAO).listApps(anyString(), any[GoogleProjectId])
   }
 
   it should "poll and return true when apps have finished deleting" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] = Seq.empty
+      override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] = Seq.empty
     })
 
     val action = new LeonardoService(leoDAO)
 
     Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf) shouldBe true
-    verify(leoDAO).listApps(anyString(), any[UUID])
+    verify(leoDAO).listApps(anyString(), any[GoogleProjectId])
   }
 
   it should "retry on 5xx from listapps" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
       var times = 0
 
-      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] = {
+      override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] = {
         times = times + 1
         if (times > 1) {
           Seq.empty
@@ -192,12 +192,12 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
     Await.result(action.pollAppDeletion(azureWorkspace, ctx), Duration.Inf)
 
-    verify(leoDAO, times(2)).listApps(anyString(), any[UUID])
+    verify(leoDAO, times(2)).listApps(anyString(), any[GoogleProjectId])
   }
 
   it should "complete successfully on 403 forbidden when listing apps" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
-    when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ =>
+    when(leoDAO.listApps(anyString(), any[GoogleProjectId])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden")
     )
     val action = new LeonardoService(leoDAO)
@@ -207,7 +207,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
   it should "complete successfully on 404 not found when listing apps" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
-    when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ =>
+    when(leoDAO.listApps(anyString(), any[GoogleProjectId])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.NotFound.intValue, "not found")
     )
     val action = new LeonardoService(leoDAO)
@@ -217,7 +217,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
   it should "fail on other 4xx when listing apps" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
-    when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ =>
+    when(leoDAO.listApps(anyString(), any[GoogleProjectId])).thenAnswer(_ =>
       throw new ApiException(StatusCodes.ImATeapot.intValue, "teapot")
     )
     val action = new LeonardoService(leoDAO)
@@ -229,7 +229,9 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
   it should "not retry on an unrelated exception" in {
     val leoDAO = mock[LeonardoDAO](RETURNS_SMART_NULLS)
-    when(leoDAO.listApps(anyString(), any[UUID])).thenAnswer(_ => throw new IllegalStateException("exception"))
+    when(leoDAO.listApps(anyString(), any[GoogleProjectId])).thenAnswer(_ =>
+      throw new IllegalStateException("exception")
+    )
     val action = new LeonardoService(leoDAO)
 
     intercept[IllegalStateException] {
@@ -330,7 +332,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
   it should "list running apps" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
+      override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
         Seq(
           new ListAppResponse().status(AppStatus.PROVISIONING),
           new ListAppResponse().status(AppStatus.STARTING),
@@ -348,7 +350,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
                                          AppStatus.RUNNING,
                                          AppStatus.DELETING
     )
-    verify(leoDAO).listApps(anyString(), ArgumentMatchers.eq(googleWorkspace.workspaceIdAsUUID))
+    verify(leoDAO).listApps(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
   }
 
   it should "not list stopped or deleted apps" in {
@@ -357,21 +359,21 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
     val statusUnspecifiedAppResponse = new ListAppResponse().status(AppStatus.STATUS_UNSPECIFIED)
     val errorAppResponse = new ListAppResponse().status(AppStatus.ERROR)
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse] =
+      override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
         Seq(runningAppResponse, stoppedAppResponse, statusUnspecifiedAppResponse, errorAppResponse)
     })
 
     val action = new LeonardoService(leoDAO)
     val result = Await.result(action.listRunningApps(googleWorkspace, ctx), Duration.Inf)
     result.size shouldBe 0
-    verify(leoDAO).listApps(anyString(), ArgumentMatchers.eq(googleWorkspace.workspaceIdAsUUID))
+    verify(leoDAO).listApps(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
   }
 
   behavior of "listRunningRuntimes"
 
   it should "list running runtimes" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse] = {
+      override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] = {
         val statuses = Seq(
           ClusterStatus.CREATING,
           ClusterStatus.RUNNING,
@@ -399,12 +401,12 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
                                          ClusterStatus.STOPPING,
                                          ClusterStatus.DELETING
     )
-    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(null))
+    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
   }
 
   it should "not list stopped or deleted runtimes" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse] = {
+      override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] = {
         val statuses = Seq(ClusterStatus.ERROR, ClusterStatus.STOPPED, ClusterStatus.DELETED, ClusterStatus.UNKNOWN)
         statuses.map { status =>
           new ListRuntimeResponse()
@@ -416,14 +418,14 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
     val action = new LeonardoService(leoDAO)
     val result = Await.result(action.listRunningRuntimes(googleWorkspace, ctx), Duration.Inf)
     result.size shouldBe 0
-    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(null))
+    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
   }
 
   behavior of "listRunningDisks"
 
   it should "list running disks" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse] = {
+      override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] = {
         val cloudContext = new CloudContext()
           .cloudProvider(CloudProvider.GCP)
           .cloudResource(googleWorkspace.googleProjectId.value);
@@ -450,12 +452,12 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
                                          DiskStatus.RESTORING,
                                          DiskStatus.DELETING
     )
-    verify(leoDAO).listDisks(any[String], any[String]);
+    verify(leoDAO).listDisks(any[String], any[GoogleProjectId]);
   }
 
   it should "not list stopped or deleted disks" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse] = {
+      override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] = {
         val cloudContext = new CloudContext()
           .cloudProvider(CloudProvider.GCP)
           .cloudResource(googleWorkspace.googleProjectId.value);
@@ -470,7 +472,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
     val action = new LeonardoService(leoDAO)
     val result = Await.result(action.listRunningDisks(googleWorkspace, ctx), Duration.Inf)
     result.size shouldBe 0
-    verify(leoDAO).listDisks(any[String], any[String])
+    verify(leoDAO).listDisks(any[String], any[GoogleProjectId])
   }
 
 }
