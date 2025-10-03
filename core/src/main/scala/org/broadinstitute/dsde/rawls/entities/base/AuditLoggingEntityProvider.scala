@@ -29,8 +29,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import spray.json._
 
-import java.util.concurrent.TimeUnit
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 // Case classes for structured audit logging
@@ -55,7 +54,8 @@ object AuditJsonSupport extends JsonSupport {
 class AuditLoggingEntityProvider(val delegate: EntityProvider,
                                  val requestArguments: EntityRequestArguments,
                                  metricsPrefix: String
-) extends EntityProvider
+)(implicit executionContext: ExecutionContext)
+    extends EntityProvider
     with LazyLogging
     with EntityProviderMetrics {
   override def entityStoreId: Option[String] = delegate.entityStoreId
@@ -94,12 +94,24 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
     val tryResult: Try[T] = Try(op(())) // execute the function being wrapped
     stopwatch.stop() // stop the timer
     tryResult match {
-      // on success, capture latency and count metrics for the wrapped function
-      // then return the wrapped function's result
+      // Handle the case where T is a Future (which may succeed or fail). In this case,
+      // register a callback to record success/error metrics once the Future completes,
+      // then return the original Future.
+      case Success(future: Future[_]) =>
+        future.onComplete {
+          case Success(_) =>
+            recordFunctionLatency(functionName, delegate, stopwatch.getDuration.toMillis)
+          case Failure(ex) =>
+            recordError(functionName, delegate, ex)
+        }
+        // for legal syntax, this needs to return T, not Future[_]
+        tryResult.get
+      // T is not a Future: on success, capture latency and count metrics for the wrapped
+      // function then return the wrapped function's result
       case Success(result) =>
         recordFunctionLatency(functionName, delegate, stopwatch.getDuration.toMillis)
         result
-      // on error, increment the error count metric and rethrow the exception
+      // T is not a Future: on error, increment the error count metric and rethrow the exception
       case Failure(exception) =>
         recordError(functionName, delegate, exception)
         throw exception
