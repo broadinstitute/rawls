@@ -92,7 +92,6 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
     logAudit(functionName) // log the action
     val stopwatch = StopWatch.createStarted() // start a timer
     val tryResult: Try[T] = Try(op(())) // execute the function being wrapped
-    stopwatch.stop() // stop the timer
     tryResult match {
       // Handle the case where T is a Future (which may succeed or fail). In this case,
       // register a callback to record success/error metrics once the Future completes,
@@ -100,8 +99,10 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
       case Success(future: Future[_]) =>
         future.onComplete {
           case Success(_) =>
+            stopwatch.stop() // stop the timer
             recordFunctionLatency(functionName, delegate, stopwatch.getDuration.toMillis)
           case Failure(ex) =>
+            stopwatch.stop() // stop the timer
             recordError(functionName, delegate, ex)
         }
         // for legal syntax, this needs to return T, not Future[_]
@@ -109,10 +110,12 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
       // T is not a Future: on success, capture latency and count metrics for the wrapped
       // function then return the wrapped function's result
       case Success(result) =>
+        stopwatch.stop() // stop the timer
         recordFunctionLatency(functionName, delegate, stopwatch.getDuration.toMillis)
         result
       // T is not a Future: on error, increment the error count metric and rethrow the exception
       case Failure(exception) =>
+        stopwatch.stop() // stop the timer
         recordError(functionName, delegate, exception)
         throw exception
     }
