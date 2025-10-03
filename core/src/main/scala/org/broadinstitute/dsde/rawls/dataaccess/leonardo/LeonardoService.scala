@@ -20,7 +20,6 @@ import org.broadinstitute.dsde.workbench.client.leonardo.model.{
 import java.util.UUID
 import javax.ws.rs.ProcessingException
 import scala.concurrent.{blocking, ExecutionContext, Future}
-import scala.util.{Failure, Success}
 
 /**
  * Wraps the leonardo DAO with retry logic and error handling
@@ -32,67 +31,11 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
 ) extends Retry
     with LazyLogging {
 
-  def pollOperation[T](workspace: Workspace,
-                       ctx: RawlsRequestContext,
-                       checker: (Workspace, RawlsRequestContext) => Future[Seq[T]]
-  )(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = checker(workspace, ctx).transformWith {
-    case Failure(t: ApiException) =>
-      if (t.getCode == StatusCodes.Forbidden.intValue) {
-        // leo gives back a 403 when the workspace is gone
-        logger.warn(s"403 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
-        Future.successful(true)
-      } else if (t.getCode == StatusCodes.NotFound.intValue) {
-        logger.warn(s"404 when fetching leo resources, continuing [workspaceId=${workspace.workspaceId}]")
-        Future.successful(true)
-      } else {
-        Future.failed(t)
-      }
-    case Failure(t)                               => Future.failed(t)
-    case Success(resources) if resources.nonEmpty => Future.successful(false)
-    case Success(_)                               => Future.successful(true)
-  }
-
-  def pollRuntimeDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = {
-    logger.info(s"Polling runtime deletion [workspaceId=${workspace.workspaceId}]")
-    pollOperation[ListRuntimeResponse](workspace, ctx, listNonErroredAzureRuntimes)
-  }
-
-  def pollAppDeletion(workspace: Workspace, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = {
-    logger.info(s"Polling app deletion [workspaceId=${workspace.workspaceId}]")
-    pollOperation[ListAppResponse](workspace, ctx, listNonErroredApps)
-  }
-
   def when500OrProcessingException(throwable: Throwable): Boolean =
     throwable match {
       case t: LeoApiException     => t.getCode / 100 == 5
       case _: ProcessingException => true
       case _                      => false
-    }
-
-  // TODO: Refactor to use getAllApps
-  def listNonErroredApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Seq[ListAppResponse]] =
-    retry(when500OrProcessingException) { () =>
-      Future {
-        blocking {
-          val allApps = leonardoDAO.listApps(ctx.userInfo.accessToken.token, workspace.googleProjectId)
-          val nonErroredApps = allApps.filter(_.getStatus != AppStatus.ERROR)
-          val erroredAppCount = allApps.size - nonErroredApps.size
-          if (erroredAppCount > 0) {
-            logger.info(
-              s"Filtering out ${erroredAppCount} errored apps for [workspaceId=${workspace.workspaceIdAsUUID}]"
-            )
-          }
-          nonErroredApps
-        }
-      }
     }
 
   private def getAllApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit
@@ -139,25 +82,6 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
       allRuntimes.filter(runtime => statuses.contains(runtime.getStatus));
     }
 
-  def listNonErroredAzureRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Seq[ListRuntimeResponse]] =
-    retry(when500OrProcessingException) { () =>
-      Future {
-        blocking {
-          val allRuntimes = leonardoDAO.listAzureRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
-          val nonErroredRuntimes = allRuntimes.filter(_.getStatus != ClusterStatus.ERROR)
-          val erroredRuntimeCount = allRuntimes.size - nonErroredRuntimes.size
-          if (erroredRuntimeCount > 0) {
-            logger.info(
-              s"Filtering out ${erroredRuntimeCount} errored runtimes for [workspaceId=${workspace.workspaceIdAsUUID}]"
-            )
-          }
-          nonErroredRuntimes
-        }
-      }
-    }
-
   private def getAllDisks(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListPersistentDiskResponse]] =
@@ -191,29 +115,6 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
       apps <- listRunningApps(workspace, ctx)
       disks <- listRunningDisks(workspace, ctx)
     } yield runtimes.nonEmpty || apps.nonEmpty || disks.nonEmpty
-
-  def deleteApps(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] =
-    retry(when500OrProcessingException) { () =>
-      Future {
-        blocking {
-          logger.info(s"Sending app deletion request [workspaceId=${workspace.workspaceIdAsUUID}]")
-          leonardoDAO.deleteApps(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID, deleteDisk = true)
-        }
-      }
-    }
-
-  def deleteRuntimes(workspace: Workspace, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] =
-    retry(when500OrProcessingException) { () =>
-      Future {
-        blocking {
-          logger.info(s"Sending runtime deletion request [workspaceId=${workspace.workspaceIdAsUUID}]")
-          leonardoDAO.deleteAzureRuntimes(ctx.userInfo.accessToken.token,
-                                          workspace.workspaceIdAsUUID,
-                                          deleteDisk = true
-          )
-        }
-      }
-    }
 
   /**
    * Notifies leonardo that it should delete any resource records related to the given google project ID *without*

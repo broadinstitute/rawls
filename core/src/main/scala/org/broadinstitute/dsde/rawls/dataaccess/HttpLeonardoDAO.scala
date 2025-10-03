@@ -48,50 +48,16 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     new DisksApi(apiClient)
   }
 
-  override def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean) =
-    getAppsV2LeonardoApi(token).deleteAllAppsV2(workspaceId.toString, deleteDisk)
-
   override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
     getAppsV2LeonardoApi(token).listAppByProject(googleProjectId.value, null, false, null, null).asScala.toSeq
 
   override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] =
-    getRuntimesV2LeonardoApi(token).listRuntimesByProject(googleProjectId.value, null, false).asScala.toSeq
-
-  override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
-    getRuntimesV2LeonardoApi(token).listAzureRuntimesV2(workspaceId.toString, null, false, null).asScala.toSeq
-
-  override def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit =
-    getRuntimesV2LeonardoApi(token).deleteAllRuntimesV2(workspaceId.toString, deleteDisk)
+    getRuntimesV2LeonardoApi(token).listRuntimesByProject(googleProjectId.value, null).asScala.toSeq
 
   override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] =
-    getDisksLeonardoApi(token).listDisksByProject(googleProjectId.value, null, false, null, null).asScala.toSeq
-
-  override def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID] = None): Unit =
-    createApp(token, workspaceId, s"wds-$workspaceId", leonardoConfig.wdsType, sourceWorkspaceId)
-
-  override def createApp(token: String,
-                         workspaceId: UUID,
-                         appName: String,
-                         appType: String,
-                         sourceWorkspaceId: Option[UUID]
-  ): Unit = {
-    val createAppRequest = buildAppRequest(appType, sourceWorkspaceId)
-    getAppsV2LeonardoApi(token).createAppV2(workspaceId.toString, appName, createAppRequest)
-  }
+    getDisksLeonardoApi(token).listDisksByProject(googleProjectId.value, null, null, null).asScala.toSeq
 
   override def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit =
     getResourcesLeonardoApi(token).cleanupAllResources(googleProjectId.value)
-
-  protected[dataaccess] def buildAppRequest(appType: String, sourceWorkspaceId: Option[UUID]): CreateAppRequest = {
-    val createAppRequest = new CreateAppRequest()
-    sourceWorkspaceId.foreach { sourceId =>
-      createAppRequest.setSourceWorkspaceId(sourceId.toString)
-    }
-    val appTypeEnum = AppType.fromValue(appType)
-    createAppRequest.setAppType(appTypeEnum)
-    createAppRequest.setAccessScope(AppAccessScope.WORKSPACE_SHARED)
-
-    createAppRequest
-  }
 
 }
