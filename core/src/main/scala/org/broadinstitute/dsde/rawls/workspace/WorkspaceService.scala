@@ -1580,9 +1580,17 @@ class WorkspaceService(
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = for {
     workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.lock, ignoreLock = true)
+    _ <- leonardoService.hasActiveResources(workspace, ctx).flatMap {
+      case true =>
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.Conflict, "Cannot lock workspace with active cloud environments.")
+          )
+        )
+      case false => Future.successful(())
+    }
     locked <- workspaceRepository.lockWorkspace(workspace)
     policyEmails <- getBucketPolicyEmails(workspace)
-
     _ <- fastPassServiceConstructor(ctx).removeFastPassGrantsForWorkspace(workspace)
     _ <- gcsDAO.updateBucketIamAllReaders(GcsBucketName(workspace.bucketName),
                                           policyEmails.values.toSet,

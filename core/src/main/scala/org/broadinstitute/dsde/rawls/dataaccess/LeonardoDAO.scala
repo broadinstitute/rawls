@@ -1,31 +1,20 @@
 package org.broadinstitute.dsde.rawls.dataaccess
-import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsApi
 
-import scala.concurrent.{ExecutionContext, Future}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
-
-import java.util.UUID
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{
+  ListAppResponse,
+  ListPersistentDiskResponse,
+  ListRuntimeResponse
+}
 
 trait LeonardoDAO {
 
-  def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID]): Unit
+  def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse]
 
-  def createApp(token: String,
-                workspaceId: UUID,
-                appName: String,
-                appType: String,
-                sourceWorkspaceId: Option[UUID]
-  ): Unit
+  def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse]
 
-  def deleteApps(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit
-
-  def listApps(token: String, workspaceId: UUID): Seq[ListAppResponse]
-
-  def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
-
-  def deleteAzureRuntimes(token: String, workspaceId: UUID, deleteDisk: Boolean): Unit
+  def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse]
 
   @throws(classOf[ApiException])
   def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit

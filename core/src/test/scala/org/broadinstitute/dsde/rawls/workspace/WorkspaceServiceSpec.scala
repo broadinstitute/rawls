@@ -184,8 +184,10 @@ class WorkspaceServiceSpec
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
-    )
-      .thenReturn(Future.successful())
+    ).thenReturn(Future.successful())
+    when(
+      leonardoService.hasActiveResources(any[Workspace], any[RawlsRequestContext])(any[ExecutionContext])
+    ).thenReturn(Future.successful(false))
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
@@ -743,6 +745,41 @@ class WorkspaceServiceSpec
 
     assert {
       !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
+  it should "fail to lock a workspace with active cloud resources" in withTestDataServices { services =>
+    when(
+      services.leonardoService.hasActiveResources(any[Workspace], any[RawlsRequestContext])(any[ExecutionContext])
+    ).thenReturn(Future.successful(true))
+    val except: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+        Duration.Inf
+      )
+    }
+    assertResult(StatusCodes.Conflict) {
+      except.errorReport.statusCode.get
+    }
+
+    assert {
+      !runAndWait(workspaceQuery.findByName(testData.workspaceNoSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
+  it should "lock a workspace with no active cloud resources" in withTestDataServices { services =>
+    when(
+      services.leonardoService.hasActiveResources(any[Workspace], any[RawlsRequestContext])(any[ExecutionContext])
+    ).thenReturn(Future.successful(false))
+    val result = Await.result(
+      services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+      Duration.Inf
+    )
+    assertResult(true) {
+      result
+    }
+    assert {
+      runAndWait(workspaceQuery.findByName(testData.workspaceNoSubmissions.toWorkspaceName)).head.isLocked
     }
   }
 
