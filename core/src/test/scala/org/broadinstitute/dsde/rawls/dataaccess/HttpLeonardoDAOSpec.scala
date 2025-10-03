@@ -86,6 +86,29 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
 
   }
 
+  it should "call the listDisks API with labels" in {
+    val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+
+    Try(leonardoDAO.listDisks(token, null))
+
+    Mockito
+      .verify(leonardoDAO)
+      .listDisks(ArgumentMatchers.eq(token), ArgumentMatchers.eq(null))
+
+  }
+
+  it should "call the listRuntimes API with source workspace id" in {
+    val workspaceId = UUID.randomUUID()
+    val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
+
+    Try(leonardoDAO.listRuntimes(token, workspaceId))
+
+    Mockito
+      .verify(leonardoDAO)
+      .listRuntimes(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId))
+
+  }
+
   it should "call the listAzureRuntimes API with source workspace id" in {
     val workspaceId = UUID.randomUUID()
     val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
