@@ -29,7 +29,7 @@ trait LeonardoDAO {
 
   def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse]
 
-  def listRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
+  def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse]
 
   def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse]
 

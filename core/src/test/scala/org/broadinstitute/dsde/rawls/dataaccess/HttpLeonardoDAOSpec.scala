@@ -97,15 +97,15 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
 
   }
 
-  it should "call the listRuntimes API with source workspace id" in {
+  it should "call the listRuntimes API with lables" in {
     val workspaceId = UUID.randomUUID()
     val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
 
-    Try(leonardoDAO.listRuntimes(token, workspaceId))
+    Try(leonardoDAO.listRuntimes(token, null))
 
     Mockito
       .verify(leonardoDAO)
-      .listRuntimes(ArgumentMatchers.eq(token), ArgumentMatchers.eq(workspaceId))
+      .listRuntimes(ArgumentMatchers.eq(token), ArgumentMatchers.eq(null))
 
   }
 

@@ -27,7 +27,7 @@ class MockLeonardoDAO extends LeonardoDAO {
 
   override def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse] = ???
 
-  override def listRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] = ???
+  override def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse] = ???
 
   override def listAzureRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] = ???
 

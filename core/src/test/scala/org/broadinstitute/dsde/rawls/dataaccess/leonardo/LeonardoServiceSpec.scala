@@ -371,16 +371,22 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
   it should "list running runtimes" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
-        Seq(
-          new ListRuntimeResponse().status(ClusterStatus.CREATING),
-          new ListRuntimeResponse().status(ClusterStatus.RUNNING),
-          new ListRuntimeResponse().status(ClusterStatus.UPDATING),
-          new ListRuntimeResponse().status(ClusterStatus.STARTING),
-          new ListRuntimeResponse().status(ClusterStatus.STOPPING),
-          new ListRuntimeResponse().status(ClusterStatus.DELETING),
-          new ListRuntimeResponse().status(ClusterStatus.DELETED)
+      override def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse] = {
+        val statuses = Seq(
+          ClusterStatus.CREATING,
+          ClusterStatus.RUNNING,
+          ClusterStatus.UPDATING,
+          ClusterStatus.STARTING,
+          ClusterStatus.STOPPING,
+          ClusterStatus.DELETING,
+          ClusterStatus.DELETED
         )
+        statuses.map { status =>
+          new ListRuntimeResponse()
+            .status(status)
+            .workspaceId(googleWorkspace.workspaceId)
+        }
+      }
     })
 
     val action = new LeonardoService(leoDAO)
@@ -393,24 +399,24 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
                                          ClusterStatus.STOPPING,
                                          ClusterStatus.DELETING
     )
-    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(googleWorkspace.workspaceIdAsUUID))
+    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(null))
   }
 
   it should "not list stopped or deleted runtimes" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listRuntimes(token: String, workspaceId: UUID): Seq[ListRuntimeResponse] =
-        Seq(
-          new ListRuntimeResponse().status(ClusterStatus.ERROR),
-          new ListRuntimeResponse().status(ClusterStatus.STOPPED),
-          new ListRuntimeResponse().status(ClusterStatus.DELETED),
-          new ListRuntimeResponse().status(ClusterStatus.UNKNOWN)
-        )
+      override def listRuntimes(token: String, labels: String): Seq[ListRuntimeResponse] = {
+        val statuses = Seq(ClusterStatus.ERROR, ClusterStatus.STOPPED, ClusterStatus.DELETED, ClusterStatus.UNKNOWN)
+        statuses.map { status =>
+          new ListRuntimeResponse()
+            .status(status)
+            .workspaceId(googleWorkspace.workspaceId)
+        }
+      }
     })
-
     val action = new LeonardoService(leoDAO)
     val result = Await.result(action.listRunningRuntimes(googleWorkspace, ctx), Duration.Inf)
     result.size shouldBe 0
-    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(googleWorkspace.workspaceIdAsUUID))
+    verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(null))
   }
 
   behavior of "listRunningDisks"
@@ -421,13 +427,18 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
         val cloudContext = new CloudContext()
           .cloudProvider(CloudProvider.GCP)
           .cloudResource(googleWorkspace.googleProjectId.value);
-        Seq(
-          new ListPersistentDiskResponse().status(DiskStatus.CREATING).cloudContext(cloudContext),
-          new ListPersistentDiskResponse().status(DiskStatus.READY).cloudContext(cloudContext),
-          new ListPersistentDiskResponse().status(DiskStatus.RESTORING).cloudContext(cloudContext),
-          new ListPersistentDiskResponse().status(DiskStatus.DELETING).cloudContext(cloudContext),
-          new ListPersistentDiskResponse().status(DiskStatus.DELETED).cloudContext(cloudContext)
+        val statuses = Seq(
+          DiskStatus.CREATING,
+          DiskStatus.READY,
+          DiskStatus.RESTORING,
+          DiskStatus.DELETING,
+          DiskStatus.DELETED
         )
+        statuses.map { status =>
+          new ListPersistentDiskResponse()
+            .status(status)
+            .cloudContext(cloudContext)
+        }
       }
     })
 
@@ -444,12 +455,18 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
   it should "not list stopped or deleted disks" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse] =
-        Seq(new ListPersistentDiskResponse().status(DiskStatus.FAILED),
-            new ListPersistentDiskResponse().status(DiskStatus.DELETED)
-        )
+      override def listDisks(token: String, labels: String): Seq[ListPersistentDiskResponse] = {
+        val cloudContext = new CloudContext()
+          .cloudProvider(CloudProvider.GCP)
+          .cloudResource(googleWorkspace.googleProjectId.value);
+        val statuses = Seq(DiskStatus.FAILED, DiskStatus.DELETED)
+        statuses.map { status =>
+          new ListPersistentDiskResponse()
+            .status(status)
+            .cloudContext(cloudContext)
+        }
+      }
     })
-
     val action = new LeonardoService(leoDAO)
     val result = Await.result(action.listRunningDisks(googleWorkspace, ctx), Duration.Inf)
     result.size shouldBe 0

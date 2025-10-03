@@ -120,7 +120,8 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     retry(when500OrProcessingException) { () =>
       Future {
         blocking {
-          leonardoDAO.listRuntimes(ctx.userInfo.accessToken.token, workspace.workspaceIdAsUUID)
+          val allRuntimes = leonardoDAO.listRuntimes(ctx.userInfo.accessToken.token, null)
+          allRuntimes.filter(runtime => runtime.getWorkspaceId == workspace.workspaceId)
         }
       }
     }
