@@ -5,6 +5,7 @@ import io.opentelemetry.api.common.{AttributeKey, Attributes}
 import io.opentelemetry.api.metrics.{DoubleHistogram, LongCounter, LongHistogram}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 
+import java.util.stream.DoubleStream
 import scala.jdk.CollectionConverters._
 
 trait EntityProviderMetrics extends RawlsInstrumented {
@@ -15,8 +16,32 @@ trait EntityProviderMetrics extends RawlsInstrumented {
   private val ProviderNameKey = AttributeKey.stringKey("providername")
   private val ErrorClassKey = AttributeKey.stringKey("errortype")
 
-  private val BucketBoundaries =
-    List[java.lang.Double](0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0).asJava
+  // every 10ms up to 100ms, then every 190ms up to 2s (190 ends neatly at 2s), then every 2s up to
+  // 10s, then every 20s up to 9m
+  private val BucketBoundaries: java.util.List[
+    java.lang.Double
+  ] = // does all the math in terms of milliseconds, then converts to seconds, otherwise the
+    // precision is wonky
+    DoubleStream
+      .iterate(10,
+               (d: Double) => d < 60000 * 9,
+               (d: Double) => {
+                 def foo(d: Double): Double =
+                   if (d < 100) {
+                     d + 10
+                   } else if (d < 2000) {
+                     d + 190
+                   } else if (d < 10000) {
+                     d + 2000
+                   } else
+                     d + 20000
+
+                 foo(d)
+               }
+      )
+      .map((d: Double) => d / 1000.0)
+      .boxed
+      .toList
 
   private def meter = GlobalOpenTelemetry.get().getMeter("RawlsMetrics")
 
