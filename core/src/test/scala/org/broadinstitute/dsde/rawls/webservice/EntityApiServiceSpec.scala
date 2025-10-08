@@ -1561,7 +1561,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val update1 = EntityUpdateDefinition(
       entityName,
       testData.sample1.entityType,
-      Seq(AddUpdateAttribute(AttributeName.withDefaultNS("list"), AttributeValueEmptyList))
+      Seq(CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("samples")))
     )
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1))) ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
@@ -1574,7 +1574,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             Entity(
               entityName,
               testData.sample1.entityType,
-              Map(AttributeName.withDefaultNS("list") -> AttributeValueEmptyList)
+              // note that even though update1 asked to create an empty reference list with CreateAttributeEntityReferenceList,
+              // what gets written to the db is `[]`, which Quicksilver interprets as AttributeValueEmptyList
+              Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList)
             )
           )
         ) {
@@ -1591,7 +1593,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val update2 = EntityUpdateDefinition(
       entityName,
       testData.sample1.entityType,
-      Seq(AddListMember(AttributeName.withDefaultNS("list"), ref))
+      Seq(AddListMember(AttributeName.withDefaultNS("samples"), ref))
     )
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update2))) ~>
       sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
@@ -1604,7 +1606,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             Entity(
               entityName,
               testData.sample1.entityType,
-              Map(AttributeName.withDefaultNS("list") -> AttributeEntityReferenceList(Seq(ref)))
+              Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(ref)))
             )
           )
         ) {
