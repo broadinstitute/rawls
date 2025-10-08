@@ -1,10 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{
-  ListAppResponse,
-  ListRuntimeResponse
-}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{ListAppResponse, ListRuntimeResponse}
 
 class MockLeonardoDAO extends LeonardoDAO {
 

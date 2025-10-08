@@ -107,7 +107,7 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
       allDisks.filter(disk => statuses.contains(disk.getStatus));
     }
 
-  //** Check if a workspace has any active cloud environments.
+  // ** Check if a workspace has any active cloud environments.
   def hasActiveResources(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Boolean] =
