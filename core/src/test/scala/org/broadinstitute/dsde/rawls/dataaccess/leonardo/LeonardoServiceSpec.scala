@@ -16,12 +16,8 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   AppStatus,
-  CloudContext,
-  CloudProvider,
   ClusterStatus,
-  DiskStatus,
   ListAppResponse,
-  ListPersistentDiskResponse,
   ListRuntimeResponse
 }
 import org.joda.time.DateTime

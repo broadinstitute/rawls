@@ -4,10 +4,9 @@ import okhttp3.{Dispatcher, Protocol}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
-import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, DisksApi, ResourcesApi, RuntimesApi}
+import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, ResourcesApi, RuntimesApi}
 import org.broadinstitute.dsde.workbench.client.leonardo.model._
 
-import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
