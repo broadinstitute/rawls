@@ -26,6 +26,10 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   MethodConfiguration
 }
+import org.broadinstitute.dsde.rawls.util.AttributeOperationListModes.{
+  AllowAddingReferencesToEmptyList,
+  AttributeOperationListMode
+}
 
 import scala.concurrent.Future
 
@@ -65,7 +69,8 @@ trait AttributeSupport {
   }
 
   def applyAttributeUpdateOperations(attributable: Attributable,
-                                     operations: Seq[AttributeUpdateOperation]
+                                     operations: Seq[AttributeUpdateOperation],
+                                     listMode: AttributeOperationListMode = AllowAddingReferencesToEmptyList
   ): AttributeMap =
     operations.foldLeft(attributable.attributes) { (startingAttributes, operation) =>
       operation match {
@@ -96,7 +101,17 @@ trait AttributeSupport {
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>
-                  throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
+                  listMode match {
+                    case AttributeOperationListModes.Strict =>
+                      throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
+                    case AttributeOperationListModes.AllowAddingReferencesToEmptyList =>
+                      // When an entity has an attribute with a value of `[]`, Quicksilver cannot distinguish
+                      // if that value is a AttributeValueList or a AttributeEntityReferenceList, and by default
+                      // it deserializes it as AttributeValueList. So, here, we allow adding entity references
+                      // to an AttributeValueList, which converts it to a AttributeEntityReferenceList.
+                      startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
+                  }
+
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
@@ -175,8 +190,22 @@ trait AttributeSupport {
    * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
    * @return the updated entity
    */
-  def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity =
-    entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
+  def applyOperationsToEntity(entity: Entity,
+                              operations: Seq[AttributeUpdateOperation],
+                              listMode: AttributeOperationListMode = AllowAddingReferencesToEmptyList
+  ): Entity =
+    entity.copy(attributes = applyAttributeUpdateOperations(entity, operations, listMode))
+}
+
+object AttributeOperationListModes extends Enumeration {
+  type AttributeOperationListMode = Value
+  /*
+   * AllowAddingReferencesToEmptyList: attempting to add an AttributeEntityReference as a list member to an
+   *  AttributeEmptyValueList is allowed and results in an AttributeEntityReferenceList
+   * Strict: attempting to add an AttributeEntityReference as a list member to an
+   *  AttributeEmptyValueList is not allowed and throws an exception.
+   */
+  val AllowAddingReferencesToEmptyList, Strict = Value
 }
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)

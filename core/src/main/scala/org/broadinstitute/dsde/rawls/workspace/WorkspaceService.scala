@@ -43,6 +43,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{
   AttributeNotFoundException,
+  AttributeOperationListModes,
   AttributeSupport,
   AttributeUpdateOperationException,
   BillingProjectSupport,
@@ -1654,7 +1655,9 @@ class WorkspaceService(
    * @return the updated entity
    */
   private def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace =
-    workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
+    workspace.copy(attributes =
+      applyAttributeUpdateOperations(workspace, operations, AttributeOperationListModes.Strict)
+    )
 
   private def getGoogleBucketPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
     val googleRole = if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty) {
