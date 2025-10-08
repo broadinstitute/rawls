@@ -103,18 +103,18 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListPersistentDiskResponse]] =
     getAllDisks(workspace, ctx).map { allDisks =>
-      val statuses = Set(DiskStatus.CREATING, DiskStatus.READY, DiskStatus.RESTORING, DiskStatus.DELETING);
+      val statuses = Set(DiskStatus.CREATING, DiskStatus.RESTORING, DiskStatus.DELETING);
       allDisks.filter(disk => statuses.contains(disk.getStatus));
     }
 
+  //** Check if a workspace has any active cloud environments.
   def hasActiveResources(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Boolean] =
     for {
       runtimes <- listRunningRuntimes(workspace, ctx)
       apps <- listRunningApps(workspace, ctx)
-      disks <- listRunningDisks(workspace, ctx)
-    } yield runtimes.nonEmpty || apps.nonEmpty || disks.nonEmpty
+    } yield runtimes.nonEmpty || apps.nonEmpty
 
   /**
    * Notifies leonardo that it should delete any resource records related to the given google project ID *without*

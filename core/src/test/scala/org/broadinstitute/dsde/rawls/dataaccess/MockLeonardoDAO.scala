@@ -3,15 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   ListAppResponse,
-  ListPersistentDiskResponse,
   ListRuntimeResponse
 }
 
 class MockLeonardoDAO extends LeonardoDAO {
 
   override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] = ???
-
-  override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] = ???
 
   override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] = ???
 

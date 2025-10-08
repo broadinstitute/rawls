@@ -43,19 +43,11 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     new RuntimesApi(apiClient)
   }
 
-  private def getDisksLeonardoApi(accessToken: String): DisksApi = {
-    val apiClient = getApiClient(accessToken)
-    new DisksApi(apiClient)
-  }
-
   override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
     getAppsV2LeonardoApi(token).listAppByProject(googleProjectId.value, null, false, null, null).asScala.toSeq
 
   override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] =
     getRuntimesV2LeonardoApi(token).listRuntimesByProject(googleProjectId.value, null).asScala.toSeq
-
-  override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] =
-    getDisksLeonardoApi(token).listDisksByProject(googleProjectId.value, null, null, null).asScala.toSeq
 
   override def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit =
     getResourcesLeonardoApi(token).cleanupAllResources(googleProjectId.value)

@@ -34,17 +34,6 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
 
   }
 
-  it should "call the listDisks API with google project" in {
-    val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
-
-    Try(leonardoDAO.listDisks(token, googleProjectId))
-
-    Mockito
-      .verify(leonardoDAO)
-      .listDisks(ArgumentMatchers.eq(token), ArgumentMatchers.eq(googleProjectId))
-
-  }
-
   it should "call the listRuntimes API with google project" in {
     val leonardoDAO = Mockito.spy(new HttpLeonardoDAO(leonardoConfig))
 
