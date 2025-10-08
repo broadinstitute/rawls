@@ -76,4 +76,47 @@ class ExecutionModelSpec extends AnyFlatSpec with Assertions with Matchers {
     serializedObj should include(bigDecimalString)
   }
 
+  behavior of "ExecutionServiceOutputs deserialization"
+
+  it should "deserialize not-yet-archived outputs responses" in {
+    val jsonString =
+      """{
+        | "id": "00112233-4455-6677-8899-aabbccddeeff",
+        | "outputs": {
+        |   "echo_strings.echo_files.out": "Hello World"
+        | }
+        |}""".stripMargin
+
+    val jsonObj = ExecutionServiceOutputsFormat.read(jsonString.parseJson)
+    jsonObj shouldBe ExecutionServiceOutputs(
+      id = "00112233-4455-6677-8899-aabbccddeeff",
+      outputs = Option(
+        Map(
+          "echo_strings.echo_files.out" -> Left(AttributeString("Hello World"))
+        )
+      ),
+      message = None,
+      metadataArchiveStatus = None
+    )
+  }
+
+  it should "deserialize archived outputs responses" in {
+    val jsonString =
+      """{
+        | "id": "00112233-4455-6677-8899-aabbccddeeff",
+        | "message": "Cromwell has archived this workflow's metadata according to the lifecycle policy. The workflow completed at 2025-02-28T14:46:51.011Z, which was 17385233716 milliseconds ago. It is available in the archive bucket, or via a support request in the case of a managed instance.",
+        | "metadataArchiveStatus": "ArchivedAndDeleted"
+        |}""".stripMargin
+
+    val jsonObj = ExecutionServiceOutputsFormat.read(jsonString.parseJson)
+    jsonObj shouldBe ExecutionServiceOutputs(
+      id = "00112233-4455-6677-8899-aabbccddeeff",
+      outputs = None,
+      message = Option(
+        "Cromwell has archived this workflow's metadata according to the lifecycle policy. The workflow completed at 2025-02-28T14:46:51.011Z, which was 17385233716 milliseconds ago. It is available in the archive bucket, or via a support request in the case of a managed instance."
+      ),
+      metadataArchiveStatus = Option("ArchivedAndDeleted")
+    )
+  }
+
 }

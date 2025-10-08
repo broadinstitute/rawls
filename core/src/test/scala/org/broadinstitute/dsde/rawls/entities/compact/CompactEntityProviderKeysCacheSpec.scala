@@ -462,12 +462,14 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
 
     val sourceProvider = new CompactEntityProvider(
       defaultEntityRequestArguments.copy(workspace = sourceWorkspace),
-      new CompactEntityRepository(slickDataSource)
+      new CompactEntityRepository(slickDataSource),
+      "testMetricPrefix"
     )(ec, system)
 
     val destinationProvider = new CompactEntityProvider(
       defaultEntityRequestArguments.copy(workspace = destinationWorkspace),
-      new CompactEntityRepository(slickDataSource)
+      new CompactEntityRepository(slickDataSource),
+      "testMetricPrefix"
     )(ec, system)
 
     // insert entities to be copied to source workspace
@@ -624,7 +626,7 @@ class CompactEntityProviderKeysCacheSpec extends TestDriverComponentWithFlatSpec
   // ====================================================================================================
   def defaultProvider(): CompactEntityProvider = {
     val repository = new CompactEntityRepository(slickDataSource)
-    new CompactEntityProvider(defaultEntityRequestArguments, repository)(ec, system)
+    new CompactEntityProvider(defaultEntityRequestArguments, repository, "testMetricPrefix")(ec, system)
   }
 
 }

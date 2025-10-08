@@ -55,7 +55,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyInt, anyLong}
 import org.mockito.Mockito.times
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -1047,7 +1047,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
         any[Boolean],
         any[Int],
-        any[Boolean]
+        any[Boolean],
+        any[Long]
       )
     ).thenReturn(Future.successful(QuicksilverMigrationResult(2, 2, 2)))
 
@@ -1066,7 +1067,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
       any[Boolean],
       any[Int],
-      any[Boolean]
+      any[Boolean],
+      any[Long]
     )
   }
 
@@ -1107,7 +1109,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
         any[Boolean],
         any[Int],
-        any[Boolean]
+        any[Boolean],
+        any[Long]
       )
     ).thenReturn(Future.failed(new Exception("migration failed")))
 
@@ -1233,7 +1236,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
           ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
           any[Boolean],
           any[Int],
-          any[Boolean]
+          any[Boolean],
+          any[Long]
         )
       ).thenReturn(Future.successful(QuicksilverMigrationResult(1, 2, 3)))
 
@@ -1254,7 +1258,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
         anyBoolean(),
         anyInt(),
-        ArgumentMatchers.eq(false)
+        ArgumentMatchers.eq(false),
+        anyLong()
       )
     }
   }
@@ -1301,7 +1306,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
         ArgumentMatchers.eq(WorkspaceName(workspace.namespace, workspace.name)),
         any[Boolean],
         any[Int],
-        any[Boolean]
+        any[Boolean],
+        any[Long]
       )
     ).thenReturn(Future.successful(QuicksilverMigrationResult(1, 2, 3)))
 
@@ -1322,7 +1328,8 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
       any[WorkspaceName],
       anyBoolean(),
       anyInt(),
-      anyBoolean()
+      anyBoolean(),
+      anyLong()
     )
   }
 

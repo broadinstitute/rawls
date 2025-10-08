@@ -32,14 +32,14 @@ import org.broadinstitute.dsde.rawls.fastpass.{FastPassServiceImpl, MockFastPass
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.methods.MethodConfigurationService
-import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsStatsDTestUtils}
+import org.broadinstitute.dsde.rawls.metrics.logEvents.WorkspaceDeleteEvent
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSetting
+import org.broadinstitute.dsde.rawls.model.{SamResourcePolicyName, WorkspaceSetting, _}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.policy.PolicyService
@@ -184,8 +184,10 @@ class WorkspaceServiceSpec
     val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
     when(
       leonardoService.cleanupResources(any[GoogleProjectId], any[UUID], any[RawlsRequestContext])(any[ExecutionContext])
-    )
-      .thenReturn(Future.successful())
+    ).thenReturn(Future.successful())
+    when(
+      leonardoService.hasActiveResources(any[Workspace], any[RawlsRequestContext])(any[ExecutionContext])
+    ).thenReturn(Future.successful(false))
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
     val policyService = mock[PolicyService](RETURNS_SMART_NULLS)
     when(policyService.createWorkspacePao(any(), any(), any())).thenReturn(Future.unit)
@@ -245,6 +247,7 @@ class WorkspaceServiceSpec
       "fakeDatePartitionColumn",
       "fakeServiceProject",
       31,
+      slickDataSource,
       bigQueryDAO
     )
     val execServiceBatchSize = 3
@@ -317,6 +320,7 @@ class WorkspaceServiceSpec
                                 Option(mockWorkspaceSettingRepository)
       ) _
 
+    val bardService = mock[BardService](RETURNS_SMART_NULLS)
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -340,7 +344,8 @@ class WorkspaceServiceSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(
@@ -413,6 +418,13 @@ class WorkspaceServiceSpec
       (_: RawlsRequestContext, _: SlickDataSource) => mockFastPassService
   }
 
+  class TestApiServiceWithCustomFastPassAndSam(dataSource: SlickDataSource, override val user: RawlsUser)
+      extends TestApiServiceWithMockFastPassService(dataSource, user) {
+
+    override val samDAO: CustomizableMockSamDAO = Mockito.spy(new CustomizableMockSamDAO(dataSource))
+    override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
+  }
+
   def withTestDataServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
@@ -434,6 +446,15 @@ class WorkspaceServiceSpec
     }
   def withTestDataServicesCustomFastPass[T](testCode: TestApiServiceWithMockFastPassService => T): T =
     withTestDataServicesCustomFastPassAndUser(testData.userOwner)(testCode)
+
+  def withTestDataServicesCustomFastPassAndSamAndUser[T](
+    user: RawlsUser
+  )(testCode: TestApiServiceWithCustomFastPassAndSam => T): T =
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServicesCustomFastPassAndSam(dataSource, user)(testCode)
+    }
+  def withTestDataServicesCustomFastPassAndSam[T](testCode: TestApiServiceWithCustomFastPassAndSam => T): T =
+    withTestDataServicesCustomFastPassAndSamAndUser(testData.userOwner)(testCode)
 
   def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user)
@@ -458,6 +479,17 @@ class WorkspaceServiceSpec
     testCode: TestApiServiceWithMockFastPassService => T
   ) = {
     val apiService = new TestApiServiceWithMockFastPassService(dataSource, user)
+
+    try
+      testCode(apiService)
+    finally
+      apiService.cleanupSupervisor
+  }
+
+  private def withServicesCustomFastPassAndSam[T](dataSource: SlickDataSource, user: RawlsUser)(
+    testCode: TestApiServiceWithCustomFastPassAndSam => T
+  ) = {
+    val apiService = new TestApiServiceWithCustomFastPassAndSam(dataSource, user)
 
     try
       testCode(apiService)
@@ -715,6 +747,253 @@ class WorkspaceServiceSpec
       !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
     }
   }
+
+  it should "fail to lock a workspace with active cloud resources" in withTestDataServices { services =>
+    when(
+      services.leonardoService.hasActiveResources(any[Workspace], any[RawlsRequestContext])(any[ExecutionContext])
+    ).thenReturn(Future.successful(true))
+    val except: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+        Duration.Inf
+      )
+    }
+    assertResult(StatusCodes.Conflict) {
+      except.errorReport.statusCode.get
+    }
+
+    assert {
+      !runAndWait(workspaceQuery.findByName(testData.workspaceNoSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
+  it should "lock a workspace with no active cloud resources" in withTestDataServices { services =>
+    when(
+      services.leonardoService.hasActiveResources(any[Workspace], any[RawlsRequestContext])(any[ExecutionContext])
+    ).thenReturn(Future.successful(false))
+    val result = Await.result(
+      services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+      Duration.Inf
+    )
+    assertResult(true) {
+      result
+    }
+    assert {
+      runAndWait(workspaceQuery.findByName(testData.workspaceNoSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
+  it should "call updateBucketIamAllReaders when locking a workspace" in withTestDataServicesCustomFastPassAndSam {
+    services =>
+      populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
+      when(
+        services.samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
+                                              testData.workspaceNoSubmissions.workspaceId,
+                                              testContext
+        )
+      )
+        .thenReturn(Future.successful(Seq.empty))
+      val workspaceProjectOwnersEmail = "projectOwners@gmail.com"
+      val workspaceOwnersEmail = "owners@gmail.com"
+      val workspaceWritersEmail = "writers@gmail.com"
+      val workspaceReadersEmail = "readers@gmail.com"
+      mockListPoliciesForResource(
+        services.samDAO,
+        testData.workspaceNoSubmissions,
+        Map(
+          SamWorkspacePolicyNames.projectOwner -> workspaceProjectOwnersEmail,
+          SamWorkspacePolicyNames.owner -> workspaceOwnersEmail,
+          SamWorkspacePolicyNames.writer -> workspaceWritersEmail,
+          SamWorkspacePolicyNames.reader -> workspaceReadersEmail
+        )
+      )
+      val billingOwnerEmail = "billing@gmail.com"
+      mockGetBillingProjectOwnerEmail(services.samDAO, testData.workspaceNoSubmissions.namespace, billingOwnerEmail)
+
+      Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+                   Duration.Inf
+      )
+      verify(services.gcsDAO).updateBucketIamAllReaders(
+        GcsBucketName(testData.workspaceNoSubmissions.bucketName),
+        Set(WorkbenchEmail(billingOwnerEmail),
+            WorkbenchEmail(workspaceOwnersEmail),
+            WorkbenchEmail(workspaceWritersEmail),
+            WorkbenchEmail(workspaceReadersEmail)
+        ),
+        Some(testData.workspaceNoSubmissions.googleProjectId),
+        iamPolicyVersion = 3
+      )
+      verify(services.mockFastPassService).removeFastPassGrantsForWorkspace(any[Workspace])
+  }
+
+  it should "call updateBucketIamAllReaders when locking a workspace with an auth domain" in withTestDataServicesCustomFastPassAndSam {
+    services =>
+      populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
+      when(services.samDAO.getResourceAuthDomain(any(), any(), any()))
+        .thenReturn(Future.successful(Seq("fakeAuthDomain@test.firecloud.org")))
+
+      val workspaceProjectOwnersEmail = "projectOwners@gmail.com"
+      val workspaceOwnersEmail = "owners@gmail.com"
+      val workspaceWritersEmail = "writers@gmail.com"
+      val workspaceReadersEmail = "readers@gmail.com"
+      mockListPoliciesForResource(
+        services.samDAO,
+        testData.workspaceNoSubmissions,
+        Map(
+          SamWorkspacePolicyNames.projectOwner -> workspaceProjectOwnersEmail,
+          SamWorkspacePolicyNames.owner -> workspaceOwnersEmail,
+          SamWorkspacePolicyNames.writer -> workspaceWritersEmail,
+          SamWorkspacePolicyNames.reader -> workspaceReadersEmail
+        )
+      )
+      val billingOwnerEmail = "billing@gmail.com"
+      mockGetBillingProjectOwnerEmail(services.samDAO, testData.workspaceNoSubmissions.namespace, billingOwnerEmail)
+
+      Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+                   Duration.Inf
+      )
+
+      verify(services.gcsDAO).updateBucketIamAllReaders(
+        GcsBucketName(testData.workspaceNoSubmissions.bucketName),
+        Set(
+          WorkbenchEmail(workspaceProjectOwnersEmail),
+          WorkbenchEmail(workspaceOwnersEmail),
+          WorkbenchEmail(workspaceWritersEmail),
+          WorkbenchEmail(workspaceReadersEmail)
+        ),
+        Some(testData.workspaceNoSubmissions.googleProjectId),
+        iamPolicyVersion = 3
+      )
+      verify(services.mockFastPassService).removeFastPassGrantsForWorkspace(any[Workspace])
+  }
+
+  it should "call updateBucketIam when unlocking a workspace" in withTestDataServicesCustomFastPassAndSam { services =>
+    populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
+    when(
+      services.samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
+                                            testData.workspaceNoSubmissions.workspaceId,
+                                            testContext
+      )
+    ).thenReturn(Future.successful(Seq.empty))
+
+    val workspaceProjectOwnersEmail = "projectOwners@gmail.com"
+    val workspaceOwnersEmail = "owners@gmail.com"
+    val workspaceWritersEmail = "writers@gmail.com"
+    val workspaceReadersEmail = "readers@gmail.com"
+    mockListPoliciesForResource(
+      services.samDAO,
+      testData.workspaceNoSubmissions,
+      Map(
+        SamWorkspacePolicyNames.projectOwner -> workspaceProjectOwnersEmail,
+        SamWorkspacePolicyNames.owner -> workspaceOwnersEmail,
+        SamWorkspacePolicyNames.writer -> workspaceWritersEmail,
+        SamWorkspacePolicyNames.reader -> workspaceReadersEmail
+      )
+    )
+    val billingOwnerEmail = "billing@gmail.com"
+    mockGetBillingProjectOwnerEmail(services.samDAO, testData.workspaceNoSubmissions.namespace, billingOwnerEmail)
+
+    Await.result(services.workspaceService.unlockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+                 Duration.Inf
+    )
+
+    val expectedPolicyEmails = Map(
+      WorkspaceAccessLevels.ProjectOwner -> WorkbenchEmail(billingOwnerEmail),
+      WorkspaceAccessLevels.Owner -> WorkbenchEmail(workspaceOwnersEmail),
+      WorkspaceAccessLevels.Write -> WorkbenchEmail(workspaceWritersEmail),
+      WorkspaceAccessLevels.Read -> WorkbenchEmail(workspaceReadersEmail)
+    )
+    verify(services.gcsDAO).updateBucketIam(
+      GcsBucketName(testData.workspaceNoSubmissions.bucketName),
+      expectedPolicyEmails,
+      Some(testData.workspaceNoSubmissions.googleProjectId),
+      iamPolicyVersion = 3
+    )
+    verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(any[Workspace])
+  }
+
+  it should "call updateBucketIam when unlocking a workspace with an auth domain" in withTestDataServicesCustomFastPassAndSam {
+    services =>
+      populateWorkspacePolicies(services, testData.workspaceNoSubmissions)
+      when(services.samDAO.getResourceAuthDomain(any(), any(), any()))
+        .thenReturn(Future.successful(Seq("fakeAuthDomain@test.firecloud.org")))
+
+      val workspaceProjectOwnersEmail = "projectOwners@gmail.com"
+      val workspaceOwnersEmail = "owners@gmail.com"
+      val workspaceWritersEmail = "writers@gmail.com"
+      val workspaceReadersEmail = "readers@gmail.com"
+      mockListPoliciesForResource(
+        services.samDAO,
+        testData.workspaceNoSubmissions,
+        Map(
+          SamWorkspacePolicyNames.projectOwner -> workspaceProjectOwnersEmail,
+          SamWorkspacePolicyNames.owner -> workspaceOwnersEmail,
+          SamWorkspacePolicyNames.writer -> workspaceWritersEmail,
+          SamWorkspacePolicyNames.reader -> workspaceReadersEmail
+        )
+      )
+      val billingOwnerEmail = "billing@gmail.com"
+      mockGetBillingProjectOwnerEmail(services.samDAO, testData.workspaceNoSubmissions.namespace, billingOwnerEmail)
+
+      Await.result(services.workspaceService.unlockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName),
+                   Duration.Inf
+      )
+
+      val expectedPolicyEmails = Map(
+        WorkspaceAccessLevels.ProjectOwner -> WorkbenchEmail(workspaceProjectOwnersEmail),
+        WorkspaceAccessLevels.Owner -> WorkbenchEmail(workspaceOwnersEmail),
+        WorkspaceAccessLevels.Write -> WorkbenchEmail(workspaceWritersEmail),
+        WorkspaceAccessLevels.Read -> WorkbenchEmail(workspaceReadersEmail)
+      )
+      verify(services.gcsDAO).updateBucketIam(
+        GcsBucketName(testData.workspaceNoSubmissions.bucketName),
+        expectedPolicyEmails,
+        Some(testData.workspaceNoSubmissions.googleProjectId),
+        iamPolicyVersion = 3
+      )
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(any[Workspace])
+  }
+
+  def mockListPoliciesForResource(samDAO: MockSamDAO,
+                                  workspace: Workspace,
+                                  policyEmails: Map[SamResourcePolicyName, String]
+  ): Unit = {
+    val policies = policyEmails.map { case (policyName, email) =>
+      SamPolicyWithNameAndEmail(
+        policyName,
+        SamPolicy(Set.empty, Set.empty, Set.empty),
+        WorkbenchEmail(email)
+      )
+    }.toSet
+
+    when(
+      samDAO.listPoliciesForResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        any
+      )
+    ).thenReturn(Future.successful(policies))
+  }
+
+  private def mockGetBillingProjectOwnerEmail(samDAO: MockSamDAO,
+                                              workspaceNamespace: String,
+                                              billingOwnerEmail: String
+  ) =
+    when(
+      samDAO.getPolicySyncStatus(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(workspaceNamespace),
+        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner),
+        any
+      )
+    ).thenReturn(
+      Future.successful(
+        SamPolicySyncStatus(
+          "",
+          WorkbenchEmail(billingOwnerEmail)
+        )
+      )
+    )
 
   behavior of "deleteWorkspace"
 
@@ -1132,6 +1411,19 @@ class WorkspaceServiceSpec
     assertResult(Some(StatusCodes.BadRequest)) {
       error.errorReport.statusCode
     }
+  }
+
+  it should "log to bard when deleting workspace" in withTestDataServices { services =>
+    // delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    val deleteEvent = WorkspaceDeleteEvent(
+      testData.workspaceNoSubmissions.workspaceId,
+      testData.workspaceNoSubmissions.namespace,
+      testData.workspaceNoSubmissions.name,
+      services.ctx1.userInfo.userSubjectId.value
+    )
+    verify(services.bardService).sendEvent(deleteEvent, services.ctx1.userInfo)
   }
 
   behavior of "getTags"

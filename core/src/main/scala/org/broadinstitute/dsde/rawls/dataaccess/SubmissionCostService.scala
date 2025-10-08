@@ -19,7 +19,8 @@ trait SubmissionCostService {
                          tableNameOpt: Option[String]
   ): Future[Map[String, Float]]
 
-  def getWorkflowCost(workflowId: String,
+  def getWorkflowCost(submissionId: String,
+                      workflowId: String,
                       googleProjectId: GoogleProjectId,
                       submissionDate: DateTime,
                       terminalStatusDate: Option[DateTime],

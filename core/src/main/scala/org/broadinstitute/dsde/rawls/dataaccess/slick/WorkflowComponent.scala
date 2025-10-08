@@ -531,6 +531,9 @@ trait WorkflowComponent {
     def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType =
       filter(wf => wf.externalId === externalId && wf.submissionId === submissionId)
 
+    def findWorkflowByExternalIdsAndSubmissionId(externalIds: Set[String], submissionId: UUID): WorkflowQueryType =
+      filter(wf => wf.externalId.inSetBind(externalIds) && wf.submissionId === submissionId)
+
     def findWorkflowsForAbort(submissionId: UUID): WorkflowQueryType = {
       val statuses: Traversable[String] = WorkflowStatuses.abortableStatuses map (_.toString)
       filter(wf => wf.submissionId === submissionId && wf.externalId.isDefined && wf.status.inSetBind(statuses))

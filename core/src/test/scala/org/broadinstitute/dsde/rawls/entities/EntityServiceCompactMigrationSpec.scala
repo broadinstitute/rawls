@@ -8,7 +8,12 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{QuicksilverMigrationResult, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  QuicksilverAlreadyMigratedException,
+  QuicksilverMigrationResult,
+  RawSqlQuery,
+  TestDriverComponent
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
@@ -25,6 +30,7 @@ import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model.{
   Attribute,
   AttributeBoolean,
@@ -60,10 +66,13 @@ import org.scalatest.Inspectors.forEvery
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import slick.jdbc.TransactionIsolation
 import spray.json._
 
+import java.util.UUID
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.{Failure, Try}
 
 class EntityServiceCompactMigrationSpec
     extends AnyFlatSpec
@@ -75,7 +84,8 @@ class EntityServiceCompactMigrationSpec
     with ScalaFutures
     with MockitoTestUtils
     with RawlsStatsDTestUtils
-    with CompactEntitySerialization {
+    with CompactEntitySerialization
+    with RawSqlQuery {
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
@@ -175,6 +185,7 @@ class EntityServiceCompactMigrationSpec
 
         val compactProvider = new CompactEntityProvider(requestArguments,
                                                         new CompactEntityRepository(slickDataSource),
+                                                        "testMetricPrefix",
                                                         CompactEntityProviderConfig()
         )
 
@@ -261,6 +272,7 @@ class EntityServiceCompactMigrationSpec
 
     val compactProvider = new CompactEntityProvider(requestArguments,
                                                     new CompactEntityRepository(slickDataSource),
+                                                    "testMetricPrefix",
                                                     CompactEntityProviderConfig()
     )
 
@@ -346,6 +358,7 @@ class EntityServiceCompactMigrationSpec
 
     val compactProvider = new CompactEntityProvider(requestArguments,
                                                     new CompactEntityRepository(slickDataSource),
+                                                    "testMetricPrefix",
                                                     CompactEntityProviderConfig()
     )
 
@@ -412,6 +425,53 @@ class EntityServiceCompactMigrationSpec
     // numEntitiesUpdated: test data has 18, but we soft-deleted 2
     // numEntitiesDeleted: 1 soft-deleted entity were hard-deleted
     // numAttributesDeleted: we delete all attributes in the workspace, not just the soft-deleted ones
+  }
+
+  it should s"roll back the CompactDataTables setting on failed migration" in withTestDataServices { apiService =>
+    val workspace = legacyTestData.workspace // has some entities we can use to test references
+
+    /** Locks all entities of the given workspace for ${lockSeconds} seconds. Use this to simulate database contention. */
+    def lockAllEntities(dataSource: SlickDataSource, workspaceId: UUID, lockSeconds: Int): Future[Unit] = {
+      import dataSource.dataAccess.driver.api._
+      val locker = for {
+        _ <- sql"""select * from ENTITY where workspace_id = $workspaceId for update;""".as[Unit]
+        _ <- sql"""select sleep(${lockSeconds + 2});""".as[Unit]
+      } yield ()
+      dataSource.database.run(locker.transactionally.withTransactionIsolation(TransactionIsolation.Serializable))
+    }
+
+    // lock entities; do NOT wait for this Future to complete so it is still running when we kick off the migration
+    lockAllEntities(slickDataSource, workspace.workspaceIdAsUUID, 60)
+    // ask to perform migration
+    val migrationResult =
+      Try(Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost))
+
+    migrationResult shouldBe a[Failure[_]]
+
+    // check if the setting exists
+    val repo = new WorkspaceSettingRepository(slickDataSource)
+    Await.result(repo.hasPendingSettings(workspace.workspaceIdAsUUID, CompactDataTables), Duration.Inf) shouldBe false
+    Await.result(repo.getWorkspaceSettingOfType(workspace.workspaceIdAsUUID, CompactDataTables),
+                 Duration.Inf
+    ) shouldBe empty
+
+  }
+
+  it should s"throw QuicksilverAlreadyMigratedException if the workspace has already been migrated" in withTestDataServices {
+    apiService =>
+      val workspace = legacyTestData.workspace // has some entities we can use to test references
+
+      // perform migration
+      val migrationResult =
+        Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+
+      migrationResult shouldBe QuicksilverMigrationResult(18, 0, 0)
+
+      // perform migration again
+      intercept[QuicksilverAlreadyMigratedException] {
+        Await.result(apiService.entityService.quicksilverMigration(workspace.toWorkspaceName), atMost)
+      }
+
   }
 
 }

@@ -37,7 +37,7 @@ object Dependencies {
   val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-8b413b45f-SNAP"
 
   val bardClient: ModuleID = "bio.terra" % "bard-client-resttemplate" % "1.0.10" exclude("org.springframework", "spring-aop") exclude("org.springframework", "spring-jcl")
-  val httpComponents5: ModuleID = "org.apache.httpcomponents.client5" % "httpclient5" % "5.5" // Needed for connection pooling with the Bard client
+  val httpComponents5: ModuleID = "org.apache.httpcomponents.client5" % "httpclient5" % "5.5.1" // Needed for connection pooling with the Bard client
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleApiV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20241011-" + googleV))
@@ -50,7 +50,7 @@ object Dependencies {
   val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev20250211-" + googleV)
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20250208-" + googleV)
   val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20250212-" + googleV)
-  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.4.8-jre"
+  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "33.5.0-jre"
 
   val googleMonitoring: ModuleID =  "com.google.apis" % "google-api-services-monitoring" % ("v3-rev20250130-" + googleV)
 
@@ -62,14 +62,14 @@ object Dependencies {
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.3.5"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
-  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
+  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.6"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.20.0"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.14.0"
-  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.4"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.20.0"
+  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.5"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.22.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.18"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.19"
   val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "8.1"
   val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
@@ -106,14 +106,14 @@ object Dependencies {
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.128.3" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.128.5" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.17.0"
-  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.19.0"
+  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.18.0"
+  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.19.1"
 
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
@@ -131,13 +131,13 @@ object Dependencies {
 
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.153-SNAPSHOT")
-  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "1.1.42-SNAPSHOT" classifier "plain"))
+  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "1.1.53-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.423")
-  val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-2e87300"
-  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.28-SNAPSHOT")
+  val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-82c1f7d"
+  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.37-SNAPSHOT")
 
   // OpenTelemetry
-  val openTelemetryInstrumentationVersion = "2.0.0"
+  val openTelemetryInstrumentationVersion = "2.20.0"
   val otelInstrumentationResources: ModuleID =
     "io.opentelemetry.instrumentation" % "opentelemetry-resources" % (openTelemetryInstrumentationVersion + "-alpha")
 
@@ -145,10 +145,10 @@ object Dependencies {
   var gcpOpenTelemetryExporterVersion = "0.27.0"
   var googleTraceExporter: ModuleID = "com.google.cloud.opentelemetry" % "exporter-trace" % gcpOpenTelemetryExporterVersion
 
-  val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.3").cross(CrossVersion.full))
+  val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.4").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
-  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.32"
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.34"
 
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included

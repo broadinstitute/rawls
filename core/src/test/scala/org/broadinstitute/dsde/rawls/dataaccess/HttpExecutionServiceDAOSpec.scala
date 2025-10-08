@@ -115,7 +115,8 @@ class HttpExecutionServiceDAOSpec
     withStatsD {
       val result = test.outputs("69d1d92f-3895-4a7b-880a-82535e9a096e", userInfo).futureValue
       result.id shouldBe "this_workflow_exists"
-      result.outputs.size shouldBe 3
+      result.outputs should not be empty
+      result.outputs.get.size shouldBe 3
     } { capturedMetrics =>
       capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get",
                                                                                "api.workflows.v1.redacted.outputs",

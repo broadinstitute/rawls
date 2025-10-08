@@ -317,7 +317,6 @@ class UserServiceSpec
                                                            testContext
       )
       verify(mockSamDAO, never()).getPetServiceAccountKeyForUser(any[GoogleProjectId], any[RawlsUserEmail])
-      verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, testContext)
       verify(mockSamDAO).forgetProject(project.googleProjectId, testContext)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
       verify(mockGcsDAO).deleteV1Project(project.googleProjectId)
@@ -368,7 +367,6 @@ class UserServiceSpec
                                                            testContext
       )
       verify(mockSamDAO, never()).getPetServiceAccountKeyForUser(any[GoogleProjectId], any[RawlsUserEmail])
-      verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, testContext)
       verify(mockSamDAO).forgetProject(project.googleProjectId, testContext)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
       verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)

@@ -248,7 +248,13 @@ trait ApiServiceSpec
     override val statusServiceConstructor = StatusService.constructor(healthMonitor) _
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService =
-      new MockSubmissionCostService("fakeTableName", "fakeDatePartitionColumn", "fakeServiceProject", 31, bigQueryDAO)
+      new MockSubmissionCostService("fakeTableName",
+                                    "fakeDatePartitionColumn",
+                                    "fakeServiceProject",
+                                    31,
+                                    slickDataSource,
+                                    bigQueryDAO
+      )
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
@@ -312,6 +318,7 @@ trait ApiServiceSpec
       terraBucketWriterRole = "fakeTerraBucketWriterRole"
     ) _
 
+    val bardService = new MockBardService();
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -335,7 +342,8 @@ trait ApiServiceSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     override val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =

@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.StringValidationUtils
 import org.broadinstitute.dsde.rawls.model.{AttributeName, Entity, ErrorReportSource}
 
-object EntityUtils extends StringValidationUtils {
+object EntityUtils extends StringValidationUtils with LazyLogging {
   implicit override val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   def validateAttrName(attrName: AttributeName, entityType: String): Unit = {
@@ -16,4 +17,5 @@ object EntityUtils extends StringValidationUtils {
     validateEntityName(entity.name)
     entity.attributes.keys.foreach(attrName => validateAttrName(attrName, entity.entityType))
   }
+
 }

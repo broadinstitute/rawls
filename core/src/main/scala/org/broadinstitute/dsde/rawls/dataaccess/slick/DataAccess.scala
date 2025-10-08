@@ -18,6 +18,7 @@ trait DataAccess
     with MethodConfigurationComponent
     with SubmissionComponent
     with WorkflowComponent
+    with WorkflowActualCostComponent
     with ExprEvalComponent
     with WorkspaceRequesterPaysComponent
     with EntityTypeStatisticsComponent
@@ -69,6 +70,7 @@ trait DataAccess
       TableQuery[MethodConfigurationOutputTable].delete andThen // FK to MC
       TableQuery[SubmissionValidationTable].delete andThen // FK to workflow, workflowfailure
       TableQuery[WorkflowMessageTable].delete andThen // FK to workflow
+      TableQuery[WorkflowActualCostTable].delete andThen
       TableQuery[WorkflowTable].delete andThen // FK to submission, entity
       TableQuery[SubmissionTable].delete andThen // FK to workspace, user, MC, entity
       TableQuery[MethodConfigurationTable].delete andThen // FK to workspace

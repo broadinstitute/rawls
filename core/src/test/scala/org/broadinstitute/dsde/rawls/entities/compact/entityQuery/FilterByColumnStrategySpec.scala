@@ -33,7 +33,7 @@ class FilterByColumnStrategySpec
     val entityQuery = EntityQuery(0, 0, "", SortDirections.Ascending, None, columnFilter = Some(columnFilter))
     val workspaceId = UUID.randomUUID()
     val entityType = "testType"
-    val strategy = new FilterByColumnStrategy(mockRepository, workspaceId, entityType, entityQuery)
+    val strategy = new FilterByColumnStrategy(mockRepository, workspaceId, entityType, entityQuery, "testMetricPrefix")
 
     when(mockRepository.queries.countEntitiesWithColumnFilter(workspaceId, entityType, columnFilter))
       .thenReturn(DBIO.successful(10))

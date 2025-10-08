@@ -22,7 +22,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.samplers.Sampler
 import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
-import io.opentelemetry.semconv.ResourceAttributes
+import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
@@ -244,7 +244,7 @@ object Boot extends IOApp with LazyLogging {
       val policyService = new PolicyService(tpsDAO)
 
       val submissionCostService =
-        SubmissionCostServiceFactory.createSubmissionCostService(appConfigManager, bigQueryDAO)
+        SubmissionCostServiceFactory.createSubmissionCostService(appConfigManager, slickDataSource, bigQueryDAO)
 
       val methodRepoDAO =
         MethodRepoDAOFactory.createMethodRepoDAO(appConfigManager, metricsPrefix)
@@ -364,6 +364,12 @@ object Boot extends IOApp with LazyLogging {
         Some(workspaceSettingRepository)
       )
 
+      val bardService = new BardService(
+        appConfigManager.conf.getBoolean("bard.enabled"),
+        appConfigManager.conf.getString("bard.bardUrl"),
+        appConfigManager.conf.getInt("bard.connectionPoolSize")
+      )
+
       lazy val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
         (ctx: RawlsRequestContext) =>
           new WorkspaceSettingService(ctx,
@@ -403,7 +409,8 @@ object Boot extends IOApp with LazyLogging {
         fastPassServiceConstructor,
         policyService,
         workspaceSettingServiceConstructor,
-        entityServiceConstructor
+        entityServiceConstructor,
+        bardService
       )
 
       val workspaceAdminServiceConstructor: RawlsRequestContext => WorkspaceAdminService =
@@ -526,12 +533,6 @@ object Boot extends IOApp with LazyLogging {
 
       if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
-
-        val bardService = new BardService(
-          appConfigManager.conf.getBoolean("bard.enabled"),
-          appConfigManager.conf.getString("bard.bardUrl"),
-          appConfigManager.conf.getInt("bard.connectionPoolSize")
-        )
 
         BootMonitors.bootMonitors(
           system,

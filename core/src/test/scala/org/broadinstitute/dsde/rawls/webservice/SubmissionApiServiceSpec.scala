@@ -771,7 +771,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
                 )
               )
             )
-          )
+          ),
+          None,
+          None
         )
         assertResult(expectedOutputs) {
           responseAs[WorkflowOutputs]

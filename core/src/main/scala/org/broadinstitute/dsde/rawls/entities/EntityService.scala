@@ -9,12 +9,14 @@ import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.time.StopWatch
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
+  QuicksilverAlreadyMigratedException,
   QuicksilverMigrationResult,
   ReadAction,
   ReadWriteAction
 }
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider}
+import org.broadinstitute.dsde.rawls.entities.compact.SortMemoryRetry
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
@@ -45,6 +47,7 @@ import spray.json.RootJsonFormat
 import java.sql.SQLException
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 object EntityService {
   def constructor(dataSource: SlickDataSource,
@@ -78,7 +81,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     with EntitySupport
     with AttributeSupport
     with LazyLogging
-    with RawlsInstrumented
+    with SortMemoryRetry
     with JsonFilterUtils
     with StringValidationUtils {
 
@@ -590,7 +593,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
   def quicksilverMigration(workspaceName: WorkspaceName,
                            cleanup: Boolean = false,
                            batchSize: Int = 50000,
-                           updateWorkspaceSettings: Boolean = true
+                           updateWorkspaceSettings: Boolean = true,
+                           sortBufferSize: Long = 8388608L // 8M
   ): Future[QuicksilverMigrationResult] =
     traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
       for {
@@ -604,14 +608,18 @@ class EntityService(protected val ctx: RawlsRequestContext,
         // Else, check if the user is an owner of the workspace; retrieve it if so.
         workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", s) { _ =>
           if (userIsAdmin) {
-            logger.info(s"Executing Quicksilver migration as admin for $workspaceName")
-            getV2WorkspaceContext(workspaceName, Some(WorkspaceAttributeSpecs(all = false)))
+            getV2WorkspaceContext(workspaceName, Some(WorkspaceAttributeSpecs(all = false))) map { ctx =>
+              logger.info(s"Quicksilver migration ${ctx.workspaceId} executing as admin for $workspaceName")
+              ctx
+            }
           } else {
-            logger.info(s"Executing Quicksilver migration as user for $workspaceName")
             getV2WorkspaceContextAndPermissions(workspaceName,
                                                 SamWorkspaceActions.own,
                                                 Some(WorkspaceAttributeSpecs(all = false))
-            )
+            ) map { ctx =>
+              logger.info(s"Quicksilver migration ${ctx.workspaceId} executing as user for $workspaceName")
+              ctx
+            }
           }
         }
         workspaceId = workspaceContext.workspaceIdAsUUID
@@ -627,7 +635,8 @@ class EntityService(protected val ctx: RawlsRequestContext,
             .asInstanceOf[Option[CompactDataTablesSetting]]
             .exists(_.config.enabled)
         ) {
-          throw new RawlsExceptionWithErrorReport(ErrorReport("Quicksilver already enabled for this workspace"))
+          logger.info(s"Quicksilver migration $workspaceId skipped: Quicksilver already enabled for this workspace")
+          throw new QuicksilverAlreadyMigratedException
         }
 
         // Check if there are any pending compactDataTables settings for this workspace
@@ -641,7 +650,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
         // Prevent starting another migration to avoid conflicts or an inconsistent state.
         _ = if (hasPendingSettings && updateWorkspaceSettings) {
           throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, "Quicksilver migration is already in progress for this workspace")
+            ErrorReport(
+              StatusCodes.BadRequest,
+              s"Quicksilver migration $workspaceId failed: Quicksilver migration is already in progress for this workspace"
+            )
           )
         }
 
@@ -658,7 +670,11 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
 
         // start a transaction; here's where we do a bunch of writes
-        userResult <- dataSource.inTransaction { dataAccess =>
+        userResult <- retryWithSortMemory(dataSource,
+                                          "quicksilverMigration",
+                                          startingSortBufferSize = sortBufferSize.toInt
+        ) {
+          val dataAccess = dataSource.dataAccess
           val shardId: String = dataAccess.determineShard(workspaceId)
 
           val stopwatch = StopWatch.createStarted()
@@ -667,87 +683,97 @@ class EntityService(protected val ctx: RawlsRequestContext,
             s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
           )
 
-          withIncreasedSortMemory(dataAccess) {
-            for {
-              // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
-              // for each batch. later queries will use those boundaries to migrate entities in batches, which
-              // prevents the temp tables from growing too large.
-              batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
-              // niceties for logging
-              indexedBoundaries = batchBoundaries.zipWithIndex
+          for {
+            // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
+            // for each batch. later queries will use those boundaries to migrate entities in batches, which
+            // prevents the temp tables from growing too large.
+            batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
+            // niceties for logging
+            indexedBoundaries = batchBoundaries.zipWithIndex
 
-              // for each batch, migrate the entities in that batch
-              updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
-                quicksilverMigrateBatch(workspaceId,
-                                        shardId,
-                                        boundary,
-                                        dataAccess,
-                                        idx,
-                                        indexedBoundaries.size,
-                                        stopwatch,
-                                        s
-                )
-              })
-              numEntitiesUpdated = updateCounts.sum
-
-              (numAttributesDeleted, numEntitiesDeleted) <-
-                if (cleanup) {
-                  // hard delete legacy data if requested
-                  hardDeleteLegacyData(workspaceId, shardId, dataAccess)
-                } else {
-                  // otherwise, just log that we did not delete legacy data
-                  DBIO.successful((0, 0))
-                }
-
-              _ = logger.info(
-                s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+            // for each batch, migrate the entities in that batch
+            updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
+              quicksilverMigrateBatch(workspaceId,
+                                      shardId,
+                                      boundary,
+                                      dataAccess,
+                                      idx,
+                                      indexedBoundaries.size,
+                                      stopwatch,
+                                      s
               )
-            } yield QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted)
-          }
+            })
+            numEntitiesUpdated = updateCounts.sum
+
+            (numAttributesDeleted, numEntitiesDeleted) <-
+              if (cleanup) {
+                // hard delete legacy data if requested
+                hardDeleteLegacyData(workspaceId, shardId, dataAccess)
+              } else {
+                // otherwise, just log that we did not delete legacy data
+                DBIO.successful((0, 0))
+              }
+
+            _ = logger.info(
+              s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
+            )
+          } yield Success(QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted))
 
         }
-
-        // Apply the workspace setting to mark the migration as finalized
-        _ = if (updateWorkspaceSettings) {
-          traceFutureWithParent("applyWorkspaceSettings", s) { _ =>
-            settingsRepo.markWorkspaceSettingApplied(
-              workspaceContext.workspaceIdAsUUID,
-              WorkspaceSettingTypes.CompactDataTables
-            )
+          .recover { case t: Throwable =>
+            Failure(t)
           }
+
+        // Apply the workspace setting to mark the migration as finalized, or roll it back if the migration failed
+        finalResult <- userResult match {
+          case Success(result) =>
+            val applyFuture = if (updateWorkspaceSettings) {
+              traceFutureWithParent("applyWorkspaceSettings", s) { _ =>
+                settingsRepo.markWorkspaceSettingApplied(
+                  workspaceContext.workspaceIdAsUUID,
+                  WorkspaceSettingTypes.CompactDataTables
+                )
+              }
+            } else {
+              Future.successful(())
+            }
+            applyFuture map (_ => result)
+          case Failure(t) =>
+            logger.warn(
+              s"Quicksilver migration $workspaceId: FAILED with ${t.getClass.getSimpleName}: ${t.getMessage}"
+            )
+            val rollbackFuture = if (updateWorkspaceSettings) {
+              traceFutureWithParent("rollBackWorkspaceSettings", s) { _ =>
+                settingsRepo.removePendingSetting(
+                  workspaceContext.workspaceIdAsUUID,
+                  WorkspaceSettingTypes.CompactDataTables
+                ) map { _ =>
+                  logger.warn(
+                    s"Quicksilver migration $workspaceId: rolled back CompactDataTables workspace setting."
+                  )
+                }
+              }
+            } else Future.successful(())
+            rollbackFuture map (_ => throw t)
         }
 
         // return a count of entities updated
-      } yield userResult
+      } yield finalResult
     }
 
   private def hardDeleteLegacyData(workspaceId: UUID,
                                    shardId: String,
                                    dataAccess: DataAccess
   ): ReadWriteAction[(Int, Int)] = {
-    logger.info(s"Quicksilver migration: deleting legacy attributes ...")
+    logger.info(s"Quicksilver migration $workspaceId: deleting legacy attributes ...")
     for {
       // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
       numAttributesDeleted <- dataAccess.compactEntityQuery.migrationDeleteLegacyAttributes(workspaceId, shardId)
       // delete the all_attribute_values column for this workspace
-      _ = logger.info(s"Quicksilver migration: clearing all_attribute_values ...")
+      _ = logger.info(s"Quicksilver migration $workspaceId: clearing all_attribute_values ...")
       numEntitiesDeleted <- dataAccess.compactEntityQuery.migrationHardDeleteEntitiesMarkedForDeletion(workspaceId)
     } yield (numAttributesDeleted, numEntitiesDeleted) // return count of attributes and entities deleted
   }
-
-  /** Executes a database operation `op` in a session using 8MB of `sort_buffer_size` memory,
-    * then resets the sort buffer size back to its original value */
-  private def withIncreasedSortMemory[T](dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] =
-    for {
-      // get the current value of MySQL sort_buffer_size
-      defaultSortBufferSize <- dataAccess.compactEntityQuery.getSortBufferSetting
-      // set sort buffer size to 8MB; this avoids MySQL errors during migration
-      // with an "Out of sort memory, consider increasing server sort buffer size" message.
-      // see also https://bugs.mysql.com/bug.php?id=103225
-      _ <- dataAccess.compactEntityQuery.setSessionSortBuffer(8388608L)
-      // execute the requested operation, then reset sort buffer size to its original value
-      result <- op andFinally dataAccess.compactEntityQuery.setSessionSortBuffer(defaultSortBufferSize)
-    } yield result
 
   private case class MigrationBoundary(startEntityId: Long, endEntityId: Long)
 

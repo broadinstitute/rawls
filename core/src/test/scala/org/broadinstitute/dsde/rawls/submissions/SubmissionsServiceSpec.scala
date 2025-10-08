@@ -183,6 +183,7 @@ class SubmissionsServiceSpec
       "fakeDatePartitionColumn",
       "fakeServiceProject",
       31,
+      slickDataSource,
       bigQueryDAO
     )
     val execServiceBatchSize = 3
@@ -241,6 +242,7 @@ class SubmissionsServiceSpec
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
     val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService = _ =>
       mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
+    val bardService = new MockBardService();
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       executionServiceCluster,
@@ -264,7 +266,8 @@ class SubmissionsServiceSpec
       fastPassServiceConstructor,
       policyService,
       workspaceSettingServiceConstructor,
-      entityServiceConstructor
+      entityServiceConstructor,
+      bardService
     ) _
 
     val methodRepoDAO = new HttpMethodRepoDAO(
