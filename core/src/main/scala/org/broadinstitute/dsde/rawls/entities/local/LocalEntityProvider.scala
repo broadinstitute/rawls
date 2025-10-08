@@ -47,6 +47,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{
+  AttributeOperationListModes,
   AttributeSupport,
   AttributeUpdateOperationException,
   CollectionUtils,
@@ -557,12 +558,13 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                 entityUpdates.map { entityUpdate =>
                   entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
                     case Some(e) =>
-                      Try(applyOperationsToEntity(e, entityUpdate.operations))
+                      Try(applyOperationsToEntity(e, entityUpdate.operations, AttributeOperationListModes.Strict))
                     case None =>
                       if (upsert) {
                         Try(
                           applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty),
-                                                  entityUpdate.operations
+                                                  entityUpdate.operations,
+                                                  AttributeOperationListModes.Strict
                           )
                         )
                       } else {
@@ -804,7 +806,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       traceDBIOWithParent("withEntity", parentContext) { s =>
         withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
           val updateAction = Try {
-            val updatedEntity = applyOperationsToEntity(entity, operations)
+            val updatedEntity = applyOperationsToEntity(entity, operations, AttributeOperationListModes.Strict)
             traceDBIOWithParent("saveEntity", s)(_ => dataAccess.entityQuery.save(workspaceContext, updatedEntity))
           } match {
             case Success(result) => result
