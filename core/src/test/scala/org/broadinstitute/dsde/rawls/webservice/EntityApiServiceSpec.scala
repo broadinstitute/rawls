@@ -1554,6 +1554,70 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "allow adding references to a pre-existing empty list" in withTestDataApiServices { services =>
+    val entityName = "new-entity-empty-list"
+
+    // update 1: create an entity with an empty list
+    val update1 = EntityUpdateDefinition(
+      entityName,
+      testData.sample1.entityType,
+      Seq(AddUpdateAttribute(AttributeName.withDefaultNS("list"), AttributeValueEmptyList))
+    )
+    Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1))) ~>
+      sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(
+          Some(
+            Entity(
+              entityName,
+              testData.sample1.entityType,
+              Map(AttributeName.withDefaultNS("list") -> AttributeValueEmptyList)
+            )
+          )
+        ) {
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      testData.sample1.entityType,
+                                                      entityName
+            )
+          ).map(_.toEntity)
+        }
+      }
+    // update 2: update that entity by adding a reference to the empty list
+    val ref = AttributeEntityReference(testData.sample1.entityType, testData.sample1.name)
+    val update2 = EntityUpdateDefinition(
+      entityName,
+      testData.sample1.entityType,
+      Seq(AddListMember(AttributeName.withDefaultNS("list"), ref))
+    )
+    Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update2))) ~>
+      sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(
+          Some(
+            Entity(
+              entityName,
+              testData.sample1.entityType,
+              Map(AttributeName.withDefaultNS("list") -> AttributeEntityReferenceList(Seq(ref)))
+            )
+          )
+        ) {
+          runAndWait(
+            compactEntityRepository.queries.getEntity(testData.workspace.workspaceIdAsUUID,
+                                                      testData.sample1.entityType,
+                                                      entityName
+            )
+          ).map(_.toEntity)
+        }
+      }
+  }
+
   it should "return 200 on get entity" in withTestDataApiServices { services =>
     withStatsD {
       Get(testData.sample2.path(testData.workspace)) ~>

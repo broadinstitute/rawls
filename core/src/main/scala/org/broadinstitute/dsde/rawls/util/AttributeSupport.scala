@@ -96,7 +96,11 @@ trait AttributeSupport {
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>
-                  throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
+                  // When an entity has an attribute with a value of `[]`, Quicksilver cannot distinguish
+                  // if that value is a AttributeValueList or a AttributeEntityReferenceList, and by default
+                  // it deserializes it as AttributeValueList. So, here, we allow adding entity references
+                  // to an AttributeValueList, which converts it to a AttributeEntityReferenceList.
+                  startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
