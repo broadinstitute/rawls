@@ -126,6 +126,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
           new ListAppResponse().status(AppStatus.PROVISIONING),
           new ListAppResponse().status(AppStatus.STARTING),
           new ListAppResponse().status(AppStatus.RUNNING),
+          new ListAppResponse().status(AppStatus.STOPPED),
           new ListAppResponse().status(AppStatus.DELETING),
           new ListAppResponse().status(AppStatus.DELETED)
         )
@@ -133,10 +134,11 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
     val action = new LeonardoService(leoDAO)
     val result = Await.result(action.listRunningApps(googleWorkspace, ctx), Duration.Inf)
-    result.size shouldBe 4
+    result.size shouldBe 5
     result.map(_.getStatus) shouldBe Seq(AppStatus.PROVISIONING,
                                          AppStatus.STARTING,
                                          AppStatus.RUNNING,
+                                         AppStatus.STOPPED,
                                          AppStatus.DELETING
     )
     verify(leoDAO).listApps(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
@@ -144,12 +146,11 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
   it should "not list stopped or deleted apps" in {
     val runningAppResponse = new ListAppResponse().status(AppStatus.DELETED)
-    val stoppedAppResponse = new ListAppResponse().status(AppStatus.STOPPED)
     val statusUnspecifiedAppResponse = new ListAppResponse().status(AppStatus.STATUS_UNSPECIFIED)
     val errorAppResponse = new ListAppResponse().status(AppStatus.ERROR)
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
       override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
-        Seq(runningAppResponse, stoppedAppResponse, statusUnspecifiedAppResponse, errorAppResponse)
+        Seq(runningAppResponse, statusUnspecifiedAppResponse, errorAppResponse)
     })
 
     val action = new LeonardoService(leoDAO)
@@ -169,6 +170,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
           ClusterStatus.UPDATING,
           ClusterStatus.STARTING,
           ClusterStatus.STOPPING,
+          ClusterStatus.STOPPED,
           ClusterStatus.DELETING,
           ClusterStatus.DELETED
         )
@@ -182,13 +184,15 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
 
     val action = new LeonardoService(leoDAO)
     val result = Await.result(action.listRunningRuntimes(googleWorkspace, ctx), Duration.Inf)
-    result.size shouldBe 6
-    result.map(_.getStatus) shouldBe Seq(ClusterStatus.CREATING,
-                                         ClusterStatus.RUNNING,
-                                         ClusterStatus.UPDATING,
-                                         ClusterStatus.STARTING,
-                                         ClusterStatus.STOPPING,
-                                         ClusterStatus.DELETING
+    result.size shouldBe 7
+    result.map(_.getStatus) shouldBe Seq(
+      ClusterStatus.CREATING,
+      ClusterStatus.RUNNING,
+      ClusterStatus.UPDATING,
+      ClusterStatus.STARTING,
+      ClusterStatus.STOPPING,
+      ClusterStatus.STOPPED,
+      ClusterStatus.DELETING
     )
     verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
   }
@@ -196,7 +200,7 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
   it should "not list stopped or deleted runtimes" in {
     val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
       override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] = {
-        val statuses = Seq(ClusterStatus.ERROR, ClusterStatus.STOPPED, ClusterStatus.DELETED, ClusterStatus.UNKNOWN)
+        val statuses = Seq(ClusterStatus.ERROR, ClusterStatus.DELETED, ClusterStatus.UNKNOWN)
         statuses.map { status =>
           new ListRuntimeResponse()
             .status(status)

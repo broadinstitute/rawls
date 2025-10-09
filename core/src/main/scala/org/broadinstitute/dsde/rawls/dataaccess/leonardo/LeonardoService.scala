@@ -50,7 +50,13 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListAppResponse]] =
     getAllApps(workspace, ctx).map { allApps =>
-      val statuses = Set(AppStatus.RUNNING, AppStatus.PROVISIONING, AppStatus.STARTING, AppStatus.DELETING);
+      val statuses = Set(AppStatus.RUNNING,
+                         AppStatus.PROVISIONING,
+                         AppStatus.STARTING,
+                         AppStatus.STOPPED,
+                         AppStatus.STOPPING,
+                         AppStatus.DELETING
+      );
       allApps.filter(app => statuses.contains(app.getStatus));
     }
 
@@ -69,12 +75,14 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
     ec: ExecutionContext
   ): Future[Seq[ListRuntimeResponse]] =
     getAllRuntimes(workspace, ctx).map { allRuntimes =>
-      val statuses = Set(ClusterStatus.RUNNING,
-                         ClusterStatus.STARTING,
-                         ClusterStatus.STOPPING,
-                         ClusterStatus.CREATING,
-                         ClusterStatus.UPDATING,
-                         ClusterStatus.DELETING
+      val statuses = Set(
+        ClusterStatus.RUNNING,
+        ClusterStatus.STARTING,
+        ClusterStatus.STOPPING,
+        ClusterStatus.STOPPED,
+        ClusterStatus.CREATING,
+        ClusterStatus.UPDATING,
+        ClusterStatus.DELETING
       );
       allRuntimes.filter(runtime => statuses.contains(runtime.getStatus));
     }
