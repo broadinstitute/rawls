@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.31.xsd">
+    <changeSet logicalFilePath="dummy" author="davidan" id="quicksilver_for_empty_workspaces.xml">
+        <sql>
+        <!-- Insert a CompactDataTables workspace setting for all v2 workspaces which have zero entities.
+                If a workspace has no entities, it does not need any complicated migration to Quicksilver;
+                it just needs the appropriate workspace setting.
+         -->
+            insert into WORKSPACE_SETTINGS(
+                WORKSPACE_ID, SETTING_TYPE, CONFIG, STATUS, USER_ID)
+            select w.id, 'CompactDataTables', '{"enabled": true, "performMigration": false}', 'Applied', 'quicksilver-migration'
+            from WORKSPACE w
+            where w.WORKSPACE_VERSION = 'v2'
+              and (w.ID not in (
+                select s.WORKSPACE_ID
+                from WORKSPACE_SETTINGS s
+                where s.SETTING_TYPE = 'CompactDataTables'
+            ))
+              and not exists (
+                SELECT 1
+                FROM ENTITY e
+                WHERE e.workspace_id = w.id
+            );
+        </sql>
+    </changeSet>
+</databaseChangeLog>
