@@ -9,11 +9,8 @@ import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.workbench.client.leonardo.{ApiException, ApiException => LeoApiException}
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   AppStatus,
-  CloudProvider,
   ClusterStatus,
-  DiskStatus,
   ListAppResponse,
-  ListPersistentDiskResponse,
   ListRuntimeResponse
 }
 
@@ -82,39 +79,14 @@ class LeonardoService(leonardoDAO: LeonardoDAO)(implicit
       allRuntimes.filter(runtime => statuses.contains(runtime.getStatus));
     }
 
-  private def getAllDisks(workspace: Workspace, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Seq[ListPersistentDiskResponse]] =
-    retry(when500OrProcessingException) { () =>
-      Future {
-        blocking {
-          val allDisks = leonardoDAO.listDisks(ctx.userInfo.accessToken.token, workspace.googleProjectId);
-          allDisks.filter { disk =>
-            val cloudContext = disk.getCloudContext
-            cloudContext != null &&
-            cloudContext.getCloudResource == workspace.googleProjectId.value &&
-            cloudContext.getCloudProvider == CloudProvider.GCP
-          }
-        }
-      }
-    }
-
-  def listRunningDisks(workspace: Workspace, ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Seq[ListPersistentDiskResponse]] =
-    getAllDisks(workspace, ctx).map { allDisks =>
-      val statuses = Set(DiskStatus.CREATING, DiskStatus.READY, DiskStatus.RESTORING, DiskStatus.DELETING);
-      allDisks.filter(disk => statuses.contains(disk.getStatus));
-    }
-
+  // ** Check if a workspace has any active cloud environments.
   def hasActiveResources(workspace: Workspace, ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Boolean] =
     for {
       runtimes <- listRunningRuntimes(workspace, ctx)
       apps <- listRunningApps(workspace, ctx)
-      disks <- listRunningDisks(workspace, ctx)
-    } yield runtimes.nonEmpty || apps.nonEmpty || disks.nonEmpty
+    } yield runtimes.nonEmpty || apps.nonEmpty
 
   /**
    * Notifies leonardo that it should delete any resource records related to the given google project ID *without*

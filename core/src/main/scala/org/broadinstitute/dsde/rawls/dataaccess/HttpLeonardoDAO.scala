@@ -4,10 +4,9 @@ import okhttp3.{Dispatcher, Protocol}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
-import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, DisksApi, ResourcesApi, RuntimesApi}
+import org.broadinstitute.dsde.workbench.client.leonardo.api.{AppsApi, ResourcesApi, RuntimesApi}
 import org.broadinstitute.dsde.workbench.client.leonardo.model._
 
-import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
@@ -43,19 +42,11 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     new RuntimesApi(apiClient)
   }
 
-  private def getDisksLeonardoApi(accessToken: String): DisksApi = {
-    val apiClient = getApiClient(accessToken)
-    new DisksApi(apiClient)
-  }
-
   override def listApps(token: String, googleProjectId: GoogleProjectId): Seq[ListAppResponse] =
     getAppsV2LeonardoApi(token).listAppByProject(googleProjectId.value, null, false, null, null).asScala.toSeq
 
   override def listRuntimes(token: String, googleProjectId: GoogleProjectId): Seq[ListRuntimeResponse] =
     getRuntimesV2LeonardoApi(token).listRuntimesByProject(googleProjectId.value, null).asScala.toSeq
-
-  override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] =
-    getDisksLeonardoApi(token).listDisksByProject(googleProjectId.value, null, null, null).asScala.toSeq
 
   override def cleanupAllResources(token: String, googleProjectId: GoogleProjectId): Unit =
     getResourcesLeonardoApi(token).cleanupAllResources(googleProjectId.value)

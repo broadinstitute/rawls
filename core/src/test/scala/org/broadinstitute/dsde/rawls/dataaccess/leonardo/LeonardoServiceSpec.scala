@@ -16,12 +16,8 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiException
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{
   AppStatus,
-  CloudContext,
-  CloudProvider,
   ClusterStatus,
-  DiskStatus,
   ListAppResponse,
-  ListPersistentDiskResponse,
   ListRuntimeResponse
 }
 import org.joda.time.DateTime
@@ -212,60 +208,6 @@ class LeonardoServiceSpec extends AnyFlatSpec with MockitoSugar with Matchers wi
     val result = Await.result(action.listRunningRuntimes(googleWorkspace, ctx), Duration.Inf)
     result.size shouldBe 0
     verify(leoDAO).listRuntimes(anyString(), ArgumentMatchers.eq(googleWorkspace.googleProjectId))
-  }
-
-  behavior of "listRunningDisks"
-
-  it should "list running disks" in {
-    val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] = {
-        val cloudContext = new CloudContext()
-          .cloudProvider(CloudProvider.GCP)
-          .cloudResource(googleWorkspace.googleProjectId.value);
-        val statuses = Seq(
-          DiskStatus.CREATING,
-          DiskStatus.READY,
-          DiskStatus.RESTORING,
-          DiskStatus.DELETING,
-          DiskStatus.DELETED
-        )
-        statuses.map { status =>
-          new ListPersistentDiskResponse()
-            .status(status)
-            .cloudContext(cloudContext)
-        }
-      }
-    })
-
-    val action = new LeonardoService(leoDAO)
-    val result = Await.result(action.listRunningDisks(googleWorkspace, ctx), Duration.Inf)
-    result.size shouldBe 4
-    result.map(_.getStatus) shouldBe Seq(DiskStatus.CREATING,
-                                         DiskStatus.READY,
-                                         DiskStatus.RESTORING,
-                                         DiskStatus.DELETING
-    )
-    verify(leoDAO).listDisks(any[String], any[GoogleProjectId]);
-  }
-
-  it should "not list stopped or deleted disks" in {
-    val leoDAO: MockLeonardoDAO = Mockito.spy(new MockLeonardoDAO() {
-      override def listDisks(token: String, googleProjectId: GoogleProjectId): Seq[ListPersistentDiskResponse] = {
-        val cloudContext = new CloudContext()
-          .cloudProvider(CloudProvider.GCP)
-          .cloudResource(googleWorkspace.googleProjectId.value);
-        val statuses = Seq(DiskStatus.FAILED, DiskStatus.DELETED)
-        statuses.map { status =>
-          new ListPersistentDiskResponse()
-            .status(status)
-            .cloudContext(cloudContext)
-        }
-      }
-    })
-    val action = new LeonardoService(leoDAO)
-    val result = Await.result(action.listRunningDisks(googleWorkspace, ctx), Duration.Inf)
-    result.size shouldBe 0
-    verify(leoDAO).listDisks(any[String], any[GoogleProjectId])
   }
 
 }
