@@ -47,18 +47,6 @@ trait CompactEntitySlickComponent {
       )
   }
 
-  /** high-level Slick table for ENTITY_KEYS */
-  class CompactEntityKeysTable(tag: Tag) extends Table[KeysRecord](tag, "ENTITY_KEYS") {
-    def id = column[Long]("id")
-    def workspaceId = column[UUID]("workspace_id")
-    def entityType = column[String]("entity_type")
-    def attributeKeys = column[String]("attribute_keys")
-    def lastUpdated = column[Timestamp]("last_updated")
-
-    def * =
-      (id, workspaceId, entityType, attributeKeys, lastUpdated) <> (KeysRecord.tupled, KeysRecord.unapply)
-  }
-
   /** high-level Slick query object for ENTITY */
   @unused
   object compactEntitySlickQuery extends TableQuery(new CompactEntityTable(_)) {}
@@ -67,7 +55,4 @@ trait CompactEntitySlickComponent {
   @unused
   object compactEntityRefSlickQuery extends TableQuery(new CompactEntityRefTable(_)) {}
 
-  /** high-level Slick query object for ENTITY_KEYS */
-  @unused
-  object compactEntityKeysSlickQuery extends TableQuery(new CompactEntityKeysTable(_)) {}
 }

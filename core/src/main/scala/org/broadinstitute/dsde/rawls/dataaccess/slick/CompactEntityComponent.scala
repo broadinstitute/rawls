@@ -74,9 +74,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   implicit val getJsonEntityVersionRecord: GetResult[CompactEntityVersionRecord] =
     GetResult(r => CompactEntityVersionRecord(r.<<, r.<<, r.<<, r.<<))
 
-  implicit val getKeysRecord: GetResult[KeysRecord] =
-    GetResult(r => KeysRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
-
   implicit val getEntityTypeAndAttributeKey: GetResult[EntityTypeAndAttributeKey] =
     GetResult(r => EntityTypeAndAttributeKey(r.<<, AttributeName.fromDelimitedName(r.<<)))
 
