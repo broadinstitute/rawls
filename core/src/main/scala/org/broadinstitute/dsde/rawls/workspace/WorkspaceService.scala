@@ -270,13 +270,29 @@ class WorkspaceService(
             } yield newWorkspace,
           TransactionIsolation.ReadCommitted // read committed to avoid deadlocks on workspace attribute scratch table
         )
-      )
+      ) recover { case t: Throwable =>
+        logger.warn(
+          s"Error in createWorkspace.createNewWorkspaceContext - workspace:'${workspaceRequest.name}': ${t.getClass.getSimpleName}: ${t.getMessage}"
+        )
+        throw t
+      }
       // enable quicksilver for new workspaces
       _ <- traceFutureWithParent("enableQuicksilverForWorkspace", parentContext)(_ =>
-        enableQuicksilver(workspace.workspaceIdAsUUID)
+        enableQuicksilver(workspace.workspaceIdAsUUID) recover { case t: Throwable =>
+          logger.warn(
+            s"Error in createWorkspace.enableQuicksilver - workspace:'${workspaceRequest.name}' - UUID:${workspace.workspaceId}: ${t.getClass.getSimpleName}: ${t.getMessage}"
+          )
+          throw t
+        }
       )
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext).syncFastPassesForUserInWorkspace(workspace)
+        fastPassServiceConstructor(childContext)
+          .syncFastPassesForUserInWorkspace(workspace) recover { case t: Throwable =>
+          logger.warn(
+            s"Error in createWorkspace.syncFastPassesForUserInWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspace.workspaceId}: ${t.getClass.getSimpleName}: ${t.getMessage}"
+          )
+          throw t
+        }
       )
     } yield workspace
   }
