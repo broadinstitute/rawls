@@ -661,37 +661,67 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       }
   }
 
+  def expectedResponse(sub: Submission): SubmissionListResponse = {
+    val wfCount = sub.workflows.length
+    val statuses: Map[String, Int] = if (wfCount > 0) Map("Submitted" -> wfCount) else Map.empty
+    // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
+    // val runCost = if (wfCount == 0) None else Some(wfCount * 1.23f)  // mockSubmissionCostService.fixedCost
+    val runCost = None
+
+    SubmissionListResponse(sub, None, statuses, false).copy(cost = runCost)
+  }
+  val expectedSubmissions = Set(
+    expectedResponse(testData.submissionTerminateTest),
+    expectedResponse(testData.submissionNoWorkflows),
+    expectedResponse(testData.submission1),
+    expectedResponse(testData.costedSubmission1),
+    expectedResponse(testData.submission2),
+    expectedResponse(testData.submissionUpdateEntity),
+    expectedResponse(testData.regionalSubmission),
+    expectedResponse(testData.submissionUpdateWorkspace)
+  )
+
   it should "return 200 when listing submissions" in withTestDataApiServices { services =>
-    def expectedResponse(sub: Submission): SubmissionListResponse = {
-      val wfCount = sub.workflows.length
-      val statuses: Map[String, Int] = if (wfCount > 0) Map("Submitted" -> wfCount) else Map.empty
-      // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
-      // val runCost = if (wfCount == 0) None else Some(wfCount * 1.23f)  // mockSubmissionCostService.fixedCost
-      val runCost = None
-
-      SubmissionListResponse(sub, None, statuses, false).copy(cost = runCost)
-    }
-
     Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
-        assertResult(
-          Set(
-            expectedResponse(testData.submissionTerminateTest),
-            expectedResponse(testData.submissionNoWorkflows),
-            expectedResponse(testData.submission1),
-            expectedResponse(testData.costedSubmission1),
-            expectedResponse(testData.submission2),
-            expectedResponse(testData.submissionUpdateEntity),
-            expectedResponse(testData.regionalSubmission),
-            expectedResponse(testData.submissionUpdateWorkspace)
-          )
-        ) {
+        assertResult(expectedSubmissions) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
       }
   }
+
+  it should "return 200 when listing submissions with date filter" in withTestDataApiServices { services =>
+
+    Get(s"${testData.wsName.path}/submissions?startDate=2025-10-01") ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.OK)(status)
+        assertResult(expectedSubmissions) {
+          responseAs[Seq[SubmissionListResponse]].toSet
+        }
+      }
+  }
+
+   it should "return 200 with no matching submissions" in withTestDataApiServices { services =>
+     Get(s"${testData.wsName.path}/submissions?startDate=2025-01-01&endDate=2025-06-01") ~>
+       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+       check {
+         assertResult(StatusCodes.OK)(status)
+         assertResult(Set.empty) {
+           responseAs[Seq[SubmissionListResponse]].toSet
+         }
+       }
+   }
+
+   it should "return 400 error listing submissions with incorrect start and end date format" in withTestDataApiServices { services =>
+     Get(s"${testData.wsName.path}/submissions?startDate=foo&endDate=bar") ~>
+       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+       check {
+         assertResult(StatusCodes.BadRequest)(status)
+       }
+   }
 
   it should "return 200 when counting submissions" in withTestDataApiServices { services =>
     withStatsD {
