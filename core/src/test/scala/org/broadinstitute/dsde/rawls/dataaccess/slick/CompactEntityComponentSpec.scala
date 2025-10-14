@@ -265,6 +265,33 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual should contain theSameElementsAs selectedRecords
   }
 
+  it should "return soft-deleted entities" in withMinimalTestDatabase { dataSource =>
+    import driver.api._ // for Slick queries in this test
+
+    val entity1 = Entity("entityName1", "entityType", Map())
+    val entity2 = Entity("entityName2", "entityType", Map())
+    val entity3 = Entity("entityName3", "entityType", Map())
+
+    insertAndGetAll(Seq(entity1, entity2, entity3))
+
+    // soft-delete entity 2
+    val softDelete = runAndWait(dataSource.dataAccess.compactEntityQuery.batchHide(wsid, Seq(entity2.toPointer)))
+    softDelete shouldBe 1
+
+    // use the high-level Slick query object to get the actual rows saved to the database
+    val slickQuery: ReadAction[Seq[CompactEntityRecord]] = dataSource.dataAccess.compactEntitySlickQuery
+      .filter(e => e.workspaceId === wsid && e.entityType === entity1.entityType)
+      .result
+
+    val records: Seq[CompactEntityRecord] = runAndWait(slickQuery)
+
+    val ids = records.map(_.id)
+
+    val actual = runAndWait(q.getEntitiesByIds(wsid, ids))
+
+    actual should contain theSameElementsAs records
+  }
+
   behavior of "existsAll and countExisting"
 
   it should "find the entities" in withMinimalTestDatabase { _ =>
