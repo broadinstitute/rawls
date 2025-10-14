@@ -3,20 +3,12 @@ package org.broadinstitute.dsde.rawls.submissions
 import akka.http.scaladsl.model.StatusCodes
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
+import jakarta.ws.rs.BadRequestException
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  ExecutionServiceCluster,
-  ExecutionServiceDAO,
-  ExecutionServiceId,
-  GoogleServicesDAO,
-  MethodRepoDAO,
-  SamDAO,
-  SlickDataSource,
-  SubmissionCostService
-}
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceDAO, ExecutionServiceId, GoogleServicesDAO, MethodRepoDAO, SamDAO, SlickDataSource, SubmissionCostService}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
@@ -28,59 +20,20 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{
-  ActiveSubmission,
-  AttributeEntityReference,
-  AttributeString,
-  AttributeValue,
-  ErrorReport,
-  ErrorReportSource,
-  ExecutionServiceLogs,
-  ExecutionServiceOutputs,
-  ExternalEntityInfo,
-  MetadataParams,
-  MethodConfiguration,
-  PreparedSubmission,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RetriedSubmissionReport,
-  SamWorkspaceActions,
-  SeparateSubmissionFinalOutputsSetting,
-  Submission,
-  SubmissionListResponse,
-  SubmissionReport,
-  SubmissionRequest,
-  SubmissionRetry,
-  SubmissionStatuses,
-  SubmissionValidationEntityInputs,
-  SubmissionValidationHeader,
-  SubmissionValidationInput,
-  SubmissionValidationReport,
-  TaskOutput,
-  UserCommentUpdateOperation,
-  Workflow,
-  WorkflowCost,
-  WorkflowCostTypes,
-  WorkflowFailureModes,
-  WorkflowOutputs,
-  WorkflowQueueStatusByUserResponse,
-  WorkflowStatuses,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName
-}
+import org.broadinstitute.dsde.rawls.model.{ActiveSubmission, AttributeEntityReference, AttributeString, AttributeValue, ErrorReport, ErrorReportSource, ExecutionServiceLogs, ExecutionServiceOutputs, ExternalEntityInfo, MetadataParams, MethodConfiguration, PreparedSubmission, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail, RetriedSubmissionReport, SamWorkspaceActions, SeparateSubmissionFinalOutputsSetting, Submission, SubmissionListResponse, SubmissionReport, SubmissionRequest, SubmissionRetry, SubmissionStatuses, SubmissionValidationEntityInputs, SubmissionValidationHeader, SubmissionValidationInput, SubmissionValidationReport, TaskOutput, UserCommentUpdateOperation, Workflow, WorkflowCost, WorkflowCostTypes, WorkflowFailureModes, WorkflowOutputs, WorkflowQueueStatusByUserResponse, WorkflowStatuses, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService.getTerminalStatusDate
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
+import org.joda.time.format.ISODateTimeFormat
+import org.springframework.web.client.HttpClientErrorException.BadRequest
 import slick.jdbc.TransactionIsolation
 import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
 
+import java.sql.Timestamp
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -323,15 +276,33 @@ class SubmissionsService(
     } yield WorkflowCost(workflowId, costs.get(workflowId))
   }
 
-  def listSubmissions(workspaceName: WorkspaceName,
-                      parentContext: RawlsRequestContext
-  ): Future[Seq[SubmissionListResponse]] = {
-    val costlessSubmissionsFuture =
-      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
-          dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
-        }
+  def listWithSubmitterForWorkspace(workspaceName: WorkspaceName,
+                                               startDate: DateTime,
+                                               endDate: DateTime
+                                             ): Future[Seq[SubmissionListResponse]] = {
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.listWithSubmitter(
+          workspaceContext,
+          startDate,
+          endDate
+        )
       }
+    }
+  }
+
+  def listSubmissions(workspaceName: WorkspaceName,
+                      parentContext: RawlsRequestContext,
+                      startDateOpt: Option[DateTime],
+                      endDateOpt: Option[DateTime]
+  ): Future[Seq[SubmissionListResponse]] = {
+    val startDate = startDateOpt.getOrElse(DateTime.now().minusDays(30))
+    val endDate = endDateOpt.getOrElse(DateTime.now())
+    if (endDate.isBefore(startDate)) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "End date must occur after start date."))
+    }
+
+    val costlessSubmissionsFuture = listWithSubmitterForWorkspace(workspaceName, startDate, endDate)
 
     // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
     // val costMapFuture = costlessSubmissionsFuture flatMap { submissions =>

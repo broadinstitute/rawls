@@ -488,7 +488,7 @@ class SubmissionsServiceSpec
       )
 
       val firstSubmission =
-        Await.result(services.submissionsService.listSubmissions(workspaceName, testContext), Duration.Inf).head
+        Await.result(services.submissionsService.listSubmissions(workspaceName, testContext, Option.empty, Option.empty), Duration.Inf).head
 
       val result = Await.result(
         services.submissionsService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),

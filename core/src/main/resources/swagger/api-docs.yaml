@@ -746,6 +746,21 @@ paths:
       summary: list active submissions
       description: List all active submissions in all workspaces
       operationId: listAllActiveSubmissions
+      parameters:
+        - name: startDate
+          in: query
+          description: Optional start date to filter results (inclusive). Default value is 30 days ago.
+          schema:
+            type: string
+            format: date
+            example: 2025-10-31
+        - name: endDate
+          in: query
+          description: Optional end date to filter results (inclusive). Default value is the current date.
+          schema:
+            type: string
+            format: date
+            example: 2025-10-31
       responses:
         200:
           description: Successful Request

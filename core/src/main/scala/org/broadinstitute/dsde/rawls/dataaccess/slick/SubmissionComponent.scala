@@ -151,11 +151,15 @@ trait SubmissionComponent {
         })
       )
 
-    def listWithSubmitter(workspaceContext: Workspace): ReadWriteAction[Seq[SubmissionListResponse]] = {
+    def listWithSubmitter(workspaceContext: Workspace,
+                          startDate: DateTime,
+                          endDate: DateTime): ReadWriteAction[Seq[SubmissionListResponse]] = {
+      val start = new Timestamp(startDate.getMillis)
+      val end = new Timestamp(endDate.getMillis)
       val query = for {
-        (submissionRec, entityRec) <- findByWorkspaceId(
-          workspaceContext.workspaceIdAsUUID
-        ) joinLeft entityQuery on (_.submissionEntityId === _.id)
+        (submissionRec, entityRec) <- findByWorkspaceId(workspaceContext.workspaceIdAsUUID)
+          .filter(sub => sub.submissionDate >= start && sub.submissionDate <= end)
+          .joinLeft(entityQuery).on(_.submissionEntityId === _.id)
         methodConfigRec <- methodConfigurationQuery if submissionRec.methodConfigurationId === methodConfigRec.id
       } yield (submissionRec, methodConfigRec, entityRec)
 
