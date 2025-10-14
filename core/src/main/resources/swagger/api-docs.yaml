@@ -753,7 +753,7 @@ paths:
           schema:
             type: string
             format: date
-            example: 2025-10-31
+            example: 2025-10-01
         - name: endDate
           in: query
           description: Optional end date to filter results (inclusive). Default value is the current date.

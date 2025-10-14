@@ -693,7 +693,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   }
 
   it should "return 200 when listing submissions with date filter" in withTestDataApiServices { services =>
-
     Get(s"${testData.wsName.path}/submissions?startDate=2025-10-01") ~>
       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
@@ -704,24 +703,25 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       }
   }
 
-   it should "return 200 with no matching submissions" in withTestDataApiServices { services =>
-     Get(s"${testData.wsName.path}/submissions?startDate=2025-01-01&endDate=2025-06-01") ~>
-       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
-       check {
-         assertResult(StatusCodes.OK)(status)
-         assertResult(Set.empty) {
-           responseAs[Seq[SubmissionListResponse]].toSet
-         }
-       }
-   }
+  it should "return 200 with no matching submissions" in withTestDataApiServices { services =>
+    Get(s"${testData.wsName.path}/submissions?startDate=2025-01-01&endDate=2025-06-01") ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.OK)(status)
+        assertResult(Set.empty) {
+          responseAs[Seq[SubmissionListResponse]].toSet
+        }
+      }
+  }
 
-   it should "return 400 error listing submissions with incorrect start and end date format" in withTestDataApiServices { services =>
-     Get(s"${testData.wsName.path}/submissions?startDate=foo&endDate=bar") ~>
-       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
-       check {
-         assertResult(StatusCodes.BadRequest)(status)
-       }
-   }
+  it should "return 400 error listing submissions with incorrect start and end date format" in withTestDataApiServices {
+    services =>
+      Get(s"${testData.wsName.path}/submissions?startDate=foo&endDate=bar") ~>
+        sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+        check {
+          assertResult(StatusCodes.BadRequest)(status)
+        }
+  }
 
   it should "return 200 when counting submissions" in withTestDataApiServices { services =>
     withStatsD {

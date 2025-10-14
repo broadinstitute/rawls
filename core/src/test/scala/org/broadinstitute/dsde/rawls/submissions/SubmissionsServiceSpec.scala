@@ -29,7 +29,13 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterServiceImp
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{RawlsWorkspaceAclManager, WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository, WorkspaceSettingService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  RawlsWorkspaceAclManager,
+  WorkspaceRepository,
+  WorkspaceService,
+  WorkspaceSettingRepository,
+  WorkspaceSettingService
+}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -506,7 +512,11 @@ class SubmissionsServiceSpec
       )
 
       val firstSubmission =
-        Await.result(services.submissionsService.listSubmissions(workspaceName, testContext, Option.empty, Option.empty), Duration.Inf).head
+        Await
+          .result(services.submissionsService.listSubmissions(workspaceName, testContext, Option.empty, Option.empty),
+                  Duration.Inf
+          )
+          .head
 
       val result = Await.result(
         services.submissionsService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
