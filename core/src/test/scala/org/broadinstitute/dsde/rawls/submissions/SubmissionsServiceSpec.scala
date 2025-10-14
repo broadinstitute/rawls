@@ -311,26 +311,6 @@ class SubmissionsServiceSpec
       )
     }
 
-//    override val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService =
-//      SubmissionsService.constructor(
-//        slickDataSource,
-//        entityManager,
-//        methodRepoDAO,
-//        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
-//        executionServiceCluster,
-//        methodConfigResolver,
-//        gcsDAO,
-//        samDAO,
-//        maxActiveWorkflowsTotal,
-//        maxActiveWorkflowsPerUser,
-//        workbenchMetricBaseName,
-//        submissionCostService,
-//        workspaceServiceConfig,
-//        workspaceRepository,
-//        workspaceSettingRepository,
-//        entityServiceConstructor
-//      ) _
-
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
   }
