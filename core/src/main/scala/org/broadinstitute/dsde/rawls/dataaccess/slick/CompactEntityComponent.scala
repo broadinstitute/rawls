@@ -200,7 +200,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         sql"""select id, name, entity_type, workspace_id, record_version, deleted, attributes
                from ENTITY
                where workspace_id = $workspaceId
-               and deleted = 0
                and id in ( """,
         inClause,
         sql""" );"""
