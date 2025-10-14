@@ -1320,7 +1320,7 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           // the order of the columns here is also the sort precedence, list length first, then scalar value
           // Sorting on a list column should sort by the list size and sorting on a scalar column sorts on the column value.
           // If the column is a mixed type then all scalars will group together sorted by value then all the lists will follow sorted by size.
-          sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}), e.attributes -> ${slickAttributePath(attr)}"
+          sql" JSON_LENGTH(e.attributes -> ${slickAttributePath(attr)}) #${SortDirections.toSql(entityQuery.sortDirection)}, e.attributes -> ${slickAttributePath(attr)}"
       },
       sql" #${SortDirections.toSql(entityQuery.sortDirection)}, name #${SortDirections.toSql(entityQuery.sortDirection)}"
     )
