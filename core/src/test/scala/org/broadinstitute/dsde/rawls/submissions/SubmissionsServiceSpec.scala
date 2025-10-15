@@ -752,26 +752,18 @@ class SubmissionsServiceSpec
     actual.errorReport.message shouldBe "End date must occur after start date."
   }
 
-  it should "use default start and end dates if not specified" in withTestDataServices { services =>
+  it should "Do not filter submissions when no start and end dates are specified" in withTestDataServices { services =>
     val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
     Await.result(services.submissionsService.listSubmissions(workspaceName, testContext, None, None), Duration.Inf)
 
     val workspaceCaptor = ArgumentCaptor.forClass(classOf[WorkspaceName])
-    val startCaptor = ArgumentCaptor.forClass(classOf[DateTime])
-    val endCaptor = ArgumentCaptor.forClass(classOf[DateTime])
+    val startCaptor = ArgumentCaptor.forClass(classOf[Option[DateTime]])
+    val endCaptor = ArgumentCaptor.forClass(classOf[Option[DateTime]])
 
     verify(services.submissionsService)
       .listWithSubmitterForWorkspace(workspaceCaptor.capture(), startCaptor.capture(), endCaptor.capture())
     workspaceCaptor.getValue shouldBe workspaceName
-
-    val startDate = startCaptor.getValue
-    val expectedStartDate = DateTime.now().minusDays(30)
-    (startDate.getYear, startDate.getMonthOfYear, startDate.getDayOfMonth) shouldBe
-      (expectedStartDate.getYear, expectedStartDate.getMonthOfYear, expectedStartDate.getDayOfMonth)
-
-    val endDate = endCaptor.getValue
-    val expectedEndDate = DateTime.now()
-    (endDate.getYear, endDate.getMonthOfYear, endDate.getDayOfMonth) shouldBe
-      (expectedEndDate.getYear, expectedEndDate.getMonthOfYear, expectedEndDate.getDayOfMonth)
+    startCaptor.getValue shouldBe Option.empty
+    endCaptor.getValue shouldBe Option.empty
   }
 }
