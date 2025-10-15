@@ -352,6 +352,12 @@ class SubmissionsService(
       )
     }
 
+    if (endDateOpt.isDefined && endDateOpt.get.isAfter(DateTime.now())) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Date filters cannot be in the future.")
+      )
+    }
+
     val costlessSubmissionsFuture = listWithSubmitterForWorkspace(workspaceName, startDateOpt, endDateOpt)
 
     // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit

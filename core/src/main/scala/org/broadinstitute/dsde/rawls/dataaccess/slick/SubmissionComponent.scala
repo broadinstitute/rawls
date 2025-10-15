@@ -160,10 +160,14 @@ trait SubmissionComponent {
         case (Some(startDate), Some(endDate)) =>
           val start = new Timestamp(startDate.withTimeAtStartOfDay.getMillis)
           val end = new Timestamp(endDate.plusDays(1).withTimeAtStartOfDay.getMillis - 1)
-          baseQuery.filter(sub =>
-            sub.submissionDate >= start && sub.submissionDate <= end
-          )
-        case _ =>
+          baseQuery.filter(sub => sub.submissionDate >= start && sub.submissionDate <= end)
+        case (Some(startDate), None) =>
+          val start = new Timestamp(startDate.withTimeAtStartOfDay.getMillis)
+          baseQuery.filter(sub => sub.submissionDate >= start)
+        case (None, Some(endDate)) =>
+          val end = new Timestamp(endDate.plusDays(1).withTimeAtStartOfDay.getMillis - 1)
+          baseQuery.filter(sub => sub.submissionDate <= end)
+        case (None, None) =>
           baseQuery
       }
       val query = for {

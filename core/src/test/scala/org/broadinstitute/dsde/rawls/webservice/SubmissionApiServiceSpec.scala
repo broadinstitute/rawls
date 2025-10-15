@@ -671,24 +671,46 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     SubmissionListResponse(sub, None, statuses, false).copy(cost = runCost)
   }
 
-  it should "return 200 when listing submissions" in withTestDataApiServices { services =>
-    val expectedSubmissions = Set(
-      expectedResponse(testData.submissionTerminateTest),
-      expectedResponse(testData.submissionNoWorkflows),
-      expectedResponse(testData.submission1),
-      expectedResponse(testData.costedSubmission1),
-      expectedResponse(testData.submission2),
-      expectedResponse(testData.submissionUpdateEntity),
-      expectedResponse(testData.regionalSubmission),
-      expectedResponse(testData.submissionUpdateWorkspace),
-      expectedResponse(testData.submission20250915)
-    )
+  val expectedSubmissions = Set(
+    expectedResponse(testData.submissionTerminateTest),
+    expectedResponse(testData.submissionNoWorkflows),
+    expectedResponse(testData.submission1),
+    expectedResponse(testData.costedSubmission1),
+    expectedResponse(testData.submission2),
+    expectedResponse(testData.submissionUpdateEntity),
+    expectedResponse(testData.regionalSubmission),
+    expectedResponse(testData.submissionUpdateWorkspace),
+    expectedResponse(testData.submission20250915)
+  )
 
+  it should "return 200 when listing submissions" in withTestDataApiServices { services =>
     Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
         assertResult(expectedSubmissions) {
+          responseAs[Seq[SubmissionListResponse]].toSet
+        }
+      }
+  }
+
+  it should "use current date when no end date is specified" in withTestDataApiServices { services =>
+    Get(s"${testData.wsName.path}/submissions?startDate=2025-09-01") ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.OK)(status)
+        assertResult(expectedSubmissions) {
+          responseAs[Seq[SubmissionListResponse]].toSet
+        }
+      }
+  }
+
+  it should "return all results up to end date when no start date is specified" in withTestDataApiServices { services =>
+    Get(s"${testData.wsName.path}/submissions?endDate=2025-09-30") ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.OK)(status)
+        assertResult(Set(expectedResponse(testData.submission20250915))) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
       }
@@ -713,6 +735,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         assertResult(Set.empty) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
+      }
+  }
+
+  it should "return 400 error with start and end dates in the future" in withTestDataApiServices { services =>
+    Get(s"${testData.wsName.path}/submissions?startDate=2050-10-15&endDate=2050-10-30") ~>
+      sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
+      check {
+        assertResult(StatusCodes.BadRequest)(status)
       }
   }
 
