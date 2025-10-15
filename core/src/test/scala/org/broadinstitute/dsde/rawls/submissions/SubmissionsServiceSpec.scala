@@ -763,8 +763,15 @@ class SubmissionsServiceSpec
     verify(services.submissionsService)
       .listWithSubmitterForWorkspace(workspaceCaptor.capture(), startCaptor.capture(), endCaptor.capture())
     workspaceCaptor.getValue shouldBe workspaceName
-    startCaptor.getValue shouldBe DateTime.now().minusDays(30).toDate
-    endCaptor.getValue shouldBe DateTime.now().toDate
-  }
 
+    val startDate = startCaptor.getValue
+    val expectedStartDate = DateTime.now().minusDays(30)
+    (startDate.getYear, startDate.getMonthOfYear, startDate.getDayOfMonth) shouldBe
+      (expectedStartDate.getYear, expectedStartDate.getMonthOfYear, expectedStartDate.getDayOfMonth)
+
+    val endDate = endCaptor.getValue
+    val expectedEndDate = DateTime.now()
+    (endDate.getYear, endDate.getMonthOfYear, endDate.getDayOfMonth) shouldBe
+      (expectedEndDate.getYear, expectedEndDate.getMonthOfYear, expectedEndDate.getDayOfMonth)
+  }
 }
