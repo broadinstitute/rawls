@@ -422,7 +422,7 @@ trait EntityComponent {
         concatSqlActions(
           sql"""select e.id, e.name #$sortColumns from ENTITY e """,
           sortJoin,
-          sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """
+          sql""" where e.deleted = b'0' and e.entity_type = $entityType and e.workspace_id = $workspaceId """
         )
       }
 
@@ -594,7 +594,7 @@ trait EntityComponent {
             concatSqlActions(
               sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date, null
                              from ENTITY e
-                             where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """,
+                             where e.deleted = b'0' and e.entity_type = $entityType and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """,
               paginationFilterSql("and", "e", entityQuery),
               order("e"),
               sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize}"
@@ -602,7 +602,7 @@ trait EntityComponent {
           } else {
             // user is sorting by an attribute value, so we need the largest number of joins
             // this query is very similar to baseEntityAndAttributeSql
-            /* TODO: include "where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId"
+            /* TODO: include "where e.deleted = b'0' and e.entity_type = $entityType and e.workspace_id = $workspaceId"
                 in the top-level select, to reduce what MySQL needs to look at? Does this actually help?
              */
             /* TODO: it's inefficient to return all columns of e_ref; we only really need the id and the name. We turn it into an
