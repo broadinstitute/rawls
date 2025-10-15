@@ -1079,6 +1079,20 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - name: startDate
+          in: query
+          description: Optional start date to filter results (inclusive).
+          schema:
+            type: string
+            format: date
+            example: 2025-10-01
+        - name: endDate
+          in: query
+          description: Optional end date to filter results (inclusive).
+          schema:
+            type: string
+            format: date
+            example: 2025-10-31
       responses:
         200:
           description: Successful Request
