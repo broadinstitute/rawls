@@ -670,18 +670,20 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
     SubmissionListResponse(sub, None, statuses, false).copy(cost = runCost)
   }
-  val expectedSubmissions = Set(
-    expectedResponse(testData.submissionTerminateTest),
-    expectedResponse(testData.submissionNoWorkflows),
-    expectedResponse(testData.submission1),
-    expectedResponse(testData.costedSubmission1),
-    expectedResponse(testData.submission2),
-    expectedResponse(testData.submissionUpdateEntity),
-    expectedResponse(testData.regionalSubmission),
-    expectedResponse(testData.submissionUpdateWorkspace)
-  )
 
   it should "return 200 when listing submissions" in withTestDataApiServices { services =>
+    val expectedSubmissions = Set(
+      expectedResponse(testData.submissionTerminateTest),
+      expectedResponse(testData.submissionNoWorkflows),
+      expectedResponse(testData.submission1),
+      expectedResponse(testData.costedSubmission1),
+      expectedResponse(testData.submission2),
+      expectedResponse(testData.submissionUpdateEntity),
+      expectedResponse(testData.regionalSubmission),
+      expectedResponse(testData.submissionUpdateWorkspace),
+      expectedResponse(testData.submission20250915)
+    )
+
     Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
@@ -692,12 +694,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       }
   }
 
-  it should "return 200 when listing submissions with date filter" in withTestDataApiServices { services =>
-    Get(s"${testData.wsName.path}/submissions?startDate=2025-10-01") ~>
+  it should "return 200 listing submissions within date range" in withTestDataApiServices { services =>
+    Get(s"${testData.wsName.path}/submissions?startDate=2025-09-01&endDate=2025-10-01") ~>
       sealRoute(services.submissionRoutes(userInfo = userInfo)) ~>
       check {
         assertResult(StatusCodes.OK)(status)
-        assertResult(expectedSubmissions) {
+        assertResult(Set(expectedResponse(testData.submission20250915))) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
       }
@@ -730,7 +732,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Map("Submitted" -> 8)) {
+          assertResult(Map("Submitted" -> 9)) {
             responseAs[Map[String, Int]]
           }
         }

@@ -160,7 +160,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
                            individualWorkflowCost: Option[Float] = None,
                            externalEntityInfo: Option[ExternalEntityInfo] = None,
-                           ignoreEmptyOutputs: Boolean = false
+                           ignoreEmptyOutputs: Boolean = false,
+                           testDate: DateTime = currentTime()
   ): Submission = {
 
     val workflows = workflowEntities map { ref =>
@@ -1200,6 +1201,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq(sample4, sample5, sample6),
       Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
     )
+
     val regionalSubmission = createTestSubmission(
       regionalWorkspace,
       agoraMethodConfig,
@@ -1627,6 +1629,19 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
     )
 
+    // a submission from 30 days ago, to test filtering submissions by date
+    val submission20250915 = createTestSubmission(
+      workspace,
+      agoraMethodConfig,
+      indiv1,
+      WorkbenchEmail(userOwner.userEmail.value),
+      Seq(sample1, sample2, sample3),
+      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+      Seq(sample4, sample5, sample6),
+      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2),
+      testDate = new DateTime(2025, 9, 15, 0, 0, 0, 0)
+    )
+
     val allWorkspaces = Seq(
       workspace,
       workspaceLocked,
@@ -1748,6 +1763,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
             submissionQuery.create(context, submission2),
             submissionQuery.create(context, submissionUpdateEntity),
             submissionQuery.create(context, submissionUpdateWorkspace),
+            submissionQuery.create(context, submission20250915),
 
             // update exec key for all test data workflows that have been started.
 

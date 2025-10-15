@@ -152,14 +152,16 @@ trait SubmissionComponent {
       )
 
     def listWithSubmitter(workspaceContext: Workspace,
-                          startDate: Option[DateTime],
-                          endDate: Option[DateTime]
+                          startDateOpt: Option[DateTime],
+                          endDateOpt: Option[DateTime]
     ): ReadWriteAction[Seq[SubmissionListResponse]] = {
       val baseQuery = findByWorkspaceId(workspaceContext.workspaceIdAsUUID)
-      val filteredQuery = (startDate, endDate) match {
-        case (Some(start), Some(end)) =>
+      val filteredQuery = (startDateOpt, endDateOpt) match {
+        case (Some(startDate), Some(endDate)) =>
+          val start = new Timestamp(startDate.withTimeAtStartOfDay.getMillis)
+          val end = new Timestamp(endDate.plusDays(1).withTimeAtStartOfDay.getMillis - 1)
           baseQuery.filter(sub =>
-            sub.submissionDate >= new Timestamp(start.getMillis) && sub.submissionDate <= new Timestamp(end.getMillis)
+            sub.submissionDate >= start && sub.submissionDate <= end
           )
         case _ =>
           baseQuery
