@@ -2492,6 +2492,62 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     actual should contain theSameElementsInOrderAs List(entity4, entity2, entity1, entity3)
   }
 
+  it should "sort by attribute list size descending" in withMinimalTestDatabase { _ =>
+    val entityType1 = "entityType1"
+    val testAttrName = AttributeName.withDefaultNS("foo")
+    val sortAttrName = AttributeName.withDefaultNS("sortMe")
+    val entity1 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(testAttrName -> AttributeString("foo"),
+            sortAttrName -> AttributeValueList(List.fill(7)(AttributeNumber(Random.nextInt())))
+        )
+      )
+    val entity2 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(testAttrName -> AttributeString("foo"),
+            sortAttrName -> AttributeValueList(List.fill(3)(AttributeNumber(Random.nextInt())))
+        )
+      )
+    val entity3 =
+      Entity(
+        UUID.randomUUID().toString,
+        entityType1,
+        Map(testAttrName -> AttributeString("foo"),
+            sortAttrName -> AttributeValueList(List.fill(9)(AttributeNumber(Random.nextInt())))
+        )
+      )
+    val entity4 =
+      Entity(UUID.randomUUID().toString,
+             entityType1,
+             Map(testAttrName -> AttributeString("foo"), sortAttrName -> AttributeNumber(Random.nextInt()))
+      )
+    insertAndGet(entity1)
+    insertAndGet(entity2)
+    insertAndGet(entity3)
+    insertAndGet(entity4) // this one does not have a list so should have a sort value of 1
+
+    val columnFilter = EntityColumnFilter(testAttrName, "foo")
+    val actual = runAndWait(
+      q.queryEntitiesWithColumnFilter(
+        wsid,
+        entityType1,
+        EntityQuery(1,
+                    10,
+                    toDelimitedName(sortAttrName),
+                    SortDirections.Descending,
+                    None,
+                    columnFilter = Some(columnFilter)
+        ),
+        columnFilter
+      )
+    )
+    actual should contain theSameElementsInOrderAs List(entity3, entity1, entity2, entity4)
+  }
+
   it should "respect desired fields" in withMinimalTestDatabase { _ =>
     val columnFilter = EntityColumnFilter(AttributeName.withDefaultNS("foo"), "foo")
     testDesiredFields(None, Some(columnFilter)) { (entityType, entityQuery) =>
