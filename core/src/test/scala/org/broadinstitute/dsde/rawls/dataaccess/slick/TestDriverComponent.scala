@@ -86,7 +86,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   )
   val testContext = RawlsRequestContext(userInfo)
 
-  // NOTE: we previously truncated millis here for DB compatibility reasons, but this is is no longer necessary.
+  // NOTE: we previously truncated millis here for DB compatibility reasons, but this is no longer necessary.
   // now only serves to encapsulate a Java-ism
   def currentTime() = new DateTime()
   val testDate = currentTime()
@@ -160,8 +160,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
                            individualWorkflowCost: Option[Float] = None,
                            externalEntityInfo: Option[ExternalEntityInfo] = None,
-                           ignoreEmptyOutputs: Boolean = false,
-                           testDate: DateTime = currentTime()
+                           ignoreEmptyOutputs: Boolean = false
   ): Submission = {
 
     val workflows = workflowEntities map { ref =>
@@ -1630,16 +1629,26 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
 
     // a submission from 30 days ago, to test filtering submissions by date
-    val submission20250915 = createTestSubmission(
-      workspace,
-      agoraMethodConfig,
-      indiv1,
-      WorkbenchEmail(userOwner.userEmail.value),
-      Seq(sample1, sample2, sample3),
-      Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
-      Seq(sample4, sample5, sample6),
-      Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2),
-      testDate = new DateTime(2025, 9, 15, 0, 0, 0, 0)
+    val submission20250915 = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = new DateTime(2025, 9, 15, 0, 0, 0, 0),
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name,
+      submissionEntity = Option(indiv1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSubmission20250915"),
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
     )
 
     val allWorkspaces = Seq(
