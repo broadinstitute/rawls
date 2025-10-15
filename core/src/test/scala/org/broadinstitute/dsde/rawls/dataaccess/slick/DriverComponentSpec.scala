@@ -30,7 +30,7 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val queryArecords = runAndWait(queryA.as[WorkflowRecord])
 
     // first check that we're not just comparing empty seqs
-    assertResult(22)(queryArecords.length)
+    assertResult(23)(queryArecords.length)
 
     assertResult(queryArecords) {
       runAndWait(concatSqlActions(Seq(select, where): _*).as[WorkflowRecord])
@@ -43,7 +43,7 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val queryBrecords = runAndWait(queryB.as[WorkflowRecord])
 
     // first check that we're not just comparing empty seqs
-    assertResult(22)(queryBrecords.length)
+    assertResult(23)(queryBrecords.length)
 
     assertResult(queryBrecords) {
       runAndWait(concatSqlActions(Seq(select, where1, sql",", where2): _*).as[WorkflowRecord])

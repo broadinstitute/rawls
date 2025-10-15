@@ -1640,13 +1640,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowSubmission20250915"),
-          status = WorkflowStatuses.Succeeded,
+          status = WorkflowStatuses.Submitted,
           statusLastChangedDate = testDate,
           workflowEntity = Option(sample1.toReference),
           inputResolutions = inputResolutions
         )
       ),
-      status = SubmissionStatuses.Done,
+      status = SubmissionStatuses.Submitted,
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
