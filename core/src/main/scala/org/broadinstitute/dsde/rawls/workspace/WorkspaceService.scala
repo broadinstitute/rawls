@@ -213,26 +213,6 @@ class WorkspaceService(
           )
       }
 
-    /**
-     * Enable Quicksilver for a workspace by creating a CompactDataTables setting record.
-     * This bypasses WorkspaceSettingService and works directly with workspaceSettingsRepository to manipulate
-     * database rows. We do this because we don't want to trigger any of the Quicksilver migration logic
-     * when adding this setting.
-     *
-     * @param workspaceId UUID of workspace for which to enable Quicksilver
-     * @return number of settings applied; should always be 1.
-     */
-    def enableQuicksilver(workspaceId: UUID): Future[Int] = for {
-      _ <- workspaceSettingsRepository.createWorkspaceSettingsRecords(
-        workspaceId,
-        List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false)))),
-        parentContext.userInfo.userSubjectId
-      )
-      numApplied <- workspaceSettingsRepository.markWorkspaceSettingApplied(workspaceId,
-                                                                            WorkspaceSettingTypes.CompactDataTables
-      )
-    } yield numApplied
-
     for {
       _ <- traceFutureWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
         withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
@@ -276,15 +256,7 @@ class WorkspaceService(
         )
         throw t
       }
-      // enable quicksilver for new workspaces
-      _ <- traceFutureWithParent("enableQuicksilverForWorkspace", parentContext)(_ =>
-        enableQuicksilver(workspace.workspaceIdAsUUID) recover { case t: Throwable =>
-          logger.warn(
-            s"Error in createWorkspace.enableQuicksilver - workspace:'${workspaceRequest.name}' - UUID:${workspace.workspaceId}: ${t.getClass.getSimpleName}: ${t.getMessage}"
-          )
-          throw t
-        }
-      )
+
       _ <- traceFutureWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
         fastPassServiceConstructor(childContext)
           .syncFastPassesForUserInWorkspace(workspace) recover { case t: Throwable =>
@@ -2481,6 +2453,23 @@ class WorkspaceService(
           span
         )
       )
+
+      // enable quicksilver for new workspaces. This bypasses the logic in WorkspaceSettingRepository
+      // because we can be certain this is a brand-new workspace with no pre-existing settings, and
+      // we want to keep this operation as light as possible.
+      _ <- traceDBIOWithParent("enableQuicksilverForWorkspace", parentContext) { _ =>
+        val tsNow = java.sql.Timestamp.from(java.time.Instant.now())
+        val quicksilverRecord = WorkspaceSettingRecord(
+          "CompactDataTables",
+          savedWorkspace.workspaceIdAsUUID,
+          """{"enabled": true, "performMigration": false}""",
+          "Applied",
+          tsNow,
+          tsNow,
+          parentContext.userInfo.userSubjectId.value
+        )
+        dataAccess.workspaceSettingQuery += quicksilverRecord
+      }
 
       _ <- traceDBIOWithParent("updateServicePerimeter", parentContext)(_ =>
         maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess)
