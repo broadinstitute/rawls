@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportForma
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
+import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsString, PrettyPrinter}
 
@@ -30,8 +31,14 @@ trait SubmissionApiService extends UserInfoDirectives {
     val ctx = RawlsRequestContext(userInfo, Option(otelContext))
     path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
       get {
-        complete {
-          submissionsServiceConstructor(ctx).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName), ctx)
+        parameters("startDate".as[DateTime].?, "endDate".as[DateTime].?) { (startDateOpt, endDateOpt) =>
+          complete {
+            submissionsServiceConstructor(ctx).listSubmissions(
+              WorkspaceName(workspaceNamespace, workspaceName),
+              ctx,
+              startDateOpt,
+              endDateOpt)
+          }
         }
       }
     } ~
