@@ -151,11 +151,29 @@ trait SubmissionComponent {
         })
       )
 
-    def listWithSubmitter(workspaceContext: Workspace): ReadWriteAction[Seq[SubmissionListResponse]] = {
+    def listWithSubmitter(workspaceContext: Workspace,
+                          startDateOpt: Option[DateTime],
+                          endDateOpt: Option[DateTime]
+    ): ReadWriteAction[Seq[SubmissionListResponse]] = {
+      val baseQuery = findByWorkspaceId(workspaceContext.workspaceIdAsUUID)
+      val filteredQuery = (startDateOpt, endDateOpt) match {
+        case (Some(startDate), Some(endDate)) =>
+          val start = new Timestamp(startDate.withTimeAtStartOfDay.getMillis)
+          val end = new Timestamp(endDate.plusDays(1).withTimeAtStartOfDay.getMillis - 1)
+          baseQuery.filter(sub => sub.submissionDate >= start && sub.submissionDate <= end)
+        case (Some(startDate), None) =>
+          val start = new Timestamp(startDate.withTimeAtStartOfDay.getMillis)
+          baseQuery.filter(sub => sub.submissionDate >= start)
+        case (None, Some(endDate)) =>
+          val end = new Timestamp(endDate.plusDays(1).withTimeAtStartOfDay.getMillis - 1)
+          baseQuery.filter(sub => sub.submissionDate <= end)
+        case (None, None) =>
+          baseQuery
+      }
       val query = for {
-        (submissionRec, entityRec) <- findByWorkspaceId(
-          workspaceContext.workspaceIdAsUUID
-        ) joinLeft entityQuery on (_.submissionEntityId === _.id)
+        (submissionRec, entityRec) <- filteredQuery
+          .joinLeft(entityQuery)
+          .on(_.submissionEntityId === _.id)
         methodConfigRec <- methodConfigurationQuery if submissionRec.methodConfigurationId === methodConfigRec.id
       } yield (submissionRec, methodConfigRec, entityRec)
 

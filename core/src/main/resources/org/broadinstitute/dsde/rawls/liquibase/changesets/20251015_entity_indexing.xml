@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
+    <!-- In production, this index requires ~1 hour to create. We will manually add the index to the db using
+     ALGORITHM=INPLACE, LOCK=NONE. This changeset reflects that manual operation, and thus uses
+     failOnError="false" because we expect the index to already exist in prod when it runs. -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="entity_indexing" failOnError="false">
+        <createIndex tableName="ENTITY" indexName="idx_ws_type_deleted">
+            <column name="workspace_id" />
+            <column name="entity_type" />
+            <column name="deleted" />
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

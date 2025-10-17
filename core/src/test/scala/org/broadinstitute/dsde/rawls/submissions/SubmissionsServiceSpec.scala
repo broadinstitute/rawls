@@ -41,6 +41,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.joda.time.DateTime
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
@@ -49,6 +50,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -286,26 +288,28 @@ class SubmissionsServiceSpec
         workspaceRepository,
         workbenchMetricBaseName
       ) _
-
-    override val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService =
-      SubmissionsService.constructor(
-        slickDataSource,
-        entityManager,
-        methodRepoDAO,
-        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
-        executionServiceCluster,
-        methodConfigResolver,
-        gcsDAO,
-        samDAO,
-        maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser,
-        workbenchMetricBaseName,
-        submissionCostService,
-        workspaceServiceConfig,
-        workspaceRepository,
-        workspaceSettingRepository,
-        entityServiceConstructor
-      ) _
+    override val submissionsServiceConstructor: RawlsRequestContext => SubmissionsService = { ctx =>
+      spy(
+        SubmissionsService.constructor(
+          slickDataSource,
+          entityManager,
+          methodRepoDAO,
+          new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+          executionServiceCluster,
+          methodConfigResolver,
+          gcsDAO,
+          samDAO,
+          maxActiveWorkflowsTotal,
+          maxActiveWorkflowsPerUser,
+          workbenchMetricBaseName,
+          submissionCostService,
+          workspaceServiceConfig,
+          workspaceRepository,
+          workspaceSettingRepository,
+          entityServiceConstructor
+        )(ctx)
+      )
+    }
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
@@ -488,7 +492,11 @@ class SubmissionsServiceSpec
       )
 
       val firstSubmission =
-        Await.result(services.submissionsService.listSubmissions(workspaceName, testContext), Duration.Inf).head
+        Await
+          .result(services.submissionsService.listSubmissions(workspaceName, testContext, Option.empty, Option.empty),
+                  Duration.Inf
+          )
+          .head
 
       val result = Await.result(
         services.submissionsService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
@@ -728,4 +736,34 @@ class SubmissionsServiceSpec
 
   }
 
+  behavior of "listSubmissions"
+
+  it should "error if end date before start date" in withTestDataServices { services =>
+    val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
+    val start = currentTime()
+    val end = start.minusHours(1)
+
+    val actual = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.submissionsService.listSubmissions(workspaceName, testContext, Option(start), Option(end)),
+                   Duration.Inf
+      )
+    }
+    actual.errorReport.statusCode should contain(StatusCodes.BadRequest)
+    actual.errorReport.message shouldBe "End date must occur after start date."
+  }
+
+  it should "Do not filter submissions when no start and end dates are specified" in withTestDataServices { services =>
+    val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
+    Await.result(services.submissionsService.listSubmissions(workspaceName, testContext, None, None), Duration.Inf)
+
+    val workspaceCaptor = ArgumentCaptor.forClass(classOf[WorkspaceName])
+    val startCaptor = ArgumentCaptor.forClass(classOf[Option[DateTime]])
+    val endCaptor = ArgumentCaptor.forClass(classOf[Option[DateTime]])
+
+    verify(services.submissionsService)
+      .listWithSubmitterForWorkspace(workspaceCaptor.capture(), startCaptor.capture(), endCaptor.capture())
+    workspaceCaptor.getValue shouldBe workspaceName
+    startCaptor.getValue shouldBe Option.empty
+    endCaptor.getValue shouldBe Option.empty
+  }
 }

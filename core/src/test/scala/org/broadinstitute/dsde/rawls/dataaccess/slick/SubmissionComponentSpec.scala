@@ -277,7 +277,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   it should "count submissions by their statuses" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
-    // test data contains 5 submissions, all in "Submitted" state
+    // test data contains 7 submissions, all in "Submitted" state
     // update one of the submissions to "Done"
     runAndWait(
       submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Done)
@@ -294,10 +294,10 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(submissionQuery.get(workspaceContext, testData.submission2.submissionId))
     }
 
-    // should return {"Submitted" : 6, "Done" : 1, "Aborted" : 1}
+    // should return {"Submitted" : 7, "Done" : 1, "Aborted" : 1}
     assert(3 == runAndWait(submissionQuery.countByStatus(workspaceContext)).size)
     assert(
-      Option(6) == runAndWait(submissionQuery.countByStatus(workspaceContext))
+      Option(7) == runAndWait(submissionQuery.countByStatus(workspaceContext))
         .get(SubmissionStatuses.Submitted.toString)
     )
     assert(

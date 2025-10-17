@@ -86,7 +86,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   )
   val testContext = RawlsRequestContext(userInfo)
 
-  // NOTE: we previously truncated millis here for DB compatibility reasons, but this is is no longer necessary.
+  // NOTE: we previously truncated millis here for DB compatibility reasons, but this is no longer necessary.
   // now only serves to encapsulate a Java-ism
   def currentTime() = new DateTime()
   val testDate = currentTime()
@@ -1200,6 +1200,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq(sample4, sample5, sample6),
       Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2)
     )
+
     val regionalSubmission = createTestSubmission(
       regionalWorkspace,
       agoraMethodConfig,
@@ -1627,6 +1628,29 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
     )
 
+    // a submission from 30 days ago, to test filtering submissions by date
+    val submission20250915 = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = new DateTime(2025, 9, 15, 0, 0, 0, 0),
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name,
+      submissionEntity = Option(indiv1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSubmission20250915"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
     val allWorkspaces = Seq(
       workspace,
       workspaceLocked,
@@ -1748,6 +1772,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
             submissionQuery.create(context, submission2),
             submissionQuery.create(context, submissionUpdateEntity),
             submissionQuery.create(context, submissionUpdateWorkspace),
+            submissionQuery.create(context, submission20250915),
 
             // update exec key for all test data workflows that have been started.
 

@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.submissions
 import akka.http.scaladsl.model.StatusCodes
 import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
+import jakarta.ws.rs.BadRequestException
 import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkflowRecord}
@@ -77,10 +78,13 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceFutureWithParent
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
+import org.joda.time.format.ISODateTimeFormat
+import org.springframework.web.client.HttpClientErrorException.BadRequest
 import slick.jdbc.TransactionIsolation
 import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
 
+import java.sql.Timestamp
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -323,15 +327,38 @@ class SubmissionsService(
     } yield WorkflowCost(workflowId, costs.get(workflowId))
   }
 
-  def listSubmissions(workspaceName: WorkspaceName,
-                      parentContext: RawlsRequestContext
-  ): Future[Seq[SubmissionListResponse]] = {
-    val costlessSubmissionsFuture =
-      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
-          dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
-        }
+  def listWithSubmitterForWorkspace(workspaceName: WorkspaceName,
+                                    startDate: Option[DateTime],
+                                    endDate: Option[DateTime]
+  ): Future[Seq[SubmissionListResponse]] =
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.listWithSubmitter(
+          workspaceContext,
+          startDate,
+          endDate
+        )
       }
+    }
+
+  def listSubmissions(workspaceName: WorkspaceName,
+                      parentContext: RawlsRequestContext,
+                      startDateOpt: Option[DateTime],
+                      endDateOpt: Option[DateTime]
+  ): Future[Seq[SubmissionListResponse]] = {
+    if (startDateOpt.isDefined && endDateOpt.isDefined && endDateOpt.get.isBefore(startDateOpt.get)) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "End date must occur after start date.")
+      )
+    }
+
+    if (endDateOpt.isDefined && endDateOpt.get.isAfter(DateTime.now())) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Date filters cannot be in the future.")
+      )
+    }
+
+    val costlessSubmissionsFuture = listWithSubmitterForWorkspace(workspaceName, startDateOpt, endDateOpt)
 
     // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
     // val costMapFuture = costlessSubmissionsFuture flatMap { submissions =>

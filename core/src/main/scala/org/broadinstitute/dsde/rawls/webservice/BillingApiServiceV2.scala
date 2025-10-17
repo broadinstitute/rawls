@@ -51,8 +51,6 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
       }
     }
 
-  implicit def dateTimeUnmarshaller: Unmarshaller[String, DateTime] = Unmarshaller.strict(DateTime.parse)
-
   def billingRoutesV2(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
     val ctx = RawlsRequestContext(userInfo, Option(otelContext))
     pathPrefix("billing" / "v2") {
