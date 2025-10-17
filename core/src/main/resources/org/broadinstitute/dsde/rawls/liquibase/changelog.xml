@@ -149,4 +149,5 @@
     <include file="changesets/20250821_remove_all_gcpbatch_workspace_settings_again.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20250912_workflow_actual_cost.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20251009_quicksilver_for_empty_workspaces.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20251015_entity_indexing.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
