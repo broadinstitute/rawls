@@ -938,7 +938,10 @@ class SubmissionSpec(_system: ActorSystem)
       val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
       assert(submissionData.workflows.size == 1)
 
-      val subList = Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty), Duration.Inf)
+      val subList =
+        Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty),
+                     Duration.Inf
+        )
 
       val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
       assert(oneSub.nonEmpty)
@@ -1289,7 +1292,10 @@ class SubmissionSpec(_system: ActorSystem)
     val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
     assert(submissionData.workflows.size == 1)
 
-    val subList = Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty), Duration.Inf)
+    val subList =
+      Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty),
+                   Duration.Inf
+      )
 
     val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
     assert(oneSub.nonEmpty)
