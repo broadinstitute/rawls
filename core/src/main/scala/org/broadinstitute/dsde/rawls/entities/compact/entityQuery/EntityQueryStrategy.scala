@@ -49,16 +49,9 @@ trait EntityQueryStrategy extends SortMemoryRetry {
   )(op: => ReadWriteAction[T])(implicit
     executionContext: ExecutionContext
   ): Future[T] =
-    // is this a sort by name/id? If so, no need to retry with extra sort memory.
-    entityQuery.sortField match {
-      case Attributable.nameReservedAttribute =>
-        repository.dataSource.inTransaction(isolationLevel)(_ => op)
-      case _ =>
-        retryWithSortMemory[T](repository.dataSource, functionName, isolationLevel = isolationLevel) {
-          op
-        }
+    retryWithSortMemory[T](repository.dataSource, functionName, isolationLevel = isolationLevel) {
+      op
     }
-
 }
 
 object EntityQueryStrategy {
