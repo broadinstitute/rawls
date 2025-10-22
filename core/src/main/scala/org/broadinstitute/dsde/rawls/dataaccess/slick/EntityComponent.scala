@@ -5,18 +5,12 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{setTraceSpanAttribute, traceDBIOWithParent}
-import org.broadinstitute.dsde.rawls.{
-  model,
-  RawlsException,
-  RawlsExceptionWithErrorReport,
-  RawlsFatalExceptionWithErrorReport
-}
+import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport}
 import slick.dbio.Effect.Read
-import slick.jdbc.{GetResult, JdbcProfile, ResultSetConcurrency, ResultSetType, SQLActionBuilder, TransactionIsolation}
+import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 import slick.sql.SqlStreamingAction
 
 import java.nio.charset.StandardCharsets
@@ -110,12 +104,7 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 
 //noinspection TypeAnnotation
 trait EntityComponent {
-  this: DriverComponent
-    with WorkspaceComponent
-    with AttributeComponent
-    with EntityTypeStatisticsComponent
-    with EntityCacheComponent
-    with EntityAttributeStatisticsComponent =>
+  this: DriverComponent with WorkspaceComponent with AttributeComponent =>
 
   object entityQueryWithInlineAttributes extends TableQuery(new EntityTableWithInlineAttributes(_)) {
     type EntityQueryWithInlineAttributes = Query[EntityTableWithInlineAttributes, EntityRecordWithInlineAttributes, Seq]
@@ -1455,27 +1444,4 @@ trait EntityComponent {
     }
   }
 
-  object entityCacheManagementQuery {
-
-    // given a workspace and entity metadata, persist that metadata to the cache tables
-    def saveEntityCache(workspaceId: UUID,
-                        entityTypesWithCounts: Map[String, Int],
-                        entityTypesWithAttrNames: Map[String, Seq[AttributeName]],
-                        timestamp: Timestamp
-    ) =
-      // TODO: beware contention on the approach of delete-all and batch-insert all below
-      // if we see contention we could move to encoding the entire metadata object as json
-      // and storing in a single column on WORKSPACE_ENTITY_CACHE
-      for {
-        // update entity statistics
-        _ <- entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceId)
-        _ <- entityTypeStatisticsQuery.batchInsert(workspaceId, entityTypesWithCounts)
-        // update entity attribute statistics
-        _ <- entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceId)
-        _ <- entityAttributeStatisticsQuery.batchInsert(workspaceId, entityTypesWithAttrNames)
-        // update cache update date
-        numCachesUpdated <- entityCacheQuery.updateCacheLastUpdated(workspaceId, timestamp)
-      } yield numCachesUpdated
-
-  }
 }
