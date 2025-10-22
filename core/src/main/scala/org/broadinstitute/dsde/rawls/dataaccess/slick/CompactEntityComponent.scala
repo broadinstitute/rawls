@@ -1314,7 +1314,6 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       case _ => sql"attributes"
     }
 
-
   private def fromActiveEntitiesOfTypeInWorkspace(workspaceId: UUID, entityType: String) =
     sql" from ENTITY e where e.workspace_id = $workspaceId and e.entity_type = $entityType and e.deleted = 0"
 
