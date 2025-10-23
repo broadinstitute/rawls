@@ -1289,9 +1289,9 @@ class CompactEntityQuery(driverComponent: DriverComponent)
           FROM JSON_TABLE(
             e.attributes, '$$.refs[*]'
             COLUMNS (
-              a VARCHAR(254) PATH '$$.a',
-              t VARCHAR(254) PATH '$$.t',
-              n VARCHAR(254) PATH '$$.n'
+              a varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+              t varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+              n varchar(254) PATH '$$.n'
             )
           ) jt
           WHERE jt.a IN (#$refsFilter)
