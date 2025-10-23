@@ -1273,15 +1273,41 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         // For each field, create a JSON_OBJECT that contains the field if it exists;
         // else create an empty JSON_OBJECT. These objects are all merged together below;
         // this ensures that if a field is missing in the db, it will not be present in the result.
+        val refsFilter = fields.map(f => s"'$f'").mkString(",")
+        val refsJsonArray =
+          sql"""(
+          SELECT IFNULL(
+            JSON_ARRAYAGG(
+              JSON_OBJECT(
+                'a', jt.a,
+                't', jt.t,
+                'n', jt.n
+              )
+            ),
+            JSON_ARRAY()
+          )
+          FROM JSON_TABLE(
+            e.attributes, '$$.refs[*]'
+            COLUMNS (
+              a varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+              t varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+              n varchar(254) PATH '$$.n'
+            )
+          ) jt
+          WHERE jt.a IN (#$refsFilter)
+        )"""
+
         val fieldObjects = fields.map { field =>
           sql"IF(JSON_CONTAINS_PATH(e.attributes, 'one', ${slickAttributePath(field)}), JSON_OBJECT($field, e.attributes -> ${slickAttributePath(field)}), JSON_OBJECT())"
         }
         concatSqlActions(
           sql"""JSON_OBJECT(
-               '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
-               '#${CompactEntitySerialization.REFS_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.REFS_KEY}',
-               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_MERGE_PATCH(
-                  JSON_OBJECT(),""",
+             '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
+             '#${CompactEntitySerialization.REFS_KEY}', """,
+          refsJsonArray,
+          sql""",
+             '#${CompactEntitySerialization.ATTRS_KEY}', JSON_MERGE_PATCH(
+                JSON_OBJECT(),""",
           reduceSqlActionsWithDelim(fieldObjects.toSeq, sql","),
           sql"))"
         )
