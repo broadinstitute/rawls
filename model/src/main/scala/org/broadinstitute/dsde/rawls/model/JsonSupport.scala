@@ -124,7 +124,7 @@ trait AttributeFormat extends RootJsonFormat[Attribute] with AttributeListSerial
     // vals
     case AttributeNull            => JsNull
     case AttributeBoolean(b)      => JsBoolean(b)
-    case AttributeNumber(n)       => JsNumber(n)
+    case AttributeNumber(n)       => JsNumber(n.bigDecimal.stripTrailingZeros()) // remove any trailing zeros
     case AttributeString(s)       => JsString(s)
     case AttributeValueRawJson(j) => j
     // ref
