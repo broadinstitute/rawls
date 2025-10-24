@@ -233,9 +233,6 @@ class FastPassServiceSpec
     entityManager = Mockito.spy(
       EntityManager.defaultEntityManager(
         dataSource,
-        new WorkspaceSettingRepository(dataSource),
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )
     )

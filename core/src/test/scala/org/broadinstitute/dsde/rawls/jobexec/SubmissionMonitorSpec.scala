@@ -83,9 +83,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     workbenchMetricBaseName,
     EntityManager.defaultEntityManager(
       slickDataSource,
-      spyWorkspaceSettingRepository,
-      false,
-      java.time.Duration.ofMinutes(2),
       workbenchMetricBaseName
     ),
     1000

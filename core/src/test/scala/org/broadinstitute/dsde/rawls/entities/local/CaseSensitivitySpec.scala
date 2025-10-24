@@ -973,9 +973,6 @@ class CaseSensitivitySpec
       workbenchMetricBaseName = "test",
       EntityManager.defaultEntityManager(
         dataSource,
-        mockWorkspaceSettingRepository,
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         "testMetricBaseName"
       ),
       1000

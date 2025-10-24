@@ -120,9 +120,6 @@ class BatchUpsertScalingSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        mockWorkspaceSettingRepository,
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       ),
       1000

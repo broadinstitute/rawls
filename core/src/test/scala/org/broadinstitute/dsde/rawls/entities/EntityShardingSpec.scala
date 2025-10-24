@@ -73,9 +73,6 @@ class EntityShardingSpec
       workbenchMetricBaseName = "test",
       EntityManager.defaultEntityManager(
         dataSource,
-        new WorkspaceSettingRepository(dataSource),
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       ),
       1000

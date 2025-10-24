@@ -126,9 +126,6 @@ class EntityServiceCompactMigrationSpec
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        workspaceSettingRepository,
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )(executionContext, system),
       7, // <-- specifically, chosen to be lower than the number of samples in "workspace" within testData

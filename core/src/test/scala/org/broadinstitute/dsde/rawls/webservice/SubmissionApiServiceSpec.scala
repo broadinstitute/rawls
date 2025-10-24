@@ -60,9 +60,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       )
     override val entityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      if (legacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )(executionContext, system)
   }

@@ -77,9 +77,6 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
         "metric",
         EntityManager.defaultEntityManager(
           dataSource,
-          new WorkspaceSettingRepository(dataSource),
-          false,
-          java.time.Duration.ofSeconds(1),
           "metric"
         ),
         1000,

@@ -153,9 +153,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       )
     val mockEntityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      spyWorkspaceSettingRepository,
-      services.testConf.getBoolean("entityStatisticsCache.enabled"),
-      services.testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 
