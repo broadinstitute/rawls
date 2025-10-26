@@ -3,7 +3,17 @@ package org.broadinstitute.dsde.rawls.entities.compact
 import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityAttributeListSerializer
 import org.broadinstitute.dsde.rawls.entities.exceptions.CompactEntityDeserializationException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceList, AttributeFormat, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeEntityReference,
+  AttributeEntityReferenceList,
+  AttributeFormat,
+  AttributeName,
+  AttributeNumber,
+  AttributeString,
+  AttributeValueList,
+  Entity
+}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json.{JsNumber, JsObject}
@@ -90,8 +100,8 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
   trailingZeroSerializationCases foreach { case (input, expected) =>
     it should s"strip trailing zeros from $input" in {
       import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
-        import spray.json.DefaultJsonProtocol._
-        import spray.json._
+      import spray.json.DefaultJsonProtocol._
+      import spray.json._
 
       implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
 
