@@ -377,8 +377,7 @@ object Boot extends IOApp with LazyLogging {
                                       workspaceRepository,
                                       gcsDAO,
                                       samDAO,
-                                      appDependencies.googleStorageService,
-                                      entityServiceConstructor(ctx)
+                                      appDependencies.googleStorageService
           )(implicitly, IORuntime.global)
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(

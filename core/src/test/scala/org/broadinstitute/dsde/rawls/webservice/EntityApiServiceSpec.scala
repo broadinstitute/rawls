@@ -70,8 +70,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           new WorkspaceRepository(slickDataSource),
           gcsDAO,
           samDAO,
-          mock[GoogleStorageService[IO]],
-          entityServiceConstructor(ctx)
+          mock[GoogleStorageService[IO]]
         )(executionContext, global)
 
     override val entityServiceConstructor: RawlsRequestContext => EntityService =

@@ -47,8 +47,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                               val workspaceRepository: WorkspaceRepository,
                               gcsDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              googleStorageService: GoogleStorageService[IO],
-                              entityService: EntityService
+                              googleStorageService: GoogleStorageService[IO]
 )(implicit protected val executionContext: ExecutionContext, ioRuntime: IORuntime)
     extends WorkspaceSupport
     with LazyLogging {

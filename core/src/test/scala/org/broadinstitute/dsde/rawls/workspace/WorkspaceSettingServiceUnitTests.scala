@@ -79,8 +79,7 @@ class WorkspaceSettingServiceUnitTests extends AnyFlatSpec with MockitoTestUtils
                                 workspaceRepository,
                                 gcsDAO,
                                 samDAO,
-                                googleStorageService,
-                                entityService
+                                googleStorageService
     )
 
   val workspace: Workspace = Workspace(
