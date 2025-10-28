@@ -1,10 +1,13 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
+import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityAttributeListSerializer
 import org.broadinstitute.dsde.rawls.entities.exceptions.CompactEntityDeserializationException
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeEntityReference,
   AttributeEntityReferenceList,
+  AttributeFormat,
   AttributeName,
   AttributeNumber,
   AttributeString,
@@ -13,7 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import spray.json.{JsArray, JsNumber, JsObject}
+import spray.json.{JsNumber, JsObject}
 
 class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with CompactEntitySerialization {
 
@@ -81,6 +84,33 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     actual.attrs(singleref) shouldBe AttributeString("targetName1")
     actual.attrs.keys should contain(reflist)
     actual.attrs(reflist) shouldBe AttributeNumber(2)
+  }
+
+  behavior of "AttributeFormat serialization"
+
+  val trailingZeroSerializationCases = Map(
+    "1" -> "1",
+    "1.0" -> "1",
+    "1.1" -> "1.1",
+    "1.10" -> "1.1",
+    "99999.0000" -> "99999"
+  )
+
+  // note this is serialization of an entity via `AttributeFormat`, not via `CompactEntitySerialization`
+  trailingZeroSerializationCases foreach { case (input, expected) =>
+    it should s"strip trailing zeros from $input" in {
+      import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
+      import spray.json.DefaultJsonProtocol._
+      import spray.json._
+
+      implicit val attributeFormat: AttributeFormat = new AttributeFormat with CompactEntityAttributeListSerializer
+
+      val attrs: AttributeMap = Map(
+        AttributeName.withDefaultNS("foo") -> AttributeNumber(BigDecimal(input))
+      )
+      val serialized = attrs.toJson.compactPrint
+      serialized shouldBe s"""{"foo":$expected}"""
+    }
   }
 
   behavior of "Attribute deserialization"
@@ -178,6 +208,37 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
 
     val actual = fromSql(Option(input))
     actual shouldBe expected
+  }
+
+  val trailingZeroDeserializationCases = Map(
+    "1" -> "1",
+    "1.0" -> "1",
+    "1.1" -> "1.1",
+    "1.10" -> "1.1",
+    "99999.0000" -> "99999"
+  )
+
+  trailingZeroDeserializationCases foreach { case (inputVal, expectedVal) =>
+    it should s"strip trailing zeros when deserializing $inputVal" in {
+      val input =
+        s"""{ "v": 2,
+         "attrs": {"hello": "world", "mynum": $inputVal, "somelist": [true, false] },
+         "refs": []
+       }"""
+
+      val expected = Map(
+        AttributeName.fromDelimitedName("hello") -> AttributeString("world"),
+        AttributeName.fromDelimitedName("mynum") -> AttributeNumber(
+          BigDecimal(expectedVal).bigDecimal.stripTrailingZeros()
+        ),
+        AttributeName.fromDelimitedName("somelist") -> AttributeValueList(
+          Seq(AttributeBoolean(true), AttributeBoolean(false))
+        )
+      )
+
+      val actual = fromSql(Option(input))
+      actual shouldBe expected
+    }
   }
 
   it should "throw if the attributes sub-object is missing" in {

@@ -2335,24 +2335,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       )
     )
 
-    val workspaceEntities = Seq(participant1, sample1)
-
-    val workspaceAttrNameCacheEntries = workspaceEntities.groupBy(_.entityType).map { case (entityType, entities) =>
-      entityType -> entities.flatMap(_.attributes.keys)
-    }
-
-    val workspaceEntityTypeCacheEntries = workspaceEntities.groupBy(_.entityType).view.mapValues(_.length).toMap
-
     override def save() =
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
-          DBIO.seq(
-            // note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return
-            entityQuery.save(context, participant1),
-            entityAttributeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceAttrNameCacheEntries),
-            entityTypeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceEntityTypeCacheEntries)
-          )
+          // note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return
+          entityQuery.save(context, participant1)
         }
       )
 

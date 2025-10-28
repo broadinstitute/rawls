@@ -21,9 +21,6 @@ trait DataAccess
     with WorkflowActualCostComponent
     with ExprEvalComponent
     with WorkspaceRequesterPaysComponent
-    with EntityTypeStatisticsComponent
-    with EntityAttributeStatisticsComponent
-    with EntityCacheComponent
     with LocalEntityExpressionQueries
     with CloneWorkspaceFileTransferComponent
     with WorkspaceFeatureFlagComponent
@@ -76,9 +73,6 @@ trait DataAccess
       TableQuery[MethodConfigurationTable].delete andThen // FK to workspace
       TableQuery[EntityTable].delete andThen // FK to workspace
       TableQuery[WorkspaceRequesterPaysTable].delete andThen // FK to workspace
-      TableQuery[EntityTypeStatisticsTable].delete andThen // FK to workspace
-      TableQuery[EntityAttributeStatisticsTable].delete andThen // FK to workspace
-      TableQuery[EntityCacheTable].delete andThen // FK to workspace
       TableQuery[CloneWorkspaceFileTransferTable].delete andThen // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[BillingAccountChanges].delete andThen // FK to BillingProject
