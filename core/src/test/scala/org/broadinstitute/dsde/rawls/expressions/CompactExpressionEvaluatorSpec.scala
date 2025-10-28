@@ -10,11 +10,8 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
   RelationContext
 }
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{
   AgoraMethod,
-  AttributeEntityReference,
-  AttributeEntityReferenceList,
   AttributeName,
   AttributeNumber,
   AttributeString,
@@ -25,8 +22,7 @@ import org.broadinstitute.dsde.rawls.model.{
   MethodConfiguration,
   SubmissionValidationEntityInputs,
   SubmissionValidationValue,
-  WdlSource,
-  Workspace
+  WdlSource
 }
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito

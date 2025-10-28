@@ -21,8 +21,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DeleteEntitiesOfTypeConflictException
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils}
-import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -42,7 +41,6 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
-  SubmissionValidationValue,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
@@ -50,10 +48,9 @@ import org.broadinstitute.dsde.rawls.util.{
   AttributeOperationListModes,
   AttributeSupport,
   AttributeUpdateOperationException,
-  CollectionUtils,
   EntitySupport
 }
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import slick.jdbc.TransactionIsolation.ReadCommitted
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 
