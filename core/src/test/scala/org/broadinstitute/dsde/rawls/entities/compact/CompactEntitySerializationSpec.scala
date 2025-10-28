@@ -93,6 +93,8 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     "1.0" -> "1",
     "1.1" -> "1.1",
     "1.10" -> "1.1",
+    "10" -> "10",
+    "50" -> "50",
     "99999.0000" -> "99999"
   )
 
@@ -215,6 +217,9 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     "1.0" -> "1",
     "1.1" -> "1.1",
     "1.10" -> "1.1",
+    "10" -> "10",
+    "50" -> "50",
+    "5E+1" -> "50",
     "99999.0000" -> "99999"
   )
 

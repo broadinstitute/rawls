@@ -122,9 +122,11 @@ trait AttributeFormat extends RootJsonFormat[Attribute] with AttributeListSerial
   override def write(obj: Attribute): JsValue = writeAttribute(obj)
   def writeAttribute(obj: Attribute): JsValue = obj match {
     // vals
-    case AttributeNull            => JsNull
-    case AttributeBoolean(b)      => JsBoolean(b)
-    case AttributeNumber(n)       => JsNumber(n.bigDecimal.stripTrailingZeros()) // remove any trailing zeros
+    case AttributeNull       => JsNull
+    case AttributeBoolean(b) => JsBoolean(b)
+    // remove any trailing zeros and avoid scientific notation
+    case AttributeNumber(n) =>
+      JsNumber(BigDecimal(n.bigDecimal.stripTrailingZeros().toPlainString))
     case AttributeString(s)       => JsString(s)
     case AttributeValueRawJson(j) => j
     // ref
@@ -144,7 +146,8 @@ trait AttributeFormat extends RootJsonFormat[Attribute] with AttributeListSerial
     case JsNull       => AttributeNull
     case JsString(s)  => AttributeString(s)
     case JsBoolean(b) => AttributeBoolean(b)
-    case JsNumber(n)  => AttributeNumber(n.bigDecimal.stripTrailingZeros()) // remove any trailing zeros
+    // remove any trailing zeros and avoid scientific notation
+    case JsNumber(n) => AttributeNumber(BigDecimal(n.bigDecimal.stripTrailingZeros().toPlainString))
     // NOTE: we handle AttributeValueRawJson in readComplexType below
 
     case JsObject(members) if ENTITY_OBJECT_KEYS subsetOf members.keySet =>
