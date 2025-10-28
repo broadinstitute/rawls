@@ -8,7 +8,7 @@ import akka.stream.scaladsl.Source
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
-import fs2.concurrent.SignallingRef
+import fs2.interop.reactivestreams._
 import io.circe.fs2._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -17,18 +17,8 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport => RawlsErrorReport,
-  ImportStatuses,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  Workspace
-}
-import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{
-  updateImportStatusFormat,
-  AvroUpsertMonitorConfig,
-  KeepAlive
-}
+import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsRequestContext, RawlsUserEmail, Workspace, ErrorReport => RawlsErrorReport}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, KeepAlive, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
@@ -441,16 +431,16 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         circeJson.toString().parseJson.convertTo[EntityUpdateDefinition]
       }
 
-      // chunk the stream into batches.
-      val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
+      // translate the fs2 stream into an akka source
+      val entityUpdateSource = entityUpdateDefinitionStream.toUnicastPublisher
+        .use { publisher =>
+          IO(Source.fromPublisher(publisher))
+        }
+        .unsafeRunSync()
 
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
-      def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Int] = {
-        logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
-
-        // translate the upsertBatch back into a stream of json.
-        // TODO CORE-427: rewrite this monitor to fully stream, instead of stream->materialize->stream
-        val entityUpdateStream: Source[EntityUpdateDefinition, _] = Source(upsertBatch)
+      def performUpsertBatch(entityUpdateStream: Source[EntityUpdateDefinition, _]): Future[Int] = {
+        logger.info(s"upserting entities for jobId ${jobId.toString} ...")
 
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
@@ -464,51 +454,34 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         } yield upsertResults
       }
 
-      // create our pause signal. We use this to control when the stream should pause and resume.
-      val sig = SignallingRef[IO, Boolean](false).unsafeRunSync()
-
-      // tell the stream what to execute for each batch.
-      // we must ensure that each batch is upserted sequentially, because later entities may reference earlier entities.
-      // if we try to upsert them in parallel, the referenced entity may not exist yet, and the "later" upsert would fail.
-      // therefore, for each batch, we:
-      //  1. pause the stream by setting the signal to true
-      //  2. perform this batch's upsert
-      //  3. resume the stream by setting the signal to false
-      // TODO: I _think_ that by using evalMapChunk here, we can eliminate the pause/resume and trust the stream
-      // to handle it natively. This will require more testing so I am leaving the pause/resume in place, as it does
-      // no harm.
-      val upsertFuturesStream = batchStream.zipWithIndex
-        .evalMapChunk { case (chunk, idx) =>
+      val upsertAttempt =
+        entityUpdateDefinitionStream.toUnicastPublisher.use { publisher =>
           for {
-            _ <- sig.set(true)
-            _ = self ! KeepAlive // keep actor alive during this loop
-            attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(idx, chunk.toList))))
-            _ <- sig.set(false)
+            attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(Source.fromPublisher(publisher)))))
           } yield {
             attempt match {
               case Failure(regrets: RawlsExceptionWithErrorReport) =>
                 val loggedErrors = stringMessageFromFailures(regrets.errorReport.causes.toList, 100)
                 logger.warn(
-                  s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors"
+                  s"upsert for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors"
                 )
               // CompactEntityProvider will throw a DataEntityException, which gets caught by this Throwable case
               case Failure(t: Throwable) =>
                 logger.warn(
-                  s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The error is: ${t.getMessage}"
+                  s"upsert for jobId ${jobId.toString} contained errors. The error is: ${t.getMessage}"
                 )
 
               case _ => // noop; here for completeness of matching
             }
             logger.info(
-              s"completed upsert batch #$idx for jobId ${jobId.toString} with ${attempt.getClass.getSimpleName}..."
+              s"completed upsert for jobId ${jobId.toString} with ${attempt.getClass.getSimpleName}..."
             )
             attempt
           }
         }
-        .pauseWhen(sig)
 
       // finally, after all the stream setup, tell the stream to execute
-      val upsertResults = upsertFuturesStream.compile.toList.unsafeRunSync()
+      val upsertResults = List(upsertAttempt.unsafeRunSync())
 
       val numSuccesses: Int = upsertResults.collect { case Success(writeSize) => writeSize }.sum
 

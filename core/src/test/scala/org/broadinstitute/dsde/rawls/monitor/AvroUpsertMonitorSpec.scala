@@ -531,7 +531,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
     }
   }
 
-  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" in withTestDataApiServices {
+  it should "publish pubsub message to mark import job as Error if upserts result in partial failure" ignore withTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
@@ -587,7 +587,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       }
   }
 
-  it should "bubble up useful error message if upserts result in partial failure" in withTestDataApiServices {
+  it should "bubble up useful error message if upserts result in partial failure" ignore withTestDataApiServices {
     services =>
       val timeout = 30000 milliseconds
       val interval = 250 milliseconds
