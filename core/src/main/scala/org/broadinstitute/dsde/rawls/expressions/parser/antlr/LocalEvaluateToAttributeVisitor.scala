@@ -4,7 +4,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.ExpressionAndResult
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{
-  EntityLookupContext,
   WorkspaceAttributeLookupContext,
   WorkspaceEntityLookupContext
 }
@@ -46,15 +45,6 @@ trait WorkspaceLookups {
     ctx: WorkspaceAttributeLookupContext
   ): ReadWriteAction[Seq[ExpressionAndResult]] =
     slickEvaluator.evalWorkspaceAttributeLookupFinalAttribute(workspace, ctx).map { result =>
-      Seq((ctx.getText, result))
-    }
-}
-
-trait LocalEntityLookups {
-  this: LocalEvaluateToAttributeVisitor =>
-
-  override def visitEntityLookup(ctx: EntityLookupContext): ReadWriteAction[Seq[ExpressionAndResult]] =
-    slickEvaluator.evalEntityLookupFinalAttribute(workspace, ctx).map { result =>
       Seq((ctx.getText, result))
     }
 }
