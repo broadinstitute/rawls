@@ -35,7 +35,6 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import java.time.Duration
@@ -305,18 +304,6 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case _ =>
           Future.successful(())
       }
-    } else if (performMigration.isEmpty || performMigration.contains(true)) { // default to true
-      // If compact data tables setting is enabled and a migration is requested, we need to migrate the entity attributes.
-      Future {
-        entityService
-          .quicksilverMigration(workspaceName = workspaceName, updateWorkspaceSettings = false)
-          .map(_ => ())
-          .recover { case e: Exception =>
-            throw new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.InternalServerError, s"Quicksilver migration failed: ${e.getMessage}")
-            )
-          }
-      }.flatten
     } else {
       // no action necessary; no migration was requested
       Future.successful(())

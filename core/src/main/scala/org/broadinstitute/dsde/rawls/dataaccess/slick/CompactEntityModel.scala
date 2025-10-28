@@ -4,10 +4,7 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, Entity, EntityPointer}
-import spray.json.DefaultJsonProtocol.{jsonFormat3, jsonFormat4, IntJsonFormat}
-import spray.json.RootJsonFormat
 
-import java.sql.Timestamp
 import java.util.UUID
 import scala.annotation.unused
 import scala.util.{Failure, Success, Try}
@@ -86,11 +83,3 @@ case class EntityTypeAndCount(
   entityType: String,
   count: Int
 )
-
-case class QuicksilverMigrationResult(
-  numEntitiesUpdated: Int,
-  numEntitiesDeleted: Int,
-  numAttributesDeleted: Int
-)
-
-class QuicksilverAlreadyMigratedException extends Exception
