@@ -2298,7 +2298,7 @@ class CompactEntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   }
 
   private val columnFilterCases = List(
-    (AttributeNumber(42), "42"),
+    (AttributeNumber(42), "42.0"),
     (AttributeString("foo"), "foo"),
     (AttributeString("fOo"), "foO"), // case sensitivity check
     (AttributeBoolean(true), "TRUE")

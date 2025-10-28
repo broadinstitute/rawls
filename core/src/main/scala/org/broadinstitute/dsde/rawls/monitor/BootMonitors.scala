@@ -149,18 +149,6 @@ object BootMonitors extends LazyLogging {
                                             samDAO
       )
 
-      // Boot entity statistics cache monitor
-      if (appConfigManager.conf.getBoolean("entityStatisticsCache.enabled")) {
-        startEntityStatisticsCacheMonitor(
-          system,
-          slickDataSource,
-          util.toScalaDuration(appConfigManager.conf.getDuration("entityStatisticsCache.timeoutPerWorkspace")),
-          util.toScalaDuration(appConfigManager.conf.getDuration("entityStatisticsCache.standardPollInterval")),
-          util.toScalaDuration(appConfigManager.conf.getDuration("entityStatisticsCache.workspaceCooldown")),
-          metricsPrefix
-        )
-      }
-
       val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
         util.toScalaDuration(appConfigManager.conf.getDuration("avroUpsertMonitor.pollInterval")),
         util.toScalaDuration(appConfigManager.conf.getDuration("avroUpsertMonitor.pollJitter")),
@@ -364,22 +352,6 @@ object BootMonitors extends LazyLogging {
                cloneWorkspaceFileTransferMonitorConfig.pollInterval
         )
         .withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
-    )
-
-  private def startEntityStatisticsCacheMonitor(system: ActorSystem,
-                                                slickDataSource: SlickDataSource,
-                                                timeoutPerWorkspace: Duration,
-                                                standardPollInterval: FiniteDuration,
-                                                workspaceCooldown: FiniteDuration,
-                                                workbenchMetricBaseName: String
-  ) =
-    system.actorOf(
-      EntityStatisticsCacheMonitor.props(slickDataSource,
-                                         timeoutPerWorkspace,
-                                         standardPollInterval,
-                                         workspaceCooldown,
-                                         workbenchMetricBaseName
-      )
     )
 
   private def startAvroUpsertMonitor(system: ActorSystem,

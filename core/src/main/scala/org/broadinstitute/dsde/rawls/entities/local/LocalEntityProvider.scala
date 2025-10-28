@@ -69,96 +69,25 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                           implicit protected val dataSource: SlickDataSource,
                           cacheEnabled: Boolean,
                           queryTimeout: Duration,
-                          override val workbenchMetricBaseName: String
+                          val workbenchMetricBaseName: String
 )(implicit protected val executionContext: ExecutionContext, actorSystem: ActorSystem)
     extends EntityProvider
     with LazyLogging
     with EntitySupport
     with AttributeSupport
-    with ExpressionEvaluationSupport
-    with EntityStatisticsCacheSupport {
+    with ExpressionEvaluationSupport {
 
   import dataSource.dataAccess.driver.api._
 
   override val entityStoreId: Option[String] = None
 
-  override val workspaceContext = requestArguments.workspace
+  val workspaceContext = requestArguments.workspace
 
   final private val queryTimeoutSeconds: Int = queryTimeout.getSeconds.toInt
 
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext
-  ): Future[Map[String, EntityTypeMetadata]] =
-    // start performance tracing
-    traceFutureWithParent("LocalEntityProvider.entityTypeMetadata", parentContext) { localContext =>
-      setTraceSpanAttribute(localContext,
-                            AttributeKey.stringKey("workspace"),
-                            workspaceContext.toWorkspaceName.toString
-      )
-      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("useCache"), java.lang.Boolean.valueOf(useCache))
-      setTraceSpanAttribute(localContext,
-                            AttributeKey.booleanKey("cacheEnabled"),
-                            java.lang.Boolean.valueOf(cacheEnabled)
-      )
-
-      // start transaction
-      dataSource.inTransaction(ReadCommitted) { dataAccess =>
-        if (!useCache || !cacheEnabled) {
-          if (!cacheEnabled) {
-            logger.info(
-              s"entity statistics cache: miss (cache disabled at system level) [${workspaceContext.workspaceIdAsUUID}]"
-            )
-          } else if (!useCache) {
-            logger.info(
-              s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]"
-            )
-          }
-          // retrieve metadata, bypassing cache
-          calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
-        } else {
-          // system and request both have cache enabled. Check for existence and staleness of cache
-          cacheStaleness(dataAccess, localContext).flatMap {
-            case None =>
-              // cache does not exist - return uncached
-              logger.info(
-                s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]"
-              )
-              calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
-            case Some(0) =>
-              // cache is up to date - return cached
-              logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
-              calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, localContext)
-            case Some(stalenessSeconds) =>
-              // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
-              cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
-                if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
-                  setTraceSpanAttribute(localContext,
-                                        AttributeKey.booleanKey("alwaysCacheTypeCountsFeatureFlag"),
-                                        java.lang.Boolean.valueOf(flags.alwaysCacheTypeCounts)
-                  )
-                  setTraceSpanAttribute(localContext,
-                                        AttributeKey.booleanKey("alwaysCacheAttributesFeatureFlag"),
-                                        java.lang.Boolean.valueOf(flags.alwaysCacheAttributes)
-                  )
-                  logger.info(
-                    s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                  )
-                } else {
-                  logger.info(
-                    s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                  )
-                  // and opportunistically save
-                }
-                calculateMetadataResponse(dataAccess,
-                                          countsFromCache = flags.alwaysCacheTypeCounts,
-                                          attributesFromCache = flags.alwaysCacheAttributes,
-                                          localContext
-                )
-              } // end feature-flags lookup
-          } // end staleness lookup
-        } // end if useCache/cacheEnabled check
-      } // end transaction
-    } // end root trace
+  ): Future[Map[String, EntityTypeMetadata]] = Future.successful(Map.empty[String, EntityTypeMetadata])
 
   override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] =
     dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>

@@ -29,11 +29,11 @@ import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ErrorReport
-
 import spray.json._
 
 import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
+import scala.util.{Failure, Success, Try}
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -1273,15 +1273,41 @@ class CompactEntityQuery(driverComponent: DriverComponent)
         // For each field, create a JSON_OBJECT that contains the field if it exists;
         // else create an empty JSON_OBJECT. These objects are all merged together below;
         // this ensures that if a field is missing in the db, it will not be present in the result.
+        val refsFilter = fields.map(f => s"'$f'").mkString(",")
+        val refsJsonArray =
+          sql"""(
+          SELECT IFNULL(
+            JSON_ARRAYAGG(
+              JSON_OBJECT(
+                'a', jt.a,
+                't', jt.t,
+                'n', jt.n
+              )
+            ),
+            JSON_ARRAY()
+          )
+          FROM JSON_TABLE(
+            e.attributes, '$$.refs[*]'
+            COLUMNS (
+              a varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.a',
+              t varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin PATH '$$.t',
+              n varchar(254) PATH '$$.n'
+            )
+          ) jt
+          WHERE jt.a IN (#$refsFilter)
+        )"""
+
         val fieldObjects = fields.map { field =>
           sql"IF(JSON_CONTAINS_PATH(e.attributes, 'one', ${slickAttributePath(field)}), JSON_OBJECT($field, e.attributes -> ${slickAttributePath(field)}), JSON_OBJECT())"
         }
         concatSqlActions(
           sql"""JSON_OBJECT(
-               '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
-               '#${CompactEntitySerialization.REFS_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.REFS_KEY}',
-               '#${CompactEntitySerialization.ATTRS_KEY}', JSON_MERGE_PATCH(
-                  JSON_OBJECT(),""",
+             '#${CompactEntitySerialization.VERSION_KEY}', e.attributes -> '$$.#${CompactEntitySerialization.VERSION_KEY}',
+             '#${CompactEntitySerialization.REFS_KEY}', """,
+          refsJsonArray,
+          sql""",
+             '#${CompactEntitySerialization.ATTRS_KEY}', JSON_MERGE_PATCH(
+                JSON_OBJECT(),""",
           reduceSqlActionsWithDelim(fieldObjects.toSeq, sql","),
           sql"))"
         )
@@ -1307,8 +1333,24 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   private def columnFilterCondition(columnFilter: EntityColumnFilter) =
-    // CAST, JSON_UNQUOTE and JSON_EXTRACT are used to handle strings and numbers and do a case insensitive comparison
-    sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
+    // Can the filter term be parsed as a number?
+    Try(columnFilter.term.toDouble) match {
+      case Failure(_) =>
+        sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
+      case Success(dbl) =>
+        // The user-supplied filter term is a number. If the attribute in the database is also a number, compare
+        // number-to-number in the WHERE clause. If the attribute in the database is anything else, treat both the
+        // attribute and the filter term as strings and compare those.
+        sql""" and (
+          (
+            JSON_TYPE(e.attributes -> ${slickAttributePath(columnFilter.attributeName)}) in ('INTEGER', 'DOUBLE')
+            AND
+            e.attributes -> ${slickAttributePath(columnFilter.attributeName)} = $dbl
+          )
+          OR
+          CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}
+        )"""
+    }
 
   private def orderBy(entityQuery: EntityQuery): SQLActionBuilder =
     concatSqlActions(
