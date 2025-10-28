@@ -93,7 +93,11 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     "1.0" -> "1",
     "1.1" -> "1.1",
     "1.10" -> "1.1",
-    "99999.0000" -> "99999"
+    "10" -> "10",
+    "50" -> "50",
+    "5E+1" -> "50",
+    "99999.0000" -> "99999",
+    "-123456.7890" -> "-123456.789"
   )
 
   // note this is serialization of an entity via `AttributeFormat`, not via `CompactEntitySerialization`
@@ -215,7 +219,11 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     "1.0" -> "1",
     "1.1" -> "1.1",
     "1.10" -> "1.1",
-    "99999.0000" -> "99999"
+    "10" -> "10",
+    "50" -> "50",
+    "5E+1" -> "50",
+    "99999.0000" -> "99999",
+    "-123456.7890" -> "-123456.789"
   )
 
   trailingZeroDeserializationCases foreach { case (inputVal, expectedVal) =>
