@@ -17,8 +17,18 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsRequestContext, RawlsUserEmail, Workspace, ErrorReport => RawlsErrorReport}
-import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, KeepAlive, updateImportStatusFormat}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport => RawlsErrorReport,
+  ImportStatuses,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  Workspace
+}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{
+  updateImportStatusFormat,
+  AvroUpsertMonitorConfig,
+  KeepAlive
+}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
@@ -431,13 +441,6 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         circeJson.toString().parseJson.convertTo[EntityUpdateDefinition]
       }
 
-      // translate the fs2 stream into an akka source
-      val entityUpdateSource = entityUpdateDefinitionStream.toUnicastPublisher
-        .use { publisher =>
-          IO(Source.fromPublisher(publisher))
-        }
-        .unsafeRunSync()
-
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
       def performUpsertBatch(entityUpdateStream: Source[EntityUpdateDefinition, _]): Future[Int] = {
         logger.info(s"upserting entities for jobId ${jobId.toString} ...")
@@ -455,29 +458,12 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
       }
 
       val upsertAttempt =
+        // get a reactive-stream publisher from the incoming stream
         entityUpdateDefinitionStream.toUnicastPublisher.use { publisher =>
-          for {
-            attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(Source.fromPublisher(publisher)))))
-          } yield {
-            attempt match {
-              case Failure(regrets: RawlsExceptionWithErrorReport) =>
-                val loggedErrors = stringMessageFromFailures(regrets.errorReport.causes.toList, 100)
-                logger.warn(
-                  s"upsert for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors"
-                )
-              // CompactEntityProvider will throw a DataEntityException, which gets caught by this Throwable case
-              case Failure(t: Throwable) =>
-                logger.warn(
-                  s"upsert for jobId ${jobId.toString} contained errors. The error is: ${t.getMessage}"
-                )
-
-              case _ => // noop; here for completeness of matching
-            }
-            logger.info(
-              s"completed upsert for jobId ${jobId.toString} with ${attempt.getClass.getSimpleName}..."
-            )
-            attempt
-          }
+          // translate the publisher into an akka Source
+          val entityUpdateSource = Source.fromPublisher(publisher)
+          // batch-upsert the akka Source
+          IO.fromFuture(IO(toFutureTry(performUpsertBatch(entityUpdateSource))))
         }
 
       // finally, after all the stream setup, tell the stream to execute
@@ -520,7 +506,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
 
       val elapsed = System.currentTimeMillis() - startTime
       logger.info(
-        s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted," +
+        s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses rows updated," +
           s" ${failureReports.size} failed$additionalErrorString Errors: ${failureReportsForCaller.map(_.message).mkString(", ")}"
       )
 
