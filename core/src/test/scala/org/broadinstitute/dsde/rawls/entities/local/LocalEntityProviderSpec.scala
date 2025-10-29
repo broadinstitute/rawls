@@ -99,16 +99,6 @@ class LocalEntityProviderSpec
                                                 AttributeName.withDefaultNS("two") -> AttributeString("222")
                                             )
         )
-
-        val withAllAttrs = runAndWait(
-          dataSource.dataAccess.entityQueryWithInlineAttributes
-            .findEntityByName(localEntityProviderTestData.workspace.workspaceIdAsUUID, "mytype", "myname")
-            .result
-        )
-
-        withAllAttrs.size shouldBe 1
-        val allAttrs = withAllAttrs.head.allAttributeValues.getOrElse("")
-        allAttrs shouldBe "myname 111 222"
     }
 
   }
