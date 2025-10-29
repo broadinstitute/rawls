@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
+import com.google.common.annotations.VisibleForTesting
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.entities.EntityUtils
@@ -1156,8 +1157,11 @@ trait EntityComponent {
       } yield numEntitiesHidden.sum
 
     // perform actual deletion (not hiding) of all entities in a workspace
-
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] =
+      filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
+
+    @VisibleForTesting
+    def deleteEntitiesAndAttributesFromDb(workspaceContext: Workspace): WriteAction[Int] =
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
 
