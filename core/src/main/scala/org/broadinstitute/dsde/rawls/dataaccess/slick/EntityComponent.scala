@@ -31,16 +31,8 @@ sealed trait EntityRecordBase {
   val deletedDate: Option[Timestamp]
 
   def toReference = AttributeEntityReference(entityType, name)
-  def withoutAllAttributeValues = EntityRecord(id, name, entityType, workspaceId, recordVersion, deleted, deletedDate)
-  def withAllAttributeValues(allAttributeValues: Option[String]) = EntityRecordWithInlineAttributes(id,
-                                                                                                    name,
-                                                                                                    entityType,
-                                                                                                    workspaceId,
-                                                                                                    recordVersion,
-                                                                                                    allAttributeValues,
-                                                                                                    deleted,
-                                                                                                    deletedDate
-  )
+  def withAllAttributeValues =
+    EntityRecord(id, name, entityType, workspaceId, recordVersion, deleted, deletedDate)
 }
 
 case class EntityRecord(id: Long,
@@ -52,26 +44,11 @@ case class EntityRecord(id: Long,
                         deletedDate: Option[Timestamp]
 ) extends EntityRecordBase
 
-case class EntityRecordWithInlineAttributes(id: Long,
-                                            name: String,
-                                            entityType: String,
-                                            workspaceId: UUID,
-                                            recordVersion: Long,
-                                            allAttributeValues: Option[String],
-                                            deleted: Boolean,
-                                            deletedDate: Option[Timestamp]
-) extends EntityRecordBase
-
 // result structure from entity and attribute list raw sql
 case class EntityAndAttributesResult(entityRecord: EntityRecord,
                                      attributeRecord: Option[EntityAttributeRecord],
                                      refEntityRecord: Option[EntityRecord]
 )
-
-object EntityComponent {
-  // the length of the all_attribute_values column, which is TEXT, minus a few bytes because i'm nervous
-  val allAttributeValuesColumnSize = 65532
-}
 
 import slick.jdbc.MySQLProfile.api._
 
@@ -94,73 +71,27 @@ class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
     (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
 }
 
-class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecordWithInlineAttributes](tag) {
-  def allAttributeValues = column[Option[String]]("all_attribute_values")
-
-  def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted, deletedDate) <> (
-    EntityRecordWithInlineAttributes.tupled,
-    EntityRecordWithInlineAttributes.unapply
-  )
-}
-
 //noinspection TypeAnnotation
 trait EntityComponent {
   this: DriverComponent with WorkspaceComponent with AttributeComponent =>
 
-  object entityQueryWithInlineAttributes extends TableQuery(new EntityTableWithInlineAttributes(_)) {
-    type EntityQueryWithInlineAttributes = Query[EntityTableWithInlineAttributes, EntityRecordWithInlineAttributes, Seq]
+  object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
 
-    // only used by tests
-    def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQueryWithInlineAttributes =
-      filter(entRec =>
-        entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId
-      )
-
-    @tailrec
-    def collectAttributeStrings(toProcess: Iterable[Attribute], processed: List[String], charsRemaining: Int): String =
-      if (toProcess.isEmpty || charsRemaining <= 0)
-        processed.mkString(" ")
-      else {
-        val nextAttr = AttributeStringifier(toProcess.head)
-        collectAttributeStrings(toProcess.tail, processed :+ nextAttr, charsRemaining - nextAttr.length - 1)
-      }
-
-    private def createAllAttributesString(entity: Entity): Option[String] = {
-      // maxLength is the max number of *bytes* we want to insert into the db
-      val maxLength = EntityComponent.allAttributeValuesColumnSize
-      // generate the all_attribute_values string. This has {maxLength} *characters* in it; if it contains multi-byte
-      // characters then it will have > {maxLength} bytes in it
-      val raw =
-        s"${entity.name} ${collectAttributeStrings(entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]), List(), maxLength)}".toLowerCase
-      // take the first {maxLength} bytes from the all_attribute_values string
-      val bytes = raw.getBytes(StandardCharsets.UTF_8).take(maxLength)
-      // convert the bytes back into a string. If the last character was a multi-byte character and we truncated it,
-      // the last character will be corrupted, but we accept that possibility
-      val limited = new String(bytes, StandardCharsets.UTF_8)
-
-      Option(limited)
-    }
+    type EntityQuery = Query[EntityTable, EntityRecord, Seq]
+    type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
     def batchInsertEntities(workspaceContext: Workspace,
                             entities: TraversableOnce[Entity]
     ): ReadWriteAction[Seq[EntityRecord]] = {
-      def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecordWithInlineAttributes =
-        EntityRecordWithInlineAttributes(0,
-                                         entity.name,
-                                         entity.entityType,
-                                         workspaceId,
-                                         0,
-                                         createAllAttributesString(entity),
-                                         deleted = false,
-                                         deletedDate = None
-        )
+      def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecord =
+        EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, deleted = false, deletedDate = None)
 
       if (entities.nonEmpty) {
         val entityRecs = entities.toSeq.map(e => marshalNewEntity(e, workspaceContext.workspaceIdAsUUID))
 
         workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
           DBIO
-            .sequence(entityRecs.grouped(batchSize).map(entityQueryWithInlineAttributes ++= _))
+            .sequence(entityRecs.grouped(batchSize).map(entityQuery ++= _))
             .map(_.flatten.sum)
             .andThen(
               entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, entityRecs.map(_.toReference).toSet)
@@ -186,28 +117,10 @@ trait EntityComponent {
     def optimisticLockUpdate(entityRecs: Seq[EntityRecord],
                              entities: Traversable[Entity]
     ): ReadWriteAction[Seq[Int]] = {
-      def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord],
-                                     entitiesToSave: Traversable[Entity]
-      ): Seq[EntityRecordWithInlineAttributes] = {
-        // "entitiesToSave" may contain duplicate entities. Ensure that we merge attributes for any duplicates
-        // before grabbing their values.
-        val entitiesByRef = entitiesToSave
-          .foldLeft(Map.empty[AttributeEntityReference, Entity]) { (acc, e) =>
-            val ref = e.toReference
-            acc.get(ref) match {
-              case None          => acc + ((ref, e))
-              case Some(current) => acc.updated(ref, current.copy(attributes = current.attributes ++ e.attributes))
-            }
-          }
-        entityRecsFromDb map { rec =>
-          rec.withAllAttributeValues(createAllAttributesString(entitiesByRef(rec.toReference)))
-        }
-      }
-
-      def findEntityByIdAndVersion(id: Long, version: Long): EntityQueryWithInlineAttributes =
+      def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery =
         filter(rec => rec.id === id && rec.version === version)
 
-      def optimisticLockUpdateOne(originalRec: EntityRecordWithInlineAttributes): ReadWriteAction[Int] =
+      def optimisticLockUpdateOne(originalRec: EntityRecord): ReadWriteAction[Int] =
         findEntityByIdAndVersion(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion =
           originalRec.recordVersion + 1
         ) map {
@@ -218,14 +131,8 @@ trait EntityComponent {
           case success => success
         }
 
-      DBIO.sequence(populateAllAttributeValues(entityRecs, entities) map optimisticLockUpdateOne)
+      DBIO.sequence(entityRecs map optimisticLockUpdateOne)
     }
-  }
-
-  object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
-
-    type EntityQuery = Query[EntityTable, EntityRecord, Seq]
-    type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
@@ -417,23 +324,7 @@ trait EntityComponent {
       }
 
       // generate the clause to filter based on user search terms
-      def paginationFilterSql(prefix: String, alias: String, entityQuery: model.EntityQuery) = {
-        val filtersOption = entityQuery.filterTerms.map {
-          _.split(" ").toSeq.map { term =>
-            sql"concat(#$alias.name, ' ', #$alias.all_attribute_values) like ${'%' + term.toLowerCase + '%'}"
-          }
-        }
-
-        filtersOption match {
-          case None => sql""
-          case Some(filters) =>
-            concatSqlActions(
-              sql"#$prefix (",
-              reduceSqlActionsWithDelim(filters, sql" #${FilterOperators.toSql(entityQuery.filterOperator)} "),
-              sql") "
-            )
-        }
-      }
+      def paginationFilterSql(prefix: String, alias: String, entityQuery: model.EntityQuery) = sql""
 
       def activeActionForMetadata(workspaceContext: Workspace,
                                   entityType: String,
@@ -489,7 +380,7 @@ trait EntityComponent {
           Lots of conditionals in here, to achieve the optimal SQL query for any given request. Pseudocode:
 
           When sorting by name, and requesting no attributes:
-            select from ENTITY e order by e.name, with optional filter on e.all_attribute_values, limit, offset.
+            select from ENTITY e order by e.name, with optional limit, offset.
 
           All other requests:
             select from ENTITY e
@@ -498,7 +389,6 @@ trait EntityComponent {
               join (subquery of select attribute-being-sorted-on from ENTITY
                       left join ENTITY_ATTRIBUTE
                       left join ENTITY
-                      optional filter on e.all_attribute_values
                       sort by attribute, limit, offset) to get the proper pagination
          */
 
@@ -733,8 +623,8 @@ trait EntityComponent {
       ): WriteAction[Int] = {
 
         val baseInsert =
-          sql"""insert into ENTITY (name, entity_type, workspace_id, record_version, all_attribute_values, deleted, deleted_date)
-                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values, 0, null from ENTITY e where workspace_id = $clonedWorkspaceId and deleted = 0
+          sql"""insert into ENTITY (name, entity_type, workspace_id, record_version, deleted, deleted_date)
+                select name, entity_type, $newWorkspaceId, record_version, 0, null from ENTITY e where workspace_id = $clonedWorkspaceId and deleted = 0
           """
         addEntitiesToWhereIfNeeded(entityRefs, baseInsert).head
       }
@@ -1031,7 +921,7 @@ trait EntityComponent {
           getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
         )
         savingEntityRecs <- traceDBIOWithParent("insertNewEntities", parentContext)(_ =>
-          entityQueryWithInlineAttributes
+          entityQuery
             .insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference))
             .map(_ ++ preExistingEntityRecs)
         )
@@ -1053,8 +943,7 @@ trait EntityComponent {
         )
 
         // find any entities that were repeated in the input payload. These repeated entities
-        // may translate to one insert and one update; we need to make sure the extra updates
-        // properly calculate all_attribute_values in the call to optimisticLockUpdate below.
+        // may translate to one insert and one update.
         repeats = entities.groupBy(_.toReference).filter(_._2.size > 1).keySet
         // narrow the repeats to only those that triggered an insert (as opposed to repeats
         // being multiple updates)
@@ -1066,7 +955,7 @@ trait EntityComponent {
         recsToUpdate = (actuallyUpdatedPreExistingEntityRecs ++ insertedRepeats).distinct
 
         _ <- traceDBIOWithParent("optimisticLockUpdate", parentContext)(_ =>
-          entityQueryWithInlineAttributes.optimisticLockUpdate(recsToUpdate, entities)
+          entityQuery.optimisticLockUpdate(recsToUpdate, entities)
         )
       } yield entities
     }
@@ -1417,8 +1306,6 @@ trait EntityComponent {
       }
 
     // Unmarshal methods
-
-    // NOTE: marshalNewEntity is in entityQueryWithInlineAttributes because it helps save the inline attributes to DB
 
     private def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap): Entity =
       Entity(entityRecord.name, entityRecord.entityType, attributes)
