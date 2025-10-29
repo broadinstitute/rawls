@@ -332,48 +332,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   val testWorkspace = new EmptyWorkspace
 
-  it should "trim giant all_attribute_values strings so they don't overflow" in withCustomTestDatabase(testWorkspace) {
-    dataSource =>
-      /*
-       Create a long string composed of the recycle-symbol emoji. This string has 65534/4 characters in it, and we
-       will insert four copies of it into separate string attributes.
-
-       The recycle symbol used here is a triple-byte character. This means that each string is ~49151 bytes long.
-
-       Both the all_attributes_value and attribute_string columns in the db have a max byte length of 65535. We use
-       four separate attributes to ensure we will not overflow the attribute_string column ... but when concatenated
-       together, the value WOULD overflow all_attribute_values unless our trimming logic came into play.
-
-       This test verifies the all_attribute_values trimming logic.
-       */
-      val veryLongString = "♲" * (EntityComponent.allAttributeValuesColumnSize / 4)
-      val sample1 = Entity(
-        "sample1",
-        "Sample",
-        Map(
-          AttributeName.withDefaultNS("veryLongString1") -> AttributeString(veryLongString),
-          AttributeName.withDefaultNS("veryLongString2") -> AttributeString(veryLongString),
-          AttributeName.withDefaultNS("veryLongString3") -> AttributeString(veryLongString),
-          AttributeName.withDefaultNS("veryLongString4") -> AttributeString(veryLongString)
-        )
-      )
-      withWorkspaceContext(testWorkspace.workspace) { context =>
-        runAndWait(entityQuery.save(context, sample1))
-
-        val entityRec = runAndWait(
-          uniqueResult(
-            entityQueryWithInlineAttributes
-              .findEntityByName(UUID.fromString(testWorkspace.workspace.workspaceId), "Sample", "sample1")
-              .result
-          )
-        )
-        // measure the byte size of the actual value is exactly what we specified
-        assertResult(EntityComponent.allAttributeValuesColumnSize) {
-          entityRec.get.allAttributeValues.get.getBytes(StandardCharsets.UTF_8).length
-        }
-      }
-  }
-
   class BugTestData extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
     val workspace = Workspace(wsName.namespace,
@@ -547,7 +505,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       runAndWait(entityQuery.save(context, makeEntity(0)))
 
       // did we save the entity?
-      // did we populate its all_attribute_values?
       val entityWithAllAttrs = runAndWait(
         entityQueryWithInlineAttributes
           .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
@@ -555,8 +512,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       )
       entityWithAllAttrs should have length 1
       entityWithAllAttrs.head.recordVersion shouldBe 0
-      entityWithAllAttrs.head.allAttributeValues should not be empty
-      entityWithAllAttrs.head.allAttributeValues.get should include("index-0")
     }
 
     withWorkspaceContext(legacyTestData.workspace) { context =>
@@ -565,7 +520,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.save(context, makeEntity(idx)))
       }
 
-      // did we update the record versions and populate its all_attribute_values?
+      // did we update the record versions?
       val entityWithAllAttrs = runAndWait(
         entityQueryWithInlineAttributes
           .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
@@ -573,11 +528,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       )
       entityWithAllAttrs should have length 1
       entityWithAllAttrs.head.recordVersion shouldBe count
-      entityWithAllAttrs.head.allAttributeValues should not be empty
-      entityWithAllAttrs.head.allAttributeValues.get should not be empty
-      entityWithAllAttrs.head.allAttributeValues.get should include(
-        "index-20"
-      ) // we should have updated to the newest value
     }
   }
 
@@ -1360,58 +1310,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "select the all_attribute_values column when using entityQueryWithInlineAttributes and not otherwise" in withLegacyDefaultTestDatabase {
-    withWorkspaceContext(legacyTestData.workspace) { context =>
-      val hasAttrs = Entity(
-        "entityWithAttrs",
-        "Pair",
-        Map(
-          AttributeName.withDefaultNS("attrOne") -> AttributeString("one"),
-          AttributeName.withDefaultNS("attrTwo") -> AttributeString("two"),
-          AttributeName.withDefaultNS("attrThree") -> AttributeString("three"),
-          AttributeName.withDefaultNS("attrFour") -> AttributeString("four")
-        )
-      )
-
-      runAndWait(entityQuery.save(context, hasAttrs))
-
-      val recWithAttrs = runAndWait(
-        entityQueryWithInlineAttributes
-          .filter(e => e.name === "entityWithAttrs" && e.entityType === "Pair")
-          .result
-          .headOption
-      )
-
-      assert(recWithAttrs.isDefined, "entityQuery should find the record")
-      withClue(
-        "entityQueryWithInlineAttributes should return an EntityRecordWithInlineAttributes, which has allAttributeValues"
-      ) {
-        recWithAttrs shouldBe an[Option[EntityRecordWithInlineAttributes]]
-      }
-      assertResult(Some(Some("entitywithattrs one two three four")), "entityQuery should return allAttributeValues") {
-        recWithAttrs.map(_.allAttributeValues)
-      }
-
-      val recWithoutAttrs = runAndWait(
-        entityQuery
-          .filter(e => e.name === "entityWithAttrs" && e.entityType === "Pair")
-          .result
-          .headOption
-      )
-
-      assert(recWithoutAttrs.isDefined, "entityQuery should find the record")
-      withClue("entityQuery should return an EntityRecord, which does not have allAttributeValues") {
-        recWithoutAttrs shouldBe an[Option[EntityRecord]]
-      }
-
-      assertResult(recWithoutAttrs,
-                   "entityQuery and entityQueryWithInlineAttributes should return the same record otherwise"
-      ) {
-        recWithAttrs.map(_.withoutAllAttributeValues)
-      }
-    }
-  }
-
   private def caseSensitivityFixtures(context: Workspace) = {
     val entitiesToSave = Seq(
       Entity("name-1",
@@ -1464,34 +1362,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
               runAndWait(entityQuery.loadEntityPageCounts(context, typeName, unfilteredQuery, testContext))
             pageResult._2 should be > 0
             pageResult._2 shouldBe pageResult._1
-          }
-        }
-      }
-    }
-  }
-
-  val filterFixtures = Map(
-    "mytype" -> Map("bar" -> 2, "value1" -> 1, "value" -> 3, "nonexistent" -> 0),
-    "anothertype" -> Map("value5" -> 1, "value" -> 2, "alsononexistent" -> 0)
-  )
-
-  filterFixtures foreach { typeFixtures =>
-    val typeName = typeFixtures._1
-    val typeTests = typeFixtures._2
-    typeTests foreach { test =>
-      val filterTerm = test._1
-      val expectedCount = test._2
-      List("name", "case", "CASE") foreach { sortKey =>
-        List(SortDirections.Ascending, SortDirections.Descending) foreach { sortDir =>
-          it should s"return expected count ($expectedCount) for type=[$typeName], sortKey=[$sortKey], sortDir=[$sortDir], term [$filterTerm]" in withCustomTestDatabase(
-            emptyWorkspace
-          ) { _ =>
-            withWorkspaceContext(emptyWorkspace.workspace) { context =>
-              caseSensitivityFixtures(context)
-              val filterQuery = EntityQuery(1, 1, sortKey, sortDir, Some(filterTerm))
-              val pageResult = runAndWait(entityQuery.loadEntityPageCounts(context, typeName, filterQuery, testContext))
-              pageResult._2 shouldBe expectedCount
-            }
           }
         }
       }
