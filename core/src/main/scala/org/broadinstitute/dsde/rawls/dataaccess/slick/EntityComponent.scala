@@ -32,7 +32,7 @@ sealed trait EntityRecordBase {
 
   def toReference = AttributeEntityReference(entityType, name)
   def withAllAttributeValues =
-    EntityRecordWithInlineAttributes(id, name, entityType, workspaceId, recordVersion, deleted, deletedDate)
+    EntityRecord(id, name, entityType, workspaceId, recordVersion, deleted, deletedDate)
 }
 
 case class EntityRecord(id: Long,
@@ -42,15 +42,6 @@ case class EntityRecord(id: Long,
                         recordVersion: Long,
                         deleted: Boolean,
                         deletedDate: Option[Timestamp]
-) extends EntityRecordBase
-
-case class EntityRecordWithInlineAttributes(id: Long,
-                                            name: String,
-                                            entityType: String,
-                                            workspaceId: UUID,
-                                            recordVersion: Long,
-                                            deleted: Boolean,
-                                            deletedDate: Option[Timestamp]
 ) extends EntityRecordBase
 
 // result structure from entity and attribute list raw sql
@@ -80,10 +71,10 @@ class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
     (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
 }
 
-class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecordWithInlineAttributes](tag) {
+class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
   def * = (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (
-    EntityRecordWithInlineAttributes.tupled,
-    EntityRecordWithInlineAttributes.unapply
+    EntityRecord.tupled,
+    EntityRecord.unapply
   )
 }
 
@@ -91,8 +82,8 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 trait EntityComponent {
   this: DriverComponent with WorkspaceComponent with AttributeComponent =>
 
-  object entityQueryWithInlineAttributes extends TableQuery(new EntityTableWithInlineAttributes(_)) {
-    type EntityQueryWithInlineAttributes = Query[EntityTableWithInlineAttributes, EntityRecordWithInlineAttributes, Seq]
+  object entityQueryWithInlineAttributes extends TableQuery(new EntityTable(_)) {
+    type EntityQueryWithInlineAttributes = Query[EntityTable, EntityRecord, Seq]
 
     // only used by tests
     def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQueryWithInlineAttributes =
@@ -103,15 +94,8 @@ trait EntityComponent {
     def batchInsertEntities(workspaceContext: Workspace,
                             entities: TraversableOnce[Entity]
     ): ReadWriteAction[Seq[EntityRecord]] = {
-      def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecordWithInlineAttributes =
-        EntityRecordWithInlineAttributes(0,
-                                         entity.name,
-                                         entity.entityType,
-                                         workspaceId,
-                                         0,
-                                         deleted = false,
-                                         deletedDate = None
-        )
+      def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecord =
+        EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, deleted = false, deletedDate = None)
 
       if (entities.nonEmpty) {
         val entityRecs = entities.toSeq.map(e => marshalNewEntity(e, workspaceContext.workspaceIdAsUUID))
@@ -144,17 +128,10 @@ trait EntityComponent {
     def optimisticLockUpdate(entityRecs: Seq[EntityRecord],
                              entities: Traversable[Entity]
     ): ReadWriteAction[Seq[Int]] = {
-      def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord],
-                                     _entitiesToSave: Traversable[Entity]
-      ): Seq[EntityRecordWithInlineAttributes] =
-        entityRecsFromDb map { rec =>
-          rec.withAllAttributeValues
-        }
-
       def findEntityByIdAndVersion(id: Long, version: Long): EntityQueryWithInlineAttributes =
         filter(rec => rec.id === id && rec.version === version)
 
-      def optimisticLockUpdateOne(originalRec: EntityRecordWithInlineAttributes): ReadWriteAction[Int] =
+      def optimisticLockUpdateOne(originalRec: EntityRecord): ReadWriteAction[Int] =
         findEntityByIdAndVersion(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion =
           originalRec.recordVersion + 1
         ) map {
@@ -165,7 +142,7 @@ trait EntityComponent {
           case success => success
         }
 
-      DBIO.sequence(populateAllAttributeValues(entityRecs, entities) map optimisticLockUpdateOne)
+      DBIO.sequence(entityRecs map optimisticLockUpdateOne)
     }
   }
 
