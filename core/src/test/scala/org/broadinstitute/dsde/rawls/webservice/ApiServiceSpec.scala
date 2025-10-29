@@ -276,8 +276,7 @@ trait ApiServiceSpec
           new WorkspaceRepository(slickDataSource),
           gcsDAO,
           samDAO,
-          mock[GoogleStorageService[IO]],
-          entityServiceConstructor(ctx)
+          mock[GoogleStorageService[IO]]
         )
 
     val entityManager = EntityManager.defaultEntityManager(
