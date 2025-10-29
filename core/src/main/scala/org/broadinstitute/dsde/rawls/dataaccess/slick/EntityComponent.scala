@@ -71,25 +71,14 @@ class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
     (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
 }
 
-class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
-  def * = (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (
-    EntityRecord.tupled,
-    EntityRecord.unapply
-  )
-}
-
 //noinspection TypeAnnotation
 trait EntityComponent {
   this: DriverComponent with WorkspaceComponent with AttributeComponent =>
 
-  object entityQueryWithInlineAttributes extends TableQuery(new EntityTable(_)) {
-    type EntityQueryWithInlineAttributes = Query[EntityTable, EntityRecord, Seq]
+  object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
 
-    // only used by tests
-    def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQueryWithInlineAttributes =
-      filter(entRec =>
-        entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId
-      )
+    type EntityQuery = Query[EntityTable, EntityRecord, Seq]
+    type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
     def batchInsertEntities(workspaceContext: Workspace,
                             entities: TraversableOnce[Entity]
@@ -102,7 +91,7 @@ trait EntityComponent {
 
         workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
           DBIO
-            .sequence(entityRecs.grouped(batchSize).map(entityQueryWithInlineAttributes ++= _))
+            .sequence(entityRecs.grouped(batchSize).map(entityQuery ++= _))
             .map(_.flatten.sum)
             .andThen(
               entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, entityRecs.map(_.toReference).toSet)
@@ -128,7 +117,7 @@ trait EntityComponent {
     def optimisticLockUpdate(entityRecs: Seq[EntityRecord],
                              entities: Traversable[Entity]
     ): ReadWriteAction[Seq[Int]] = {
-      def findEntityByIdAndVersion(id: Long, version: Long): EntityQueryWithInlineAttributes =
+      def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery =
         filter(rec => rec.id === id && rec.version === version)
 
       def optimisticLockUpdateOne(originalRec: EntityRecord): ReadWriteAction[Int] =
@@ -144,12 +133,6 @@ trait EntityComponent {
 
       DBIO.sequence(entityRecs map optimisticLockUpdateOne)
     }
-  }
-
-  object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
-
-    type EntityQuery = Query[EntityTable, EntityRecord, Seq]
-    type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
@@ -938,7 +921,7 @@ trait EntityComponent {
           getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
         )
         savingEntityRecs <- traceDBIOWithParent("insertNewEntities", parentContext)(_ =>
-          entityQueryWithInlineAttributes
+          entityQuery
             .insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference))
             .map(_ ++ preExistingEntityRecs)
         )
@@ -972,7 +955,7 @@ trait EntityComponent {
         recsToUpdate = (actuallyUpdatedPreExistingEntityRecs ++ insertedRepeats).distinct
 
         _ <- traceDBIOWithParent("optimisticLockUpdate", parentContext)(_ =>
-          entityQueryWithInlineAttributes.optimisticLockUpdate(recsToUpdate, entities)
+          entityQuery.optimisticLockUpdate(recsToUpdate, entities)
         )
       } yield entities
     }
@@ -1323,8 +1306,6 @@ trait EntityComponent {
       }
 
     // Unmarshal methods
-
-    // NOTE: marshalNewEntity is in entityQueryWithInlineAttributes because it helps save the inline attributes to DB
 
     private def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap): Entity =
       Entity(entityRecord.name, entityRecord.entityType, attributes)

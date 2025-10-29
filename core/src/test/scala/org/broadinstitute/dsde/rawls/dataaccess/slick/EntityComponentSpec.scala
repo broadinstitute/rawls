@@ -506,7 +506,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       // did we save the entity?
       val entityWithAllAttrs = runAndWait(
-        entityQueryWithInlineAttributes
+        entityQuery
           .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
           .result
       )
@@ -522,7 +522,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       // did we update the record versions?
       val entityWithAllAttrs = runAndWait(
-        entityQueryWithInlineAttributes
+        entityQuery
           .findEntityByName(legacyTestData.workspace.workspaceIdAsUUID, "Sample", "some-sample")
           .result
       )
