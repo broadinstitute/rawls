@@ -43,8 +43,7 @@ trait CompactEntityComponent extends LazyLogging {
 }
 
 class CompactEntityQuery(driverComponent: DriverComponent)
-    extends CompactEntityMigration
-    with CompactEntityKeysCache
+    extends CompactEntityKeysCache
     with RawSqlQuery
     with CompactEntitySerialization {
   override val driver = driverComponent.driver
@@ -1217,6 +1216,17 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             and JSON_CONTAINS_PATH(attributes, 'one', '$.attrs.attrToRemove1', '$.attrs.attrToRemove2')
        */
     }
+
+  /** get the current value of the sort_buffer_size setting */
+  def getSortBufferSetting: ReadAction[Long] =
+    sql"""SELECT @@sort_buffer_size;""".as[Long].head
+
+  /** set MySQL's sort_buffer_size setting to a given value.
+   * default 262144 = 256k
+   * 8M = 8,388,608
+   */
+  def setSessionSortBuffer(bufferSize: Long) =
+    sql"""SET SESSION sort_buffer_size = $bufferSize;""".asUpdate
 
   // ====================================================================================================
   //  entity query helpers

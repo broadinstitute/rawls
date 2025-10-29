@@ -6,14 +6,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
-import org.apache.commons.lang3.time.StopWatch
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  DataAccess,
-  QuicksilverAlreadyMigratedException,
-  QuicksilverMigrationResult,
-  ReadAction,
-  ReadWriteAction
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider}
 import org.broadinstitute.dsde.rawls.entities.compact.SortMemoryRetry
@@ -23,9 +16,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException
 }
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{
@@ -34,20 +25,13 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   traceFutureWithParent
 }
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.{
-  WorkspaceRepository,
-  WorkspaceSettingRepository,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
-import spray.json.DefaultJsonProtocol.jsonFormat3
-import spray.json.RootJsonFormat
 
 import java.sql.SQLException
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 
 object EntityService {
   def constructor(dataSource: SlickDataSource,
@@ -580,294 +564,5 @@ class EntityService(protected val ctx: RawlsRequestContext,
           ErrorReport(StatusCodes.InternalServerError, "Workspace setting service not available")
         )
     }
-
-  /**
-    * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to
-    * compact (Quicksilver) format.
-    * The migration relies on temp tables; the batchSize setting ensures the temp tables do not grow too large.
-    *
-    * @param workspaceName the name of the workspace to migrate
-    * @param batchSize the number of entities to migrate in a single batch; defaults to 50,000
-    * @param updateWorkspaceSettings if true, updates the workspace settings to enable Quicksilver migration
-    */
-  def quicksilverMigration(workspaceName: WorkspaceName,
-                           cleanup: Boolean = false,
-                           batchSize: Int = 50000,
-                           updateWorkspaceSettings: Boolean = true,
-                           sortBufferSize: Long = 8388608L // 8M
-  ): Future[QuicksilverMigrationResult] =
-    traceFutureWithParent("EntityService.quicksilverMigration", ctx) { s =>
-      for {
-        // Is the current user a migration admin? Here, we define admin as having the "migrate" action
-        // on the "workspace" Sam resource of type "resource_type_admin".
-        userIsAdmin <- samDAO.admin.userHasResourceTypeAdminPermission(SamResourceTypeNames.workspace,
-                                                                       SamResourceTypeAdminActions.migrate,
-                                                                       ctx
-        )
-        // If the user is an admin, just retrieve the workspace.
-        // Else, check if the user is an owner of the workspace; retrieve it if so.
-        workspaceContext <- traceFutureWithParent("getV2WorkspaceContextAndPermissions", s) { _ =>
-          if (userIsAdmin) {
-            getV2WorkspaceContext(workspaceName, Some(WorkspaceAttributeSpecs(all = false))) map { ctx =>
-              logger.info(s"Quicksilver migration ${ctx.workspaceId} executing as admin for $workspaceName")
-              ctx
-            }
-          } else {
-            getV2WorkspaceContextAndPermissions(workspaceName,
-                                                SamWorkspaceActions.own,
-                                                Some(WorkspaceAttributeSpecs(all = false))
-            ) map { ctx =>
-              logger.info(s"Quicksilver migration ${ctx.workspaceId} executing as user for $workspaceName")
-              ctx
-            }
-          }
-        }
-        workspaceId = workspaceContext.workspaceIdAsUUID
-
-        // confirm if this is already a quicksilver workspace by checking settings
-        settingsRepo = workspaceSettingsRepository.get
-        settings <- traceFutureWithParent("getWorkspaceSettings", s) { _ =>
-          settingsRepo.getWorkspaceSettings(workspaceContext.workspaceIdAsUUID)
-        }
-        _ = if (
-          settings
-            .find(_.isInstanceOf[CompactDataTablesSetting])
-            .asInstanceOf[Option[CompactDataTablesSetting]]
-            .exists(_.config.enabled)
-        ) {
-          logger.info(s"Quicksilver migration $workspaceId skipped: Quicksilver already enabled for this workspace")
-          throw new QuicksilverAlreadyMigratedException
-        }
-
-        // Check if there are any pending compactDataTables settings for this workspace
-        // If Migration is triggered from Settings, there will be "Pending" settings
-        // If Migration is triggered from the Migration API, there will be no "Pending" settings unless already requested
-        hasPendingSettings <- traceFutureWithParent("workspaceHasPendingSettings", s) { _ =>
-          settingsRepo.hasPendingSettings(workspaceContext.workspaceIdAsUUID, CompactDataTables)
-        }
-
-        // If there are pending settings, it means migration has already been requested and is currently in progress.
-        // Prevent starting another migration to avoid conflicts or an inconsistent state.
-        _ = if (hasPendingSettings && updateWorkspaceSettings) {
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              s"Quicksilver migration $workspaceId failed: Quicksilver migration is already in progress for this workspace"
-            )
-          )
-        }
-
-        // If there are no pending settings, we can set the workspace settings to enable Quicksilver migration
-        // This is done before the migration starts to ensure that the workspace setting marked as "Pending"
-        _ = if (!hasPendingSettings && updateWorkspaceSettings) {
-          traceFutureWithParent("setWorkspaceSettings", s) { _ =>
-            settingsRepo.createWorkspaceSettingsRecords(
-              workspaceContext.workspaceIdAsUUID,
-              List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false)))),
-              ctx.userInfo.userSubjectId
-            )
-          }
-        }
-
-        // start a transaction; here's where we do a bunch of writes
-        userResult <- retryWithSortMemory(dataSource,
-                                          "quicksilverMigration",
-                                          startingSortBufferSize = sortBufferSize.toInt
-        ) {
-          val dataAccess = dataSource.dataAccess
-          val shardId: String = dataAccess.determineShard(workspaceId)
-
-          val stopwatch = StopWatch.createStarted()
-
-          logger.info(
-            s"Quicksilver migration $workspaceId: starting (${stopwatch.formatTime()}) ..."
-          )
-
-          for {
-            // batch into groups of $batchSize entities, currently 50k. This method returns the min and max entity ids
-            // for each batch. later queries will use those boundaries to migrate entities in batches, which
-            // prevents the temp tables from growing too large.
-            batchBoundaries <- quicksilverCalculateBatches(workspaceId, batchSize, dataAccess)
-            // niceties for logging
-            indexedBoundaries = batchBoundaries.zipWithIndex
-
-            // for each batch, migrate the entities in that batch
-            updateCounts <- DBIO.sequence(indexedBoundaries.map { case (boundary, idx) =>
-              quicksilverMigrateBatch(workspaceId,
-                                      shardId,
-                                      boundary,
-                                      dataAccess,
-                                      idx,
-                                      indexedBoundaries.size,
-                                      stopwatch,
-                                      s
-              )
-            })
-            numEntitiesUpdated = updateCounts.sum
-
-            (numAttributesDeleted, numEntitiesDeleted) <-
-              if (cleanup) {
-                // hard delete legacy data if requested
-                hardDeleteLegacyData(workspaceId, shardId, dataAccess)
-              } else {
-                // otherwise, just log that we did not delete legacy data
-                DBIO.successful((0, 0))
-              }
-
-            _ = logger.info(
-              s"Quicksilver migration $workspaceId: done! $numEntitiesUpdated entities updated. (${stopwatch.formatTime()})"
-            )
-          } yield Success(QuicksilverMigrationResult(numEntitiesUpdated, numEntitiesDeleted, numAttributesDeleted))
-
-        }
-          .recover { case t: Throwable =>
-            Failure(t)
-          }
-
-        // Apply the workspace setting to mark the migration as finalized, or roll it back if the migration failed
-        finalResult <- userResult match {
-          case Success(result) =>
-            val applyFuture = if (updateWorkspaceSettings) {
-              traceFutureWithParent("applyWorkspaceSettings", s) { _ =>
-                settingsRepo.markWorkspaceSettingApplied(
-                  workspaceContext.workspaceIdAsUUID,
-                  WorkspaceSettingTypes.CompactDataTables
-                )
-              }
-            } else {
-              Future.successful(())
-            }
-            applyFuture map (_ => result)
-          case Failure(t) =>
-            logger.warn(
-              s"Quicksilver migration $workspaceId: FAILED with ${t.getClass.getSimpleName}: ${t.getMessage}"
-            )
-            val rollbackFuture = if (updateWorkspaceSettings) {
-              traceFutureWithParent("rollBackWorkspaceSettings", s) { _ =>
-                settingsRepo.removePendingSetting(
-                  workspaceContext.workspaceIdAsUUID,
-                  WorkspaceSettingTypes.CompactDataTables
-                ) map { _ =>
-                  logger.warn(
-                    s"Quicksilver migration $workspaceId: rolled back CompactDataTables workspace setting."
-                  )
-                }
-              }
-            } else Future.successful(())
-            rollbackFuture map (_ => throw t)
-        }
-
-        // return a count of entities updated
-      } yield finalResult
-    }
-
-  private def hardDeleteLegacyData(workspaceId: UUID,
-                                   shardId: String,
-                                   dataAccess: DataAccess
-  ): ReadWriteAction[(Int, Int)] = {
-    logger.info(s"Quicksilver migration $workspaceId: deleting legacy attributes ...")
-    for {
-      // delete legacy attributes from the ENTITY_ATTRIBUTE_xx_xx table
-      numAttributesDeleted <- dataAccess.compactEntityQuery.migrationDeleteLegacyAttributes(workspaceId, shardId)
-      // delete the all_attribute_values column for this workspace
-      _ = logger.info(s"Quicksilver migration $workspaceId: clearing all_attribute_values ...")
-      numEntitiesDeleted <- dataAccess.compactEntityQuery.migrationHardDeleteEntitiesMarkedForDeletion(workspaceId)
-    } yield (numAttributesDeleted, numEntitiesDeleted) // return count of attributes and entities deleted
-  }
-
-  private case class MigrationBoundary(startEntityId: Long, endEntityId: Long)
-
-  /**
-   * Calculate the boundaries for each batch of entities to migrate
-   * This method returns a sequence of MigrationBoundary objects, each containing the start and end entity ids
-   * for a batch. The batch sizes are determined by the batchSize parameter.
-   */
-  private def quicksilverCalculateBatches(workspaceId: UUID,
-                                          batchSize: Int,
-                                          dataAccess: DataAccess
-  ): ReadAction[Seq[MigrationBoundary]] = {
-
-    def findNextBatch(accum: Seq[MigrationBoundary], startingId: Long): ReadAction[Seq[MigrationBoundary]] =
-      dataAccess.compactEntityQuery.findMaxBatchId(batchSize, startingId, workspaceId).flatMap {
-        case None | Some(0L) => DBIO.successful(accum)
-        case Some(nextLimit) => findNextBatch(accum :+ MigrationBoundary(startingId, nextLimit), nextLimit)
-      }
-
-    findNextBatch(Seq.empty, -1)
-  }
-
-  /**
-    * Perform the work to migrate a single batch of entities from legacy to compact format.
-    * This method will:
-    *   - create temporary tables for attributes and entities
-    *   - populate the attribute temp table with JSON-normalized attributes
-    *   - populate the entity temp table with a single JSON object per entity
-    *   - update the ENTITY table from the entity temp table
-    *   - drop the temporary tables
-    */
-  private def quicksilverMigrateBatch(workspaceId: UUID,
-                                      shardId: String,
-                                      boundary: MigrationBoundary,
-                                      dataAccess: DataAccess,
-                                      batchIdx: Int,
-                                      totalBatches: Int,
-                                      stopwatch: StopWatch,
-                                      parentContext: RawlsRequestContext
-  ): ReadWriteAction[Int] = {
-
-    // instrumentation helper
-    def logAndTrace[T, E <: Effect](spanName: String, logMessage: String)(
-      op: DBIOAction[T, NoStream, E]
-    ): DBIOAction[T, NoStream, E with Effect] =
-      traceDBIOWithParent(spanName, parentContext) { _ =>
-        op
-      }.map { result =>
-        logger.info(
-          s"Quicksilver migration $workspaceId batch ${batchIdx + 1}/$totalBatches: $logMessage (${stopwatch.formatTime()}) ..."
-        )
-        result
-      }
-
-    (for {
-      // create temp tables
-      _ <- logAndTrace("migrationCreateTempTables", "created migration temp tables") {
-        DBIO.seq(dataAccess.compactEntityQuery.migrationCreateAttributeTempTable,
-                 dataAccess.compactEntityQuery.migrationCreateEntityTempTable
-        )
-      }
-      // normalize attributes to JSON scalars and insert into the temp table
-      _ <- logAndTrace("migrationPopulateAttributeTempTable", "populated attribute temp table") {
-        dataAccess.compactEntityQuery.migrationPopulateAttributeTempTable(workspaceId,
-                                                                          shardId,
-                                                                          boundary.startEntityId,
-                                                                          boundary.endEntityId
-        )
-      }
-      // combine scalars into arrays; join all attributes into a single JSON object per entity; populate entity temp
-      _ <- logAndTrace("migrationPopulateEntityTempTable", "populated entity temp table") {
-        dataAccess.compactEntityQuery.migrationPopulateEntityTempTable
-      }
-
-      // update ENTITY from the contents of the temp table
-      numEntitiesUpdated <- logAndTrace("migrationUpdateEntityTableAttributes",
-                                        "updated ENTITY $.attrs from temp table"
-      ) {
-        dataAccess.compactEntityQuery.migrationUpdateEntityTableAttributes(workspaceId)
-      }
-
-      _ <- logAndTrace("migrationUpdateEntityTableReferences", "updated ENTITY $.refs from temp table") {
-        dataAccess.compactEntityQuery.migrationUpdateEntityTableReferences(workspaceId)
-      }
-
-    } yield numEntitiesUpdated) andFinally
-      // drop temp tables
-      // this explicitly uses create/drop table instead of truncate to avoid implicit transaction commits:
-      // https://dev.mysql.com/doc/refman/8.0/en/implicit-commit.html
-      logAndTrace("migrationDropTempTables", "dropped temp tables") {
-        DBIO.seq(dataAccess.compactEntityQuery.migrationDropAttributeTempTable,
-                 dataAccess.compactEntityQuery.migrationDropEntityTempTable
-        )
-      }
-  }
 
 }
