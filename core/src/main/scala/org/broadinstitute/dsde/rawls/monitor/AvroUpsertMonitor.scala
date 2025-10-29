@@ -49,7 +49,7 @@ import scala.util.{Failure, Success, Try}
  */
 object AvroUpsertMonitorSupervisor {
   sealed trait AvroUpsertMonitorSupervisorMessage
-  case object Init extends AvroUpsertMonitorSupervisorMessage
+  private case object Init extends AvroUpsertMonitorSupervisorMessage
   case object Start extends AvroUpsertMonitorSupervisorMessage
   case object KeepAlive extends AvroUpsertMonitorSupervisorMessage
 
@@ -120,13 +120,13 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
 
   self ! Init
 
-  override def receive = {
+  override def receive: Receive = {
     case Init              => init pipeTo self
     case Start             => for (i <- 1 to avroUpsertMonitorConfig.workerCount) startOne()
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
-  def init =
+  def init: Future[AvroUpsertMonitorSupervisor.Start.type] =
     for {
       _ <- pubSubDAO.createTopic(avroUpsertMonitorConfig.importRequestPubSubTopic)
       _ <- pubSubDAO.createSubscription(
@@ -136,7 +136,7 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
       )
     } yield Start
 
-  def startOne(): Unit = {
+  private def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
     actorOf(
       AvroUpsertMonitor.props(
@@ -150,13 +150,12 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
         avroUpsertMonitorConfig.importRequestPubSubSubscription,
         avroUpsertMonitorConfig.updateCwdsStatusPubSubTopic,
         cwdsDAO,
-        avroUpsertMonitorConfig.batchSize,
         dataSource
       )
     )
   }
 
-  override val supervisorStrategy =
+  override val supervisorStrategy: SupervisorStrategy =
     OneForOneStrategy() { case e =>
       logger.error("unexpected error in avro upsert monitor", e)
       // start one to replace the error, stop the errored child so that we also drop its mailbox (i.e. restart not good enough)
@@ -169,8 +168,6 @@ object AvroUpsertMonitor {
   case object StartMonitorPass
   case object ImportComplete
 
-  val objectIdPattern = """"([^/]+)/([^/]+)"""".r
-
   def props(pollInterval: FiniteDuration,
             pollIntervalJitter: FiniteDuration,
             entityService: RawlsRequestContext => EntityService,
@@ -181,7 +178,6 @@ object AvroUpsertMonitor {
             pubSubSubscriptionName: String,
             cwdsStatusPubSubTopic: String,
             cwdsDAO: CwdsDAO,
-            batchSize: Int,
             dataSource: SlickDataSource
   ): Props =
     Props(
@@ -196,7 +192,6 @@ object AvroUpsertMonitor {
         pubSubSubscriptionName,
         cwdsStatusPubSubTopic,
         cwdsDAO,
-        batchSize,
         dataSource
       )
     )
@@ -212,7 +207,6 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                              pubSubSubscriptionName: String,
                              cwdsStatusPubSubTopic: String,
                              cwdsDAO: CwdsDAO,
-                             batchSize: Int,
                              dataSource: SlickDataSource
 ) extends Actor
     with LazyLogging
@@ -232,11 +226,12 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
 
   self ! StartMonitorPass
 
-  // fail safe in case this actor is idle too long but not too fast (1 second lower limit)
+  // fail-safe in case this actor is idle too long but not too fast (1 second lower limit)
   setReceiveTimeout(max((pollInterval + pollIntervalJitter) * 20, 1 second))
 
   private def max(durations: FiniteDuration*): FiniteDuration = {
-    implicit val finiteDurationIsOrdered = scala.concurrent.duration.FiniteDuration.FiniteDurationIsOrdered
+    implicit val finiteDurationIsOrdered: Ordering[FiniteDuration] =
+      scala.concurrent.duration.FiniteDuration.FiniteDurationIsOrdered
     durations.max
   }
 
@@ -251,9 +246,9 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
    * It is conceivable (with a large change in technology - think serializing all imports and guaranteeing in-order,
    * only-once delivery) that we could eliminate the kind of data overwrites that Pub/Sub makes us liable to see.
    * However, it is worth noting that we already accept the possibility that Terra users will overwrite each other's
-   * data. We also acknowledge that the the risk of data overwrite is small, requiring pubsub to double-deliver a
+   * data. We also acknowledge that the risk of data overwrite is small, requiring pubsub to double-deliver a
    * message at the same time as Rawls receives another user request modifying the same entities. */
-  override def receive = {
+  override def receive: Receive = {
     case StartMonitorPass =>
       // start the process by pulling a message and sending it back to self
       pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
@@ -307,7 +302,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
             )
           ) map {
             case Success(importUpsertResults) =>
-              val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
+              val failureMessages = stringMessageFromFailures(importUpsertResults.failures)
               val baseMsg =
                 s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
               if (importUpsertResults.failures.isEmpty)
@@ -499,7 +494,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
           RawlsErrorReport(
             StatusCodes.BadRequest,
             s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString" +
-              s" Error messages: ${stringMessageFromFailures(failureReportsForCaller, 100)}"
+              s" Error messages: ${stringMessageFromFailures(failureReportsForCaller)}"
           )
         )
       }
@@ -538,8 +533,8 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     googleStorage.getBlobBody(bucketName, blobName)
   }
 
-  override val supervisorStrategy =
-    OneForOneStrategy() { case e =>
+  override val supervisorStrategy: SupervisorStrategy =
+    OneForOneStrategy() { case _ =>
       Escalate
     }
 
