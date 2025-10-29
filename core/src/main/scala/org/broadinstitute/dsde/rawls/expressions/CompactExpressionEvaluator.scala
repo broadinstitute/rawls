@@ -476,6 +476,8 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
                     ) || attributeName == AttributeName.withDefaultNS(Attributable.nameReservedAttribute)
                   ) {
                     Seq(AttributeString(record.name))
+                  } else if (attributeName == AttributeName.withDefaultNS(Attributable.entityTypeReservedAttribute)) {
+                    Seq(AttributeString(record.entityType))
                   } else {
                     record.toEntity.attributes.get(attributeName) match {
                       case Some(avl: AttributeValueList) => avl.list

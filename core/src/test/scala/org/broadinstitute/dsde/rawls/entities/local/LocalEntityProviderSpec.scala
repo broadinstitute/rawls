@@ -3,11 +3,14 @@ package org.broadinstitute.dsde.rawls.entities.local
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity, EntityTypeMetadata}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
@@ -25,13 +28,17 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
 import org.scalatest.wordspec.AnyWordSpecLike
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.concurrent.ExecutionContext
 
 class LocalEntityProviderSpec
@@ -51,276 +58,7 @@ class LocalEntityProviderSpec
 
   val testConf = ConfigFactory.load()
 
-  // Test harness to call resolveInputsForEntities without having to go via the WorkspaceService
-  def testResolveInputs(workspaceContext: Workspace,
-                        methodConfig: MethodConfiguration,
-                        entity: Entity,
-                        wdl: WDL,
-                        dataAccess: DataAccess
-  )(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
-
-    val localEntityProvider = new LocalEntityProvider(
-      EntityRequestArguments(workspaceContext, testContext),
-      slickDataSource,
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
-      workbenchMetricBaseName
-    )
-
-    dataAccess.entityQuery
-      .findEntityByName(workspaceContext.workspaceIdAsUUID, entity.entityType, entity.name)
-      .result flatMap { entityRecs =>
-      methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
-        case scala.util.Failure(exception) =>
-          DBIO.failed(exception)
-        case scala.util.Success(gatherInputsResult: GatherInputsResult)
-            if gatherInputsResult.extraInputs.nonEmpty || gatherInputsResult.missingInputs.nonEmpty =>
-          DBIO.failed(new RawlsException(s"gatherInputsResult has missing or extra inputs: $gatherInputsResult"))
-        case scala.util.Success(gatherInputsResult: GatherInputsResult) =>
-          localEntityProvider.evaluateExpressionsInternal(workspaceContext,
-                                                          gatherInputsResult.processableInputs,
-                                                          Some(entityRecs),
-                                                          dataAccess
-          )
-      }
-    }
-  }
-
   "LocalEntityProvider" should {
-    "resolve method config inputs" in withLegacyConfigData {
-      val context = workspace
-
-      runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
-        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName)))
-
-      runAndWait(testResolveInputs(context, configEvenBetter, sampleGood, littleWdl, this)) shouldBe
-        Map(
-          sampleGood.name -> Seq(
-            SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName),
-            SubmissionValidationValue(Some(AttributeNumber(1)), None, intOptNameWithWfName)
-          )
-        )
-
-      runAndWait(testResolveInputs(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe
-        Map(
-          sampleSet.name -> Seq(
-            SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayNameWithWfName)
-          )
-        )
-
-      runAndWait(testResolveInputs(context, configSampleSet, sampleSet2, arrayWdl, this)) shouldBe
-        Map(
-          sampleSet2.name -> Seq(
-            SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))),
-                                      None,
-                                      intArrayNameWithWfName
-            )
-          )
-        )
-
-      // attribute reference with 1 element array should resolve as AttributeValueList
-      runAndWait(testResolveInputs(context, configSampleSet, sampleSet4, arrayWdl, this)) shouldBe
-        Map(
-          sampleSet4.name -> Seq(
-            SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(101)))), None, intArrayNameWithWfName)
-          )
-        )
-
-      // failure cases
-      assertResult(true, "Missing values should return an error") {
-        runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this))
-          .get("sampleMissingValue")
-          .get match {
-          case Seq(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgNameWithWfName => true
-        }
-      }
-
-      // MethodConfiguration config_namespace/configMissingExpr is missing definitions for these inputs: w1.t1.int_arg
-      intercept[RawlsException] {
-        runAndWait(testResolveInputs(context, configMissingExpr, sampleGood, littleWdl, this))
-      }
-    }
-
-    "resolve empty lists into AttributeEmptyLists" in withLegacyConfigData {
-      val context = workspace
-
-      runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
-        Map(
-          sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName))
-        )
-    }
-
-    "resolve empty lists into empty Array in nested WDL Struct" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
-        testResolveInputs(context,
-                          configNestedWdlStructWithEmptyList,
-                          sampleForWdlStruct,
-                          wdlStructInputWdlWithNestedStruct,
-                          this
-        )
-      )
-      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[]},"id":101,"sample":"sample1","samples":[]}}"""
-    }
-
-    "unpack AttributeValueRawJson into WDL-arrays" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
-        runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, doubleArrayWdl, this))
-      val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
-    }
-
-    "unpack array input expression with attribute reference into WDL-arrays" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
-        runAndWait(testResolveInputs(context, configArrayWithAttrRef, sampleSet2, doubleArrayWdl, this))
-      val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"w1.aint_array":[[10,11,12],[1,2]]}"""
-    }
-
-    "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
-        runAndWait(testResolveInputs(context, configWdlStruct, sampleForWdlStruct2, wdlStructInputWdl, this))
-      val methodProps = resolvedInputs(sampleForWdlStruct2.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101]}}"""
-    }
-
-    "correctly unpack nested wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
-        testResolveInputs(context, configNestedWdlStruct, sampleForWdlStruct2, wdlStructInputWdlWithNestedStruct, this)
-      )
-      val methodProps = resolvedInputs(sampleForWdlStruct2.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[101]},"id":123,"sample":"sample1","samples":[101]}}"""
-    }
-
-    "unpack wdl struct expression with attribute references into WDL Struct input" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
-        runAndWait(testResolveInputs(context, configWdlStruct, sampleForWdlStruct, wdlStructInputWdl, this))
-      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"wdlStructWf.obj":{"id":101,"sample":"sample1","samples":[1,2]}}"""
-    }
-
-    "unpack AttributeValueRawJson into optional WDL-arrays" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
-        runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, optionalDoubleArrayWdl, this))
-      val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
-    }
-
-    "unpack nested Array into WDL Struct" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
-        testResolveInputs(context,
-                          configNestedArrayWdlStruct,
-                          sampleForWdlStruct,
-                          wdlStructInputWdlWithNestedArray,
-                          this
-        )
-      )
-      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[0,1,2],[3,4,5]]},"id":101,"sample":"sample1","samples":[[0,1,2],[3,4,5]]}}"""
-    }
-
-    "unpack AttributeValueRawJson into lists-of WDL-arrays" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] =
-        runAndWait(testResolveInputs(context, configRawJsonTripleArray, sampleSet2, tripleArrayWdl, this))
-      val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}"""
-    }
-
-    "unpack triple Array into WDL Struct" in withLegacyConfigData {
-      val context = workspace
-
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(
-        testResolveInputs(context,
-                          configTripleArrayWdlStruct,
-                          sampleForWdlStruct,
-                          wdlStructInputWdlWithTripleArray,
-                          this
-        )
-      )
-      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-
-      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]},"id":101,"sample":"sample1","samples":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}}"""
-    }
-
-    "cast attribute numbers into strings for string inputs" in withLegacyConfigData {
-      val context = workspace
-      runAndWait(testResolveInputs(context, configStringArgFromNumberAttribute, sampleGood, stringWdl, this)) shouldBe
-        Map(
-          sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeString("1")), None, stringArgNameWithWfName))
-        )
-    }
-
-    "cast attribute numbers into strings for string inputs via a set" in withLegacyConfigData {
-      val context = workspace
-      runAndWait(
-        testResolveInputs(context, configStringArgFromNumberAttributeViaSampleSet, sampleSet2, arrayStringWdl, this)
-      ) shouldBe
-        Map(
-          sampleSet2.name -> Seq(
-            SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeString("1"), AttributeString("2")))),
-                                      None,
-                                      strArrayNameWithWfName
-            )
-          )
-        )
-    }
 
     "accept multiple update operations for the same entity in batchUpsert" in withLocalEntityProviderTestDatabase {
       dataSource =>

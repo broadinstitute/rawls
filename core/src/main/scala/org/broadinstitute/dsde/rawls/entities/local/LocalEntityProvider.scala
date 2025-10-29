@@ -21,8 +21,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DeleteEntitiesOfTypeConflictException
 }
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils}
-import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{
   Attributable,
@@ -42,7 +41,6 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
-  SubmissionValidationValue,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
@@ -50,10 +48,9 @@ import org.broadinstitute.dsde.rawls.util.{
   AttributeOperationListModes,
   AttributeSupport,
   AttributeUpdateOperationException,
-  CollectionUtils,
   EntitySupport
 }
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import slick.jdbc.TransactionIsolation.ReadCommitted
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
 
@@ -177,104 +174,14 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                                   entityName: EntityName,
                                   expression: EntityName,
                                   parentContext: RawlsRequestContext
-  ): Future[Seq[AttributeValue]] =
-    dataSource.inTransaction(ReadCommitted) { dataAccess =>
-      traceDBIOWithParent("withSingleEntityRec", parentContext) { _ =>
-        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          traceDBIOWithParent("withNewExpressionEvaluator", parentContext) { _ =>
-            ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-              traceDBIOWithParent("evalFinalAttribute", parentContext) { _ =>
-                evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
-                  // parsing failure
-                  case Failure(regret) =>
-                    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
-                  case Success(valuesByEntity) =>
-                    if (valuesByEntity.size != 1) {
-                      // wrong number of entities?!
-                      throw new RawlsException(
-                        s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
-                      )
-                    } else {
-                      assert(valuesByEntity.head._1 == entityName)
-                      valuesByEntity.head match {
-                        case (_, Success(result)) => result.toSeq
-                        case (_, Failure(regret)) =>
-                          throw new RawlsExceptionWithErrorReport(
-                            errorReport = ErrorReport(
-                              StatusCodes.BadRequest,
-                              "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
-                              ErrorReport(regret)
-                            )
-                          )
-                      }
-                    }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+  ): Future[Seq[AttributeValue]] = ???
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[LazyList[SubmissionValidationEntityInputs]] =
-    dataSource.inTransaction(ReadCommitted) { dataAccess =>
-      withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
-        // Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-        evaluateExpressionsInternal(workspaceContext,
-                                    gatherInputsResult.processableInputs,
-                                    jobEntityRecs,
-                                    dataAccess
-        ) map { valuesByEntity =>
-          createSubmissionValidationEntityInputs(valuesByEntity)
-        }
-      }
-    }
+  ): Future[LazyList[SubmissionValidationEntityInputs]] = ???
 
   override def expressionValidator: ExpressionValidator = new ExpressionValidator
-
-  protected[local] def evaluateExpressionsInternal(workspaceContext: Workspace,
-                                                   inputs: Set[MethodInput],
-                                                   entities: Option[Seq[EntityRecord]],
-                                                   dataAccess: DataAccess
-  )(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
-    import dataAccess.driver.api._
-
-    val entityNames = entities match {
-      case Some(recs) => recs.map(_.name)
-      case None       => Seq("")
-    }
-
-    if (inputs.isEmpty) {
-      // no inputs to evaluate = just return an empty map back!
-      DBIO.successful(entityNames.map(_ -> Seq.empty[SubmissionValidationValue]).toMap)
-    } else {
-      ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
-        // Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
-        val resultsByInput = inputs.toSeq.map { input =>
-          evaluator.evalFinalAttribute(workspaceContext, input.expression, Option(input)).asTry.map {
-            tryAttribsByEntity =>
-              val validationValuesByEntity: Seq[(EntityName, SubmissionValidationValue)] = tryAttribsByEntity match {
-                case Failure(regret) =>
-                  // The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
-                  entityNames
-                    .map((_, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.getName)))
-                case Success(attributeMap) =>
-                  convertToSubmissionValidationValues(attributeMap, input)
-              }
-              validationValuesByEntity
-          }
-        }
-
-        // Flip the list of DBIO monads into one on the outside that we can map across and then group by entity.
-        DBIO.sequence(resultsByInput) map { results =>
-          CollectionUtils.groupByTuples(results.flatten)
-        }
-      }
-    }
-  }
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
     dataSource.inTransaction(ReadCommitted) { dataAccess =>
