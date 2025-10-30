@@ -19,7 +19,6 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkflowStatuses
 }
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -77,9 +76,6 @@ class SubmissionMonitorActorTimeoutSpec(_system: ActorSystem)
         "metric",
         EntityManager.defaultEntityManager(
           dataSource,
-          new WorkspaceSettingRepository(dataSource),
-          false,
-          java.time.Duration.ofSeconds(1),
           "metric"
         ),
         1000,

@@ -28,12 +28,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService.BUCKET_GET_PERMISSION
-import org.broadinstitute.dsde.rawls.workspace.{
-  RawlsWorkspaceAclManager,
-  WorkspaceService,
-  WorkspaceSettingRepository,
-  WorkspaceSettingService
-}
+import org.broadinstitute.dsde.rawls.workspace.{RawlsWorkspaceAclManager, WorkspaceService, WorkspaceSettingService}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.{toProjectExpr, toProjectPolicy}
@@ -52,9 +47,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, OptionValues}
 
-import java.sql.Timestamp
 import java.time.{Duration => JavaDuration, LocalDateTime, OffsetDateTime, ZoneOffset}
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.duration.{Duration, _}
@@ -233,9 +226,6 @@ class FastPassServiceSpec
     entityManager = Mockito.spy(
       EntityManager.defaultEntityManager(
         dataSource,
-        new WorkspaceSettingRepository(dataSource),
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )
     )

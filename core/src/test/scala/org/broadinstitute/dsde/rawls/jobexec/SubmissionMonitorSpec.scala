@@ -28,7 +28,6 @@ import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, never, spy, verify}
-import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -83,9 +82,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     workbenchMetricBaseName,
     EntityManager.defaultEntityManager(
       slickDataSource,
-      spyWorkspaceSettingRepository,
-      false,
-      java.time.Duration.ofMinutes(2),
       workbenchMetricBaseName
     ),
     1000

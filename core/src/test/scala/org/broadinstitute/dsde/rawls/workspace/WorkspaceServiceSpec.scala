@@ -17,7 +17,6 @@ import com.google.api.services.storage.model.Bucket
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -73,8 +72,6 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
-import java.sql.Timestamp
-import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -300,9 +297,6 @@ class WorkspaceServiceSpec
     entityManager = Mockito.spy(
       EntityManager.defaultEntityManager(
         dataSource,
-        new WorkspaceSettingRepository(dataSource),
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )
     )
