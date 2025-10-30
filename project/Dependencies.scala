@@ -69,6 +69,7 @@ object Dependencies {
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.22.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
+  val fs2Reactive: ModuleID =     "co.fs2"                        %% "fs2-reactive-streams" % "3.6.1" // match the version of fs2-core
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.19"
   val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "8.1"
   val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
@@ -239,6 +240,7 @@ object Dependencies {
     circeYAML,
     cromwellClient,
     cats,
+    fs2Reactive,
     mysqlConnector,
     liquibaseCore,
     logbackClassic,
