@@ -14,10 +14,9 @@ import slick.dbio.Effect.Read
 import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 import slick.sql.SqlStreamingAction
 
-import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.{Date, UUID}
-import scala.annotation.tailrec
+import scala.annotation.unused
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -31,8 +30,6 @@ sealed trait EntityRecordBase {
   val deletedDate: Option[Timestamp]
 
   def toReference = AttributeEntityReference(entityType, name)
-  def withAllAttributeValues =
-    EntityRecord(id, name, entityType, workspaceId, recordVersion, deleted, deletedDate)
 }
 
 case class EntityRecord(id: Long,
@@ -61,9 +58,6 @@ sealed abstract class EntityTableBase[RECORD_TYPE <: EntityRecordBase](tag: Tag)
   def version = column[Long]("record_version")
   def deleted = column[Boolean]("deleted")
   def deletedDate = column[Option[Timestamp]]("deleted_date")
-
-//  def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-  def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
 }
 
 class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
@@ -78,16 +72,16 @@ trait EntityComponent {
   object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
 
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
-    type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
+    private type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
-    def batchInsertEntities(workspaceContext: Workspace,
-                            entities: TraversableOnce[Entity]
+    private def batchInsertEntities(workspaceContext: Workspace,
+                                    entities: IterableOnce[Entity]
     ): ReadWriteAction[Seq[EntityRecord]] = {
       def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecord =
         EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, deleted = false, deletedDate = None)
 
-      if (entities.nonEmpty) {
-        val entityRecs = entities.toSeq.map(e => marshalNewEntity(e, workspaceContext.workspaceIdAsUUID))
+      if (entities.iterator.nonEmpty) {
+        val entityRecs = entities.iterator.toSeq.map(e => marshalNewEntity(e, workspaceContext.workspaceIdAsUUID))
 
         workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
           DBIO
@@ -101,9 +95,9 @@ trait EntityComponent {
       }
     }
 
-    def insertNewEntities(workspaceContext: Workspace,
-                          entities: Traversable[Entity],
-                          existingEntityRefs: Seq[AttributeEntityReference]
+    private def insertNewEntities(workspaceContext: Workspace,
+                                  entities: Iterable[Entity],
+                                  existingEntityRefs: Seq[AttributeEntityReference]
     ): ReadWriteAction[Seq[EntityRecord]] = {
       val newEntities = entities.filterNot(e => existingEntityRefs.contains(e.toReference))
       // only insert the first instance of each entity, if the input contains duplicates.
@@ -114,9 +108,7 @@ trait EntityComponent {
       batchInsertEntities(workspaceContext, insertableEntities)
     }
 
-    def optimisticLockUpdate(entityRecs: Seq[EntityRecord],
-                             entities: Traversable[Entity]
-    ): ReadWriteAction[Seq[Int]] = {
+    def optimisticLockUpdate(entityRecs: Seq[EntityRecord]): ReadWriteAction[Seq[Int]] = {
       def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery =
         filter(rec => rec.id === id && rec.version === version)
 
@@ -324,7 +316,11 @@ trait EntityComponent {
       }
 
       // generate the clause to filter based on user search terms
-      def paginationFilterSql(prefix: String, alias: String, entityQuery: model.EntityQuery) = sql""
+      private def paginationFilterSql(@unused prefix: String,
+                                      @unused alias: String,
+                                      @unused entityQuery: model.EntityQuery
+      ) =
+        sql""
 
       def activeActionForMetadata(workspaceContext: Workspace,
                                   entityType: String,
@@ -693,18 +689,16 @@ trait EntityComponent {
 
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      def listActiveEntitiesOfType(workspaceContext: Workspace,
-                                   entityType: String
-      ): ReadAction[TraversableOnce[Entity]] =
+      def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[IterableOnce[Entity]] =
         sql"""#${EntityAndAttributesRawSqlQuery.baseEntityAndAttributeSql(workspaceContext)}
         where e.deleted = false
-        and e.entity_type = ${entityType}
+        and e.entity_type = $entityType
         and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
           .as[EntityAndAttributesResult](EntityAndAttributesRawSqlQuery.getEntityAndAttributesResult)
           .map(query => unmarshalEntities(query))
 
       // includes "deleted" hidden entities
-      def listEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] =
+      def listEntities(workspaceContext: Workspace): ReadAction[IterableOnce[Entity]] =
         sql"""#${EntityAndAttributesRawSqlQuery.baseEntityAndAttributeSql(
             workspaceContext
           )} where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
@@ -764,7 +758,7 @@ trait EntityComponent {
         query => unmarshalEntities(query)
       ) map (_.headOption)
 
-    def getEntities(workspaceId: UUID, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] =
+    def getEntities(workspaceId: UUID, entityIds: Iterable[Long]): ReadAction[Seq[(Long, Entity)]] =
       EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, entityIds.toSet) map (query =>
         unmarshalEntitiesWithIds(query)
       )
@@ -780,15 +774,15 @@ trait EntityComponent {
     }
 
     def getActiveEntities(workspaceContext: Workspace,
-                          entityRefs: Traversable[AttributeEntityReference]
-    ): ReadAction[TraversableOnce[Entity]] =
+                          entityRefs: Iterable[AttributeEntityReference]
+    ): ReadAction[IterableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.activeActionForRefs(workspaceContext, entityRefs.toSet) map (query =>
         unmarshalEntities(query)
       )
 
     // list all entities or those in a category
 
-    def listActiveEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] =
+    def listActiveEntities(workspaceContext: Workspace): ReadAction[IterableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
 
     // almost the same as "listActiveEntitiesOfType" except 1) does not unmarshal entities; 2) returns a stream
@@ -908,9 +902,9 @@ trait EntityComponent {
       save(workspaceContext, Seq(entity)).map(_.head)
 
     def save(workspaceContext: Workspace,
-             entities: Traversable[Entity],
+             entities: Iterable[Entity],
              parentContext: RawlsTracingContext = RawlsTracingContext()
-    ): ReadWriteAction[Traversable[Entity]] = {
+    ): ReadWriteAction[Iterable[Entity]] = {
       entities.foreach(EntityUtils.validateEntity)
 
       for {
@@ -955,13 +949,13 @@ trait EntityComponent {
         recsToUpdate = (actuallyUpdatedPreExistingEntityRecs ++ insertedRepeats).distinct
 
         _ <- traceDBIOWithParent("optimisticLockUpdate", parentContext)(_ =>
-          entityQuery.optimisticLockUpdate(recsToUpdate, entities)
+          entityQuery.optimisticLockUpdate(recsToUpdate)
         )
       } yield entities
     }
 
     private def lookupNotYetLoadedReferences(workspaceContext: Workspace,
-                                             entities: Traversable[Entity],
+                                             entities: Iterable[Entity],
                                              alreadyLoadedEntityRefs: Seq[AttributeEntityReference]
     ): ReadAction[Seq[EntityRecord]] = {
       val allRefAttributes = (for {
@@ -1002,7 +996,7 @@ trait EntityComponent {
     }
 
     private def rewriteAttributes(workspaceId: UUID,
-                                  entitiesToSave: Traversable[Entity],
+                                  entitiesToSave: Iterable[Entity],
                                   entityIds: Seq[Long],
                                   entityIdsByRef: Map[AttributeEntityReference, Long],
                                   parentContext: RawlsTracingContext = RawlsTracingContext()
@@ -1112,7 +1106,7 @@ trait EntityComponent {
 
       def getSoftConflicts(paths: Seq[EntityPath]) =
         getCopyConflicts(destWorkspaceContext, paths.map(_.path.last)).map { conflicts =>
-          val conflictsAsRefs = conflicts.toSeq.map(_.toReference)
+          val conflictsAsRefs = conflicts.iterator.toSeq.map(_.toReference)
           paths.filter(p => conflictsAsRefs.contains(p.path.last))
         }
 
@@ -1207,9 +1201,9 @@ trait EntityComponent {
     // return the entities already present in the destination workspace
 
     private[slick] def getCopyConflicts(destWorkspaceContext: Workspace,
-                                        entitiesToCopy: TraversableOnce[AttributeEntityReference]
-    ): ReadAction[TraversableOnce[EntityRecord]] =
-      getEntityRecords(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopy.toSet)
+                                        entitiesToCopy: IterableOnce[AttributeEntityReference]
+    ): ReadAction[IterableOnce[EntityRecord]] =
+      getEntityRecords(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopy.iterator.toSet)
 
     // the opposite of getEntitySubtrees: traverse the graph to retrieve all entities which ultimately refer to these
 
@@ -1227,9 +1221,9 @@ trait EntityComponent {
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
 
-    sealed trait RecursionDirection
-    case object Up extends RecursionDirection
-    case object Down extends RecursionDirection
+    sealed private trait RecursionDirection
+    private case object Up extends RecursionDirection
+    private case object Down extends RecursionDirection
 
     /**
       * Starting with entities specified by entityIds, recursively walk references accumulating all the ids
@@ -1286,25 +1280,6 @@ trait EntityComponent {
       }
     }
 
-    // Utility methods
-
-    def generateEntityMetadataMap(typesAndCountsQ: ReadAction[Map[String, Int]],
-                                  typesAndAttrsQ: ReadAction[Map[String, Seq[AttributeName]]]
-    ) =
-      typesAndCountsQ flatMap { typesAndCounts =>
-        typesAndAttrsQ map { typesAndAttrs =>
-          (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-            (entityType,
-             EntityTypeMetadata(
-               typesAndCounts.getOrElse(entityType, 0),
-               entityType + Attributable.entityIdAttributeSuffix,
-               typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)
-             )
-            )
-          } toMap
-        }
-      }
-
     // Unmarshal methods
 
     private def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap): Entity =
@@ -1315,7 +1290,7 @@ trait EntityComponent {
     ): Seq[Entity] =
       unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
 
-    def unmarshalEntitiesWithIds(
+    private def unmarshalEntitiesWithIds(
       entityAttributeRecords: Seq[EntityAndAttributesResult]
     ): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
