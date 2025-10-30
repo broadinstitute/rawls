@@ -124,7 +124,6 @@ trait AttributeComponent {
 
   abstract class AttributeTable[OWNER_ID: TypedType, RECORD <: AttributeRecord[OWNER_ID]](tag: Tag, tableName: String)
       extends Table[RECORD](tag, tableName) {
-    final type OwnerIdType = OWNER_ID
 
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def ownerId = column[OWNER_ID]("owner_id")
@@ -162,11 +161,6 @@ trait AttributeComponent {
              deleted,
              deletedDate
     ) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
-
-    def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
-
-    def entityRef = foreignKey(s"FK_ENT_ATTRIBUTE_ENTITY_REF_$shard", valueEntityRef, entityQuery)(_.id.?)
-    def parentEntity = foreignKey(s"FK_ATTRIBUTE_PARENT_ENTITY_$shard", ownerId, entityQuery)(_.id)
   }
 
   class WorkspaceAttributeTable(tag: Tag)
@@ -185,11 +179,6 @@ trait AttributeComponent {
              deleted,
              deletedDate
     ) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
-
-    def uniqueIdx = index("UNQ_WORKSPACE_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
-
-    def entityRef = foreignKey("FK_WS_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
-    def workspace = foreignKey("FK_ATTRIBUTE_PARENT_WORKSPACE", ownerId, workspaceQuery)(_.id)
   }
 
   class SubmissionAttributeTable(tag: Tag)
@@ -208,12 +197,6 @@ trait AttributeComponent {
              deleted,
              deletedDate
     ) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
-
-    def uniqueIdx = index("UNQ_SUBMISSION_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
-
-    def entityRef = foreignKey("FK_SUB_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
-    def submissionValidation =
-      foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
   class EntityAttributeTempTable(tag: Tag)
@@ -506,7 +489,7 @@ trait AttributeComponent {
     def findByOwnerQuery(ownerIds: Seq[OWNER_ID]) =
       filter(_.ownerId inSetBind ownerIds)
 
-    val caseSensitiveCollate = SimpleExpression.unary[Option[String], Option[String]] { (value, qb) =>
+    private val caseSensitiveCollate = SimpleExpression.unary[Option[String], Option[String]] { (value, qb) =>
       qb.expr(value)
       qb.sqlBuilder += " collate utf8_bin"
     }
@@ -568,15 +551,19 @@ trait AttributeComponent {
     // but we only want to use a subset of the fields: the primary key.
     // AttributeRecordPrimaryKey encapsulates only those fields.
 
-    case class AttributeRecordPrimaryKey(ownerId: OWNER_ID, namespace: String, name: String, listIndex: Option[Int])
+    private case class AttributeRecordPrimaryKey(ownerId: OWNER_ID,
+                                                 namespace: String,
+                                                 name: String,
+                                                 listIndex: Option[Int]
+    )
 
     // a map of PK -> Record allows us to perform set operations on the PKs but return the Records as results
-    def toPrimaryKeyMap(recs: Traversable[RECORD]) =
+    private def toPrimaryKeyMap(recs: Iterable[RECORD]) =
       recs.map(rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec)).toMap
 
-    def patchAttributesAction(inserts: Traversable[RECORD],
-                              updates: Traversable[RECORD],
-                              deleteIds: Traversable[Long],
+    def patchAttributesAction(inserts: Iterable[RECORD],
+                              updates: Iterable[RECORD],
+                              deleteIds: Iterable[Long],
                               insertFunction: Seq[RECORD] => () => WriteAction[Int],
                               tracingContext: RawlsTracingContext
     ) =
@@ -622,7 +609,7 @@ trait AttributeComponent {
         _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
       } yield numRowsRenamed
 
-    object DeleteAttributeColumnQueries extends RawSqlQuery {
+    private object DeleteAttributeColumnQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
 
       def deleteAttributeColumn(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
@@ -635,14 +622,14 @@ trait AttributeComponent {
         val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE_#$shardId ea
                                     join ENTITY e on e.id = ea.owner_id
                                     where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
-                                      and e.entity_type = ${entityType}
+                                      and e.entity_type = $entityType
                                       and (ea.namespace, ea.name) in """
 
         concatSqlActions(deleteQueryBase, sql"(", attributeNamesSql, sql")").as[Int]
       }
     }
 
-    object AttributeColumnQueries extends RawSqlQuery {
+    private object AttributeColumnQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
 
       def renameAttribute(workspaceContext: Workspace,
@@ -683,8 +670,8 @@ trait AttributeComponent {
      * @param insertFunction function to use when writing attributes to the db (allows rewriteAttrsAction to be generic)
      * @return the ids of the parent (entity|workspace) objects that had attribute inserts/updates/deletes
      */
-    def rewriteAttrsAction(attributesToSave: Traversable[RECORD],
-                           existingAttributes: Traversable[RECORD],
+    def rewriteAttrsAction(attributesToSave: Iterable[RECORD],
+                           existingAttributes: Iterable[RECORD],
                            insertFunction: Seq[RECORD] => () => WriteAction[Int],
                            parentContext: RawlsTracingContext = RawlsTracingContext()
     ): ReadWriteAction[Set[OWNER_ID]] =
@@ -734,10 +721,10 @@ trait AttributeComponent {
         val existingKeys = existingAttrMap.keySet
 
         // insert attributes which are in save but not exists
-        val attributesToInsert = toSaveAttrMap.filterKeys(!existingKeys.contains(_))
+        val attributesToInsert = toSaveAttrMap.view.filterKeys(!existingKeys.contains(_))
 
         // delete attributes which are in exists but not save
-        val attributesToDelete = existingAttrMap.filterKeys(!toSaveAttrMap.keySet.contains(_))
+        val attributesToDelete = existingAttrMap.view.filterKeys(!toSaveAttrMap.keySet.contains(_))
 
         val attributesToUpdate = toSaveAttrMap.filter { case (k, v) =>
           existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
@@ -763,7 +750,7 @@ trait AttributeComponent {
       }
 
     // noinspection SqlDialectInspection
-    object AlterAttributesUsingScratchTableQueries extends RawSqlQuery {
+    private object AlterAttributesUsingScratchTableQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
 
       // MySQL seems to handle null safe operators inefficiently. the solution to this
@@ -773,12 +760,12 @@ trait AttributeComponent {
       // attributes.
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
-      def updateInMasterAction() = {
+      private def updateInMasterAction() = {
         val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
         sql"""
           update #${baseTableRow.tableName} a
-              join #${joinTableName} ta
+              join #$joinTableName ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
           set a.value_string=ta.value_string,

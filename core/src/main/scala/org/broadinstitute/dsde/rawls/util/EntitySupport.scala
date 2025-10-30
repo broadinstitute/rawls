@@ -25,7 +25,7 @@ trait EntitySupport {
                            dataAccess: DataAccess,
                            entities: Seq[AttributeEntityReference],
                            context: RawlsRequestContext
-  )(op: (Seq[AttributeEntityReference]) => ReadWriteAction[T]): ReadWriteAction[T] =
+  )(op: Seq[AttributeEntityReference] => ReadWriteAction[T]): ReadWriteAction[T] =
     // query the db to see which of the specified entity refs exist in the workspace and are active
     traceDBIOWithParent("withAllEntityRefs.getActiveRefs", context)(_ =>
       dataAccess.entityQuery.getActiveRefs(workspaceContext.workspaceIdAsUUID, entities.toSet)
@@ -48,16 +48,15 @@ trait EntitySupport {
     }
 
   def withEntity[T](workspaceContext: Workspace, entityType: String, entityName: String, dataAccess: DataAccess)(
-    op: (Entity) => ReadWriteAction[T]
+    op: Entity => ReadWriteAction[T]
   ): ReadWriteAction[T] =
     dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
       case None =>
         DBIO.failed(
           new RawlsExceptionWithErrorReport(
-            errorReport =
-              ErrorReport(StatusCodes.NotFound,
-                          s"${entityType} ${entityName} does not exist in ${workspaceContext.toWorkspaceName}"
-              )
+            errorReport = ErrorReport(StatusCodes.NotFound,
+                                      s"$entityType $entityName does not exist in ${workspaceContext.toWorkspaceName}"
+            )
           )
         )
       case Some(entity) => op(entity)

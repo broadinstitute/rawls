@@ -32,12 +32,6 @@ object ExpressionEvaluationSupport {
 }
 
 trait ExpressionEvaluationSupport {
-  protected def createSubmissionValidationEntityInputs(
-    valuesByEntity: Map[EntityName, Seq[SubmissionValidationValue]]
-  ): LazyList[SubmissionValidationEntityInputs] =
-    LazyList.from(valuesByEntity.map { case (entityName, values) =>
-      SubmissionValidationEntityInputs(entityName, values.toSet)
-    })
 
   protected def isStringInputType(input: MethodInput): Boolean = {
     val valuetype = input.workflowInput.getValueType

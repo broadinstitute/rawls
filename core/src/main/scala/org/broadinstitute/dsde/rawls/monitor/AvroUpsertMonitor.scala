@@ -8,7 +8,7 @@ import akka.stream.scaladsl.Source
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
-import fs2.concurrent.SignallingRef
+import fs2.interop.reactivestreams._
 import io.circe.fs2._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -49,7 +49,7 @@ import scala.util.{Failure, Success, Try}
  */
 object AvroUpsertMonitorSupervisor {
   sealed trait AvroUpsertMonitorSupervisorMessage
-  case object Init extends AvroUpsertMonitorSupervisorMessage
+  private case object Init extends AvroUpsertMonitorSupervisorMessage
   case object Start extends AvroUpsertMonitorSupervisorMessage
   case object KeepAlive extends AvroUpsertMonitorSupervisorMessage
 
@@ -120,13 +120,13 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
 
   self ! Init
 
-  override def receive = {
+  override def receive: Receive = {
     case Init              => init pipeTo self
     case Start             => for (i <- 1 to avroUpsertMonitorConfig.workerCount) startOne()
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
-  def init =
+  def init: Future[AvroUpsertMonitorSupervisor.Start.type] =
     for {
       _ <- pubSubDAO.createTopic(avroUpsertMonitorConfig.importRequestPubSubTopic)
       _ <- pubSubDAO.createSubscription(
@@ -136,7 +136,7 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
       )
     } yield Start
 
-  def startOne(): Unit = {
+  private def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
     actorOf(
       AvroUpsertMonitor.props(
@@ -150,13 +150,12 @@ class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntitySe
         avroUpsertMonitorConfig.importRequestPubSubSubscription,
         avroUpsertMonitorConfig.updateCwdsStatusPubSubTopic,
         cwdsDAO,
-        avroUpsertMonitorConfig.batchSize,
         dataSource
       )
     )
   }
 
-  override val supervisorStrategy =
+  override val supervisorStrategy: SupervisorStrategy =
     OneForOneStrategy() { case e =>
       logger.error("unexpected error in avro upsert monitor", e)
       // start one to replace the error, stop the errored child so that we also drop its mailbox (i.e. restart not good enough)
@@ -169,8 +168,6 @@ object AvroUpsertMonitor {
   case object StartMonitorPass
   case object ImportComplete
 
-  val objectIdPattern = """"([^/]+)/([^/]+)"""".r
-
   def props(pollInterval: FiniteDuration,
             pollIntervalJitter: FiniteDuration,
             entityService: RawlsRequestContext => EntityService,
@@ -181,7 +178,6 @@ object AvroUpsertMonitor {
             pubSubSubscriptionName: String,
             cwdsStatusPubSubTopic: String,
             cwdsDAO: CwdsDAO,
-            batchSize: Int,
             dataSource: SlickDataSource
   ): Props =
     Props(
@@ -196,7 +192,6 @@ object AvroUpsertMonitor {
         pubSubSubscriptionName,
         cwdsStatusPubSubTopic,
         cwdsDAO,
-        batchSize,
         dataSource
       )
     )
@@ -212,7 +207,6 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                              pubSubSubscriptionName: String,
                              cwdsStatusPubSubTopic: String,
                              cwdsDAO: CwdsDAO,
-                             batchSize: Int,
                              dataSource: SlickDataSource
 ) extends Actor
     with LazyLogging
@@ -232,11 +226,12 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
 
   self ! StartMonitorPass
 
-  // fail safe in case this actor is idle too long but not too fast (1 second lower limit)
+  // fail-safe in case this actor is idle too long but not too fast (1 second lower limit)
   setReceiveTimeout(max((pollInterval + pollIntervalJitter) * 20, 1 second))
 
   private def max(durations: FiniteDuration*): FiniteDuration = {
-    implicit val finiteDurationIsOrdered = scala.concurrent.duration.FiniteDuration.FiniteDurationIsOrdered
+    implicit val finiteDurationIsOrdered: Ordering[FiniteDuration] =
+      scala.concurrent.duration.FiniteDuration.FiniteDurationIsOrdered
     durations.max
   }
 
@@ -251,9 +246,9 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
    * It is conceivable (with a large change in technology - think serializing all imports and guaranteeing in-order,
    * only-once delivery) that we could eliminate the kind of data overwrites that Pub/Sub makes us liable to see.
    * However, it is worth noting that we already accept the possibility that Terra users will overwrite each other's
-   * data. We also acknowledge that the the risk of data overwrite is small, requiring pubsub to double-deliver a
+   * data. We also acknowledge that the risk of data overwrite is small, requiring pubsub to double-deliver a
    * message at the same time as Rawls receives another user request modifying the same entities. */
-  override def receive = {
+  override def receive: Receive = {
     case StartMonitorPass =>
       // start the process by pulling a message and sending it back to self
       pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
@@ -307,7 +302,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
             )
           ) map {
             case Success(importUpsertResults) =>
-              val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
+              val failureMessages = stringMessageFromFailures(importUpsertResults.failures)
               val baseMsg =
                 s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
               if (importUpsertResults.failures.isEmpty)
@@ -441,16 +436,9 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         circeJson.toString().parseJson.convertTo[EntityUpdateDefinition]
       }
 
-      // chunk the stream into batches.
-      val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
-
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
-      def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Int] = {
-        logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
-
-        // translate the upsertBatch back into a stream of json.
-        // TODO CORE-427: rewrite this monitor to fully stream, instead of stream->materialize->stream
-        val entityUpdateStream: Source[EntityUpdateDefinition, _] = Source(upsertBatch)
+      def performUpsertBatch(entityUpdateStream: Source[EntityUpdateDefinition, _]): Future[Int] = {
+        logger.info(s"upserting entities for jobId ${jobId.toString} ...")
 
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
@@ -464,51 +452,17 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         } yield upsertResults
       }
 
-      // create our pause signal. We use this to control when the stream should pause and resume.
-      val sig = SignallingRef[IO, Boolean](false).unsafeRunSync()
-
-      // tell the stream what to execute for each batch.
-      // we must ensure that each batch is upserted sequentially, because later entities may reference earlier entities.
-      // if we try to upsert them in parallel, the referenced entity may not exist yet, and the "later" upsert would fail.
-      // therefore, for each batch, we:
-      //  1. pause the stream by setting the signal to true
-      //  2. perform this batch's upsert
-      //  3. resume the stream by setting the signal to false
-      // TODO: I _think_ that by using evalMapChunk here, we can eliminate the pause/resume and trust the stream
-      // to handle it natively. This will require more testing so I am leaving the pause/resume in place, as it does
-      // no harm.
-      val upsertFuturesStream = batchStream.zipWithIndex
-        .evalMapChunk { case (chunk, idx) =>
-          for {
-            _ <- sig.set(true)
-            _ = self ! KeepAlive // keep actor alive during this loop
-            attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(idx, chunk.toList))))
-            _ <- sig.set(false)
-          } yield {
-            attempt match {
-              case Failure(regrets: RawlsExceptionWithErrorReport) =>
-                val loggedErrors = stringMessageFromFailures(regrets.errorReport.causes.toList, 100)
-                logger.warn(
-                  s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors"
-                )
-              // CompactEntityProvider will throw a DataEntityException, which gets caught by this Throwable case
-              case Failure(t: Throwable) =>
-                logger.warn(
-                  s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The error is: ${t.getMessage}"
-                )
-
-              case _ => // noop; here for completeness of matching
-            }
-            logger.info(
-              s"completed upsert batch #$idx for jobId ${jobId.toString} with ${attempt.getClass.getSimpleName}..."
-            )
-            attempt
-          }
+      val upsertAttempt =
+        // get a reactive-stream publisher from the incoming stream
+        entityUpdateDefinitionStream.toUnicastPublisher.use { publisher =>
+          // translate the publisher into an akka Source
+          val entityUpdateSource = Source.fromPublisher(publisher)
+          // batch-upsert the akka Source
+          IO.fromFuture(IO(toFutureTry(performUpsertBatch(entityUpdateSource))))
         }
-        .pauseWhen(sig)
 
       // finally, after all the stream setup, tell the stream to execute
-      val upsertResults = upsertFuturesStream.compile.toList.unsafeRunSync()
+      val upsertResults = List(upsertAttempt.unsafeRunSync())
 
       val numSuccesses: Int = upsertResults.collect { case Success(writeSize) => writeSize }.sum
 
@@ -540,14 +494,14 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
           RawlsErrorReport(
             StatusCodes.BadRequest,
             s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString" +
-              s" Error messages: ${stringMessageFromFailures(failureReportsForCaller, 100)}"
+              s" Error messages: ${stringMessageFromFailures(failureReportsForCaller)}"
           )
         )
       }
 
       val elapsed = System.currentTimeMillis() - startTime
       logger.info(
-        s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted," +
+        s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses rows updated," +
           s" ${failureReports.size} failed$additionalErrorString Errors: ${failureReportsForCaller.map(_.message).mkString(", ")}"
       )
 
@@ -579,8 +533,8 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     googleStorage.getBlobBody(bucketName, blobName)
   }
 
-  override val supervisorStrategy =
-    OneForOneStrategy() { case e =>
+  override val supervisorStrategy: SupervisorStrategy =
+    OneForOneStrategy() { case _ =>
       Escalate
     }
 
