@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.entities.local
+package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
@@ -6,13 +6,8 @@ import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.config.{Config, ConfigFactory}
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.{
-  GoogleBigQueryServiceFactoryImpl,
-  MockBigQueryServiceFactory,
-  SlickDataSource
-}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactoryImpl, MockBigQueryServiceFactory, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
-import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProviderBuilder, CompactEntitySerialization}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
@@ -20,38 +15,21 @@ import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
-import org.broadinstitute.dsde.rawls.model.{
-  AttributeEntityReference,
-  AttributeName,
-  AttributeRename,
-  AttributeString,
-  CompactDataTablesSetting,
-  Entity,
-  EntityPointer,
-  EntityQuery,
-  EntityTypeRename,
-  FilterOperators,
-  RawlsRequestContext,
-  RawlsUser,
-  SortDirections,
-  UserInfo,
-  Workspace,
-  WorkspaceFieldSpecs
-}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeRename, AttributeString, CompactDataTablesSetting, Entity, EntityPointer, EntityQuery, EntityTypeRename, FilterOperators, RawlsRequestContext, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
 import org.scalatestplus.mockito.MockitoSugar.mock
+import spray.json._
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import spray.json._
 
 class CaseSensitivitySpec
     extends AnyFreeSpec
