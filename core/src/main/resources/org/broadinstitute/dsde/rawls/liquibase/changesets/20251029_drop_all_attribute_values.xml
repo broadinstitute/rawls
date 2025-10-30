@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
+    <!--
+        The all_attribute_values column is not used by Quicksilver, and so can be dropped.
+        The entity_type_id was never used; it can also be dropped. It was added proactively during
+            a previous downtime (since adding a column can be slow), but was never used.
+     -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="drop_all_attribute_values">
+        <dropColumn tableName="ENTITY">
+            <column name="all_attribute_values" />
+            <column name="entity_type_id" />
+        </dropColumn>
+    </changeSet>
+</databaseChangeLog>
