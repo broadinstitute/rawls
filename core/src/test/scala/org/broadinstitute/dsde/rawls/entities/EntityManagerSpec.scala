@@ -8,7 +8,14 @@ import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
-import org.broadinstitute.dsde.rawls.model.{CompactDataTablesSetting, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{
+  CompactDataTablesSetting,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  UserInfo,
+  Workspace
+}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.joda.time.DateTime
