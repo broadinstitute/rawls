@@ -390,7 +390,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                   entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))
                 )
               ) map { entities =>
-                val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
+                val entitiesByName = entities.iterator.map(e => (e.entityType, e.name) -> e).toMap
                 entityUpdates.map { entityUpdate =>
                   entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
                     case Some(e) =>
