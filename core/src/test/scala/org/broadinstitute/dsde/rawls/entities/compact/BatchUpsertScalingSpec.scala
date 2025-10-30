@@ -8,14 +8,29 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactoryImpl, MockBigQueryServiceFactory, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  GoogleBigQueryServiceFactoryImpl,
+  MockBigQueryServiceFactory,
+  SlickDataSource
+}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
+  AddUpdateAttribute,
+  AttributeUpdateOperation,
+  EntityUpdateDefinition
+}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeString, CompactDataTablesSetting, RawlsRequestContext, RawlsUser, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeEntityReference,
+  AttributeString,
+  CompactDataTablesSetting,
+  RawlsRequestContext,
+  RawlsUser,
+  UserInfo
+}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
