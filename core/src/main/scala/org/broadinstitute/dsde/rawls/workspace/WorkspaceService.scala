@@ -1113,10 +1113,6 @@ class WorkspaceService(
         case None    => Option(sourceWorkspace.bucketName)
       }
 
-//      compactDataTablesEnabled <- entityServiceConstructor(ctx).isCompactDataTableSettingEnabled(
-//        sourceWorkspace.workspaceIdAsUUID
-//      )
-
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
         Set(AttributeTempTableType.Workspace)
       )(
