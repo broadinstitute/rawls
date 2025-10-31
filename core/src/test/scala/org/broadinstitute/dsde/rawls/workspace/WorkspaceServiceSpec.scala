@@ -37,8 +37,8 @@ import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.{CompactDataTables, WorkspaceSettingType}
-import org.broadinstitute.dsde.rawls.model.{SamResourcePolicyName, WorkspaceSetting, _}
+import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
+import org.broadinstitute.dsde.rawls.model.{SamResourcePolicyName, _}
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.policy.PolicyService
@@ -116,7 +116,6 @@ class WorkspaceServiceSpec
   val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
   val mockWorkspaceSettingService: WorkspaceSettingService = mock[WorkspaceSettingService](RETURNS_SMART_NULLS)
-  val mockWorkspaceSettingRepository: WorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
 
   val mockLocalProvider: LocalEntityProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
 
@@ -136,19 +135,13 @@ class WorkspaceServiceSpec
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    clearInvocations(mockWorkspaceSettingService, mockWorkspaceSettingRepository)
+    clearInvocations(mockWorkspaceSettingService)
     when(
       mockWorkspaceSettingService.getWorkspaceSettingOfType(
         any[WorkspaceName],
         any[WorkspaceSettingType]
       )
     ).thenReturn(Future.successful(None))
-    when(
-      mockWorkspaceSettingRepository.getWorkspaceSettingOfType(
-        any[UUID],
-        ArgumentMatchers.eq(CompactDataTables)
-      )
-    ).thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
@@ -306,13 +299,7 @@ class WorkspaceServiceSpec
       .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
 
     val entityServiceConstructor =
-      EntityService.constructor(slickDataSource,
-                                samDAO,
-                                workbenchMetricBaseName = "test",
-                                entityManager,
-                                1000,
-                                Option(mockWorkspaceSettingRepository)
-      ) _
+      EntityService.constructor(slickDataSource, samDAO, workbenchMetricBaseName = "test", entityManager, 1000, None) _
 
     val bardService = mock[BardService](RETURNS_SMART_NULLS)
     val workspaceServiceConstructor = WorkspaceService.constructor(
@@ -2191,9 +2178,6 @@ class WorkspaceServiceSpec
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    when(mockWorkspaceSettingService.setWorkspaceSettings(any[WorkspaceName], any[List[WorkspaceSetting]]))
-      .thenReturn(Future.successful(mock[WorkspaceSettingResponse]))
-
     val workspace =
       Await.result(services.workspaceService.cloneWorkspace(
                      baseWorkspace.toWorkspaceName,
@@ -2207,39 +2191,6 @@ class WorkspaceServiceSpec
     workspace.googleProjectNumber should not be empty
     workspace.workspaceType shouldBe WorkspaceType.RawlsWorkspace
     workspace.attributes shouldBe baseWorkspace.attributes
-  }
-
-  "cloneWorkspace" should "create a V2 Workspace using compact data tables" in withTestDataServices { services =>
-    val baseWorkspace = testData.workspace
-    val newWorkspaceName = "cloned_space"
-
-    when(mockWorkspaceSettingService.setWorkspaceSettings(any[WorkspaceName], any[List[WorkspaceSetting]]))
-      .thenReturn(Future.successful(mock[WorkspaceSettingResponse]))
-
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-    when(mockCompactEntityProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
-    doReturn(Future.successful(mockCompactEntityProvider))
-      .when(entityManager)
-      .resolveProviderFuture(any[EntityRequestArguments])(any[ExecutionContext])
-
-    val workspace =
-      Await.result(services.workspaceService.cloneWorkspace(
-                     baseWorkspace.toWorkspaceName,
-                     workspaceRequest
-                   ),
-                   Duration.Inf
-      )
-
-    workspace.name should be(newWorkspaceName)
-    workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProjectNumber should not be empty
-    workspace.workspaceType shouldBe WorkspaceType.RawlsWorkspace
-    workspace.attributes shouldBe baseWorkspace.attributes
-    val destWorkspaceName = WorkspaceName(testData.testProject1Name.value, newWorkspaceName)
-    verify(mockWorkspaceSettingService).setWorkspaceSettings(
-      destWorkspaceName,
-      List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false))))
-    )
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
