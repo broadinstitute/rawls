@@ -17,7 +17,6 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
   EntityNotFoundException
 }
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   setTraceSpanAttribute,
@@ -30,7 +29,6 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValid
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 
 import java.sql.SQLException
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 object EntityService {
@@ -379,18 +377,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
         }
         _ = authDomainCheck(sourceAD.toSet, destAD.toSet)
         entityProvider <- getProviderWithTracing(destWsCtx, localContext)
-
-        sourceCompactEnabled <- isCompactDataTableSettingEnabled(sourceWsCtx.workspaceIdAsUUID)
-        destCompactEnabled <- isCompactDataTableSettingEnabled(destWsCtx.workspaceIdAsUUID)
-        _ = if (sourceCompactEnabled != destCompactEnabled) {
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              "Only one workspace has the CompactDataTablesSetting enabled. This setting must match on the source and destination workspace in order to copy entities."
-            )
-          )
-        }
-
         entityCopyResponse <- traceFutureWithParent("EntityManager.resolveProviderFuture", localContext) { s =>
           entityProvider
             .copyEntities(sourceWsCtx,
@@ -548,21 +534,4 @@ class EntityService(protected val ctx: RawlsRequestContext,
       }
       _ = setTraceSpanAttribute(localContext, AttributeKey.stringKey("providerType"), providerName)
     } yield entityProvider
-
-  /**
-   * Determine if a workspace has the CompactDataTables setting enabled.
-   */
-  def isCompactDataTableSettingEnabled(workspaceId: UUID): Future[Boolean] =
-    workspaceSettingsRepository match {
-      case Some(repository) =>
-        repository.getWorkspaceSettingOfType(workspaceId, CompactDataTables) map {
-          case Some(qs: CompactDataTablesSetting) => qs.config.enabled
-          case _                                  => false
-        }
-      case None =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.InternalServerError, "Workspace setting service not available")
-        )
-    }
-
 }

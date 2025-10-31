@@ -1113,9 +1113,9 @@ class WorkspaceService(
         case None    => Option(sourceWorkspace.bucketName)
       }
 
-      compactDataTablesEnabled <- entityServiceConstructor(ctx).isCompactDataTableSettingEnabled(
-        sourceWorkspace.workspaceIdAsUUID
-      )
+//      compactDataTablesEnabled <- entityServiceConstructor(ctx).isCompactDataTableSettingEnabled(
+//        sourceWorkspace.workspaceIdAsUUID
+//      )
 
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
         Set(AttributeTempTableType.Workspace)
@@ -1180,17 +1180,6 @@ class WorkspaceService(
         fastPassServiceConstructor(childContext)
           .syncFastPassesForUserInWorkspace(destWorkspaceContext)
       )
-
-      _ <-
-        if (compactDataTablesEnabled) {
-          logger.info("enabling compact data tables on new workspace")
-          workspaceSettingServiceConstructor(ctx).setWorkspaceSettings(
-            destWorkspaceContext.toWorkspaceName,
-            List(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true, performMigration = Option(false))))
-          )
-        } else {
-          Future.successful()
-        }
 
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user

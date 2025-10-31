@@ -400,10 +400,6 @@ class FastPassServiceSpec
 
     parentWorkspaceFastPassGrantsBefore should be(empty)
 
-    doReturn(Future.successful(false))
-      .when(services.entityService)
-      .isCompactDataTableSettingEnabled(parentWorkspace.workspaceIdAsUUID)
-
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
     doReturn(Future.successful(mockedProvider))
@@ -1083,10 +1079,6 @@ class FastPassServiceSpec
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    doReturn(Future.successful(false))
-      .when(services.entityService)
-      .isCompactDataTableSettingEnabled(parentWorkspace.workspaceIdAsUUID)
 
     val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
