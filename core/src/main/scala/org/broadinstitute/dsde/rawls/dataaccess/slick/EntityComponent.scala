@@ -248,16 +248,6 @@ trait EntityComponent {
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
-      // almost the same as "activeActionForType" except 1) adds a sort by e.id; 2) returns a stream
-      def activeStreamForType(workspaceContext: Workspace,
-                              entityType: String
-      ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
-        sql"""#${baseEntityAndAttributeSql(workspaceContext)}
-                where e.deleted = false
-                and e.entity_type = ${entityType}
-                and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} order by e.id"""
-          .as[EntityAndAttributesResult]
-
       def activeActionForRefs(workspaceContext: Workspace,
                               entityRefs: Set[AttributeEntityReference]
       ): ReadAction[Seq[EntityAndAttributesResult]] =
@@ -278,42 +268,6 @@ trait EntityComponent {
             workspaceContext
           )} where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
           .as[EntityAndAttributesResult]
-
-      /**
-        * Generates a sub query that can be filtered, sorted, sliced
-        * @param workspaceId
-        * @param entityType
-        * @param sortFieldName
-        * @return
-        */
-      private def paginationSubquery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
-        val shardId = determineShard(workspaceId)
-
-        val (sortColumns, sortJoin) = sortFieldName match {
-          case "name" =>
-            (
-              // no additional sort columns
-              "",
-              // no additional join required
-              sql""
-            )
-          case _ =>
-            // sortFieldName may be a namespace:name delimited string
-            val sortAttr = AttributeName.fromDelimitedName(sortFieldName)
-            (
-              // select each attribute column and the referenced entity name
-              """, sort_a.list_length as sort_list_length, sort_a.value_string as sort_field_string, sort_a.value_number as sort_field_number, sort_a.value_boolean as sort_field_boolean, sort_a.value_json as sort_field_json, sort_e_ref.name as sort_field_ref""",
-              // join to attribute and entity (for references) table, grab only the named sort attribute and only the first element of a list
-              sql"""left outer join ENTITY_ATTRIBUTE_#$shardId sort_a on sort_a.owner_id = e.id and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """
-            )
-        }
-
-        concatSqlActions(
-          sql"""select e.id, e.name #$sortColumns from ENTITY e """,
-          sortJoin,
-          sql""" where e.deleted = b'0' and e.entity_type = $entityType and e.workspace_id = $workspaceId """
-        )
-      }
 
       // generate the clause to filter based on user search terms
       private def paginationFilterSql(@unused prefix: String,
@@ -367,139 +321,6 @@ trait EntityComponent {
       }
       // END activeActionForMetadata
 
-      def activeActionForEntityAndAttributesSource(workspaceContext: Workspace,
-                                                   entityType: String,
-                                                   entityQuery: model.EntityQuery,
-                                                   parentContext: RawlsRequestContext
-      ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
-        /*
-          Lots of conditionals in here, to achieve the optimal SQL query for any given request. Pseudocode:
-
-          When sorting by name, and requesting no attributes:
-            select from ENTITY e order by e.name, with optional limit, offset.
-
-          All other requests:
-            select from ENTITY e
-              left outer join ENTITY_ATTRIBUTE to get entity values, restricting to just those requested by the user
-              left outer join ENTITY to populate any attribute references
-              join (subquery of select attribute-being-sorted-on from ENTITY
-                      left join ENTITY_ATTRIBUTE
-                      left join ENTITY
-                      sort by attribute, limit, offset) to get the proper pagination
-         */
-
-        // generate the clauses to limit the attributes returned to the user
-        def attrSelectionSql(prefix: String) = {
-          val fieldsOption = entityQuery.fields.fields.map { fieldList =>
-            val attributeNameList: Set[AttributeName] = fieldList.map(AttributeName.fromDelimitedName)
-            val attrClauses = attributeNameList.map(attrName =>
-              sql"(a.namespace = ${attrName.namespace} AND a.name = ${attrName.name})"
-            )
-            concatSqlActions(sql"#$prefix (", reduceSqlActionsWithDelim(attrClauses.toSeq, sql" or "), sql") ")
-          }
-
-          fieldsOption.getOrElse(sql"")
-        }
-
-        // sorting clauses
-        def order(alias: String) = {
-          val prefix = if (alias == "") {
-            ""
-          } else {
-            s"$alias."
-          }
-          entityQuery.sortField match {
-            case "name" => sql" order by #${prefix}name #${SortDirections.toSql(entityQuery.sortDirection)} "
-            case _ =>
-              sql" order by #${prefix}sort_list_length #${SortDirections.toSql(entityQuery.sortDirection)}, #${prefix}sort_field_string #${SortDirections
-                  .toSql(entityQuery.sortDirection)}, #${prefix}sort_field_number #${SortDirections.toSql(
-                  entityQuery.sortDirection
-                )}, #${prefix}sort_field_boolean #${SortDirections.toSql(entityQuery.sortDirection)}, #${prefix}sort_field_ref #${SortDirections
-                  .toSql(entityQuery.sortDirection)}, #${prefix}name #${SortDirections.toSql(entityQuery.sortDirection)} "
-          }
-        }
-
-        val filterByColumn =
-          entityQuery.columnFilter match {
-            case None =>
-              setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByColumn"), java.lang.Boolean.FALSE)
-              sql""
-            case Some(columnFilter) =>
-              setTraceSpanAttribute(parentContext, AttributeKey.booleanKey("isFilterByColumn"), java.lang.Boolean.TRUE)
-              val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-
-              sql""" and e.id in (
-                select filter_e.id
-                from ENTITY filter_e, ENTITY_ATTRIBUTE_#${shardId} filter_a
-                where filter_a.owner_id = filter_e.id
-                and filter_e.deleted = 0
-                and filter_e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
-                and filter_e.entity_type = $entityType
-                and filter_a.deleted = 0
-                and filter_a.namespace = ${columnFilter.attributeName.namespace}
-                and filter_a.name = ${columnFilter.attributeName.name}
-                and COALESCE(filter_a.value_string, filter_a.value_number) = ${columnFilter.term}
-             )"""
-          }
-
-        // additional joins-to-subquery to provide proper pagination
-        val paginationJoin = concatSqlActions(
-          sql""" join (""",
-          paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
-          paginationFilterSql("and", "e", entityQuery),
-          filterByColumn,
-          order(""),
-          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize} ) p on p.id = e.id "
-        )
-
-        // the full query to generate the page of results, as requested by the user
-        def pageQuery = {
-          // did the user request any attributes other than "name" and "entityType"?
-          val isRequestingAttrs: Boolean = entityQuery.fields.fields.forall { fieldSel =>
-            (fieldSel diff Set("name", "entityType")).nonEmpty
-          }
-
-          val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-
-          // different cases for which query to execute:
-          if (entityQuery.sortField == "name" && !isRequestingAttrs) {
-            // simplest; the user is sorting by ENTITY.name and doesn't want any attributes; we only need to
-            // query the ENTITY table
-            // NB: the "null" as the last column in the select is important! It allows this query to be translated into
-            // EntityAndAttributesResult objects; the null represents the lack of any attributes for this entity
-            concatSqlActions(
-              sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date, null
-                             from ENTITY e
-                             where e.deleted = b'0' and e.entity_type = $entityType and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """,
-              paginationFilterSql("and", "e", entityQuery),
-              order("e"),
-              sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize}"
-            ).as[EntityAndAttributesResult]
-          } else {
-            // user is sorting by an attribute value, so we need the largest number of joins
-            // this query is very similar to baseEntityAndAttributeSql
-            /* TODO: include "where e.deleted = b'0' and e.entity_type = $entityType and e.workspace_id = $workspaceId"
-                in the top-level select, to reduce what MySQL needs to look at? Does this actually help?
-             */
-            /* TODO: it's inefficient to return all columns of e_ref; we only really need the id and the name. We turn it into an
-                EntityRecord, and then very quickly we read that EntityRecord's name and toss the rest of the info. Can we do better?
-             */
-            concatSqlActions(
-              sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
-                             a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
-                             e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
-                             from ENTITY e
-                             left outer join ENTITY_ATTRIBUTE_#$shardId a on a.owner_id = e.id and a.deleted = e.deleted """,
-              attrSelectionSql(" and "),
-              sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
-              paginationJoin,
-              order("p")
-            ).as[EntityAndAttributesResult]
-          }
-        }
-
-        pageQuery
-      }
       // END activeActionForEntityAndAttributesSource
 
       // actions which may include "deleted" hidden entities
@@ -566,20 +387,6 @@ trait EntityComponent {
         baseUpdate.as[Int]
       }
 
-      def countReferencesToType(workspaceContext: Workspace, entityType: String): ReadAction[Vector[Int]] = {
-        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-
-        val countQuery =
-          sql"""select count(ea.id) from ENTITY doing_reference, ENTITY being_referenced, ENTITY_ATTRIBUTE_#$shardId ea where ea.value_entity_ref = being_referenced.id
-               and ea.owner_id = doing_reference.id
-               and being_referenced.entity_type=$entityType
-               and doing_reference.entity_type!=$entityType
-               and ea.deleted = 0
-               and doing_reference.deleted = 0
-               and being_referenced.workspace_id=${workspaceContext.workspaceIdAsUUID}"""
-
-        countQuery.as[Int]
-      }
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -773,23 +580,10 @@ trait EntityComponent {
         .map(_.flatten)
     }
 
-    def getActiveEntities(workspaceContext: Workspace,
-                          entityRefs: Iterable[AttributeEntityReference]
-    ): ReadAction[IterableOnce[Entity]] =
-      EntityAndAttributesRawSqlQuery.activeActionForRefs(workspaceContext, entityRefs.toSet) map (query =>
-        unmarshalEntities(query)
-      )
-
     // list all entities or those in a category
 
     def listActiveEntities(workspaceContext: Workspace): ReadAction[IterableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
-
-    // almost the same as "listActiveEntitiesOfType" except 1) does not unmarshal entities; 2) returns a stream
-    def streamActiveEntityAttributesOfType(workspaceContext: Workspace,
-                                           entityType: String
-    ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
-      EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
 
     def getEntityTypesWithCounts(workspaceId: UUID): ReadAction[Map[String, Int]] =
       findActiveEntityByWorkspace(workspaceId)
@@ -824,25 +618,6 @@ trait EntityComponent {
       }
     }
 
-    def loadSingleEntityForPage(workspaceContext: Workspace,
-                                entityType: String,
-                                entityName: String,
-                                entityQuery: model.EntityQuery
-    ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
-      for {
-        unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
-
-        desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
-        optEntity <- get(workspaceContext, entityType, entityName, desiredFields)
-      } yield
-        if (optEntity.isEmpty) {
-          // if we didn't find an entity of this name, nothing else to do
-          (unfilteredCount, 0, Seq.empty)
-        } else {
-          val page = optEntity.toSeq
-          (unfilteredCount, page.size, page)
-        }
-
     def loadEntityPageCounts(workspaceContext: Workspace,
                              entityType: String,
                              entityQuery: model.EntityQuery,
@@ -850,47 +625,6 @@ trait EntityComponent {
     ): ReadWriteAction[(Int, Int)] =
       EntityAndAttributesRawSqlQuery.activeActionForMetadata(workspaceContext, entityType, entityQuery, parentContext)
 
-    /**
-      * Returns a streaming result set of EntityAndAttributesResult objects, representing the individual attributes
-      * within a set of Entities. Respects pagination, filtering, sorting, and other features of EntityQuery.
-      *
-      * @param workspaceContext the workspace containing the entities to be queried
-      * @param entityType the type of entities to be queried
-      * @param entityQuery criteria for querying entities
-      * @param parentContext a tracing context under which this method should add its own traces
-      * @return the result set, configured for streaming
-      */
-    def loadEntityPageSource(workspaceContext: Workspace,
-                             entityType: String,
-                             entityQuery: model.EntityQuery,
-                             parentContext: RawlsRequestContext
-    ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
-      // look for a columnFilter that specifies the primary key for this entityType;
-      // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
-      val nameFilter: Option[String] = entityQuery.columnFilter match {
-        case Some(colFilter)
-            if colFilter.attributeName == AttributeName.withDefaultNS(
-              entityType + Attributable.entityIdAttributeSuffix
-            ) =>
-          Option(colFilter.term)
-        case _ => None
-      }
-
-      // if filtering by name, retrieve that entity directly, else do the full query:
-      setTraceSpanAttribute(parentContext,
-                            AttributeKey.booleanKey("isFilterByName"),
-                            java.lang.Boolean.valueOf(nameFilter.isDefined)
-      )
-      nameFilter match {
-        case Some(entityName) =>
-          val desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
-          EntityAndAttributesRawSqlQuery
-            .streamForTypeName(workspaceContext, entityType, entityName, desiredFields)
-        case _ =>
-          EntityAndAttributesRawSqlQuery
-            .activeActionForEntityAndAttributesSource(workspaceContext, entityType, entityQuery, parentContext)
-      }
-    }
     // END loadEntityPageSource
 
     // create or replace entities
@@ -1047,9 +781,6 @@ trait EntityComponent {
     def deleteEntitiesAndAttributesFromDb(workspaceContext: Workspace): WriteAction[Int] =
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
-
-    def countReferringEntitiesForType(workspaceContext: Workspace, entityType: String): ReadAction[Int] =
-      EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
 
     def copyEntitiesToNewWorkspace(sourceWs: UUID,
                                    destWs: UUID,
