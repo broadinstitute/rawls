@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import slick.dbio.Effect.Read
-import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
+import slick.jdbc.{GetResult, JdbcProfile}
 import slick.sql.SqlStreamingAction
 
 import java.sql.Timestamp
@@ -70,6 +70,7 @@ trait EntityComponent {
 
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
 
+    @VisibleForTesting
     private def batchInsertEntities(workspaceContext: Workspace,
                                     entities: IterableOnce[Entity]
     ): ReadWriteAction[Seq[EntityRecord]] = {
@@ -91,6 +92,7 @@ trait EntityComponent {
       }
     }
 
+    @VisibleForTesting
     private def insertNewEntities(workspaceContext: Workspace,
                                   entities: Iterable[Entity],
                                   existingEntityRefs: Seq[AttributeEntityReference]
@@ -104,6 +106,7 @@ trait EntityComponent {
       batchInsertEntities(workspaceContext, insertableEntities)
     }
 
+    @VisibleForTesting
     def optimisticLockUpdate(entityRecs: Seq[EntityRecord]): ReadWriteAction[Seq[Int]] = {
       def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery =
         filter(rec => rec.id === id && rec.version === version)
@@ -143,6 +146,7 @@ trait EntityComponent {
           concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
         }
 
+      @VisibleForTesting
       def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
         // get unique suffix for renaming
         val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
@@ -176,31 +180,6 @@ trait EntityComponent {
         concatSqlActions(baseUpdateSql, criteriaSql).as[Int]
       }
 
-      def batchHideType(workspaceId: UUID, entityType: String): ReadWriteAction[Seq[Int]] = {
-        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
-        val deletedDate = new Timestamp(new Date().getTime)
-        // issue bulk rename/hide for all entities of the specified type
-        val typeUpdate =
-          sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and entity_type=$entityType"""
-        typeUpdate.as[Int]
-      }
-
-      def activeActionForRefs(workspaceId: UUID,
-                              entities: Set[AttributeEntityReference]
-      ): ReadAction[Seq[AttributeEntityReference]] =
-        if (entities.isEmpty) {
-          DBIO.successful(Seq.empty[AttributeEntityReference])
-        } else {
-          val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and ("
-          val entityTypeNameTuples = reduceSqlActionsWithDelim(
-            entities.map(entity => sql"(entity_type = ${entity.entityType} and name = ${entity.entityName})").toSeq,
-            sql" OR "
-          )
-          concatSqlActions(baseSelect, entityTypeNameTuples, sql") and deleted = 0").as[(String, String)].map { vect =>
-            vect.map(pair => AttributeEntityReference(pair._1, pair._2))
-          }
-        }
-
     }
 
     // noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
@@ -226,14 +205,17 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
+      @VisibleForTesting
       def baseEntityAndAttributeSql(workspace: Workspace): String =
         baseEntityAndAttributeSql(
           workspace.workspaceIdAsUUID
         )
 
+      @VisibleForTesting
       private def baseEntityAndAttributeSql(workspaceId: UUID): String =
         baseEntityAndAttributeSql(determineShard(workspaceId))
 
+      @VisibleForTesting
       private def baseEntityAndAttributeSql(shardId: ShardId): String =
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
           a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
@@ -244,6 +226,7 @@ trait EntityComponent {
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
+      @VisibleForTesting
       def activeActionForWorkspace(workspaceContext: Workspace): ReadAction[Seq[EntityAndAttributesResult]] =
         sql"""#${baseEntityAndAttributeSql(
             workspaceContext
@@ -252,6 +235,7 @@ trait EntityComponent {
 
       // actions which may include "deleted" hidden entities
 
+      @VisibleForTesting
       def streamForTypeName(workspaceContext: Workspace,
                             entityType: String,
                             entityName: String,
@@ -273,6 +257,7 @@ trait EntityComponent {
         ).as[EntityAndAttributesResult]
       }
 
+      @VisibleForTesting
       def batchHide(workspaceContext: Workspace, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
         val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
         // get unique suffix for renaming
@@ -292,19 +277,6 @@ trait EntityComponent {
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 
-      def batchHideAttributesOfType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Seq[Int]] = {
-        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-        // get unique suffix for renaming
-        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
-        val deletedDate = new Timestamp(new Date().getTime)
-        // issue bulk rename/hide for all entity attributes, given an entity type
-        val baseUpdate =
-          sql"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
-                set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
-                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and e.entity_type=$entityType"""
-        baseUpdate.as[Int]
-      }
-
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -313,6 +285,7 @@ trait EntityComponent {
     private object EntityDependenciesDeletionQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
+      @VisibleForTesting
       def deleteAction(workspaceContext: Workspace): WriteAction[Int] = {
         val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
 
@@ -324,16 +297,6 @@ trait EntityComponent {
       }
     }
 
-    // noinspection SqlDialectInspection
-    private object CheckForExistingEntityTypeQuery extends RawSqlQuery {
-      val driver: JdbcProfile = EntityComponent.this.driver
-
-      def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Seq[Boolean]] =
-        sql"""select exists (select name from ENTITY
-               where workspace_id=${workspaceContext.workspaceIdAsUUID} and entity_type = $entityType and deleted = 0)
-          """.as[Boolean]
-    }
-
     /*
       These methods are only used by unit tests.
       They return full, materialized result sets without streaming, and these result sets can be
@@ -343,6 +306,7 @@ trait EntityComponent {
 
       val driver: JdbcProfile = EntityComponent.this.driver
 
+      @VisibleForTesting
       def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[IterableOnce[Entity]] =
         sql"""#${EntityAndAttributesRawSqlQuery.baseEntityAndAttributeSql(workspaceContext)}
         where e.deleted = false
@@ -352,6 +316,7 @@ trait EntityComponent {
           .map(query => unmarshalEntities(query))
 
       // includes "deleted" hidden entities
+      @VisibleForTesting
       def listEntities(workspaceContext: Workspace): ReadAction[IterableOnce[Entity]] =
         sql"""#${EntityAndAttributesRawSqlQuery.baseEntityAndAttributeSql(
             workspaceContext
@@ -365,25 +330,13 @@ trait EntityComponent {
 
     // Active queries: only return entities and attributes with their deleted flag set to false
 
+    @VisibleForTesting
     def findActiveEntityByType(workspaceId: UUID, entityType: String): EntityQuery =
       filter(entRec => entRec.entityType === entityType && entRec.workspaceId === workspaceId && !entRec.deleted)
 
+    @VisibleForTesting
     def findActiveEntityByWorkspace(workspaceId: UUID): EntityQuery =
       filter(entRec => entRec.workspaceId === workspaceId && !entRec.deleted)
-
-    /**
-      * given a set of AttributeEntityReference, query the db and return those refs that
-      * are 1) active and 2) exist in the specified workspace. Use this method to validate user input
-      * with the lightest SQL query; it does not fetch attributes or extraneous columns
-      *
-      * @param workspaceId the workspace to query for entity refs
-      * @param entities the refs for which to query
-      * @return the subset of refs that are active and found in the workspace
-      */
-    def getActiveRefs(workspaceId: UUID,
-                      entities: Set[AttributeEntityReference]
-    ): ReadAction[Seq[AttributeEntityReference]] =
-      EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
 
     // queries which may include "deleted" hidden entities
 
@@ -398,6 +351,7 @@ trait EntityComponent {
     // Actions
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
+    @VisibleForTesting
     def get(workspaceContext: Workspace,
             entityType: String,
             entityName: String,
@@ -418,7 +372,7 @@ trait EntityComponent {
     }
 
     // list all entities or those in a category
-
+    @VisibleForTesting
     def listActiveEntities(workspaceContext: Workspace): ReadAction[IterableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
 
@@ -427,9 +381,11 @@ trait EntityComponent {
     // TODO: can this be optimized? It nicely reuses the save(..., entities) method, but that method
     // does a lot of work. This single-entity save could, for instance, look for simple cases e.g. no references,
     // and take an easier code path.
+    @VisibleForTesting
     def save(workspaceContext: Workspace, entity: Entity): ReadWriteAction[Entity] =
       save(workspaceContext, Seq(entity)).map(_.head)
 
+    @VisibleForTesting
     def save(workspaceContext: Workspace,
              entities: Iterable[Entity],
              parentContext: RawlsTracingContext = RawlsTracingContext()
@@ -483,6 +439,7 @@ trait EntityComponent {
       } yield entities
     }
 
+    @VisibleForTesting
     private def lookupNotYetLoadedReferences(workspaceContext: Workspace,
                                              entities: Iterable[Entity],
                                              alreadyLoadedEntityRefs: Seq[AttributeEntityReference]
@@ -500,6 +457,7 @@ trait EntityComponent {
       lookupNotYetLoadedReferences(workspaceContext, allRefAttributes, alreadyLoadedEntityRefs)
     }
 
+    @VisibleForTesting
     private def lookupNotYetLoadedReferences(workspaceContext: Workspace,
                                              attrReferences: Set[AttributeEntityReference],
                                              alreadyLoadedEntityRefs: Seq[AttributeEntityReference]
@@ -524,6 +482,7 @@ trait EntityComponent {
       }
     }
 
+    @VisibleForTesting
     private def rewriteAttributes(workspaceId: UUID,
                                   entitiesToSave: Iterable[Entity],
                                   entityIds: Seq[Long],
@@ -551,6 +510,7 @@ trait EntityComponent {
 
     // "delete" entities by hiding and renaming. we must rename the entity to avoid future name collisions if the user
     // attempts to create a new entity of the same name.
+    @VisibleForTesting
     def hide(workspaceContext: Workspace, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] =
       // N.B. we must hide both the entity attributes and the entity itself. Other queries, such
       // as baseEntityAndAttributeSql, use "where ENTITY.deleted = ENTITY_ATTRIBUTE.deleted" during joins.
@@ -560,14 +520,6 @@ trait EntityComponent {
         EntityAndAttributesRawSqlQuery.batchHide(workspaceContext, entRefs) andThen
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
 
-    // "deletes" entities of a certain type by hiding and renaming them
-    def hideType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Int] =
-      for {
-        _ <- EntityAndAttributesRawSqlQuery.batchHideAttributesOfType(workspaceContext, entityType)
-        numEntitiesHidden <- EntityRecordRawSqlQuery.batchHideType(workspaceContext.workspaceIdAsUUID, entityType)
-        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
-      } yield numEntitiesHidden.sum
-
     // perform actual deletion (not hiding) of all entities in a workspace
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] =
       filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
@@ -576,9 +528,6 @@ trait EntityComponent {
     def deleteEntitiesAndAttributesFromDb(workspaceContext: Workspace): WriteAction[Int] =
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
-
-    def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Option[Boolean]] =
-      uniqueResult(CheckForExistingEntityTypeQuery.doesEntityTypeAlreadyExist(workspaceContext, entityType))
 
     // Unmarshal methods
 

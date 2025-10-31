@@ -1,13 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import _root_.slick.dbio.DBIOAction
-import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
-import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
-import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 
-import java.nio.charset.StandardCharsets
-import java.sql.SQLException
 import java.util.UUID
 
 /**
@@ -168,19 +164,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(0)(attributeCount4)
     assertResult(0)(activeEntityCount4)
     assertResult(0)(activeAttributeCount4)
-  }
-
-  it should "return false if the entity type does not exist" in withMinimalTestDatabase { _ =>
-    withWorkspaceContext(legacyTestData.workspace) { context =>
-      val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
-      assert(!pair2EntityTypeExists)
-    }
-  }
-
-  it should "list all entities of all entity types" in withConstantTestDatabase {
-    withWorkspaceContext(constantData.workspace) { context =>
-      assertSameElements(constantData.allEntities, runAndWait(entityQuery.listActiveEntities(context)))
-    }
   }
 
   val testWorkspace = new EmptyWorkspace
@@ -600,17 +583,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val newId = runAndWait(entityQuery.findEntityByName(workspaceId, "type", "name").result).head.id
 
     assert(oldId != newId)
-  }
-
-  it should "delete an entity type and return the total number of rows deleted (hidden)" in withLegacyDefaultTestDatabase {
-    withWorkspaceContext(legacyTestData.workspace) { context =>
-      val sampleCount =
-        runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, "sample")).iterator.size
-
-      assertResult(sampleCount) {
-        runAndWait(entityQuery.hideType(context, "sample"))
-      }
-    }
   }
 
   it should "delete a set without affecting its component entities" in withLegacyDefaultTestDatabase {

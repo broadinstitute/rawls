@@ -24,7 +24,7 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{
   traceDBIOWithParent,
   traceFutureWithParent
 }
-import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
@@ -62,7 +62,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
                       None // only used for Quicksilver migration
 )(implicit protected val executionContext: ExecutionContext, system: ActorSystem)
     extends WorkspaceSupport
-    with EntitySupport
     with AttributeSupport
     with LazyLogging
     with SortMemoryRetry
