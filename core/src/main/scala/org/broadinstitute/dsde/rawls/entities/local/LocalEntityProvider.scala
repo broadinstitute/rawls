@@ -33,7 +33,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SubmissionValidationEntityInputs,
   Workspace
 }
-import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport}
+import org.broadinstitute.dsde.rawls.util.AttributeSupport
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
@@ -51,7 +51,6 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
 )(implicit protected val executionContext: ExecutionContext, _actorSystem: ActorSystem)
     extends EntityProvider
     with LazyLogging
-    with EntitySupport
     with AttributeSupport
     with ExpressionEvaluationSupport {
 
