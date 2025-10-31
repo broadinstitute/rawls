@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.entities.local
+package org.broadinstitute.dsde.rawls.entities.compact
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
   SlickDataSource
 }
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
-import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProviderBuilder, CompactEntitySerialization}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
@@ -41,9 +40,9 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
+import spray.json._
 
 import scala.concurrent.ExecutionContext
-import spray.json._
 
 class CaseSensitivitySpec
     extends AnyFreeSpec
