@@ -565,11 +565,6 @@ trait EntityComponent {
         query => unmarshalEntities(query)
       ) map (_.headOption)
 
-    def getEntities(workspaceId: UUID, entityIds: Iterable[Long]): ReadAction[Seq[(Long, Entity)]] =
-      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, entityIds.toSet) map (query =>
-        unmarshalEntitiesWithIds(query)
-      )
-
     def getEntityRecords(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
@@ -584,48 +579,6 @@ trait EntityComponent {
 
     def listActiveEntities(workspaceContext: Workspace): ReadAction[IterableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
-
-    def getEntityTypesWithCounts(workspaceId: UUID): ReadAction[Map[String, Int]] =
-      findActiveEntityByWorkspace(workspaceId)
-        .groupBy(e => e.entityType)
-        .map { case (entityType, entities) =>
-          (entityType, entities.length)
-        }
-        .result map { result =>
-        result.toMap
-      }
-
-    /**
-      * Find the distinct attribute names associated with each entity type in the workspace.
-      * @param workspaceId the workspace to query
-      * @param queryTimeout the current query timeout limit in seconds; zero means there is
-      *                     no limit
-      * @return result set containing entity types -> seq of attribute names
-      */
-    def getAttrNamesAndEntityTypes(workspaceId: UUID,
-                                   queryTimeout: Int = 0
-    ): ReadAction[Map[String, Seq[AttributeName]]] = {
-      val typesAndAttrNames = for {
-        entityRec <- findActiveEntityByWorkspace(workspaceId)
-        attrib <- findActiveAttributesByEntityId(workspaceId, entityRec.id)
-      } yield (entityRec.entityType, (attrib.namespace, attrib.name))
-
-      typesAndAttrNames.distinct.result.withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout)) map {
-        result =>
-          CollectionUtils.groupByTuples(result.map { case (entityType: String, (ns: String, n: String)) =>
-            (entityType, AttributeName(ns, n))
-          })
-      }
-    }
-
-    def loadEntityPageCounts(workspaceContext: Workspace,
-                             entityType: String,
-                             entityQuery: model.EntityQuery,
-                             parentContext: RawlsRequestContext
-    ): ReadWriteAction[(Int, Int)] =
-      EntityAndAttributesRawSqlQuery.activeActionForMetadata(workspaceContext, entityType, entityQuery, parentContext)
-
-    // END loadEntityPageSource
 
     // create or replace entities
 
