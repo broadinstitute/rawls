@@ -326,9 +326,6 @@ object Boot extends IOApp with LazyLogging {
       // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(
         slickDataSource,
-        new WorkspaceSettingRepository(slickDataSource),
-        appConfigManager.conf.getBoolean("entityStatisticsCache.enabled"),
-        entityQueryTimeout,
         metricsPrefix
       )
 

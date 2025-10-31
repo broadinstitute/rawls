@@ -17,14 +17,11 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsR
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.WorkspaceSettingType
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeName,
   AttributeRename,
   AttributeString,
-  CompactDataTablesSetting,
   Entity,
   EntityPointer,
   EntityQuery,
@@ -39,18 +36,13 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
-import org.scalatestplus.mockito.MockitoSugar.mock
 import spray.json._
 
-import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 class CaseSensitivitySpec
     extends AnyFreeSpec
@@ -959,22 +951,12 @@ class CaseSensitivitySpec
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
-    // when EntityManager asks if the workspace should use Quicksilver data tables, answer yes
-    val mockWorkspaceSettingRepository = mock[WorkspaceSettingRepository](RETURNS_SMART_NULLS)
-    when(mockWorkspaceSettingRepository.hasPendingSettings(any[UUID], any[WorkspaceSettingType])(any[ExecutionContext]))
-      .thenReturn(Future(false))
-    when(mockWorkspaceSettingRepository.getWorkspaceSettingOfType(any[UUID], any[WorkspaceSettingType]))
-      .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-
     val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
       workbenchMetricBaseName = "test",
       EntityManager.defaultEntityManager(
         dataSource,
-        mockWorkspaceSettingRepository,
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         "testMetricBaseName"
       ),
       1000

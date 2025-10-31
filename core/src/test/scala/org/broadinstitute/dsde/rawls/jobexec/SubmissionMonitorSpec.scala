@@ -17,18 +17,14 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{doReturn, never, spy, verify}
-import org.scalatest.Assertions._
+import org.mockito.Mockito.{never, spy, verify}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -62,16 +58,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-  val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-  doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-    .when(spyWorkspaceSettingRepository)
-    .getWorkspaceSettingOfType(
-      ArgumentMatchers.any[UUID](),
-      ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-    )
-
   val testDbName = "SubmissionMonitorSpec"
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
@@ -83,9 +69,6 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     workbenchMetricBaseName,
     EntityManager.defaultEntityManager(
       slickDataSource,
-      spyWorkspaceSettingRepository,
-      false,
-      java.time.Duration.ofMinutes(2),
       workbenchMetricBaseName
     ),
     1000

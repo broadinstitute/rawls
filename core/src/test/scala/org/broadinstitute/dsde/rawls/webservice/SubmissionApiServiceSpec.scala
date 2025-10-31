@@ -16,14 +16,12 @@ import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor
 import org.broadinstitute.dsde.rawls.mock.MockBardService
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.submissions.SubmissionsService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doReturn, spy, verify, when}
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import spray.json.DefaultJsonProtocol._
@@ -50,19 +48,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       with MockUserInfoDirectives {
 
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
     override val entityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      if (legacy) workspaceSettingRepository else spyWorkspaceSettingRepository,
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )(executionContext, system)
   }

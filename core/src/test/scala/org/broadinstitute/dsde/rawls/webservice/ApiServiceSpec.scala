@@ -281,9 +281,6 @@ trait ApiServiceSpec
 
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
-      new WorkspaceSettingRepository(dataSource),
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 
