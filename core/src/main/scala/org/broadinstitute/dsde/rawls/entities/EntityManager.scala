@@ -8,9 +8,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, 
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.model.{CloudPlatform, ErrorReport, WorkspaceType}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 
-import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 

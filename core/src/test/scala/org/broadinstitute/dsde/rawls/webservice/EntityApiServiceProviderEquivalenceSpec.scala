@@ -23,7 +23,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
   AttributeValueList,
   AttributeValueRawJson,
-  CompactDataTablesSetting,
   Entity,
   EntityTypeMetadata,
   Workspace
