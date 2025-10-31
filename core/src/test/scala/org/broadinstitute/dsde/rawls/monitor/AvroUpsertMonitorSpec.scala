@@ -14,30 +14,26 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AttributeUpdateOperation,
   EntityUpdateDefinition
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   AttributeFormat,
   AttributeName,
   AttributeString,
-  CompactDataTablesSetting,
   Entity,
   ImportStatuses,
   RawlsRequestContext,
   TypedAttributeListSerializer,
   UserInfo,
-  WorkspaceName,
-  WorkspaceSettingTypes
+  WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{doReturn, spy, times, verify, when}
+import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -142,20 +138,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
   def setUp(services: TestApiService) = {
     setUpPubSub(services)
 
-    val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
     val mockEntityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      spyWorkspaceSettingRepository,
-      services.testConf.getBoolean("entityStatisticsCache.enabled"),
-      services.testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 

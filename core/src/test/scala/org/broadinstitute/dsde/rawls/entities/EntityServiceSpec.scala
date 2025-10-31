@@ -27,7 +27,6 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   RemoveAttribute,
   RemoveListMember
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeEntityReference,
@@ -40,7 +39,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
   AttributeValueEmptyList,
   AttributeValueList,
-  CompactDataTablesSetting,
   Entity,
   EntityQuery,
   EntityTypeRename,
@@ -48,8 +46,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUser,
   SortDirections,
   UserInfo,
-  Workspace,
-  WorkspaceSettingTypes
+  Workspace
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.{
@@ -58,10 +55,7 @@ import org.broadinstitute.dsde.rawls.util.{
   MockitoTestUtils
 }
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doReturn, spy}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -69,7 +63,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
 import scala.concurrent.duration.{Duration, SECONDS}
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 
 class EntityServiceSpec
     extends AnyFlatSpec
@@ -137,25 +131,12 @@ class EntityServiceSpec
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
-    val workspaceSettingRepository = new WorkspaceSettingRepository(dataSource)
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
-
     val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        spyWorkspaceSettingRepository,
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       ),
       7 // <-- specifically chosen to be lower than the number of samples in "workspace" within testData

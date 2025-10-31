@@ -90,15 +90,6 @@ class SubmissionSpec(_system: ActorSystem)
   lazy val baseSpyWorkspaceSettingRepository: WorkspaceSettingRepository = {
     val workspaceSettingRepository = new WorkspaceSettingRepository(slickDataSource)
     val spyRepo = spy(workspaceSettingRepository)
-
-    // All tests should be quicksilver
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyRepo)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
-
     spyRepo
   }
 
@@ -529,9 +520,6 @@ class SubmissionSpec(_system: ActorSystem)
       val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
         dataSource,
-        workspaceSettingRepository,
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       )
 
@@ -938,7 +926,10 @@ class SubmissionSpec(_system: ActorSystem)
       val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
       assert(submissionData.workflows.size == 1)
 
-      val subList = Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty), Duration.Inf)
+      val subList =
+        Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty),
+                     Duration.Inf
+        )
 
       val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
       assert(oneSub.nonEmpty)
@@ -1289,7 +1280,10 @@ class SubmissionSpec(_system: ActorSystem)
     val submissionData = checkSubmissionStatus(submissionsService, newSubmissionReport.submissionId)
     assert(submissionData.workflows.size == 1)
 
-    val subList = Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty), Duration.Inf)
+    val subList =
+      Await.result(submissionsService.listSubmissions(testData.wsName, testContext, Option.empty, Option.empty),
+                   Duration.Inf
+      )
 
     val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
     assert(oneSub.nonEmpty)
