@@ -88,7 +88,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
       }
     val targetTagFuture = compactDataTables map {
       case true  => typeTag[CompactEntityProvider]
-      case false => typeTag[LocalEntityProvider]
+      case false => typeTag[CompactEntityProvider]
     }
 
     targetTagFuture map { targetTag =>

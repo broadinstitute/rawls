@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.AuditLoggingEntityProvider
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntityProvider
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model.{
@@ -50,7 +49,7 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
     Map.empty
   )
 
-  "compact data tables setting" should "control the provider returned by the EntityManager" in {
+  "EntityManager" should "always use a CompactEntityProvider" in {
     val workspaceId = workspace.workspaceIdAsUUID
 
     val workspaceSettingRepository = mock[WorkspaceSettingRepository]
@@ -75,10 +74,10 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
       .thenReturn(Future.successful(None))
     val beforeSetting = Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
 
-    // Provider should be an AuditLoggingEntityProvider with a LocalEntityProvider delegate
+    // Provider should be an AuditLoggingEntityProvider with a CompactEntityProvider delegate
     beforeSetting shouldBe a[AuditLoggingEntityProvider]
     val beforeSettingAuditProvider = beforeSetting.asInstanceOf[AuditLoggingEntityProvider]
-    beforeSettingAuditProvider.delegate shouldBe a[LocalEntityProvider]
+    beforeSettingAuditProvider.delegate shouldBe a[CompactEntityProvider]
 
     // check the EntityManager behavior when compact data tables is enabled
     when(workspaceSettingRepository.getWorkspaceSettingOfType(workspaceId, CompactDataTables))
@@ -95,10 +94,10 @@ class EntityManagerSpec extends AnyFlatSpec with MockitoTestUtils with Matchers 
       .thenReturn(Future.successful(Option(CompactDataTablesSetting(CompactDataTablesConfig(enabled = false)))))
     val afterUpdate = Await.result(entityManager.resolveProviderFuture(entityRequestArguments), Duration.Inf)
 
-    // Provider should be an AuditLoggingEntityProvider with a LocalEntityProvider delegate
+    // Provider should be an AuditLoggingEntityProvider with a CompactEntityProvider delegate
     afterUpdate shouldBe a[AuditLoggingEntityProvider]
     val afterUpdateAuditProvider = afterUpdate.asInstanceOf[AuditLoggingEntityProvider]
-    afterUpdateAuditProvider.delegate shouldBe a[LocalEntityProvider]
+    afterUpdateAuditProvider.delegate shouldBe a[CompactEntityProvider]
 
     // check the EntityManager behavior when there are pending compact data tables settings
     when(workspaceSettingRepository.hasPendingSettings(workspaceId, CompactDataTables))
