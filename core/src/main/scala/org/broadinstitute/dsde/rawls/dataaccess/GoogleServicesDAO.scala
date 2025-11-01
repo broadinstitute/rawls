@@ -343,7 +343,7 @@ object GoogleApiTypes {
   def withName(name: String): GoogleApiType =
     name match {
       case "AccessContextManager" => AccessContextManagerApi
-      case _ =>
+      case _                      =>
         throw new RawlsException(
           s"Invalid GoogleApiType [${name}]. Possible values: ${allGoogleApiTypes.mkString(", ")}"
         )
@@ -355,7 +355,7 @@ object GoogleApiTypes {
   def toString(googleApiType: GoogleApiType): String =
     googleApiType match {
       case AccessContextManagerApi => "AccessContextManager"
-      case _ =>
+      case _                       =>
         throw new RawlsException(
           s"Invalid GoogleApiType [${googleApiType}]. Possible values: ${allGoogleApiTypes.mkString(", ")}"
         )
@@ -375,7 +375,7 @@ object GoogleOperationNames {
   def withName(name: String): GoogleOperationName =
     name match {
       case "add_project_to_perimeter" => AddProjectToPerimeter
-      case _ =>
+      case _                          =>
         throw new RawlsException(
           s"Invalid GoogleOperationName [${name}]. Possible values: ${allGoogleOperationNames.mkString(", ")}"
         )
@@ -387,7 +387,7 @@ object GoogleOperationNames {
   def toString(googleApiType: GoogleOperationName): String =
     googleApiType match {
       case AddProjectToPerimeter => "add_project_to_perimeter"
-      case _ =>
+      case _                     =>
         throw new RawlsException(
           s"Invalid GoogleOperationName [${googleApiType}]. Possible values: ${allGoogleOperationNames.mkString(", ")}"
         )

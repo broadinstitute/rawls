@@ -713,7 +713,7 @@ object WorkflowFailureModes {
     name match {
       case "ContinueWhilePossible" => ContinueWhilePossible
       case "NoNewCalls"            => NoNewCalls
-      case _ =>
+      case _                       =>
         throw new RawlsException(
           s"Invalid WorkflowFailureMode [${name}]. Possible values: ${allWorkflowFailureModes.mkString(", ")}"
         )

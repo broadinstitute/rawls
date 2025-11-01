@@ -362,7 +362,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.findById(attributes.workspaceId.toString).map {
         case Some(workspace) => workspace
-        case None =>
+        case None            =>
           throw new RawlsException(
             s"Workspace ${attributes.workspaceId} not found while importing entities"
           )
@@ -473,7 +473,7 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         case Failure(regrets: RawlsExceptionWithErrorReport) if regrets.errorReport.causes.nonEmpty =>
           regrets.errorReport.causes
         case Failure(regrets: RawlsExceptionWithErrorReport) => Seq(regrets.errorReport)
-        case Failure(de: DataEntityException) =>
+        case Failure(de: DataEntityException)                =>
           Seq(RawlsErrorReport(de.code, de.getMessage))
         case Failure(t: Throwable) =>
           Seq(RawlsErrorReport(StatusCodes.InternalServerError, t.getMessage))

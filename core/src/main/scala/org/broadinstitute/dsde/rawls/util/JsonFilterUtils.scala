@@ -84,7 +84,7 @@ trait JsonFilterUtils extends LazyLogging {
   def deepFilterJsValue(json: JsValue, filters: Set[String]): JsValue =
     json match {
       case jso: JsObject => deepFilterJsObject(jso, filters)
-      case jsa: JsArray =>
+      case jsa: JsArray  =>
         val filteredElements = jsa.elements.map(el => deepFilterJsValue(el, filters))
         JsArray(filteredElements)
       case js => js // some other JsValue, like a scalar; pass as-is

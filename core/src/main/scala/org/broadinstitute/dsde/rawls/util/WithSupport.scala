@@ -51,7 +51,7 @@ trait MethodWiths {
           )
         )
       case Success(Some(agoraEntity)) => op(agoraEntity)
-      case Failure(throwable) =>
+      case Failure(throwable)         =>
         DBIO.failed(
           new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(StatusCodes.BadGateway,
@@ -64,7 +64,7 @@ trait MethodWiths {
 
     method.validate match {
       case Some(_) => fetchMethod
-      case None =>
+      case None    =>
         DBIO.failed(
           new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(StatusCodes.BadRequest, s"Invalid request.")

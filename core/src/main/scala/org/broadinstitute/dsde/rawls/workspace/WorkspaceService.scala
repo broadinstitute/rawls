@@ -205,7 +205,7 @@ class WorkspaceService(
       workspaceRequest.policies match {
         case None                               => Future.successful()
         case Some(policies) if policies.isEmpty => Future.successful()
-        case Some(_) =>
+        case Some(_)                            =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.BadRequest, "Policies are not supported for GCP workspaces")
@@ -701,7 +701,7 @@ class WorkspaceService(
         val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
         dataAccess.workspaceQuery.createOrUpdate(updatedWorkspace)
       } match {
-        case Success(result) => result
+        case Success(result)                               => result
         case Failure(e: AttributeUpdateOperationException) =>
           DBIO.failed(
             new RawlsExceptionWithErrorReport(
@@ -724,7 +724,7 @@ class WorkspaceService(
         )
       )
       _ <- gcsDAO.isBillingAccountEnabled(accountName).flatMap {
-        case true => Future.unit
+        case true  => Future.unit
         case false =>
           Future.failed(
             RawlsExceptionWithErrorReport(
@@ -871,7 +871,7 @@ class WorkspaceService(
         )
       )
       _ <- gcsDAO.isBillingAccountEnabled(accountName).flatMap {
-        case true => Future.unit
+        case true  => Future.unit
         case false =>
           Future.failed(
             RawlsExceptionWithErrorReport(
@@ -1276,7 +1276,7 @@ class WorkspaceService(
 
       // canCompute is only applicable to write access, readers can't have it and owners have it implicitly
       val computePolicy = workspaceACLUpdate.canCompute match {
-        case Some(false) => None
+        case Some(false)                                                        => None
         case _ if workspaceACLUpdate.accessLevel == WorkspaceAccessLevels.Write =>
           SamWorkspacePolicyNames.canCompute.some
         case _ => None
@@ -2346,7 +2346,7 @@ class WorkspaceService(
 
       billingAccount <- billingProject.billingAccount match {
         case Some(ba) => DBIO.successful(ba)
-        case _ =>
+        case _        =>
           DBIO.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing: $billingProject")
@@ -2565,7 +2565,7 @@ class WorkspaceService(
                                                googleProjectId: GoogleProjectId
   ): Future[Option[String]] =
     (maybeBucketLocation, maybeSourceBucketName) match {
-      case (bucketLocation @ Some(_), _) => Future(bucketLocation)
+      case (bucketLocation @ Some(_), _)  => Future(bucketLocation)
       case (None, Some(sourceBucketName)) =>
         gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
       case (None, None) => Future(Some(config.defaultLocation))
@@ -2657,8 +2657,8 @@ class WorkspaceService(
   private def validateNoEntityReferences(operations: Seq[AttributeUpdateOperation]): Unit =
     operations.foreach { operation =>
       operation match {
-        case AddUpdateAttribute(_, value) => checkAttributeValue(value)
-        case AddListMember(_, value)      => checkAttributeValue(value)
+        case AddUpdateAttribute(_, value)          => checkAttributeValue(value)
+        case AddListMember(_, value)               => checkAttributeValue(value)
         case CreateAttributeEntityReferenceList(_) =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest, s"Workspace attributes cannot reference entities")

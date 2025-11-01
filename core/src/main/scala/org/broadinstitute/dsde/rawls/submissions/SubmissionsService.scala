@@ -229,7 +229,7 @@ class SubmissionsService(
               case Some(id) =>
                 dataAccess.methodConfigurationQuery.get(id).map {
                   case Some(methodConfig) => methodConfig
-                  case None =>
+                  case None               =>
                     throw new RawlsExceptionWithErrorReport(
                       ErrorReport(StatusCodes.NotFound,
                                   s"The method configuration for submission ${submissionId} could not be found."
@@ -527,7 +527,7 @@ class SubmissionsService(
       }
       submitter = submitterOption match {
         case Some(userStatus) => RawlsUserEmail(userStatus.userEmail)
-        case None =>
+        case None             =>
           throw new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(StatusCodes.Unauthorized, "User not found in Sam")
           )
@@ -592,7 +592,7 @@ class SubmissionsService(
   def validateCostCap(costCap: Option[BigDecimal]): Unit = {
     // must be a positive number, no more than two decimal places, and a max of ... 10 billion?
     val maybeErrorMessage = costCap.collectFirst {
-      case cap if cap.sign != 1 => "per-workflow cost cap must be positive"
+      case cap if cap.sign != 1                                      => "per-workflow cost cap must be positive"
       case cap if cap.compare(BigDecimal.valueOf(10000000000L)) >= 0 =>
         "per-workflow cost cap must be less than 10,000,000,000"
       case cap if !(cap * 100).isWhole =>
@@ -1020,7 +1020,7 @@ class SubmissionsService(
           )
         )
       case Seq(one) => op(one)
-      case tooMany =>
+      case tooMany  =>
         DBIO.failed(
           new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(

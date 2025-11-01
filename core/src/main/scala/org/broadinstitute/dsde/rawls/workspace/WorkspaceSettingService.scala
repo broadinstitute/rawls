@@ -96,7 +96,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             rules.flatMap { rule =>
               val actionValidation = rule.action.actionType match {
                 case actionType if actionType.equals("Delete") => None
-                case actionType =>
+                case actionType                                =>
                   Some(validationErrorReport(setting.settingType, s"unsupported lifecycle action $actionType"))
               }
               val ageValidation = rule.conditions.age.collect {
@@ -127,7 +127,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 )
               case _ => None
             }
-          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_)) => None
+          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))               => None
           case GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(retentionDuration)) =>
             retentionDuration match {
               case duration if duration < 1.days.toDays || duration > 3650.days.toDays =>

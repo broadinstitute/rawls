@@ -97,7 +97,7 @@ trait CompactEntitySerialization extends LazyLogging {
   def fromSql(attributes: Option[String]): AttributeMap =
     attributes.getOrElse("{}").parseJson match {
       case jso: JsObject => deserialize(jso)
-      case otherJsValue =>
+      case otherJsValue  =>
         throw new CompactEntityDeserializationException(
           s"wanted a JsObject; found a ${otherJsValue.getClass.getName}"
         )
@@ -127,7 +127,7 @@ trait CompactEntitySerialization extends LazyLogging {
   private def getAttrs(jso: JsObject): JsObject =
     jso.fields.get(ATTRS_KEY) match {
       case Some(jso: JsObject) => jso
-      case None =>
+      case None                =>
         throw new CompactEntityDeserializationException(
           s"wanted an attributes object; found none"
         )
@@ -142,7 +142,7 @@ trait CompactEntitySerialization extends LazyLogging {
   private def getReferences(jso: JsObject): JsArray =
     jso.fields.get(REFS_KEY) match {
       case Some(jsa: JsArray) => jsa
-      case None =>
+      case None               =>
         throw new CompactEntityDeserializationException(
           s"wanted a references array; found none"
         )

@@ -1216,7 +1216,7 @@ object AttributeStringifier {
       case AttributeBoolean(value)           => value.toString
       case AttributeValueRawJson(value)      => value.toString()
       case AttributeEntityReference(_, name) => name
-      case al: AttributeList[_] =>
+      case al: AttributeList[_]              =>
         WDLJsonSupport.attributeFormat.write(al).toString()
     }
 }
@@ -1343,8 +1343,8 @@ class WorkspaceJsonSupport extends JsonSupport {
       val fields = json.asJsObject.fields
       val settingType = fields("settingType").convertTo[WorkspaceSettingType]
       settingType match {
-        case GcpBucketLifecycle  => GcpBucketLifecycleSetting(fields("config").convertTo[GcpBucketLifecycleConfig])
-        case GcpBucketSoftDelete => GcpBucketSoftDeleteSetting(fields("config").convertTo[GcpBucketSoftDeleteConfig])
+        case GcpBucketLifecycle     => GcpBucketLifecycleSetting(fields("config").convertTo[GcpBucketLifecycleConfig])
+        case GcpBucketSoftDelete    => GcpBucketSoftDeleteSetting(fields("config").convertTo[GcpBucketSoftDeleteConfig])
         case GcpBucketRequesterPays =>
           GcpBucketRequesterPaysSetting(fields("config").convertTo[GcpBucketRequesterPaysConfig])
         case GcpLogBucketRetention =>
@@ -1458,7 +1458,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
       fromUri match {
         case Some(method) => method
-        case _ =>
+        case _            =>
           json.asJsObject.fields.get("sourceRepo") match {
             case Some(JsString(Dockstore.scheme))      => DockstoreMethodFormat.read(json)
             case Some(JsString(DockstoreTools.scheme)) => DockstoreToolsMethodFormat.read(json)

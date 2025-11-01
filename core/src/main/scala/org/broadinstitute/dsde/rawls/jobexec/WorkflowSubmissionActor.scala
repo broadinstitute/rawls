@@ -397,7 +397,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       attribute <- inputResolutions.value.toSeq // toSeq makes the for comp work
       dosAttributeValue <- attribute match {
         case AttributeString(s) if s.matches(DrsResolver.dosDrsUriPattern) => Seq(s)
-        case AttributeValueList(valueList) =>
+        case AttributeValueList(valueList)                                 =>
           valueList.collect {
             case AttributeString(s) if s.value.matches(DrsResolver.dosDrsUriPattern) => s
           }

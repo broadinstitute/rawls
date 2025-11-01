@@ -631,7 +631,7 @@ class BillingAccountChangeSynchronizerSpec
         } yield {
           lastChange.value.googleSyncTime shouldBe defined
           lastChange.value.outcome.value match {
-            case Success => fail("should not succeed when updating billing project failed")
+            case Success      => fail("should not succeed when updating billing project failed")
             case Failure(msg) =>
               msg should include(testData.billingProject.googleProjectId.value)
           }
@@ -692,7 +692,7 @@ class BillingAccountChangeSynchronizerSpec
         } yield {
           lastChange.value.googleSyncTime shouldBe defined
           lastChange.value.outcome.value match {
-            case Success => fail("should not succeed when updating workspaces fail")
+            case Success      => fail("should not succeed when updating workspaces fail")
             case Failure(msg) =>
               forAll(workspaces) { workspace =>
                 msg should include(workspace.googleProjectId.value)
@@ -767,7 +767,7 @@ class BillingAccountChangeSynchronizerSpec
         } yield {
           lastChange.value.googleSyncTime shouldBe defined
           lastChange.value.outcome.value match {
-            case Success =>
+            case Success    =>
             case Failure(_) =>
               fail("should not fail when updating workspaces succeed")
           }

@@ -166,7 +166,7 @@ class ShardedHttpExecutionServiceCluster(readMembers: Set[ClusterMember],
       labels.exists(_ == SUBMISSION_ID_KEY -> submissionId)
     } map {
       case Some((executionServiceId, _)) => executionServiceId
-      case _ =>
+      case _                             =>
         val errReport = ErrorReport(
           s"Could not find a Workflow with ID $workflowId with Submission $submissionId in any Execution Service",
           Option(StatusCodes.NotFound),
@@ -231,7 +231,7 @@ class ShardedHttpExecutionServiceCluster(readMembers: Set[ClusterMember],
   private def getMember(workflowRec: WorkflowRecord): ClusterMember =
     (workflowRec.externalId, workflowRec.executionServiceKey) match {
       case (Some(extId), Some(execKey)) => getMember(ExecutionServiceId(execKey))
-      case _ =>
+      case _                            =>
         throw new RawlsException(
           s"can only process WorkflowRecord objects with an external id and an execution service key: ${workflowRec.toString}"
         )

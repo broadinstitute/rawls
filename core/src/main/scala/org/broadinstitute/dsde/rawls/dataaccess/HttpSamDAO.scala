@@ -648,7 +648,7 @@ class HttpSamDAO(baseSamServiceURL: String,
         response.getStatusCode match {
           case StatusCodes.OK.intValue        => true
           case StatusCodes.Forbidden.intValue => false
-          case _ =>
+          case _                              =>
             throw new RawlsExceptionWithErrorReport(ErrorReport(response.getStatusCode, "Response not 200 or 403"))
         }
       }

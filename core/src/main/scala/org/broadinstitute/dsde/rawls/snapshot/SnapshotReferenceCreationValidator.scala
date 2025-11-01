@@ -37,7 +37,7 @@ class SnapshotReferenceCreationValidator(val workspaceContext: Workspace, val sn
     // snapshots by ref across cloud platforms.
     (snapshot.platform, workspacePlatform) match {
       case (SnapshotCloudPlatform.GCP, Some(WorkspaceCloudPlatform.Gcp)) => // ok
-      case (_, None) =>
+      case (_, None)                                                     =>
         throw new PlatformBoundaryException(
           "Snapshots by reference are not supported into a workspace with no cloud context (" +
             s"snapshot: ${snapshot.platform}, workspace: ${workspacePlatform})."

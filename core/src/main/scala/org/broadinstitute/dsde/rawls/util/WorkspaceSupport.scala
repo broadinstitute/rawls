@@ -100,7 +100,7 @@ trait WorkspaceSupport {
       maybeUuid <- Future(Try(UUID.fromString(workspaceId)))
       workspaceUuid = maybeUuid match {
         case Success(uid) => uid
-        case Failure(_) =>
+        case Failure(_)   =>
           throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "invalid UUID"))
       }
       // Does the workspace exist?

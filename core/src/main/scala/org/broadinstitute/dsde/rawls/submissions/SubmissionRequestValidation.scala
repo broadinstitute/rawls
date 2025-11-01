@@ -79,7 +79,7 @@ object SubmissionRequestValidation extends StringValidationUtils {
       case (Some(_), _, _)          => None
       case (None, Some(_), Some(_)) => None
       case (None, None, None)       => None
-      case (None, Some(_), None) =>
+      case (None, Some(_), None)    =>
         Some(
           ErrorReport(StatusCodes.BadRequest,
                       s"Your method config defines a root entity but you haven't passed one to the submission."
@@ -114,7 +114,7 @@ object SubmissionRequestValidation extends StringValidationUtils {
     Try(submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName)) match {
       case Success(_)                 => None
       case Failure(e: RawlsException) => Some(ErrorReport(StatusCodes.BadRequest, e.getMessage))
-      case Failure(e) =>
+      case Failure(e)                 =>
         throw new RawlsExceptionWithErrorReport(errorReport =
           ErrorReport(StatusCodes.InternalServerError, e.getMessage)
         )

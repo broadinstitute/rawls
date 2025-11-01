@@ -42,7 +42,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                                               Option(SpendReportingAggregationKeys.withName(subKey))
           )
         case key :: Nil => SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.withName(key))
-        case _ =>
+        case _          =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest,
                         s"Error parsing aggregation key(s). Found ${delimitedParameter.mkString(",")}"

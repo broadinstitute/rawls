@@ -661,7 +661,7 @@ object Boot extends IOApp with LazyLogging {
 
     val maybeTracerProvider = conf.getBooleanOption("opencensus-scala.trace.exporters.stackdriver.enabled").flatMap {
       case false => None
-      case true =>
+      case true  =>
         val traceProviderBuilder = SdkTracerProvider.builder
         val projectId = conf.getString("opencensus-scala.trace.exporters.stackdriver.project-id")
         val googleTraceExporter =
