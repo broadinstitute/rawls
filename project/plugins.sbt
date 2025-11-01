@@ -10,6 +10,6 @@ addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.4")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
 
-addSbtPlugin("org.latestbit" % "sbt-gcs-plugin" % "1.14.0")
+addSbtPlugin("org.latestbit" % "sbt-gcs-plugin" % "1.15.1")
 
 addDependencyTreePlugin
