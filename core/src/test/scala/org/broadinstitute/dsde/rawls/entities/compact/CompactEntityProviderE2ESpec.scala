@@ -5,13 +5,14 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
 import cromwell.client.model.{ToolInputParameter, ValueType}
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.model.AttributeName.{toDelimitedName, withDefaultNS}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddListMember,
   AddUpdateAttribute,
@@ -27,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeNumber,
   AttributeRename,
   AttributeString,
+  AttributeValueList,
   Entity,
   EntityPointer,
   RawlsRequestContext,
@@ -1286,6 +1288,63 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
         actualException.errorReport.message should include("expects an entity of type")
     }
 
+  }
+
+  behavior of "saveWorkflowOutputEntities"
+
+  it should "preserve array ordering" in withMinimalTestDatabase { _ =>
+    val provider = defaultProvider()
+
+    // Create an entity
+    val originalEntity = Entity("myname", "mytype", Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
+    Await.result(provider.createEntity(originalEntity, defaultRequestContext), atMost)
+
+    List(23, 45, 67, 89) foreach { numElements =>
+      // generate some ordered arrays with long text
+      val prefix1 = RandomStringUtils.insecure().nextAscii(numElements * 2)
+      val prefix2 = RandomStringUtils.insecure().nextAscii(numElements * 3)
+
+      val array1 = Range.inclusive(1, numElements).map(idx => s"$prefix1$idx").sorted
+      val attr1 = AttributeValueList(array1 map AttributeString)
+      val array2 = Range.inclusive(1, numElements).map(idx => s"$prefix2$idx").sorted.reverse
+      val attr2 = AttributeValueList(array2 map AttributeString)
+
+      val mergedAttrs = originalEntity.attributes ++ Map(
+        AttributeName.withDefaultNS("attr1") -> attr1,
+        AttributeName.withDefaultNS("attr2") -> attr2
+      )
+
+      // Update the entity with some arrays
+      val entityWithUpdates = Entity(originalEntity.name, originalEntity.entityType, mergedAttrs)
+      val saveResult = runAndWait(
+        provider.saveWorkflowOutputEntities(slickDataSource.dataAccess,
+                                            minimalTestData.workspace,
+                                            Seq(entityWithUpdates)
+        )
+      )
+      saveResult shouldBe 2 // MySQL returns "2 rows affected" when upserting an existing row
+
+      // Re-retrieve the entity
+      val updatedEntity =
+        Await.result(provider.getEntity(originalEntity.entityType, originalEntity.name, defaultRequestContext),
+                     Duration.Inf
+        )
+
+      updatedEntity shouldBe entityWithUpdates
+      updatedEntity.attributes.keySet should have size 3
+      updatedEntity.attributes.keySet should contain(AttributeName.withDefaultNS("attr1"))
+      updatedEntity.attributes.keySet should contain(AttributeName.withDefaultNS("attr2"))
+
+      List("attr1", "attr2") foreach { nm =>
+        val attrName = AttributeName.withDefaultNS(nm)
+        updatedEntity.attributes.keySet should contain(attrName)
+        val attrVal = updatedEntity.attributes(attrName)
+        attrVal match {
+          case vl: AttributeValueList => vl.list should have size numElements
+          case x                      => fail(s"wrong type: ${x.getClass.getName}")
+        }
+      }
+    }
   }
 
   // ====================================================================================================
