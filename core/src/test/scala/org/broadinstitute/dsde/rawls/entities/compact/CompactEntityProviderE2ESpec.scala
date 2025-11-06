@@ -1343,6 +1343,10 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
           case vl: AttributeValueList => vl.list should have size numElements
           case x                      => fail(s"wrong type: ${x.getClass.getName}")
         }
+        nm match {
+          case "attr1" => attrVal shouldBe attr1
+          case "attr2" => attrVal shouldBe attr2
+        }
       }
     }
   }
