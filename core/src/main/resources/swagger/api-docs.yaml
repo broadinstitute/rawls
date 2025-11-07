@@ -2178,6 +2178,16 @@ paths:
         204:
           description: No migration performed.
           content: { }
+  /api/workspaces/quicksilverValidation:
+    get:
+      tags:
+        - entities
+      summary: Validate previous migrations.
+      operationId: quicksilver_validation
+      responses:
+        200:
+          description: Stuff.
+          content: { }
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
     get:
       tags:

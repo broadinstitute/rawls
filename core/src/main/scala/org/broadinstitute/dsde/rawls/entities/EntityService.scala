@@ -581,6 +581,18 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
     }
 
+  def quicksilverValidation(): Future[Map[String, String]] =
+    // TODO: get most recent migration setting
+    // TODO: get list of workspaces migrated recently
+    // TODO: loop through workspaces
+    // TODO: retrieve entity types for workspace
+    // TODO: loop through entity types
+    // TODO: retrieve N (5000?) entities of this type using both Compact and Local providers
+    // TODO: loop through each entity
+    // TODO: compare compact and local versions of the entity, log if any problem
+    // TODO: continue iterating through entities
+    Future.successful(Map())
+
   /**
     * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to
     * compact (Quicksilver) format.

@@ -45,73 +45,82 @@ trait EntityApiService extends UserInfoDirectives {
 
   def entityRoutes(otelContext: Context = Context.root(), userInfo: UserInfo): server.Route = {
     val ctx = RawlsRequestContext(userInfo, Option(otelContext))
-    path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
+    path("workspaces" / "quicksilverValidation") {
       get {
-        parameters('page.?,
-                   'pageSize.?,
-                   'sortField.?,
-                   'sortDirection.?,
-                   'filterTerms.?,
-                   'filterOperator.?,
-                   'columnFilter.?
-        ) { (page, pageSize, sortField, sortDirection, filterTerms, filterOperator, columnFilterStringOpt) =>
-          parameterSeq { allParams =>
-            val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
-              k -> Try(s.map(_.toInt))
-            }
-            val sortDirectionTry =
-              sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
-            val operatorTry =
-              filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
-
-            val filterValidation =
-              if (Seq(filterTerms, columnFilterStringOpt).count(_.isDefined) > 1) {
-                Seq(
-                  "filterTerms and columnFilter are mutually exclusive; you may specify only one of these parameters."
-                )
-              } else Seq.empty
-
-            val columnFilter: Option[Either[Seq[String], EntityColumnFilter]] =
-              EntityApiService.createColumnFilter(columnFilterStringOpt)
-            val errors = Seq(
-              toIntTries.collect {
-                case (k, Failure(t))                 => s"$k must be a positive integer"
-                case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-              },
-              if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty,
-              filterValidation,
-              columnFilter.flatMap(_.swap.toOption).getOrElse(Seq.empty)
-            ).flatten
-
-            if (errors.isEmpty) {
-              val entityQuery = EntityQuery(
-                toIntTries("page").get.getOrElse(1),
-                toIntTries("pageSize").get.getOrElse(10),
-                sortField.getOrElse("name"),
-                sortDirectionTry.get,
-                filterTerms,
-                operatorTry.get,
-                WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
-                columnFilter.flatMap(_.toOption)
-              )
-
-              onSuccess(
-                entityServiceConstructor(ctx).queryEntitiesSource(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                  entityType,
-                                                                  entityQuery
-                )
-              ) { (entityQueryResultMetadata, resultsSource) =>
-                val responseSource: Source[ByteString, _] =
-                  EntityStreamingUtils.createResponseSource(resultsSource, entityQuery, entityQueryResultMetadata)
-                complete(HttpEntity(ContentTypes.`application/json`, responseSource))
-              }
-            } else {
-              complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
-            }
-          }
+        complete {
+          entityServiceConstructor(ctx)
+            .quicksilverValidation()
         }
       }
     } ~
+      path("workspaces" / Segment / Segment / "entityQuery" / Segment) {
+        (workspaceNamespace, workspaceName, entityType) =>
+          get {
+            parameters('page.?,
+                       'pageSize.?,
+                       'sortField.?,
+                       'sortDirection.?,
+                       'filterTerms.?,
+                       'filterOperator.?,
+                       'columnFilter.?
+            ) { (page, pageSize, sortField, sortDirection, filterTerms, filterOperator, columnFilterStringOpt) =>
+              parameterSeq { allParams =>
+                val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
+                  k -> Try(s.map(_.toInt))
+                }
+                val sortDirectionTry =
+                  sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+                val operatorTry =
+                  filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
+
+                val filterValidation =
+                  if (Seq(filterTerms, columnFilterStringOpt).count(_.isDefined) > 1) {
+                    Seq(
+                      "filterTerms and columnFilter are mutually exclusive; you may specify only one of these parameters."
+                    )
+                  } else Seq.empty
+
+                val columnFilter: Option[Either[Seq[String], EntityColumnFilter]] =
+                  EntityApiService.createColumnFilter(columnFilterStringOpt)
+                val errors = Seq(
+                  toIntTries.collect {
+                    case (k, Failure(t))                 => s"$k must be a positive integer"
+                    case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+                  },
+                  if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty,
+                  filterValidation,
+                  columnFilter.flatMap(_.swap.toOption).getOrElse(Seq.empty)
+                ).flatten
+
+                if (errors.isEmpty) {
+                  val entityQuery = EntityQuery(
+                    toIntTries("page").get.getOrElse(1),
+                    toIntTries("pageSize").get.getOrElse(10),
+                    sortField.getOrElse("name"),
+                    sortDirectionTry.get,
+                    filterTerms,
+                    operatorTry.get,
+                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                    columnFilter.flatMap(_.toOption)
+                  )
+
+                  onSuccess(
+                    entityServiceConstructor(ctx).queryEntitiesSource(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                      entityType,
+                                                                      entityQuery
+                    )
+                  ) { (entityQueryResultMetadata, resultsSource) =>
+                    val responseSource: Source[ByteString, _] =
+                      EntityStreamingUtils.createResponseSource(resultsSource, entityQuery, entityQueryResultMetadata)
+                    complete(HttpEntity(ContentTypes.`application/json`, responseSource))
+                  }
+                } else {
+                  complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+                }
+              }
+            }
+          }
+      } ~
       path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
         get {
           // if useCache param is unset or set to a value that won't coerce to a boolean, default to true
