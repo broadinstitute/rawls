@@ -110,6 +110,45 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
       }
     }
   }
+
+  def getLocalProvider(requestArguments: EntityRequestArguments)(implicit
+    executionContext: ExecutionContext
+  ): Future[EntityProvider] = {
+    val targetTagFuture = Future(typeTag[LocalEntityProvider])
+    getSpecificProvider(targetTagFuture, requestArguments)
+  }
+
+  def getCompactProvider(requestArguments: EntityRequestArguments)(implicit
+    executionContext: ExecutionContext
+  ): Future[EntityProvider] = {
+    val targetTagFuture = Future(typeTag[CompactEntityProvider])
+    getSpecificProvider(targetTagFuture, requestArguments)
+  }
+
+  def getSpecificProvider(targetTagFuture: Future[TypeTag[_ <: EntityProvider]],
+                          requestArguments: EntityRequestArguments
+  )(implicit
+    executionContext: ExecutionContext
+  ): Future[EntityProvider] =
+    targetTagFuture map { targetTag =>
+      providerBuilders.find(_.builds == targetTag) match {
+        case None =>
+          throw new DataEntityException(
+            s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}"
+          )
+        case Some(builder) =>
+          builder.build(requestArguments) match {
+            case Success(provider) =>
+              // Wrap the provider with AuditLoggingEntityProvider
+              new AuditLoggingEntityProvider(provider, requestArguments, metricsPrefix)
+            case Failure(regrets: DataEntityException) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage))
+            case Failure(ex: Throwable) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex.getMessage))
+          }
+      }
+    }
+
 }
 
 object EntityManager {

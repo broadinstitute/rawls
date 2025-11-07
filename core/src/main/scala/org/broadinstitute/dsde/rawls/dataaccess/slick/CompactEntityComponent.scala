@@ -44,6 +44,7 @@ trait CompactEntityComponent extends LazyLogging {
 
 class CompactEntityQuery(driverComponent: DriverComponent)
     extends CompactEntityMigration
+    with CompactEntityValidation
     with CompactEntityKeysCache
     with RawSqlQuery
     with CompactEntitySerialization {

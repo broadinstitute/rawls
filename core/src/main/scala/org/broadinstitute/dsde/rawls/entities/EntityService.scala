@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.Source
+import akka.stream.scaladsl.{Sink, Source}
 import com.typesafe.scalalogging.LazyLogging
 import io.opentelemetry.api.common.AttributeKey
 import org.apache.commons.lang3.time.StopWatch
@@ -16,15 +16,17 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider}
-import org.broadinstitute.dsde.rawls.entities.compact.SortMemoryRetry
+import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, SortMemoryRetry}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
   DataEntityException,
   DeleteEntitiesConflictException,
   DeleteEntitiesOfTypeConflictException,
   EntityNotFoundException
 }
+import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
 import org.broadinstitute.dsde.rawls.model._
@@ -582,16 +584,95 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def quicksilverValidation(): Future[Map[String, String]] =
-    // TODO: get most recent migration setting
-    // TODO: get list of workspaces migrated recently
-    // TODO: loop through workspaces
-    // TODO: retrieve entity types for workspace
-    // TODO: loop through entity types
-    // TODO: retrieve N (5000?) entities of this type using both Compact and Local providers
-    // TODO: loop through each entity
-    // TODO: compare compact and local versions of the entity, log if any problem
-    // TODO: continue iterating through entities
-    Future.successful(Map())
+    dataSource
+      .inTransaction { dataAccess =>
+        for {
+          // get the most recent migration
+          mostRecentMigration <- dataAccess.compactEntityQuery.mostRecentMigration
+          _ = logger.info(s"Most recent migration: $mostRecentMigration")
+          // get all workspaces migrated within 24 hours of the most recent migration
+          recentlyMigratedWorkspaces <- dataAccess.compactEntityQuery.getRecentlyMigratedWorkspaces(mostRecentMigration,
+                                                                                                    48
+          )
+          // loop through each workspace
+          workspaceLoop <- DBIO.sequence(recentlyMigratedWorkspaces.map { workspaceId =>
+            for {
+              // retrieve the workspace
+              workspaceOption <- dataAccess.workspaceQuery.loadWorkspace(
+                dataAccess.workspaceQuery.findByIdQuery(workspaceId)
+              )
+              workspace = workspaceOption.get
+              // validate entities in this workspace
+              _ = logger.info(s"validating workspace: $workspaceId ${workspace.namespace}/${workspace.name} ...")
+              validation <- validateWorkspace(workspace, dataAccess)
+
+            } yield DBIO.successful(2)
+            // get the workspace
+
+          })
+
+        } yield Map.empty[String, String]
+      }
+
+  private def validateWorkspace(workspace: Workspace, dataAccess: DataAccess): ReadAction[Unit] = {
+    val entityRequestArguments = EntityRequestArguments(workspace, ctx)
+    val validationDBIO: ReadAction[Unit] = for {
+      // create Compact and Local entity providers for this workspace
+      localProvider <- DBIO.from(entityManager.getLocalProvider(entityRequestArguments))
+      compactProvider <- DBIO.from(entityManager.getCompactProvider(entityRequestArguments))
+      // retrieve entity types for workspace
+      types <- dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
+      _ =
+        if (types.isEmpty) {
+          logger.info(s"    ... workspace has no entities; skipping.")
+        }
+
+      // loop through entity types
+      entityTypeLoop <- validateEntityTypes(workspace, types, compactProvider, localProvider)
+
+    } yield ()
+
+    validationDBIO
+
+  }
+
+  private def validateEntityTypes(workspace: Workspace,
+                                  types: Map[String, Int],
+                                  compactProvider: EntityProvider,
+                                  localProvider: EntityProvider
+  ): ReadAction[_] = {
+    val foo = types.map { case (entityType, count) =>
+      for {
+        // get entities via both local and compact
+        pageSize <- Future(5000) // TODO: iterate through all entities, not just 5000
+        _ = logger.info(s"    ... validating entity type $entityType ($count) ...")
+        entityQuery = EntityQuery(1, pageSize, "name", Ascending, None)
+        compactEntitiesFuture <- compactProvider
+          .queryEntitiesSource(entityType, entityQuery, ctx)
+          .map(res => res._2.runWith(Sink.seq))
+        compactEntities <- compactEntitiesFuture
+        localEntities <- localProvider.queryEntities(entityType, entityQuery, ctx).map(_.results)
+        _ =
+          if (compactEntities.size != localEntities.size) {
+            logger.warn(
+              s"        entity counts are different: ${compactEntities.size} vs ${localEntities.size}; skipping"
+            )
+          } else {
+            val zipped = compactEntities.zip(localEntities)
+            zipped.foreach { case (c, l) =>
+              if (c != l) {
+                logger.warn(s"        ***** Found a diff! [${workspace.toWorkspaceName}] [$entityType/${c.name}]")
+                logger.warn(s"        ***** $c vs $l")
+              }
+            }
+          }
+      } yield compactEntities.size
+
+    }
+
+    DBIO.from(Future.sequence(foo))
+
+  }
 
   /**
     * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to
