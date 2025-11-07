@@ -2184,6 +2184,12 @@ paths:
         - entities
       summary: Validate previous migrations.
       operationId: quicksilver_validation
+      parameters:
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            default: 24
       responses:
         200:
           description: Stuff.

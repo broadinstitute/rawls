@@ -583,8 +583,45 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
     }
 
-  def quicksilverValidation(): Future[Map[String, String]] =
-    dataSource
+  case class MisorderedValueList(workspaceId: UUID,
+                                 workspaceName: WorkspaceName,
+                                 entityType: String,
+                                 attributeName: AttributeName,
+                                 compactAttr: AttributeValueList,
+                                 localAttr: AttributeValueList
+  )
+  case class MisorderedReferenceList(workspaceId: UUID,
+                                     workspaceName: WorkspaceName,
+                                     entityType: String,
+                                     attributeName: AttributeName,
+                                     compactAttr: AttributeEntityReferenceList,
+                                     localAttr: AttributeEntityReferenceList
+  )
+  // yes these are vars, I'm cheating to simplify the code
+  case class ValidationResults(var emptyWorkspaces: Seq[Workspace],
+                               var nonEmptyWorkspaces: Seq[Workspace],
+                               var totalEntities: Int,
+                               var totalAttributes: Int,
+                               var misorderedValues: Seq[MisorderedValueList],
+                               var misorderedReferences: Seq[MisorderedReferenceList]
+  )
+  object ValidationResults {
+    def empty: ValidationResults = ValidationResults(Seq(), Seq(), 0, 0, Seq(), Seq())
+  }
+
+  def sumResults(left: ValidationResults, right: ValidationResults): ValidationResults =
+    ValidationResults(
+      left.emptyWorkspaces ++ right.emptyWorkspaces,
+      left.nonEmptyWorkspaces ++ right.nonEmptyWorkspaces,
+      left.totalEntities + right.totalEntities,
+      left.totalAttributes + right.totalAttributes,
+      left.misorderedValues ++ right.misorderedValues,
+      left.misorderedReferences ++ right.misorderedReferences
+    )
+
+  def quicksilverValidation(hours: Int = 24): Future[ValidationResults] = {
+    val validationResults = ValidationResults.empty
+    val finalResults = dataSource
       .inTransaction { dataAccess =>
         for {
           // get the most recent migration
@@ -592,8 +629,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           _ = logger.info(s"Most recent migration: $mostRecentMigration")
           // get all workspaces migrated within 24 hours of the most recent migration
           recentlyMigratedWorkspaces <- dataAccess.compactEntityQuery.getRecentlyMigratedWorkspaces(mostRecentMigration,
-                                                                                                    48
+                                                                                                    hours
           )
+          _ = logger.info(s"Will inspect ${recentlyMigratedWorkspaces.size} workspaces")
           // loop through each workspace
           workspaceLoop <- DBIO.sequence(recentlyMigratedWorkspaces.map { workspaceId =>
             for {
@@ -604,31 +642,66 @@ class EntityService(protected val ctx: RawlsRequestContext,
               workspace = workspaceOption.get
               // validate entities in this workspace
               _ = logger.info(s"validating workspace: $workspaceId ${workspace.namespace}/${workspace.name} ...")
-              validation <- validateWorkspace(workspace, dataAccess)
+              _ <- validateWorkspace(validationResults, workspace, dataAccess)
 
-            } yield DBIO.successful(2)
+            } yield ()
             // get the workspace
 
           })
 
-        } yield Map.empty[String, String]
+        } yield ()
       }
+    finalResults map { _ =>
+      val workspacesWithMisorderedValues = validationResults.misorderedValues.map(_.workspaceName).toSet
+      val workspacesWithMisorderedReferences = validationResults.misorderedReferences.map(_.workspaceName).toSet
 
-  private def validateWorkspace(workspace: Workspace, dataAccess: DataAccess): ReadAction[Unit] = {
+      logger.error(s"""
+================================================================================
+===== VALIDATION RESULTS
+================================================================================
+
+                      Workspaces with entities: ${validationResults.nonEmptyWorkspaces.size}
+                              Empty workspaces: ${validationResults.emptyWorkspaces.size}
+
+                      Total entities validated: ${validationResults.totalEntities}
+               Total list attributes validated: ${validationResults.totalAttributes}
+
+    Number of misordered value list attributes: ${validationResults.misorderedValues.size}
+Number of misordered reference list attributes: ${validationResults.misorderedReferences.size}
+
+               Number of misordered workspaces: ${workspacesWithMisorderedValues.size + workspacesWithMisorderedReferences.size}
+
+================================================================================
+===== VALIDATION RESULTS
+================================================================================
+           """)
+      validationResults
+    }
+  }
+
+  private def validateWorkspace(validationResults: ValidationResults,
+                                workspace: Workspace,
+                                dataAccess: DataAccess
+  ): ReadAction[_] = {
+
     val entityRequestArguments = EntityRequestArguments(workspace, ctx)
-    val validationDBIO: ReadAction[Unit] = for {
+    val validationDBIO: ReadAction[_] = for {
       // create Compact and Local entity providers for this workspace
       localProvider <- DBIO.from(entityManager.getLocalProvider(entityRequestArguments))
       compactProvider <- DBIO.from(entityManager.getCompactProvider(entityRequestArguments))
       // retrieve entity types for workspace
       types <- dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
-      _ =
-        if (types.isEmpty) {
-          logger.info(s"    ... workspace has no entities; skipping.")
-        }
 
       // loop through entity types
-      entityTypeLoop <- validateEntityTypes(workspace, types, compactProvider, localProvider)
+      entityTypeLoop <-
+        if (types.isEmpty) {
+          logger.info(s"    ... workspace has no entities; skipping.")
+          validationResults.emptyWorkspaces = validationResults.emptyWorkspaces :+ workspace
+          DBIO.successful()
+        } else {
+          validationResults.nonEmptyWorkspaces = validationResults.nonEmptyWorkspaces :+ workspace
+          validateEntityTypes(validationResults, workspace, types, compactProvider, localProvider)
+        }
 
     } yield ()
 
@@ -636,12 +709,14 @@ class EntityService(protected val ctx: RawlsRequestContext,
 
   }
 
-  private def validateEntityTypes(workspace: Workspace,
+  private def validateEntityTypes(validationResults: ValidationResults,
+                                  workspace: Workspace,
                                   types: Map[String, Int],
                                   compactProvider: EntityProvider,
                                   localProvider: EntityProvider
   ): ReadAction[_] = {
-    val foo = types.map { case (entityType, count) =>
+    var totalEntities = 0
+    val typesFutures = types.map { case (entityType, count) =>
       for {
         // get entities via both local and compact
         pageSize <- Future(5000) // TODO: iterate through all entities, not just 5000
@@ -653,26 +728,90 @@ class EntityService(protected val ctx: RawlsRequestContext,
         compactEntities <- compactEntitiesFuture
         localEntities <- localProvider.queryEntities(entityType, entityQuery, ctx).map(_.results)
         _ =
-          if (compactEntities.size != localEntities.size) {
+          if (compactEntities.size != localEntities.size || compactEntities.map(_.name) != localEntities.map(_.name)) {
             logger.warn(
-              s"        entity counts are different: ${compactEntities.size} vs ${localEntities.size}; skipping"
+              s"        entity counts or names are different: ${compactEntities.size} vs ${localEntities.size}; skipping"
             )
           } else {
+            validationResults.totalEntities = validationResults.totalEntities + compactEntities.size
             val zipped = compactEntities.zip(localEntities)
-            zipped.foreach { case (c, l) =>
-              if (c != l) {
-                logger.warn(s"        ***** Found a diff! [${workspace.toWorkspaceName}] [$entityType/${c.name}]")
-                logger.warn(s"        ***** $c vs $l")
-              }
+            zipped.map { case (c, l) =>
+              compareEntities(validationResults, c, l, workspace)
             }
           }
-      } yield compactEntities.size
+      } yield ()
 
     }
 
-    DBIO.from(Future.sequence(foo))
-
+    DBIO.from(Future.sequence(typesFutures))
   }
+
+  private def compareEntities(validationResults: ValidationResults,
+                              compact: Entity,
+                              local: Entity,
+                              workspace: Workspace
+  ): Unit =
+
+    compact.attributes.foreach { case (attributeName, attributeValue) =>
+      if (!local.attributes.contains(attributeName)) {
+        // compact attribute not found in local
+      } else {
+        attributeValue match {
+          case cl: AttributeValueList =>
+            val localValue = local.attributes(attributeName)
+            localValue match {
+              case ll: AttributeValueList =>
+                validationResults.totalAttributes = validationResults.totalAttributes + 1
+                val compactValues = cl.list
+                val localValues = ll.list
+                if (compactValues != localValues && compactValues.toSet == localValues.toSet) {
+                  logger.warn(
+                    s"        ***** Found a diff! [${workspace.toWorkspaceName}] [${compact.entityType}/${compact.name}]"
+                  )
+                  validationResults.misorderedValues = validationResults.misorderedValues :+
+                    MisorderedValueList(workspace.workspaceIdAsUUID,
+                                        workspace.toWorkspaceName,
+                                        compact.entityType,
+                                        attributeName,
+                                        cl,
+                                        ll
+                    )
+
+                }
+              case x =>
+                logger.warn(
+                  s"        !! $attributeName had a compact AttributeValueList but a local ${x.getClass.getName}"
+                )
+            }
+          case cl: AttributeEntityReferenceList =>
+            val localValue = local.attributes(attributeName)
+            localValue match {
+              case ll: AttributeEntityReferenceList =>
+                validationResults.totalAttributes = validationResults.totalAttributes + 1
+                val compactValues = cl.list
+                val localValues = ll.list
+                if (compactValues != localValues && compactValues.toSet == localValues.toSet) {
+                  logger.warn(
+                    s"        ***** Found a diff! [${workspace.toWorkspaceName}] [${compact.entityType}/${compact.name}]"
+                  )
+                  validationResults.misorderedReferences = validationResults.misorderedReferences :+
+                    MisorderedReferenceList(workspace.workspaceIdAsUUID,
+                                            workspace.toWorkspaceName,
+                                            compact.entityType,
+                                            attributeName,
+                                            cl,
+                                            ll
+                    )
+                }
+              case x =>
+                logger.warn(
+                  s"        !! $attributeName had a compact AttributeEntityReferenceList but a local ${x.getClass.getName}"
+                )
+            }
+          case _ => // noop
+        }
+      }
+    }
 
   /**
     * Migrate all entity data in a given workspace from legacy (LocalEntityProvider) to

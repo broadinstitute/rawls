@@ -47,9 +47,12 @@ trait EntityApiService extends UserInfoDirectives {
     val ctx = RawlsRequestContext(userInfo, Option(otelContext))
     path("workspaces" / "quicksilverValidation") {
       get {
-        complete {
-          entityServiceConstructor(ctx)
-            .quicksilverValidation()
+        parameters("hours".withDefault(24)) { hours =>
+          complete {
+            entityServiceConstructor(ctx)
+              .quicksilverValidation(hours)
+              .map(_ => StatusCodes.OK -> "Done")
+          }
         }
       }
     } ~
