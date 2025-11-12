@@ -7,7 +7,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.monitor.QuicksilverMigrationMonitor.StartAll
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.CheckAll
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -18,7 +18,7 @@ object BucketDeletionMonitor {
             initialDelay: FiniteDuration,
             pollInterval: FiniteDuration
   )(implicit executionContext: ExecutionContext): Props =
-    Props(new QuicksilverMigrationMonitor(datasource, gcsDAO, initialDelay, pollInterval))
+    Props(new BucketDeletionMonitor(datasource, gcsDAO, initialDelay, pollInterval))
 
   sealed trait BucketDeletionsMessage
   case object CheckAll extends BucketDeletionsMessage
@@ -32,9 +32,9 @@ class BucketDeletionMonitor(datasource: SlickDataSource,
     extends Actor
     with LazyLogging {
 
-  context.system.scheduler.schedule(initialDelay, pollInterval, self, StartAll)
+  context.system.scheduler.schedule(initialDelay, pollInterval, self, CheckAll)
 
-  override def receive = { case StartAll =>
+  override def receive = { case CheckAll =>
     checkAll()
   }
 
