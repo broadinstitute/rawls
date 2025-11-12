@@ -58,7 +58,7 @@ object HealthMonitor {
         List(
 //          (Agora, checkAgora(methodRepoDAO)),
 //          (Cromwell, checkCromwell(executionServiceServers)),
-//          (Database, checkDB(slickDataSource)),
+          (Database, checkDB(slickDataSource))
 //          (GoogleBilling, checkGoogleBilling(googleServicesDAO)),
 //          (GoogleBuckets, checkGoogleBuckets(googleServicesDAO, bucketsToCheck)),
 //          (GooglePubSub, checkGooglePubsub(googlePubSubDAO, topicsToCheck)),
