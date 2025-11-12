@@ -38,8 +38,12 @@ trait CompactEntityValidation {
   def getCurrentMigration: ReadAction[Option[UUID]] =
     sql"""select workspace_id from CURRENT_MIGRATION""".as[UUID].headOption
 
-  def insertCurrentMigration(workspaceId: UUID): ReadWriteAction[Int] =
-    sql"""insert into CURRENT_MIGRATION(workspace_id) values($workspaceId)""".asUpdate
+  def bootstrapCurrentMigration: ReadWriteAction[Int] =
+    sql"""insert into CURRENT_MIGRATION(workspace_id)
+          select id from WORKSPACE order by id asc limit 1 """.asUpdate
+
+  def nextMigration(previousWorkspaceId: UUID): ReadAction[Option[UUID]] =
+    sql"""select id from WORKSPACE where id > $previousWorkspaceId order by id asc limit 1""".as[UUID].headOption
 
   def updateCurrentMigration(workspaceId: UUID): ReadWriteAction[Int] =
     sql"""update CURRENT_MIGRATION set workspace_id = $workspaceId""".asUpdate
