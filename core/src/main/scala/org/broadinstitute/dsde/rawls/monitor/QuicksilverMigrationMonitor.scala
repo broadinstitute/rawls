@@ -133,6 +133,9 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
     logger.info(s"migrating ${workspace.workspaceId} ${workspace.toWorkspaceName} ...")
     val entityRequestArguments = EntityRequestArguments(workspace, ctx)
     for {
+      // clear any previously-migrated entities from this workspace, in case we are restarting migrations
+      // after a Rawls reboot
+      _ <- dataAccess.compactEntityQuery.restartWorkspace(workspace.workspaceIdAsUUID)
       // get a LocalEntityProvider for this workspace
       localProvider <- DBIO.from(entityManager.getLocalProvider(entityRequestArguments))
       // retrieve all entity types for this workspace, using LocalEntityProvider

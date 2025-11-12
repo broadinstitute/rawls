@@ -57,4 +57,6 @@ trait CompactEntityValidation {
     sql"""insert into ENTITY_CORRECTIONS(workspace_id, entity_type, name, attributes)
        values($workspaceId, $entityType, $entityName, $serializedAttributes)""".asUpdate
 
+  def restartWorkspace(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""delete from ENTITY_CORRECTIONS where workspace_id = $workspaceId""".asUpdate
 }
