@@ -34,4 +34,23 @@ trait CompactEntityValidation {
           where SETTING_TYPE='CompactDataTables'
           and LAST_UPDATED > DATE_SUB($maxDate, INTERVAL $hours HOUR)""".as[UUID]
 
+  // ***** for tracking re-migration process
+  def getCurrentMigration: ReadAction[Option[UUID]] =
+    sql"""select workspace_id from CURRENT_MIGRATION""".as[UUID].headOption
+
+  def insertCurrentMigration(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""insert into CURRENT_MIGRATION(workspace_id) values($workspaceId)""".asUpdate
+
+  def updateCurrentMigration(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""update CURRENT_MIGRATION set workspace_id = $workspaceId""".asUpdate
+
+  // ***** for persisting to the ENTITY_CORRECTIONS table
+  def saveMigratedEntity(workspaceId: UUID,
+                         entityType: String,
+                         entityName: String,
+                         serializedAttributes: String
+  ): ReadWriteAction[Int] =
+    sql"""insert into ENTITY_CORRECTIONS(workspace_id, entity_type, name, attributes)
+       values($workspaceId, $entityType, $entityName, $serializedAttributes)""".asUpdate
+
 }

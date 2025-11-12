@@ -562,7 +562,8 @@ object Boot extends IOApp with LazyLogging {
           gcpBatchBackend,
           methodConfigResolver,
           bardService,
-          workspaceSettingRepository
+          workspaceSettingRepository,
+          entityManager
         )
       } else
         logger.info(
