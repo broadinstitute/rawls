@@ -83,7 +83,7 @@ class AuditLoggingEntityProvider(val delegate: EntityProvider,
     )
 
     import AuditJsonSupport._
-    logger.info("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
+    logger.trace("Entity operation audit", StructuredArguments.raw("audit", auditInfo.toJson.compactPrint))
   }
 
   override protected val workbenchMetricBaseName: String = metricsPrefix

@@ -121,7 +121,6 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
         // retrieve the workspace
         workspaceOption <- dataAccess.workspaceQuery.loadWorkspace(dataAccess.workspaceQuery.findByIdQuery(workspaceId))
         workspace = workspaceOption.get
-        _ = logger.info(s"migrating $workspaceId ${workspace.toWorkspaceName}")
         // persist current workspaceId to MIGRATION_PROCESS table
         _ <- dataAccess.compactEntityQuery.updateCurrentMigration(workspaceId)
         // migrate this workspace
@@ -131,6 +130,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
     }
 
   private def migrateWorkspace(workspace: Workspace, dataAccess: DataAccess): ReadWriteAction[Int] = {
+    logger.info(s"migrating ${workspace.workspaceId} ${workspace.toWorkspaceName} ...")
     val entityRequestArguments = EntityRequestArguments(workspace, ctx)
     for {
       // get a LocalEntityProvider for this workspace
@@ -138,8 +138,10 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       // retrieve all entity types for this workspace, using LocalEntityProvider
       // retrieve entity types for workspace
       allTypes <- dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
+      _ = logger.info(s"  ... ${allTypes.size} entity types in this workspace (${allTypes.keySet.mkString})")
       // loop over all entity types and migrate each one
-      results <- DBIO.sequence(allTypes.keySet.map { entityType =>
+      results <- DBIO.sequence(allTypes.map { case (entityType, count) =>
+        logger.info(s"    ... $entityType: $count entities to consider ...")
         migrateEntityType(workspace, entityType, localProvider, dataAccess)
       })
     } yield results.sum
@@ -150,7 +152,6 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
                                 localProvider: EntityProvider,
                                 dataAccess: DataAccess
   ): ReadWriteAction[Int] = {
-
     // inner method for recursion
     def processNextChunk(page: Int, rowsUpdated: Int): ReadWriteAction[Int] =
       for {
@@ -168,7 +169,10 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
           }
       } yield migrationResults
 
-    processNextChunk(1, 0)
+    processNextChunk(1, 0) map { totalRowsUpdated =>
+      logger.info(s"        ... $entityType: $totalRowsUpdated rows actually updated")
+      totalRowsUpdated
+    }
 
   }
 
