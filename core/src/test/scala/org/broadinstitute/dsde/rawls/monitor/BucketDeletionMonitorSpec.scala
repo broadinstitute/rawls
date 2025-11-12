@@ -36,7 +36,7 @@ class BucketDeletionMonitorSpec(_system: ActorSystem)
     super.afterAll()
   }
 
-  "QuicksilverMigrationMonitor" should "delete buckets" in {
+  "BucketDeletionMonitor" should "delete buckets" in {
     val emptyBucketName = "empty-bucket"
     val nonEmptyBucketName = "nonempty-bucket"
     val errorBucketName = "error-bucket"
@@ -50,7 +50,7 @@ class BucketDeletionMonitorSpec(_system: ActorSystem)
     when(mockGoogleServicesDAO.deleteBucket(nonEmptyBucketName)).thenReturn(Future.successful(false))
     when(mockGoogleServicesDAO.deleteBucket(errorBucketName)).thenReturn(Future.failed(new RuntimeException(":(")))
 
-    system.actorOf(QuicksilverMigrationMonitor.props(slickDataSource, mockGoogleServicesDAO, 0 seconds, 1 second))
+    system.actorOf(BucketDeletionMonitor.props(slickDataSource, mockGoogleServicesDAO, 0 seconds, 1 second))
 
     // `eventually` now requires an implicit `Retrying` instance. When the statement inside returns future, it'll
     // try to use `Retrying[Future[T]]`, which gets weird when we're using mockito together with it.
