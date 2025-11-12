@@ -583,21 +583,35 @@ class EntityService(protected val ctx: RawlsRequestContext,
         )
     }
 
+  trait MisorderedList
   case class MisorderedValueList(workspaceId: UUID,
                                  workspaceName: WorkspaceName,
                                  entityType: String,
                                  attributeName: AttributeName,
                                  compactAttr: AttributeValueList,
                                  localAttr: AttributeValueList
-  )
+  ) extends MisorderedList
   case class MisorderedReferenceList(workspaceId: UUID,
                                      workspaceName: WorkspaceName,
                                      entityType: String,
                                      attributeName: AttributeName,
                                      compactAttr: AttributeEntityReferenceList,
                                      localAttr: AttributeEntityReferenceList
-  )
-  // yes these are vars, I'm cheating to simplify the code
+  ) extends MisorderedList
+
+  /**
+   * For validating Quicksilver migrations
+   *
+   * yes these are vars, I'm cheating to simplify the code
+   * @param emptyWorkspaces inspected workspaces which have no entities
+   * @param nonEmptyWorkspaces inspected workspaces which contain entities
+   * @param totalEntities count of all entities inspected
+   * @param totalAttributes count of all AttributeValueList and AttributeEntityReferenceList
+   *                        attributes inspected. Does not count all other attributes such as strings,
+   *                        booleans, etc.
+   * @param misorderedValues all AttributeValueList attributes which are potentially misordered
+   * @param misorderedReferences all AttributeEntityReferenceList attributes which are potentially misordered
+   */
   case class ValidationResults(var emptyWorkspaces: Seq[Workspace],
                                var nonEmptyWorkspaces: Seq[Workspace],
                                var totalEntities: Int,
@@ -641,6 +655,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
               )
               workspace = workspaceOption.get
               // validate entities in this workspace
+              misordered = validationResults.misorderedValues.size + validationResults.misorderedReferences.size
+              percent =
+                if (validationResults.totalAttributes == 0) {
+                  0f
+                } else {
+                  misordered.toFloat / validationResults.totalAttributes.toFloat
+                }
+
+              _ = logger.info(
+                f"Stats so far: $misordered/${validationResults.totalAttributes} (${percent * 100}%.2f%%)"
+              )
               _ = logger.info(s"validating workspace: $workspaceId ${workspace.namespace}/${workspace.name} ...")
               _ <- validateWorkspace(validationResults, workspace, dataAccess)
 
@@ -655,7 +680,24 @@ class EntityService(protected val ctx: RawlsRequestContext,
       val workspacesWithMisorderedValues = validationResults.misorderedValues.map(_.workspaceName).toSet
       val workspacesWithMisorderedReferences = validationResults.misorderedReferences.map(_.workspaceName).toSet
 
-      logger.error(s"""
+      val valuesByWorkspace = validationResults.misorderedValues.groupMap(_.workspaceName)(_.compactAttr)
+      val refsByWorkspace = validationResults.misorderedReferences.groupMap(_.workspaceName)(_.compactAttr)
+
+      val valueCountsByWorkspace: Map[WorkspaceName, Int] = valuesByWorkspace.map { case (workspaceName, attrs) =>
+        workspaceName -> attrs.size
+      }
+      val refCountsByWorkspace: Map[WorkspaceName, Int] = refsByWorkspace.map { case (workspaceName, attrs) =>
+        workspaceName -> attrs.size
+      }
+
+      val combined: Map[WorkspaceName, Int] =
+        valueCountsByWorkspace ++ refCountsByWorkspace.map { case (k, v) =>
+          k -> (v + valueCountsByWorkspace.getOrElse(k, 0))
+        }
+
+      val sb: StringBuilder = new StringBuilder()
+
+      sb.append(s"""
 ================================================================================
 ===== VALIDATION RESULTS
 ================================================================================
@@ -671,10 +713,21 @@ Number of misordered reference list attributes: ${validationResults.misorderedRe
 
                Number of misordered workspaces: ${workspacesWithMisorderedValues.size + workspacesWithMisorderedReferences.size}
 
+                           Affected workspaces:
+""")
+
+      combined.foreach { case (workspaceName, count) =>
+        sb.append(s"      $workspaceName -> $count")
+      }
+
+      sb.append("""
 ================================================================================
 ===== VALIDATION RESULTS
 ================================================================================
            """)
+
+      logger.error(sb.toString())
+
       validationResults
     }
   }
