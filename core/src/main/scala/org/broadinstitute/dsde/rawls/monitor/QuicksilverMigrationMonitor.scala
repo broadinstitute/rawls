@@ -86,16 +86,17 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       for {
         // retrieve the current workspaceId from the MIGRATION_PROCESS table
         currentMigrationWorkspaceId <- dataAccess.compactEntityQuery.getCurrentMigration
-        // if current workspaceId is null, insert the first workspaceId, else use the one we just looked up
-        maybeBootstrap: UUID <-
+        // if current workspaceId is null, insert the first workspaceId
+        _ <-
           if (currentMigrationWorkspaceId.isEmpty) {
-            dataAccess.compactEntityQuery.bootstrapCurrentMigration map { _ =>
-              dataAccess.compactEntityQuery.getCurrentMigration
-            }
+            dataAccess.compactEntityQuery.bootstrapCurrentMigration
           } else {
-            DBIO.successful(currentMigrationWorkspaceId.get)
+            DBIO.successful(())
           }
-      } yield self ! MigrateWorkspace(maybeBootstrap)
+        // re-query for the current workspaceId
+        finalMigrationWorkspaceId <- dataAccess.compactEntityQuery.getCurrentMigration
+
+      } yield self ! MigrateWorkspace(finalMigrationWorkspaceId.get)
     }
 
   private def nextWorkspace(): Unit =
