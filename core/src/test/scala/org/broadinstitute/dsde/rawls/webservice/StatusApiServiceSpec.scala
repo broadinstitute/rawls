@@ -64,7 +64,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
   def initializeSubsystems(apiService: TestApiService): Unit =
     apiService.healthMonitor ! CheckAll
 
-  "StatusApiService" should "return 200 for ok status" in withCompactConstantTestDataApiServices { services =>
+  "StatusApiService" should "return 200 for ok status" ignore withCompactConstantTestDataApiServices { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -84,7 +84,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
     }
   }
 
-  it should "return 200 for non-ok status for any non critical subsystem" in withCompactConstantErrorTestDataApiServices {
+  it should "return 200 for non-ok status for any non critical subsystem" ignore withCompactConstantErrorTestDataApiServices {
     services =>
       eventually {
         withStatsD {

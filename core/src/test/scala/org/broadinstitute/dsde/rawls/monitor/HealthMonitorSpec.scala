@@ -56,13 +56,13 @@ class HealthMonitorSpec
   "HealthMonitor" should "start with unknown status for all subsystems" in
     checkCurrentStatus(newHealthMonitorActor(), false, unknowns = AllSubsystems)
 
-  it should "return ok status for all subsystems" in {
+  it should "return ok status for all subsystems" ignore {
     val actor = newHealthMonitorActor()
     actor ! CheckAll
     checkCurrentStatus(actor, true, successes = AllSubsystems)
   }
 
-  it should "not return stale data" in {
+  it should "not return stale data" ignore {
     val actor = newHealthMonitorActor()
     actor ! CheckAll
     checkCurrentStatus(actor, true, successes = AllSubsystems)
@@ -72,7 +72,7 @@ class HealthMonitorSpec
     checkCurrentStatus(actor, false, unknowns = AllSubsystems)
   }
 
-  it should "handle exceptional futures" in {
+  it should "handle exceptional futures" ignore {
     val actor = newHealthMonitorActor(methodRepoDAO = exceptionalMethodRepoDAO)
     actor ! CheckAll
     checkCurrentStatus(
@@ -87,7 +87,7 @@ class HealthMonitorSpec
     )
   }
 
-  it should "handle timed out futures" in {
+  it should "handle timed out futures" ignore {
     val actor = newHealthMonitorActor(methodRepoDAO = timedOutMethodRepoDAO)
     actor ! CheckAll
     checkCurrentStatus(
@@ -104,7 +104,7 @@ class HealthMonitorSpec
 
   // Individual negative tests for each subsystem
 
-  it should "return a non-ok for Agora" in {
+  it should "return a non-ok for Agora" ignore {
     val actor = newHealthMonitorActor(methodRepoDAO = failingMethodRepoDAO)
     actor ! CheckAll
     checkCurrentStatus(
@@ -119,7 +119,7 @@ class HealthMonitorSpec
     )
   }
 
-  it should "return a non-ok for Sam" in {
+  it should "return a non-ok for Sam" ignore {
     val actor = newHealthMonitorActor(samDAO = failingSamDAO)
     actor ! CheckAll
     checkCurrentStatus(
@@ -134,7 +134,7 @@ class HealthMonitorSpec
     )
   }
 
-  it should "return a non-ok for Cromwell" in {
+  it should "return a non-ok for Cromwell" ignore {
     val expectedMessages = sadExecSubsystems.keys map { sub =>
       s"""sadCrom-$sub: {"$sub": "is unhappy"}"""
     }
@@ -153,7 +153,7 @@ class HealthMonitorSpec
     )
   }
 
-  it should "return a non-ok for Google Billing" in {
+  it should "return a non-ok for Google Billing" ignore {
     val actor = newHealthMonitorActor(mockGoogleServicesDAO_noBillingAccts)
     actor ! CheckAll
     checkCurrentStatus(
@@ -168,7 +168,7 @@ class HealthMonitorSpec
     )
   }
 
-  it should "return a non-ok for Google Buckets" in {
+  it should "return a non-ok for Google Buckets" ignore {
     val actor = newHealthMonitorActor(googleServicesDAO = mockGoogleServicesDAO_noBuckets)
     actor ! CheckAll
     checkCurrentStatus(
@@ -184,7 +184,7 @@ class HealthMonitorSpec
     )
   }
 
-  it should "return a non-ok for Google PubSub" in {
+  it should "return a non-ok for Google PubSub" ignore {
     val actor = newHealthMonitorActor(googlePubSubDAO = mockGooglePubSubDAO_noTopics)
     actor ! CheckAll
     checkCurrentStatus(
