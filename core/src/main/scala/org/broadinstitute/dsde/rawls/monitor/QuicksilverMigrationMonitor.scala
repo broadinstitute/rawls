@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
+import org.broadinstitute.dsde.rawls.entities.exceptions.PageOutOfBoundsException
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model.{
@@ -15,6 +16,9 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValueList,
   Entity,
   EntityQuery,
+  EntityQueryResponse,
+  EntityQueryResultMetadata,
+  MigratedEntity,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -30,9 +34,10 @@ import org.broadinstitute.dsde.rawls.monitor.QuicksilverMigrationMonitor.{
 import slick.dbio.DBIO
 
 import java.util.UUID
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.{Failure, Success}
 
 object QuicksilverMigrationMonitor {
   def props(datasource: SlickDataSource, entityManager: EntityManager, initialDelay: FiniteDuration)(implicit
@@ -72,7 +77,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
   private val fakeUserInfo =
     UserInfo(RawlsUserEmail("QuicksilverMigrationMonitor"), OAuth2BearerToken(""), 3600, RawlsUserSubjectId("0"))
   private val ctx = RawlsRequestContext(fakeUserInfo, None)
-  private val chunkSize = 500
+  private val chunkSize = 200
 
   override def receive: Receive = {
     case StartAll                           => startAll()
@@ -131,7 +136,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
     }
 
   private def migrateWorkspace(workspace: Workspace, dataAccess: DataAccess): ReadWriteAction[Int] = {
-    logger.info(s"migrating ${workspace.workspaceId} ${workspace.toWorkspaceName} ...")
+    logger.info(s"[${workspace.workspaceId}] migrating ${workspace.toWorkspaceName} ...")
     val entityRequestArguments = EntityRequestArguments(workspace, ctx)
     for {
       // clear any previously-migrated entities from this workspace, in case we are restarting migrations
@@ -142,10 +147,10 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       // retrieve all entity types for this workspace, using LocalEntityProvider
       // retrieve entity types for workspace
       allTypes <- dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
-      _ = logger.info(s"  ... ${allTypes.size} entity types in this workspace (${allTypes.keySet.mkString})")
+      _ = logger.info(s"[${workspace.workspaceId}] ${allTypes.size} entity types in this workspace: $allTypes")
       // loop over all entity types and migrate each one
       results <- DBIO.sequence(allTypes.map { case (entityType, count) =>
-        logger.info(s"    ... $entityType: $count entities to consider ...")
+        logger.debug(s"    ... $entityType: $count entities to consider ...")
         migrateEntityType(workspace, entityType, localProvider, dataAccess)
       })
     } yield results.sum
@@ -161,20 +166,31 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       for {
         queryConfig <- DBIO.successful(EntityQuery(page, chunkSize, "name", Ascending, None))
         // retrieve a chunk of entities, using LocalEntityProvider
-        queryResults <- DBIO.from(localProvider.queryEntities(entityType, queryConfig, ctx))
+        queryResults <- DBIO.from(localProvider.queryEntities(entityType, queryConfig, ctx) recover {
+          // we could include relatively complex logic to compare the current page and pageSize
+          // against the total number of entities reported by this query. Instead, we just keep
+          // querying until we hit a PageOutOfBoundsException. In this case we return
+          // a fake EntityQueryResponse with no results, which gets caught later.
+          case _: PageOutOfBoundsException =>
+            EntityQueryResponse(queryConfig, EntityQueryResultMetadata(-1, -1, -1), Seq.empty[Entity])
+        })
+        _ = logger.info(
+          s"[${workspace.workspaceId} | $entityType] -> processing $entityType page ${queryConfig.page}/${queryResults.resultMetadata.filteredPageCount}"
+        )
         migrationResults <-
-          if (queryResults.results.nonEmpty) {
+          // if no results (see above), we know we're done; else, continue processing with the next page.
+          if (queryConfig.page < queryResults.resultMetadata.filteredPageCount) {
             migrateEntityChunk(workspace, queryResults.results, dataAccess) flatMap { count =>
               // loop back and retrieve the next chunk of entities of this type, until we've processed them all
               processNextChunk(page + 1, rowsUpdated + count)
             }
           } else {
-            DBIO.successful(0)
+            DBIO.successful(rowsUpdated)
           }
       } yield migrationResults
 
     processNextChunk(1, 0) map { totalRowsUpdated =>
-      logger.info(s"        ... $entityType: $totalRowsUpdated rows actually updated")
+      logger.info(s"[${workspace.workspaceId} | $entityType]    $entityType: $totalRowsUpdated rows actually updated")
       totalRowsUpdated
     }
 
@@ -185,7 +201,8 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
                                  dataAccess: DataAccess
   ): ReadWriteAction[Int] = {
     // loop over these entities
-    val entityOperations = entities.map { entity =>
+    val entitiesToMigrate = entities.flatMap { entity =>
+      logger.trace(s"            ${entity.entityType}/${entity.name} ...")
       // does this entity have any AttributeValueList or AttributeEntityReferenceList attributes?
       val listAttributesOnly = entity.attributes.filter {
         case (_ @AttributeName(_, _), _ @AttributeValueList(_))           => true
@@ -193,19 +210,33 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
         case _                                                            => false
       }
       if (listAttributesOnly.nonEmpty) {
+        logger.debug(s"              ... has list attributes, writing to db")
         // serialize this entity into Quicksilver
         val quickSilverSerialized = CompactEntitySerialization.toSql(listAttributesOnly).compactPrint
-        // persist this entity to the ENTITY_CORRECTIONS table
-        dataAccess.compactEntityQuery.saveMigratedEntity(workspace.workspaceIdAsUUID,
-                                                         entity.entityType,
-                                                         entity.name,
-                                                         quickSilverSerialized
-        )
+
+        Option(MigratedEntity(workspace.workspaceIdAsUUID, entity.entityType, entity.name, quickSilverSerialized))
       } else {
-        DBIO.successful(0)
+        None
       }
     }
-    DBIO.sequence(entityOperations) map { results => results.sum }
+
+    if (entitiesToMigrate.isEmpty) {
+      DBIO.successful(0)
+    } else {
+      dataAccess.compactEntityQuery.saveMigratedEntities(entitiesToMigrate).asTry map {
+        case Success(updateCount) =>
+          if (updateCount > 0) {
+            logger.info(
+              s"[${workspace.workspaceId} | ${entities.head.entityType}]        completed ${entities.head.entityType} chunk of size ${entities.size} with $updateCount rows updated"
+            )
+          }
+          updateCount
+        case Failure(ex) =>
+          logger.error(s"${ex.getClass.getName}: ${ex.getMessage}")
+          throw ex
+      }
+    }
+
   }
 
 }

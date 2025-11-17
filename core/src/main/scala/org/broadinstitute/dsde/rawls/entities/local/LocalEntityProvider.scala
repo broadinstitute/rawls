@@ -9,47 +9,14 @@ import io.opentelemetry.api.common.AttributeKey
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
-import org.broadinstitute.dsde.rawls.entities.base.{
-  EntityProvider,
-  ExpressionEvaluationContext,
-  ExpressionEvaluationSupport,
-  ExpressionValidator
-}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException
-}
+import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException, PageOutOfBoundsException}
 import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeEntityReference,
-  AttributeName,
-  AttributeRename,
-  AttributeUpdateOperations,
-  AttributeValue,
-  Entity,
-  EntityCopyResponse,
-  EntityPointer,
-  EntityQuery,
-  EntityQueryResponse,
-  EntityQueryResultMetadata,
-  EntityTypeMetadata,
-  EntityTypeRename,
-  ErrorReport,
-  RawlsRequestContext,
-  SubmissionValidationEntityInputs,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, AttributeRename, AttributeUpdateOperations, AttributeValue, Entity, EntityCopyResponse, EntityPointer, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, EntityTypeRename, ErrorReport, RawlsRequestContext, SubmissionValidationEntityInputs, Workspace}
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{
-  AttributeOperationListModes,
-  AttributeSupport,
-  AttributeUpdateOperationException,
-  EntitySupport
-}
+import org.broadinstitute.dsde.rawls.util.{AttributeOperationListModes, AttributeSupport, AttributeUpdateOperationException, EntitySupport}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import slick.jdbc.TransactionIsolation.ReadCommitted
 import slick.jdbc.{ResultSetConcurrency, ResultSetType}
@@ -302,7 +269,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
       } yield {
         val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
         if (filteredCount > 0 && query.page > pageCount) {
-          throw new DataEntityException(
+          throw new PageOutOfBoundsException(
             code = StatusCodes.BadRequest,
             message = s"requested page ${query.page} is greater than the number of pages $pageCount"
           )

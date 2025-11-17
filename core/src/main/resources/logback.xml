@@ -106,6 +106,27 @@
         <appender-ref ref="SYSLOG"/>
     </logger>
 
+    <logger name="org.broadinstitute.dsde.rawls.monitor.QuicksilverMigrationMonitor" level="info" additivity="false">
+        <appender-ref ref="file"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
+        <appender-ref ref="SYSLOG"/>
+        <appender-ref ref="Sentry" />
+    </logger>
+
+    <logger name="akka.event.slf4j.Slf4jLogger" level="warn" additivity="false">
+        <appender-ref ref="file"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
+        <appender-ref ref="SYSLOG"/>
+        <appender-ref ref="Sentry" />
+    </logger>
+
+    <logger name="akka.stream.Materializer" level="warn" additivity="false">
+        <appender-ref ref="file"/>
+        <appender-ref ref="${RAWLS_LOG_APPENDER}"/>
+        <appender-ref ref="SYSLOG"/>
+        <appender-ref ref="Sentry" />
+    </logger>
+
     <logger name="akka" level="info" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="${RAWLS_LOG_APPENDER}"/>

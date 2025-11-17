@@ -381,6 +381,9 @@ case class Entity(
   def toPointer: EntityPointer = EntityPointer(entityType, name)
 }
 
+// for Quicksilver re-migration
+case class MigratedEntity(workspaceId: UUID, entityType: String, entityName: String, serializedAttributes: String)
+
 case class EntityTypeMetadata(
   count: Int,
   idName: String,
