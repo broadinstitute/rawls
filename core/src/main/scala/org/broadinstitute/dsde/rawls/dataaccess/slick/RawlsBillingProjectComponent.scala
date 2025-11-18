@@ -260,7 +260,7 @@ trait RawlsBillingProjectComponent {
         .result
         .flatMap {
           case Seq() => rawlsBillingProjectQuery += RawlsBillingProjectRecord.fromBillingProject(billingProject)
-          case _ =>
+          case _     =>
             throw new RawlsException(
               s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists. If you're testing, this is likely because you previously registered this project, but failed to correctly unregister it. See https://broad.io/44jud7"
             )

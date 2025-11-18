@@ -48,7 +48,7 @@ trait ExpressionEvaluationSupport {
     rawValue match {
       case n: AttributeNumber =>
         AttributeString(n.value.bigDecimal.toPlainString) // toPlainString avoids the scientific notation in toString
-      case b: AttributeBoolean => AttributeString(b.value.toString)
+      case b: AttributeBoolean   => AttributeString(b.value.toString)
       case l: AttributeValueList =>
         val convertedValues = l.list.map(maybeConvertToString) collect { case av: AttributeValue =>
           av
@@ -76,7 +76,7 @@ trait ExpressionEvaluationSupport {
   private def unpackResult(mcSequence: Iterable[AttributeValue],
                            wfInput: ToolInputParameter
   ): SubmissionValidationValue = wfInput.getValueType.getTypeName match {
-    case TypeNameEnum.ARRAY => getArrayResult(wfInput.getName, mcSequence)
+    case TypeNameEnum.ARRAY    => getArrayResult(wfInput.getName, mcSequence)
     case TypeNameEnum.OPTIONAL =>
       if (wfInput.getValueType.getOptionalType.getTypeName == TypeNameEnum.ARRAY)
         getArrayResult(wfInput.getName, mcSequence)
@@ -102,7 +102,7 @@ trait ExpressionEvaluationSupport {
       case Seq(null)          => SubmissionValidationValue(None, handleEmpty, inputName)
       case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty, inputName)
       case Seq(singleValue)   => SubmissionValidationValue(Some(singleValue), None, inputName)
-      case multipleValues =>
+      case multipleValues     =>
         SubmissionValidationValue(Some(AttributeValueList(multipleValues.toSeq)), Some(multipleResultError), inputName)
     }
   }

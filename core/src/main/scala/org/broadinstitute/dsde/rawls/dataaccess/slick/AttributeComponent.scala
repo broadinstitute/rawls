@@ -393,7 +393,7 @@ trait AttributeComponent {
           values.zipWithIndex.map { case (value, index) =>
             marshalAttributeValue(ownerId, attributeName, value, Option(index), Option(values.length))
           }
-        case value: AttributeValue => Seq(marshalAttributeValue(ownerId, attributeName, value, None, None))
+        case value: AttributeValue         => Seq(marshalAttributeValue(ownerId, attributeName, value, None, None))
         case ref: AttributeEntityReference =>
           Seq(marshalAttributeEntityReference(ownerId, attributeName, None, ref, entityIdsByRef, None))
 

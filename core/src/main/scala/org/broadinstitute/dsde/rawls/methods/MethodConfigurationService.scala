@@ -228,7 +228,7 @@ class MethodConfigurationService(
                     )
                   )
                 case Some(_) => DBIO.successful(methodConfiguration) // renaming self to self: no-op
-                case None =>
+                case None    =>
                   dataAccess.methodConfigurationQuery.update(workspaceContext,
                                                              methodConfigurationNamespace,
                                                              methodConfigurationName,
@@ -425,7 +425,7 @@ class MethodConfigurationService(
 
     parsed flatMap {
       case Some(agoraMC) => Success(convertToMethodConfiguration(agoraMC))
-      case None =>
+      case None          =>
         Failure(
           new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")

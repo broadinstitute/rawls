@@ -170,10 +170,10 @@ private[expressions] class SlickExpressionEvaluator protected (val dataAccess: D
     runPipe(LocalEntityExpressionContext(workspaceContext, rootEntities, transactionId), pipeline) map { exprResults =>
       val results = exprResults map { case (key, attrVals) =>
         key -> Try(attrVals.collect {
-          case AttributeNull           => Seq.empty
-          case AttributeValueEmptyList => Seq.empty
-          case av: AttributeValue      => Seq(av)
-          case avl: AttributeValueList => avl.list
+          case AttributeNull                => Seq.empty
+          case AttributeValueEmptyList      => Seq.empty
+          case av: AttributeValue           => Seq(av)
+          case avl: AttributeValueList      => avl.list
           case ae: AttributeEntityReference =>
             throw new RawlsException("Attribute expression returned a reference to an entity.")
           case ael: AttributeEntityReferenceList =>

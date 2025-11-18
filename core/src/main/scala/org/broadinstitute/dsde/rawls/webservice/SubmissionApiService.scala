@@ -33,11 +33,11 @@ trait SubmissionApiService extends UserInfoDirectives {
       get {
         parameters("startDate".as[DateTime].?, "endDate".as[DateTime].?) { (startDateOpt, endDateOpt) =>
           complete {
-            submissionsServiceConstructor(ctx).listSubmissions(
-              WorkspaceName(workspaceNamespace, workspaceName),
-              ctx,
-              startDateOpt,
-              endDateOpt)
+            submissionsServiceConstructor(ctx).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName),
+                                                               ctx,
+                                                               startDateOpt,
+                                                               endDateOpt
+            )
           }
         }
       }

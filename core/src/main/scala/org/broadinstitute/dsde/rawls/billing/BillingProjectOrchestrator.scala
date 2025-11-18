@@ -167,7 +167,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                        ctx
         )
         .flatMap {
-          case true => Future.successful()
+          case true  => Future.successful()
           case false =>
             Future.failed(
               new RawlsExceptionWithErrorReport(

@@ -86,7 +86,7 @@ object MigrationUtils {
       override def empty: Outcome = Success
 
       override def combine(a: Outcome, b: Outcome): Outcome = a match {
-        case Success => b
+        case Success       => b
         case Failure(msgA) =>
           b match {
             case Success       => a

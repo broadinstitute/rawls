@@ -572,7 +572,7 @@ class SpendReportingService(
 
       spendResults = queryResults match {
         case Some(results) => results
-        case None =>
+        case None          =>
           throw RawlsExceptionWithErrorReport(
             StatusCodes.NotFound,
             s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
@@ -657,7 +657,7 @@ class SpendReportingService(
               val queryResults = runBigQueryJob(queryJob, childContext)
                 .map { result =>
                   result.getValues.asScala.toList match {
-                    case Nil => None
+                    case Nil  => None
                     case rows =>
                       val crossBillingResults =
                         extractCrossBillingProjectSpendReportingResults(rows, start, end, workspaceNamesByProjectId)

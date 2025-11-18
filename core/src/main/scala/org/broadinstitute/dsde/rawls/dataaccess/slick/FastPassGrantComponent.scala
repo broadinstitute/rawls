@@ -104,7 +104,7 @@ trait FastPassGrantComponent {
   object fastPassGrantQuery extends TableQuery(new FastPassGrantTable(_)) {
     def findById(id: Long): ReadAction[Option[FastPassGrant]] =
       uniqueResult[FastPassGrantRecord](findByIdQuery(id)) flatMap {
-        case None => DBIO.successful(None)
+        case None                      => DBIO.successful(None)
         case Some(fastPassGrantRecord) =>
           DBIO.successful(Option(FastPassGrantRecord.toFastPassGrant(fastPassGrantRecord)))
       }

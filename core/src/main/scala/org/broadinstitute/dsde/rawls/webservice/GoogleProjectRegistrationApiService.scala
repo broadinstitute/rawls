@@ -68,7 +68,7 @@ trait GoogleProjectRegistrationApiService extends UserInfoDirectives {
                   .getGoogleProjectById(GoogleProjectId(googleProjectId))
               ) {
                 case Some(project) => complete(StatusCodes.OK -> project)
-                case None =>
+                case None          =>
                   complete(StatusCodes.NotFound -> "Google project does not exist or you don't have access.")
               }
             }

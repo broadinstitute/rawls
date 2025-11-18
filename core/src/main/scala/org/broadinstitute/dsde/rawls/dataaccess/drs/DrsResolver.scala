@@ -25,7 +25,7 @@ object DrsResolver {
     val lowerUri = uri.toLowerCase
     hostNameRegex.findFirstMatchIn(lowerUri) match {
       case Some(matchGroup) => Some(matchGroup.group("hostname"))
-      case None =>
+      case None             =>
         compactIdRegex.findFirstMatchIn(lowerUri) match {
           case Some(matchGroup) => Some(matchGroup.group("compactIdPrefix"))
           case None             => None

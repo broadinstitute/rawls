@@ -192,7 +192,7 @@ class WorkspaceServiceUpdateAclSpec extends AnyFlatSpecLike with MockitoSugar wi
   ): Either[StatusCode, Set[(SamResourceTypeName, SamResourcePolicyName)]] =
     aclUpdate match {
       case WorkspaceACLUpdate(_, WorkspaceAccessLevels.ProjectOwner, _, _) => Left(StatusCodes.BadRequest)
-      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Owner, _, _) =>
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Owner, _, _)        =>
         Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.owner))
 
       case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, canShare, canCompute) =>

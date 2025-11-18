@@ -38,6 +38,7 @@ object Merging {
     case x if x.endsWith("aot.factories")                => MergeStrategy.first
     case x if x.endsWith("public-suffix-list.txt")       => MergeStrategy.first
     case "META-INF/proguard/concurrent.pro"              => MergeStrategy.concat
+    case "META-INF/license/LICENSE.boringssl.txt" => MergeStrategy.discard
     case x                                               => oldStrategy(x)
   }
 }

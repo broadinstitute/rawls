@@ -431,7 +431,7 @@ class CompactExpressionEvaluator(repository: CompactEntityRepository)
       if (plan.relationChain.isEmpty) {
         repository.queries.getEntity(workspaceId, entityType, entityName).map {
           case Some(entity) => Map(entity.name -> Seq(entity)) // Wrap the entity in a Seq to match the expected type
-          case None =>
+          case None         =>
             throw new RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.NotFound, s"Entity of type $entityType with name $entityName not found.")
             )

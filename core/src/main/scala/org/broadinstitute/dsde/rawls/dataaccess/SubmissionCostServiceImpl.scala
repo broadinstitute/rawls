@@ -224,7 +224,7 @@ class SubmissionCostServiceImpl(defaultTableName: String,
   ): Future[util.List[TableRow]] =
     workflowIds match {
       case Seq() => Future.successful(Seq.empty.asJava)
-      case ids =>
+      case ids   =>
         val subquery = ids.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
         val querySql: String =
           generateWorkflowCostsQuery(submissionDate, terminalStatusDate, subquery, tableName, datePartitionColumn)
