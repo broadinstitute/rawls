@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.compact
 
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.CompactEntityAttributeListSerializer
 import org.broadinstitute.dsde.rawls.entities.exceptions.CompactEntityDeserializationException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -84,6 +85,54 @@ class CompactEntitySerializationSpec extends AnyFlatSpec with Matchers with Comp
     actual.attrs(singleref) shouldBe AttributeString("targetName1")
     actual.attrs.keys should contain(reflist)
     actual.attrs(reflist) shouldBe AttributeNumber(2)
+  }
+
+  it should "preserve value array ordering in toSql/fromSql round trip" in {
+    // Define an entity
+    val baseAttrs = Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))
+
+    List(23, 45, 67, 89) foreach { numElements =>
+      // generate some ordered arrays with long text
+      val prefix1 = RandomStringUtils.insecure().nextAscii(numElements * 2)
+      val prefix2 = RandomStringUtils.insecure().nextAscii(numElements * 3)
+
+      val array1 = Range.inclusive(1, numElements).map(idx => s"$prefix1$idx").sorted
+      val attr1 = AttributeValueList(array1 map AttributeString)
+      val array2 = Range.inclusive(1, numElements).map(idx => s"$prefix2$idx") // arbitrary order
+      val attr2 = AttributeValueList(array2 map AttributeString)
+
+      val expected = baseAttrs ++ Map(
+        AttributeName.withDefaultNS("attr1") -> attr1,
+        AttributeName.withDefaultNS("attr2") -> attr2
+      )
+
+      // get a copy of the attributes after toSql/fromSql round trip
+      val actual = fromSql(Option(toSql(expected).compactPrint))
+
+      actual shouldBe expected
+    }
+  }
+
+  it should "preserve reference array ordering in toSql/fromSql round trip" in {
+    // Define an entity
+    val baseAttrs = Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))
+
+    List(23, 45, 67, 89) foreach { numElements =>
+      // generate some ordered arrays with long text
+      val refEntityType = RandomStringUtils.insecure().nextAscii(numElements * 2)
+      val refEntityName = RandomStringUtils.insecure().nextAscii(numElements * 3)
+
+      val array1 = Range.inclusive(1, numElements).map(_ => AttributeEntityReference(refEntityType, refEntityName))
+
+      val expected = baseAttrs ++ Map(
+        AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(array1)
+      )
+
+      // get a copy of the attributes after toSql/fromSql round trip
+      val actual = fromSql(Option(toSql(expected).compactPrint))
+
+      actual shouldBe expected
+    }
   }
 
   behavior of "AttributeFormat serialization"
