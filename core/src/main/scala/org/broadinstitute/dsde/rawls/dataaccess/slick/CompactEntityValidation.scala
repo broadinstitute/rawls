@@ -33,7 +33,7 @@ import java.util.UUID
     ) comment="All workspaces that need a re-migration";
 
     insert into MIGRATION_WORKSPACES(id)
-    select distinct workspace_id from ENTITY order by workspace_id asc;
+    select distinct workspace_id from ENTITY where deleted = b'0' order by workspace_id asc;
 
     create table ENTITY_CORRECTIONS (
         `id` bigint unsigned NOT NULL AUTO_INCREMENT,

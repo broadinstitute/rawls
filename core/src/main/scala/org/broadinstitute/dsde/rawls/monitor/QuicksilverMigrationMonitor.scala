@@ -122,18 +122,25 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
     }
 
   private def startWorkspace(workspaceId: UUID): Unit =
-    datasource.inTransaction { dataAccess =>
-      for {
-        // retrieve the workspace
-        workspaceOption <- dataAccess.workspaceQuery.loadWorkspace(dataAccess.workspaceQuery.findByIdQuery(workspaceId))
-        workspace = workspaceOption.get
-        // persist current workspaceId to MIGRATION_PROCESS table
-        _ <- dataAccess.compactEntityQuery.updateCurrentMigration(workspaceId)
-        // migrate this workspace
-        workspaceMigrationResult <- migrateWorkspace(workspace, dataAccess)
+    for {
+      workspaceCheck <- datasource.inTransaction { dataAccess =>
+        for {
+          // retrieve the workspace
+          workspaceOption <- dataAccess.workspaceQuery.loadWorkspace(
+            dataAccess.workspaceQuery.findByIdQuery(workspaceId)
+          )
+          workspace = workspaceOption.get
+          // persist current workspaceId to MIGRATION_PROCESS table
+          _ <- dataAccess.compactEntityQuery.updateCurrentMigration(workspaceId)
+          // migrate this workspace
+          workspaceMigrationResult <- migrateWorkspace(workspace, dataAccess)
 
-      } yield self ! NextWorkspace
-    }
+        } yield workspace
+      }
+      _ <- datasource.inTransaction { dataAccess =>
+        migrateWorkspace(workspaceCheck, dataAccess)
+      }
+    } yield self ! NextWorkspace
 
   private def migrateWorkspace(workspace: Workspace, dataAccess: DataAccess): ReadWriteAction[Int] = {
     logger.info(s"[${workspace.workspaceId}] migrating ${workspace.toWorkspaceName} ...")
@@ -149,7 +156,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       allTypes <- dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
       _ = logger.info(s"[${workspace.workspaceId}] ${allTypes.size} entity types in this workspace: $allTypes")
       // loop over all entity types and migrate each one
-      results <- DBIO.sequence(allTypes.map { case (entityType, count) =>
+      results <- DBIO.sequence(allTypes.toSeq.sortBy(_._1.toLowerCase).map { case (entityType, count) =>
         logger.debug(s"    ... $entityType: $count entities to consider ...")
         migrateEntityType(workspace, entityType, localProvider, dataAccess)
       })
