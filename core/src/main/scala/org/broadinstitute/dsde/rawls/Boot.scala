@@ -531,7 +531,7 @@ object Boot extends IOApp with LazyLogging {
         googleProjectRegistrationServiceConstructor
       )
 
-      if (appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
+      if (true || appConfigManager.conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
 
         BootMonitors.bootMonitors(

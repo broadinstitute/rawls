@@ -21,9 +21,19 @@ import java.util.UUID
  *
  */
 /*
+    -- ----- SQL to run prior to executing the re-migration ----- --
+
     create table CURRENT_MIGRATION (
         workspace_id binary(16)
-    );
+    ) comment="Holds state for the QuicksilverMigrationMonitor";
+
+    create table MIGRATION_WORKSPACES (
+      PRIMARY KEY (`id`),
+      id binary(16)
+    ) comment="All workspaces that need a re-migration";
+
+    insert into MIGRATION_WORKSPACES(id)
+    select distinct workspace_id from ENTITY order by workspace_id asc;
 
     create table ENTITY_CORRECTIONS (
         `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -35,7 +45,7 @@ import java.util.UUID
         PRIMARY KEY (`id`),
         UNIQUE KEY `idx_corrections_entity_type_name` (`workspace_id`,`entity_type`,`name`),
         KEY `idx_corrections_status` (`status`)
-    );
+    ) comment="Re-migrated entities. Contains only those active entities that had lists, and only their list attributes";
  */
 trait CompactEntityValidation {
   this: CompactEntityQuery =>
@@ -57,23 +67,17 @@ trait CompactEntityValidation {
 
   def bootstrapCurrentMigration: ReadWriteAction[Int] =
     sql"""insert into CURRENT_MIGRATION(workspace_id)
-          select id from WORKSPACE order by id asc limit 1 """.asUpdate
+          select id from MIGRATION_WORKSPACES order by id asc limit 1 """.asUpdate
 
   def nextMigration(previousWorkspaceId: UUID): ReadAction[Option[UUID]] =
-    sql"""select id from WORKSPACE where id > $previousWorkspaceId order by id asc limit 1""".as[UUID].headOption
+    sql"""select id from MIGRATION_WORKSPACES where id > $previousWorkspaceId order by id asc limit 1"""
+      .as[UUID]
+      .headOption
 
   def updateCurrentMigration(workspaceId: UUID): ReadWriteAction[Int] =
     sql"""update CURRENT_MIGRATION set workspace_id = $workspaceId""".asUpdate
 
   // ***** for persisting to the ENTITY_CORRECTIONS table
-  def saveMigratedEntity(workspaceId: UUID,
-                         entityType: String,
-                         entityName: String,
-                         serializedAttributes: String
-  ): ReadWriteAction[Int] =
-    sql"""insert into ENTITY_CORRECTIONS(workspace_id, entity_type, name, attributes)
-       values($workspaceId, $entityType, $entityName, $serializedAttributes)""".asUpdate
-
   def saveMigratedEntities(migratedEntities: Seq[MigratedEntity]): ReadWriteAction[Int] = {
     val startSql = sql"""insert into ENTITY_CORRECTIONS(workspace_id, entity_type, name, attributes)
        values """
