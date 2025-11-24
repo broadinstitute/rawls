@@ -132,39 +132,40 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
           workspace = workspaceOption.get
           // persist current workspaceId to MIGRATION_PROCESS table
           _ <- dataAccess.compactEntityQuery.updateCurrentMigration(workspaceId)
-          // migrate this workspace
-          workspaceMigrationResult <- migrateWorkspace(workspace, dataAccess)
-
         } yield workspace
       }
-      _ <- datasource.inTransaction { dataAccess =>
-        migrateWorkspace(workspaceCheck, dataAccess)
-      }
+      _ <- migrateWorkspace(workspaceCheck)
+
     } yield self ! NextWorkspace
 
-  private def migrateWorkspace(workspace: Workspace, dataAccess: DataAccess): ReadWriteAction[Int] = {
+  private def migrateWorkspace(workspace: Workspace): Future[Int] = {
     logger.info(s"[${workspace.workspaceId}] migrating ${workspace.toWorkspaceName} ...")
     val entityRequestArguments = EntityRequestArguments(workspace, ctx)
     for {
       // clear any previously-migrated entities from this workspace, in case we are restarting migrations
       // after a Rawls reboot
-      _ <- dataAccess.compactEntityQuery.restartWorkspace(workspace.workspaceIdAsUUID)
+      _ <- datasource.inTransaction { dataAccess =>
+        dataAccess.compactEntityQuery.restartWorkspace(workspace.workspaceIdAsUUID)
+      }
       // get a LocalEntityProvider for this workspace
-      localProvider <- DBIO.from(entityManager.getLocalProvider(entityRequestArguments))
+      localProvider <- entityManager.getLocalProvider(entityRequestArguments)
       // retrieve all entity types for this workspace, using LocalEntityProvider
       // retrieve entity types for workspace
-      allTypes <- dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
+      allTypes <- datasource.inTransaction { dataAccess =>
+        dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
+      }
       _ = logger.info(s"[${workspace.workspaceId}] ${allTypes.size} entity types in this workspace: $allTypes")
 
       // loop over all entity types and migrate each one
-      results <- allTypes.toSeq.sortBy(_._1.toLowerCase).foldLeft[ReadWriteAction[Int]](DBIO.successful(0)) { (acc, mapElement) =>
-        val (entityType, count) = mapElement
-        logger.debug(s"    ... $entityType: $count entities to consider ...")
-        acc.flatMap { accVal =>
-          migrateEntityType(workspace, entityType, localProvider, dataAccess) map { thisTypeVal =>
-            accVal + thisTypeVal
+      results <- allTypes.toSeq.sortBy(_._1.toLowerCase).foldLeft[Future[Int]](Future.successful(0)) {
+        (acc, mapElement) =>
+          val (entityType, count) = mapElement
+          logger.debug(s"    ... $entityType: $count entities to consider ...")
+          acc.flatMap { accVal =>
+            migrateEntityType(workspace, entityType, localProvider) map { thisTypeVal =>
+              accVal + thisTypeVal
+            }
           }
-        }
 
       }
 
@@ -179,11 +180,10 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
 
   private def migrateEntityType(workspace: Workspace,
                                 entityType: String,
-                                localProvider: EntityProvider,
-                                dataAccess: DataAccess
-  ): ReadWriteAction[Int] = {
+                                localProvider: EntityProvider
+  ): Future[Int] = {
     // inner method for recursion
-    def processNextChunk(page: Int, rowsUpdated: Int): ReadWriteAction[Int] =
+    def processNextChunk(page: Int, rowsUpdated: Int, dataAccess: DataAccess): ReadWriteAction[Int] =
       for {
         queryConfig <- DBIO.successful(EntityQuery(page, chunkSize, "name", Ascending, None))
         // retrieve a chunk of entities, using LocalEntityProvider
@@ -203,16 +203,18 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
           if (queryConfig.page < queryResults.resultMetadata.filteredPageCount) {
             migrateEntityChunk(workspace, queryResults.results, dataAccess) flatMap { count =>
               // loop back and retrieve the next chunk of entities of this type, until we've processed them all
-              processNextChunk(page + 1, rowsUpdated + count)
+              processNextChunk(page + 1, rowsUpdated + count, dataAccess)
             }
           } else {
             DBIO.successful(rowsUpdated)
           }
       } yield migrationResults
 
-    processNextChunk(1, 0) map { totalRowsUpdated =>
-      logger.info(s"[${workspace.workspaceId} | $entityType]    $entityType: $totalRowsUpdated rows actually updated")
-      totalRowsUpdated
+    datasource.inTransaction { dataAccess =>
+      processNextChunk(1, 0, dataAccess) map { totalRowsUpdated =>
+        logger.info(s"[${workspace.workspaceId} | $entityType]    $entityType: $totalRowsUpdated rows actually updated")
+        totalRowsUpdated
+      }
     }
 
   }
@@ -257,7 +259,6 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
           throw ex
       }
     }
-
   }
 
 }
