@@ -6,15 +6,30 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.{FastPassConfig, RawlsConfigManager}
-import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
+import org.broadinstitute.dsde.rawls.coordination.{
+  CoordinatedDataSourceAccess,
+  CoordinatedDataSourceActor,
+  DataSourceAccess,
+  UncoordinatedDataSourceAccess
+}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
+import org.broadinstitute.dsde.rawls.jobexec.{
+  MethodConfigResolver,
+  SubmissionMonitorConfig,
+  SubmissionSupervisor,
+  WorkflowSubmissionActor
+}
 import org.broadinstitute.dsde.rawls.metrics.BardService
-import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses, WorkspaceCloudPlatform}
+import org.broadinstitute.dsde.rawls.model.{
+  CromwellBackend,
+  RawlsRequestContext,
+  WorkflowStatuses,
+  WorkspaceCloudPlatform
+}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
@@ -62,9 +77,10 @@ object BootMonitors extends LazyLogging {
                    methodConfigResolver: MethodConfigResolver,
                    bardService: BardService,
                    workspaceSettingRepository: WorkspaceSettingRepository,
-                   entityManager: EntityManager
+                   entityManager: EntityManager,
+                   chunkSize: Int
   ): Unit =
 
-    system.actorOf(QuicksilverMigrationMonitor.props(slickDataSource, entityManager, 10 seconds))
+    system.actorOf(QuicksilverMigrationMonitor.props(slickDataSource, entityManager, 10 seconds, chunkSize))
 
 }

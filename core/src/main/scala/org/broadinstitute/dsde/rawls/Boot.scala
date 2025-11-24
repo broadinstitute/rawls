@@ -563,7 +563,8 @@ object Boot extends IOApp with LazyLogging {
           methodConfigResolver,
           bardService,
           workspaceSettingRepository,
-          entityManager
+          entityManager,
+          appConfigManager.conf.getInt("QuicksilverMigrationMonitor.chunkSize")
         )
       } else
         logger.info(

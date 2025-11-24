@@ -40,10 +40,10 @@ import scala.language.postfixOps
 import scala.util.{Failure, Success}
 
 object QuicksilverMigrationMonitor {
-  def props(datasource: SlickDataSource, entityManager: EntityManager, initialDelay: FiniteDuration)(implicit
-    executionContext: ExecutionContext
+  def props(datasource: SlickDataSource, entityManager: EntityManager, initialDelay: FiniteDuration, chunkSize: Int)(
+    implicit executionContext: ExecutionContext
   ): Props =
-    Props(new QuicksilverMigrationMonitor(datasource, entityManager, initialDelay))
+    Props(new QuicksilverMigrationMonitor(datasource, entityManager, initialDelay, chunkSize))
 
   sealed trait QuicksilverMigrationMessage
   case object StartAll extends QuicksilverMigrationMessage
@@ -62,7 +62,8 @@ object QuicksilverMigrationMonitor {
  */
 class QuicksilverMigrationMonitor(datasource: SlickDataSource,
                                   entityManager: EntityManager,
-                                  initialDelay: FiniteDuration
+                                  initialDelay: FiniteDuration,
+                                  chunkSize: Int
 )(implicit
   executionContext: ExecutionContext
 ) extends Actor
@@ -77,7 +78,6 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
   private val fakeUserInfo =
     UserInfo(RawlsUserEmail("QuicksilverMigrationMonitor"), OAuth2BearerToken(""), 3600, RawlsUserSubjectId("0"))
   private val ctx = RawlsRequestContext(fakeUserInfo, None)
-  private val chunkSize = 600
 
   override def receive: Receive = {
     case StartAll                           => startAll()
