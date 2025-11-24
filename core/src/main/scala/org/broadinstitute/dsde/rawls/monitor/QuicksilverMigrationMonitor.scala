@@ -155,12 +155,26 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       // retrieve entity types for workspace
       allTypes <- dataAccess.entityQuery.getEntityTypesWithCounts(workspace.workspaceIdAsUUID)
       _ = logger.info(s"[${workspace.workspaceId}] ${allTypes.size} entity types in this workspace: $allTypes")
+
       // loop over all entity types and migrate each one
-      results <- DBIO.sequence(allTypes.toSeq.sortBy(_._1.toLowerCase).map { case (entityType, count) =>
+      results <- allTypes.toSeq.sortBy(_._1.toLowerCase).foldLeft[ReadWriteAction[Int]](DBIO.successful(0)) { (acc, mapElement) =>
+        val (entityType, count) = mapElement
         logger.debug(s"    ... $entityType: $count entities to consider ...")
-        migrateEntityType(workspace, entityType, localProvider, dataAccess)
-      })
-    } yield results.sum
+        acc.flatMap { accVal =>
+          migrateEntityType(workspace, entityType, localProvider, dataAccess) map { thisTypeVal =>
+            accVal + thisTypeVal
+          }
+        }
+
+      }
+
+      // loop over all entity types and migrate each one
+//      results <- DBIO.sequence(allTypes.toSeq.sortBy(_._1.toLowerCase).map { case (entityType, count) =>
+//        logger.debug(s"    ... $entityType: $count entities to consider ...")
+//        migrateEntityType(workspace, entityType, localProvider, dataAccess)
+//      })
+
+    } yield results
   }
 
   private def migrateEntityType(workspace: Workspace,
