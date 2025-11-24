@@ -77,7 +77,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
   private val fakeUserInfo =
     UserInfo(RawlsUserEmail("QuicksilverMigrationMonitor"), OAuth2BearerToken(""), 3600, RawlsUserSubjectId("0"))
   private val ctx = RawlsRequestContext(fakeUserInfo, None)
-  private val chunkSize = 200
+  private val chunkSize = 600
 
   override def receive: Receive = {
     case StartAll                           => startAll()
