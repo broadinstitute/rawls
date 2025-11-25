@@ -2693,9 +2693,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def withLegacyDefaultTestDatabase[T](testCode: => T): T =
     withCustomTestDatabaseInternal(legacyTestData)(testCode)
 
-  def withLegacyDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
-    withCustomTestDatabaseInternal(legacyTestData)(testCode(slickDataSource))
-
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))
 
