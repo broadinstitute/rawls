@@ -483,9 +483,6 @@ trait AttributeComponent {
       )
     }
 
-    def findByNameQuery(attrName: AttributeName) =
-      filter(rec => rec.namespace === attrName.namespace && rec.name === attrName.name)
-
     def findByOwnerQuery(ownerIds: Seq[OWNER_ID]) =
       filter(_.ownerId inSetBind ownerIds)
 
@@ -585,16 +582,14 @@ trait AttributeComponent {
         } yield updateResult
       }
 
-    def deleteAttributes(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) =
-      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-        DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
-
+    // TODO CTM-173: only used in tests
     def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
                                       entityType: String,
                                       attributeName: AttributeName
     ): ReadAction[Option[Boolean]] =
       uniqueResult(AttributeColumnQueries.doesAttributeExist(workspaceContext, entityType, attributeName))
 
+    // TODO CTM-173: only used in tests
     def renameAttribute(workspaceContext: Workspace,
                         entityType: String,
                         oldAttributeName: AttributeName,
@@ -608,26 +603,6 @@ trait AttributeComponent {
         )
         _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
       } yield numRowsRenamed
-
-    private object DeleteAttributeColumnQueries extends RawSqlQuery {
-      val driver: JdbcProfile = AttributeComponent.this.driver
-
-      def deleteAttributeColumn(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
-        val attributeNamesSql = reduceSqlActionsWithDelim(attributeNames.map { attName =>
-          sql"""(${attName.namespace},${attName.name})"""
-        }.toSeq)
-
-        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-
-        val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE_#$shardId ea
-                                    join ENTITY e on e.id = ea.owner_id
-                                    where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
-                                      and e.entity_type = $entityType
-                                      and (ea.namespace, ea.name) in """
-
-        concatSqlActions(deleteQueryBase, sql"(", attributeNamesSql, sql")").as[Int]
-      }
-    }
 
     private object AttributeColumnQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
