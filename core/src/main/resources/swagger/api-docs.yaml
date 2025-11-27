@@ -3992,11 +3992,15 @@ paths:
           description: how many google projects to return at a time
           required: false
           default: 100
+          schema:
+            type: integer
         - name: offset
           in: query
           description: The number of items to skip before starting to collect the result
           required: false
           default: 0
+          schema:
+            type: integer
       responses:
         200:
           description: Successful Request
