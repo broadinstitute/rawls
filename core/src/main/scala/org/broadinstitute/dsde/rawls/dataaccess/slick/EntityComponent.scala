@@ -226,13 +226,6 @@ trait EntityComponent {
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
-      @VisibleForTesting
-      def activeActionForWorkspace(workspaceContext: Workspace): ReadAction[Seq[EntityAndAttributesResult]] =
-        sql"""#${baseEntityAndAttributeSql(
-            workspaceContext
-          )} where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
-          .as[EntityAndAttributesResult]
-
       // actions which may include "deleted" hidden entities
 
       @VisibleForTesting
@@ -280,22 +273,6 @@ trait EntityComponent {
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
-
-    // noinspection SqlDialectInspection
-    private object EntityDependenciesDeletionQuery extends RawSqlQuery {
-      val driver: JdbcProfile = EntityComponent.this.driver
-
-      @VisibleForTesting
-      def deleteAction(workspaceContext: Workspace): WriteAction[Int] = {
-        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-
-        sqlu"""delete ea from ENTITY_ATTRIBUTE_#$shardId ea
-               inner join ENTITY e
-               on ea.owner_id = e.id
-               where e.workspace_id=${workspaceContext.workspaceIdAsUUID}
-          """
-      }
-    }
 
     /*
       These methods are only used by unit tests.
@@ -370,11 +347,6 @@ trait EntityComponent {
         })
         .map(_.flatten)
     }
-
-    // list all entities or those in a category
-    @VisibleForTesting
-    def listActiveEntities(workspaceContext: Workspace): ReadAction[IterableOnce[Entity]] =
-      EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
 
     // create or replace entities
 
@@ -523,11 +495,6 @@ trait EntityComponent {
     // perform actual deletion (not hiding) of all entities in a workspace
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] =
       filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
-
-    @VisibleForTesting
-    def deleteEntitiesAndAttributesFromDb(workspaceContext: Workspace): WriteAction[Int] =
-      EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen
-        filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
 
     // Unmarshal methods
 

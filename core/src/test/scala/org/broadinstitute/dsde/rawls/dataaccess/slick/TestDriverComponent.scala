@@ -2306,7 +2306,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   /* This test data should remain constant! Changing this data set will likely break
    * many of the tests that rely on it. */
-  class ConstantTestData(useCompact: Boolean = true) extends TestData {
+  class ConstantTestData extends TestData {
     // setup workspace objects
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(
@@ -2649,14 +2649,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
-                                                                 allEntities,
-                                                                 true
-              )
-            } else {
-              entityQuery.save(context, allEntities)
-            },
+            compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                               allEntities,
+                                                               true
+            ),
             saveAllMCs(context),
             submissionQuery.create(context, submissionNoWorkflows),
             submissionQuery.create(context, submission1),
@@ -2679,7 +2675,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   val testData = new DefaultTestData()
   val legacyTestData = new DefaultTestData(false)
-  val constantData = new ConstantTestData(false)
   val compactConstantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
   val protectedWorkspaceTestData = new ProtectedWorkspaceTestData()
@@ -2698,9 +2693,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withProtectedWorkspaceTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(protectedWorkspaceTestData)(testCode(slickDataSource))
-
-  def withConstantTestDatabase[T](testCode: => T): T =
-    withCustomTestDatabaseInternal(constantData)(testCode)
 
   def withCompactConstantTestDatabase[T](testCode: => T): T =
     withCustomTestDatabaseInternal(compactConstantData)(testCode)
