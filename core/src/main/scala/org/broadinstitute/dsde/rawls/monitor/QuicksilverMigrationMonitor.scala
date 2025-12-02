@@ -137,7 +137,9 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       }
       _ <- migrateWorkspace(workspaceCheck)
 
-    } yield self ! NextWorkspace
+    } yield
+      // pause to assist with garbage collection and system load
+      context.system.scheduler.scheduleOnce(1 second, self, NextWorkspace)
 
   private def migrateWorkspace(workspace: Workspace): Future[Int] = {
     logger.info(s"[${workspace.workspaceId}] migrating ${workspace.toWorkspaceName} ...")
