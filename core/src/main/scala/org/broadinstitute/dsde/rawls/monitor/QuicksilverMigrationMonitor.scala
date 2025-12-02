@@ -117,6 +117,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
           // send a MigrateWorkspace message for the next workspace id
           self ! MigrateWorkspace(nextMigrationWorkspaceId.get)
         } else {
+          logger.info(s"********** re-migration is complete **********")
           self ! AllDone
         }
     }
@@ -200,7 +201,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
         )
         migrationResults <-
           // if no results (see above), we know we're done; else, continue processing with the next page.
-          if (queryConfig.page < queryResults.resultMetadata.filteredPageCount) {
+          if (queryConfig.page <= queryResults.resultMetadata.filteredPageCount) {
             migrateEntityChunk(workspace, queryResults.results, dataAccess) flatMap { count =>
               // loop back and retrieve the next chunk of entities of this type, until we've processed them all
               processNextChunk(page + 1, rowsUpdated + count, dataAccess)
