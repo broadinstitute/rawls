@@ -84,7 +84,7 @@ object Settings {
   )
 
   // When updating this, also update Docker image (https://hub.docker.com/r/sbtscala/scala-sbt/tags)
-  val scala213 = "2.13.17"
+  val scala213 = "2.13.18"
 
   // common settings for all sbt subprojects, without enforcing that a database is present (for tests)
   val commonSettingsWithoutDb =

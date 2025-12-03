@@ -59,25 +59,25 @@ object Dependencies {
   // rawlsCoreDependencies, does not need these. As of this writing, metrics4-scala and metrics3-statsd are only
   // needed by the metrics subproject of Rawls.
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
-  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.3.5"
+  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.3.7"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.6"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.20.1"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.14.0"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.5"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.25.0"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.27.1"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val fs2Reactive: ModuleID =     "co.fs2"                        %% "fs2-reactive-streams" % "3.6.1" // 3.7.0 has possibly-breaking changes
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.20"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.21"
   val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "9.0"
   val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.20.0"
+  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.21.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.13.2"
   // protobuf is only need to use the MySQL X DevAPI which we don't. exclude it to avoid interference with Google client libraries
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.5.0" exclude("com.google.protobuf", "protobuf-java")
@@ -107,7 +107,7 @@ object Dependencies {
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.128.7" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.128.8" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.10-${workbenchLibsHash}"
 
@@ -132,10 +132,10 @@ object Dependencies {
 
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-jakarta-client" % "1.593.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.153-SNAPSHOT")
-  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "1.1.61-SNAPSHOT" classifier "plain"))
+  val terraCommonLib = tclExclusions(clientLibExclusions("bio.terra" % "terra-common-lib" % "1.1.65-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = clientLibExclusions("org.broadinstitute.dsde.workbench" %% "sam-client" % "v0.0.423")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.13" % "1.3.6-82c1f7d"
-  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.39-SNAPSHOT")
+  val policyService = clientLibExclusions("bio.terra" % "terra-policy-client" % "1.0.41-SNAPSHOT")
 
   // OpenTelemetry
   val openTelemetryInstrumentationVersion = "2.20.0"
@@ -149,7 +149,7 @@ object Dependencies {
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.4").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
-  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.35"
+  val openApiParser: ModuleID = "io.swagger.parser.v3" % "swagger-parser-v3" % "2.1.36"
 
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included
@@ -157,7 +157,7 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     // override commons-codec to address a non-CVE warning from DefectDojo
-    "commons-codec"                 % "commons-codec"         % "1.19.0",
+    "commons-codec"                 % "commons-codec"         % "1.20.0",
     // override cats-parse to address conflicting dependency versions for scala-uri
     "org.typelevel" %% "cats-parse" % "1.1.0"
   )
