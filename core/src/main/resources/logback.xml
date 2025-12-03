@@ -20,7 +20,7 @@
 
     <appender name="Console-Standard" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-            <Pattern>%date %-5level [%thread] %logger{36}: %message%n</Pattern>
+            <Pattern>%date %-5level %logger{36}: %message%n</Pattern>
         </encoder>
     </appender>
 
