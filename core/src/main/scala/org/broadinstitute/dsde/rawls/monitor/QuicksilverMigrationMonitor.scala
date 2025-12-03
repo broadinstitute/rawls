@@ -199,7 +199,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
             EntityQueryResponse(queryConfig, EntityQueryResultMetadata(-1, -1, -1), Seq.empty[Entity])
         })
         _ = logger.info(
-          s"[${workspace.workspaceId} | $entityType] -> processing $entityType page ${queryConfig.page}/${queryResults.resultMetadata.filteredPageCount}"
+          s"[${workspace.workspaceId}] -> processing $entityType page ${queryConfig.page}/${queryResults.resultMetadata.filteredPageCount}"
         )
         migrationResults <-
           // if no results (see above), we know we're done; else, continue processing with the next page.
@@ -215,7 +215,7 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
 
     datasource.inTransaction { dataAccess =>
       processNextChunk(1, 0, dataAccess) map { totalRowsUpdated =>
-        logger.info(s"[${workspace.workspaceId} | $entityType]    $entityType: $totalRowsUpdated rows actually updated")
+        logger.info(s"[${workspace.workspaceId}]    $entityType: $totalRowsUpdated rows actually updated")
         totalRowsUpdated
       }
     }
@@ -252,8 +252,8 @@ class QuicksilverMigrationMonitor(datasource: SlickDataSource,
       dataAccess.compactEntityQuery.saveMigratedEntities(entitiesToMigrate).asTry map {
         case Success(updateCount) =>
           if (updateCount > 0) {
-            logger.info(
-              s"[${workspace.workspaceId} | ${entities.head.entityType}]        completed ${entities.head.entityType} chunk of size ${entities.size} with $updateCount rows updated"
+            logger.trace(
+              s"[${workspace.workspaceId}]        completed ${entities.head.entityType} chunk of size ${entities.size} with $updateCount rows updated"
             )
           }
           updateCount
