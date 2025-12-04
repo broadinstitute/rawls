@@ -5,8 +5,6 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName
 import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
 import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrectionStatusType
-import org.broadinstitute.dsde.rawls.monitor.ModifiedStatusType
-import org.broadinstitute.dsde.rawls.monitor.ModifiedStatusType.ModifiedStatusType
 import slick.jdbc.GetResult
 import slick.jdbc.MySQLProfile.api._
 
@@ -18,8 +16,7 @@ case class EntityCorrectionRecord(
   workspaceId: UUID,
   entityType: String,
   entityName: String,
-  attributes: String,
-  status: String
+  attributes: String
 )
 
 // high-level representation of a correction for use in the Scala tier
@@ -30,8 +27,7 @@ object EntityCorrection {
       rec.workspaceId,
       rec.entityType,
       rec.entityName,
-      CompactEntitySerialization.fromSql(Option(rec.attributes)),
-      ModifiedStatusType.fromString(rec.status)
+      CompactEntitySerialization.fromSql(Option(rec.attributes))
     )
 }
 case class EntityCorrection(
@@ -39,19 +35,18 @@ case class EntityCorrection(
   workspaceId: UUID,
   entityType: String,
   entityName: String,
-  attributes: AttributeMap,
-  status: ModifiedStatusType
+  attributes: AttributeMap
 )
 
 trait CompactEntityCorrection {
   this: CompactEntityQuery =>
 
   implicit val getEntityCorrectionRecord: GetResult[EntityCorrectionRecord] =
-    GetResult(r => EntityCorrectionRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    GetResult(r => EntityCorrectionRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
   /** retrieve the next N corrections from ENTITY_CORRECTIONS */
   def getNextCorrectionBatch(batchSize: Int): ReadAction[List[EntityCorrection]] =
-    sql"""select id, workspace_id, entity_type, name, attributes, status
+    sql"""select id, workspace_id, entity_type, name, attributes
           from ENTITY_CORRECTIONS
           order by workspace_id, entity_type, name
           where status is null

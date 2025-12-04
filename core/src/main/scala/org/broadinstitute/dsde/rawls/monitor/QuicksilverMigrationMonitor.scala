@@ -5,17 +5,9 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityCorrection, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.AttributeName
-import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus
 import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
-import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus
 import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrectionStatusType
-import org.broadinstitute.dsde.rawls.monitor.QuicksilverMigrationMonitor.{
-  AllDone,
-  Init,
-  NextBatch,
-  ProcessBatch,
-  QuicksilverMigrationMonitorConfig
-}
+import org.broadinstitute.dsde.rawls.monitor.QuicksilverMigrationMonitor._
 import slick.dbio.DBIO
 
 import scala.concurrent.Future
@@ -49,7 +41,7 @@ object QuicksilverMigrationMonitor {
 }
 
 // the actor
-class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorConfig, dataSource: SlickDataSource)
+private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorConfig, dataSource: SlickDataSource)
     extends Actor
     with QuicksilverMigrationMonitorSupport
     with LazyLogging {
@@ -100,7 +92,7 @@ class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorConfig, dat
                                                                    correction.entityName
           )
           // compare the corrected entity to the current entity
-          (entityStatus, attributeStatusMap) = compareEntities(currentEntity, correction)
+          (entityStatus, attributeStatusMap) = compareEntities(currentEntity.map(_.toEntity), correction)
           // persist the analysis result
           numUpdated <- persistAnalysisResult(dataAccess, correction, entityStatus, attributeStatusMap)
         } yield {

@@ -1,61 +1,53 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{CompactEntityRecord, EntityCorrection}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.EntityCorrection
 import org.broadinstitute.dsde.rawls.model.{
   Attribute,
   AttributeEntityReference,
   AttributeEntityReferenceList,
   AttributeName,
   AttributeValue,
-  AttributeValueList
+  AttributeValueList,
+  Entity
 }
 import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
 import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrectionStatusType
 
 object AttributeCorrectionStatus extends Enumeration {
   type AttributeCorrectionStatusType = Value
-  val CurrentAttrGone, Correct, Reordered, StartsWith, Different, TypeDifferent = Value
+  val Correct, Reordered, StartsWith, Different, TypeDifferent = Value
 }
 
 object EntityCorrectionStatus extends Enumeration {
   type EntityCorrectionStatusType = Value
-  val CurrentGone, Correct, Correctable, Mixed, StartsWith, Different = Value
-}
-
-object ModifiedStatusType extends Enumeration {
-  type ModifiedStatusType = Value
-  val Unmodified, Modified = Value
-  def fromString(str: String): ModifiedStatusType = str.toLowerCase match {
-    case "unmodified" => Unmodified
-    case "modified"   => Modified
-    case x            => throw new Exception(s"$x is not a ModifiedStatusType")
-  }
+  val CurrentGone, Correct, Correctable, Mixed, StartsWith, Different, TypeDifferent = Value
 }
 
 trait QuicksilverMigrationMonitorSupport {
 
-  def compareEntities(current: Option[CompactEntityRecord],
+  def compareEntities(current: Option[Entity],
                       correction: EntityCorrection
   ): (EntityCorrectionStatusType, Map[AttributeName, AttributeCorrectionStatusType]) = current match {
     // current entity does not exist
     case None => (EntityCorrectionStatus.CurrentGone, Map())
     // current entity exists; compare its attributes
-    case Some(cr) =>
+    case Some(e) =>
       // get the current attribute map
-      val currentAttributes = cr.toEntity.attributes
+      val currentAttributes = e.attributes
       // loop through the correction's attributes
-      val attrComparisons: Map[AttributeName, AttributeCorrectionStatusType] = correction.attributes.map {
+      val attrComparisons: Map[AttributeName, AttributeCorrectionStatusType] = correction.attributes.flatMap {
         case (attributeName, correctionValue) =>
           // get the corresponding current attribute
           val currentValue = currentAttributes.get(attributeName)
           currentValue match {
             // current attribute does not exist
-            case None               => (attributeName, AttributeCorrectionStatus.CurrentAttrGone)
-            case Some(currentValue) => (attributeName, compareAttrs(currentValue, correctionValue))
+            case None               => None
+            case Some(currentValue) => Some((attributeName, compareAttrs(currentValue, correctionValue)))
           }
       }
       // determine overall entity status from attribute statuses
-      (EntityCorrectionStatus.CurrentGone, attrComparisons)
+      val entityStatus = calculateEntityStatus(attrComparisons)
+      (entityStatus, attrComparisons)
   }
 
   def compareAttrs(current: Attribute, correction: Attribute): AttributeCorrectionStatusType =
@@ -115,9 +107,23 @@ trait QuicksilverMigrationMonitorSupport {
     attributeStatuses: Map[AttributeName, AttributeCorrectionStatusType]
   ): EntityCorrectionStatusType = {
     val attrStatuses = attributeStatuses.values.toSet
-    // CurrentAttrGone, Correct, Reordered, StartsWith, Different, TypeDifferent
-    // TODO: calculate status!
-    EntityCorrectionStatus.Mixed
+
+    if (attrStatuses.isEmpty) {
+      EntityCorrectionStatus.Correct
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.Correct)) {
+      EntityCorrectionStatus.Correct
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.Reordered)) {
+      EntityCorrectionStatus.Correctable
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.Different)) {
+      EntityCorrectionStatus.Different
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.StartsWith)) {
+      EntityCorrectionStatus.StartsWith
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.TypeDifferent)) {
+      EntityCorrectionStatus.TypeDifferent
+    } else {
+      EntityCorrectionStatus.Mixed
+    }
+
   }
 
 }

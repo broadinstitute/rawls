@@ -1,54 +1,23 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.ActorSystem
-import akka.stream.scaladsl.Source
-import akka.testkit.TestKit
-import cats.effect.unsafe.implicits.global
-import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
-  AddUpdateAttribute,
-  AttributeUpdateOperation,
-  EntityUpdateDefinition
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.EntityCorrection
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
-  AttributeFormat,
+  AttributeEntityReferenceList,
   AttributeName,
+  AttributeNumber,
   AttributeString,
   AttributeValueList,
-  Entity,
-  ImportStatuses,
-  RawlsRequestContext,
-  TypedAttributeListSerializer,
-  UserInfo,
-  WorkspaceName
+  Entity
 }
-import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
-import org.broadinstitute.dsde.workbench.google2.GcsBlobName
-import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
-import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{times, verify, when}
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Eventually
-import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
+import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
-import java.util.concurrent.TimeUnit
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 
-class QuicksilverMigrationMonitorSupportSpec()
+class QuicksilverMigrationMonitorSupportSpec
     extends QuicksilverMigrationMonitorSupport
     with AnyFlatSpecLike
     with Matchers {
@@ -143,4 +112,93 @@ class QuicksilverMigrationMonitorSupportSpec()
     actual shouldBe AttributeCorrectionStatus.Different
   }
 
+  behavior of "compareAttrs"
+
+  it should "return TypeDifferent with different classes" in {
+    val current = AttributeValueList(
+      Seq(
+        AttributeString("foo"),
+        AttributeString("bar")
+      )
+    )
+    val correction = AttributeEntityReferenceList(
+      Seq(
+        AttributeEntityReference("type", "name1"),
+        AttributeEntityReference("type", "name2")
+      )
+    )
+    val actual = compareAttrs(current, correction)
+    actual shouldBe AttributeCorrectionStatus.TypeDifferent
+  }
+
+  behavior of "compareEntities"
+
+  it should "return CurrentGone if current entity does not exist" in {
+    val current = None
+    val correction = EntityCorrection(
+      1,
+      UUID.randomUUID(),
+      "type",
+      "name",
+      Map()
+    )
+    val (actualStatus, actualAttrStatusMap) = compareEntities(current, correction)
+    actualStatus shouldBe EntityCorrectionStatus.CurrentGone
+    actualAttrStatusMap shouldBe empty
+  }
+
+  it should "skip attributes that no longer exist" in {
+    val current = Some(
+      Entity("type", "name", Map(AttributeName.withDefaultNS("second") -> AttributeValueList(Seq(AttributeNumber(42)))))
+    )
+    val correction = EntityCorrection(
+      1,
+      UUID.randomUUID(),
+      "type",
+      "name",
+      Map(
+        AttributeName.withDefaultNS("first") -> AttributeValueList(Seq(AttributeNumber(99))),
+        AttributeName.withDefaultNS("second") -> AttributeValueList(Seq(AttributeNumber(42)))
+      )
+    )
+    val (actualStatus, actualAttrStatusMap) = compareEntities(current, correction)
+    actualStatus shouldBe EntityCorrectionStatus.Correct
+    actualAttrStatusMap shouldBe Map(AttributeName.withDefaultNS("second") -> AttributeCorrectionStatus.Correct)
+  }
+
+  behavior of "calculateEntityStatus"
+
+  it should "return Correct for empty attributes" in {
+    val statusMap = Map.empty[AttributeName, AttributeCorrectionStatusType]
+    val actual = calculateEntityStatus(statusMap)
+    actual shouldBe EntityCorrectionStatus.Correct
+  }
+
+  val consistentCases = Map(
+    AttributeCorrectionStatus.Correct -> EntityCorrectionStatus.Correct,
+    AttributeCorrectionStatus.Reordered -> EntityCorrectionStatus.Correctable,
+    AttributeCorrectionStatus.StartsWith -> EntityCorrectionStatus.StartsWith,
+    AttributeCorrectionStatus.Different -> EntityCorrectionStatus.Different,
+    AttributeCorrectionStatus.TypeDifferent -> EntityCorrectionStatus.TypeDifferent
+  )
+
+  consistentCases foreach { case (attrStatus, expectedEntityStatus) =>
+    it should s"return $expectedEntityStatus when all attributes are $attrStatus" in {
+      val statusMap = Map(
+        AttributeName.withDefaultNS("foo") -> attrStatus,
+        AttributeName.withLibraryNS("bar") -> attrStatus
+      )
+      val actual = calculateEntityStatus(statusMap)
+      actual shouldBe expectedEntityStatus
+    }
+  }
+
+  it should s"return Mixed when attributes have multiple statuses" in {
+    val statusMap = Map(
+      AttributeName.withDefaultNS("foo") -> AttributeCorrectionStatus.Correct,
+      AttributeName.withLibraryNS("bar") -> AttributeCorrectionStatus.Different
+    )
+    val actual = calculateEntityStatus(statusMap)
+    actual shouldBe EntityCorrectionStatus.Mixed
+  }
 }
