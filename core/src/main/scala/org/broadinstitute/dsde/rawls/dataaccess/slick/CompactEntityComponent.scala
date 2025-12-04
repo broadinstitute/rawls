@@ -45,7 +45,8 @@ trait CompactEntityComponent extends LazyLogging {
 class CompactEntityQuery(driverComponent: DriverComponent)
     extends CompactEntityKeysCache
     with RawSqlQuery
-    with CompactEntitySerialization {
+    with CompactEntitySerialization
+    with CompactEntityCorrection {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
