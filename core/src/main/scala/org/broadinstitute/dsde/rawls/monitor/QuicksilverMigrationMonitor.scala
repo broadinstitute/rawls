@@ -5,8 +5,10 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityCorrection, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.AttributeName
-import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatusType.AttributeCorrectionStatusType
-import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatusType.EntityCorrectionStatusType
+import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus
+import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
+import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus
+import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrectionStatusType
 import org.broadinstitute.dsde.rawls.monitor.QuicksilverMigrationMonitor.{
   AllDone,
   Init,
@@ -29,12 +31,13 @@ object QuicksilverMigrationMonitor {
   )
 
   // actor messages
-  sealed trait QuicksilverMonitorMessage
+  sealed private trait QuicksilverMonitorMessage
   private case object Init extends QuicksilverMonitorMessage
   private case object NextBatch extends QuicksilverMonitorMessage
   private case class ProcessBatch(corrections: List[EntityCorrection])
   private case object AllDone extends QuicksilverMonitorMessage
 
+  // actor-creator
   def props(
     config: QuicksilverMigrationMonitorConfig,
     dataSource: SlickDataSource
@@ -45,6 +48,7 @@ object QuicksilverMigrationMonitor {
 
 }
 
+// the actor
 class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorConfig, dataSource: SlickDataSource)
     extends Actor
     with QuicksilverMigrationMonitorSupport
@@ -52,6 +56,7 @@ class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorConfig, dat
 
   import context._
 
+  // routing
   override def receive: Receive = {
     case Init                                              => startAll()
     case NextBatch                                         => nextBatch()
@@ -59,9 +64,14 @@ class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorConfig, dat
     case AllDone                                           => self ! PoisonPill
   }
 
+  /** kick things off */
+  self ! Init
+
+  /** start processing: wait for the startupDelay, then process the next batch */
   private def startAll() =
     context.system.scheduler.scheduleOnce(config.startupDelay, self, NextBatch)
 
+  /** query for the next batch of corrections */
   private def nextBatch() =
     dataSource.inTransaction { dataAccess =>
       // select the next ${config.batchSize} rows from ENTITY_CORRECTIONS
@@ -132,7 +142,7 @@ class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorConfig, dat
                                                               correction.entityName,
                                                               attributeStatusMap
         )
-      performCorrections <-
+      _ <-
         if (config.dryRun) {
           DBIO.successful(0)
         } else {

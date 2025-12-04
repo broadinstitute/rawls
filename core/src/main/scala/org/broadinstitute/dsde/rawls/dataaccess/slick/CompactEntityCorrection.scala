@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName
-import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatusType.AttributeCorrectionStatusType
-import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatusType.EntityCorrectionStatusType
+import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
+import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrectionStatusType
+import org.broadinstitute.dsde.rawls.monitor.ModifiedStatusType
 import org.broadinstitute.dsde.rawls.monitor.ModifiedStatusType.ModifiedStatusType
-import org.broadinstitute.dsde.rawls.monitor.{EntityCorrection, EntityCorrectionRecord, ModifiedStatusType}
 import slick.jdbc.GetResult
 import slick.jdbc.MySQLProfile.api._
 
@@ -49,6 +49,7 @@ trait CompactEntityCorrection {
   implicit val getEntityCorrectionRecord: GetResult[EntityCorrectionRecord] =
     GetResult(r => EntityCorrectionRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
+  /** retrieve the next N corrections from ENTITY_CORRECTIONS */
   def getNextCorrectionBatch(batchSize: Int): ReadAction[List[EntityCorrection]] =
     sql"""select id, workspace_id, entity_type, name, attributes, status
           from ENTITY_CORRECTIONS
@@ -59,6 +60,7 @@ trait CompactEntityCorrection {
       .as[EntityCorrectionRecord]
       .map(recs => recs.toList.map(r => EntityCorrection.fromRecord(r)))
 
+  /** update a single ENTITY_CORRECTIONS's status */
   def updateCorrectionStatus(workspaceId: UUID,
                              entityType: String,
                              entityName: String,
@@ -69,6 +71,7 @@ trait CompactEntityCorrection {
          and entity_type = $entityType
          and name = $entityName;""".asUpdate
 
+  /** upsert ATTRIBUTE_CORRECTIONS statuses */
   def updateAttributeStatuses(workspaceId: UUID,
                               entityType: String,
                               entityName: String,
