@@ -31,6 +31,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceCloudPlatform
 }
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
+import org.broadinstitute.dsde.rawls.monitor.QuicksilverMigrationMonitor.QuicksilverMigrationMonitorConfig
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceRepository, WorkspaceService, WorkspaceSettingRepository}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -173,6 +174,9 @@ object BootMonitors extends LazyLogging {
       )
 
       startFastPassMonitor(system, appConfigManager.conf, slickDataSource, googleIamDAO, googleStorageDAO)
+
+      // Quicksilver correction monitor
+      launchQuicksilverCorrections(system, appConfigManager.conf, slickDataSource)
     }
 
     val cloneWorkspaceFileTransferMonitorConfigRoot =
@@ -376,6 +380,25 @@ object BootMonitors extends LazyLogging {
         dataSource
       )
     )
+
+  private def launchQuicksilverCorrections(system: ActorSystem, appConfig: Config, slickDataSource: SlickDataSource) = {
+    val conf = appConfig.getConfig("quicksilverCorrections")
+    // create Quicksilver migration config
+    val quicksilverMigrationMonitorConfig = QuicksilverMigrationMonitorConfig(
+      startupDelay = conf.getDuration("startupDelay").toScala,
+      pollInterval = conf.getDuration("pollInterval").toScala,
+      batchTimeout = conf.getDuration("batchTimeout").toScala,
+      batchSize = conf.getInt("batchSize"),
+      dryRun = conf.getBoolean("dryRun")
+    )
+    // start Quicksilver migration monitor
+    system.actorOf(
+      QuicksilverMigrationMonitor.props(
+        quicksilverMigrationMonitorConfig,
+        slickDataSource
+      )
+    )
+  }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =
     Await.result(dataSource.inTransaction { dataAccess =>

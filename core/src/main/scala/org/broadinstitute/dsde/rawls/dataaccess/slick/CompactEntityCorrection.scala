@@ -44,13 +44,17 @@ trait CompactEntityCorrection {
   implicit val getEntityCorrectionRecord: GetResult[EntityCorrectionRecord] =
     GetResult(r => EntityCorrectionRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
+  /** count the outstanding corrections */
+  def countOutstandingCorrections: ReadAction[Int] =
+    sql"""select count(1) from ENTITY_CORRECTIONS where status = 'OUTSTANDING'""".as[Int].head
+
   /** retrieve the next N corrections from ENTITY_CORRECTIONS */
   def getNextCorrectionBatch(batchSize: Int): ReadAction[List[EntityCorrection]] =
     sql"""select id, workspace_id, entity_type, name, attributes
           from ENTITY_CORRECTIONS
+          where status = 'OUTSTANDING'
           order by workspace_id, entity_type, name
-          where status is null
-          limit $batchSize;
+          limit $batchSize
          """
       .as[EntityCorrectionRecord]
       .map(recs => recs.toList.map(r => EntityCorrection.fromRecord(r)))
@@ -67,18 +71,16 @@ trait CompactEntityCorrection {
          and name = $entityName;""".asUpdate
 
   /** upsert ATTRIBUTE_CORRECTIONS statuses */
-  def updateAttributeStatuses(workspaceId: UUID,
-                              entityType: String,
-                              entityName: String,
+  def updateAttributeStatuses(correctionId: Long,
                               statuses: Map[AttributeName, AttributeCorrectionStatusType]
   ): ReadWriteAction[Int] = {
     val startSql =
-      sql"""insert into ATTRIBUTE_CORRECTIONS(workspace_id, entity_type, entity_name, namespace, name, status)
+      sql"""insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
           values """
 
     val valuesSql = reduceSqlActionsWithDelim(
       statuses.map { case (attrName, status) =>
-        sql"""($workspaceId, $entityType, $entityName, ${attrName.namespace}, ${attrName.name}, ${status.toString})"""
+        sql"""($correctionId, ${attrName.namespace}, ${attrName.name}, ${status.toString})"""
       }.toSeq,
       sql","
     )
