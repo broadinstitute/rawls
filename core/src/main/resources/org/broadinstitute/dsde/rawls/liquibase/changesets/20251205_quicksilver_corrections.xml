@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
+    <!--
+        In production, the ENTITY_CORRECTIONS table will already have been created by a manual
+        process. Thus, the "IF NOT EXISTS" clause is important to ensure this changeset runs correctly.
+     -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="quicksilver_corrections">
+        <sql>
+            CREATE TABLE IF NOT EXISTS `ENTITY_CORRECTIONS` (
+              `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+              `workspace_id` binary(16) NOT NULL,
+              `entity_type` varchar(254) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin DEFAULT NULL,
+              `name` varchar(254) NOT NULL,
+              `attributes` json DEFAULT NULL,
+              `status` varchar(254) NOT NULL DEFAULT 'OUTSTANDING',
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `idx_corrections_entity_type_name` (`workspace_id`,`entity_type`,`name`),
+              KEY `idx_corrections_status` (`status`)
+            ) DEFAULT CHARSET=utf8mb3;
+        </sql>
+
+        <sql>
+            CREATE TABLE IF NOT EXISTS `ATTRIBUTE_CORRECTIONS` (
+              `correction_id` bigint unsigned NOT NULL,
+              `namespace` varchar(32) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
+              `name` varchar(200) CHARACTER SET utf8mb3 COLLATE utf8mb3_bin NOT NULL,
+              `status` varchar(254) NOT NULL,
+              PRIMARY KEY (`correction_id`, `namespace`, `name`),
+              KEY `idx_attrcorrections_status` (`status`),
+              CONSTRAINT `FK_ATTRCORRECTION_PARENT_ENTITY` FOREIGN KEY (`correction_id`) REFERENCES `ENTITY_CORRECTIONS` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+              ) DEFAULT CHARSET=utf8mb3;
+        </sql>
+    </changeSet>
+</databaseChangeLog>
