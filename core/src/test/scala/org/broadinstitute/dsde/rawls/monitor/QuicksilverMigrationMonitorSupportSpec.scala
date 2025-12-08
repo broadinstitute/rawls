@@ -41,7 +41,7 @@ class QuicksilverMigrationMonitorSupportSpec
     actual shouldBe AttributeCorrectionStatus.Correct
   }
 
-  it should "return StartsWith when it does actually start with" in {
+  it should "return Intersect when it starts with" in {
     val current = AttributeValueList(
       Seq(
         AttributeString("foo"),
@@ -56,7 +56,47 @@ class QuicksilverMigrationMonitorSupportSpec
       )
     )
     val actual = compareLists(current, correction)
-    actual shouldBe AttributeCorrectionStatus.StartsWith
+    actual shouldBe AttributeCorrectionStatus.Intersect
+  }
+
+  it should "return Intersect when common elements are in the same order" in {
+    val current = AttributeValueList(
+      Seq(
+        AttributeString("foo"),
+        AttributeString("bar"),
+        AttributeString("baz")
+      )
+    )
+    val correction = AttributeValueList(
+      Seq(
+        AttributeString("bar"),
+        AttributeString("baz"),
+        AttributeString("qux"),
+        AttributeString("qdf")
+      )
+    )
+    val actual = compareLists(current, correction)
+    actual shouldBe AttributeCorrectionStatus.Intersect
+  }
+
+  it should "return Different when common elements are ordered but different quantity" in {
+    val current = AttributeValueList(
+      Seq(
+        AttributeString("foo"),
+        AttributeString("bar"),
+        AttributeString("bar"),
+        AttributeString("baz")
+      )
+    )
+    val correction = AttributeValueList(
+      Seq(
+        AttributeString("bar"),
+        AttributeString("baz"),
+        AttributeString("qux")
+      )
+    )
+    val actual = compareLists(current, correction)
+    actual shouldBe AttributeCorrectionStatus.Different
   }
 
   it should "return Reordered when it was reordered" in {
@@ -95,7 +135,7 @@ class QuicksilverMigrationMonitorSupportSpec
     actual shouldBe AttributeCorrectionStatus.Different
   }
 
-  it should "return Different with different elements" in {
+  it should "return NothingInCommon with different elements" in {
     val current = AttributeValueList(
       Seq(
         AttributeString("cat"),
@@ -109,7 +149,7 @@ class QuicksilverMigrationMonitorSupportSpec
       )
     )
     val actual = compareLists(current, correction)
-    actual shouldBe AttributeCorrectionStatus.Different
+    actual shouldBe AttributeCorrectionStatus.NothingInCommon
   }
 
   behavior of "compareAttrs"
@@ -177,8 +217,9 @@ class QuicksilverMigrationMonitorSupportSpec
   val consistentCases = Map(
     AttributeCorrectionStatus.Correct -> EntityCorrectionStatus.Correct,
     AttributeCorrectionStatus.Reordered -> EntityCorrectionStatus.Correctable,
-    AttributeCorrectionStatus.StartsWith -> EntityCorrectionStatus.StartsWith,
+    AttributeCorrectionStatus.Intersect -> EntityCorrectionStatus.Intersect,
     AttributeCorrectionStatus.Different -> EntityCorrectionStatus.Different,
+    AttributeCorrectionStatus.NothingInCommon -> EntityCorrectionStatus.NothingInCommon,
     AttributeCorrectionStatus.TypeDifferent -> EntityCorrectionStatus.TypeDifferent
   )
 
