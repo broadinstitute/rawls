@@ -3,14 +3,9 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.Sink
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  EntityAndAttributesResult,
-  EntityAttributeRecord,
-  EntityRecord,
-  TestDriverComponent
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{
   GoogleBigQueryServiceFactoryImpl,
   MockBigQueryServiceFactory,
@@ -27,7 +22,6 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   RemoveAttribute,
   RemoveListMember
 }
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingConfig.CompactDataTablesConfig
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeEntityReference,
@@ -40,7 +34,6 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
   AttributeValueEmptyList,
   AttributeValueList,
-  CompactDataTablesSetting,
   Entity,
   EntityQuery,
   EntityTypeRename,
@@ -48,8 +41,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUser,
   SortDirections,
   UserInfo,
-  Workspace,
-  WorkspaceSettingTypes
+  Workspace
 }
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.{
@@ -58,10 +50,7 @@ import org.broadinstitute.dsde.rawls.util.{
   MockitoTestUtils
 }
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doReturn, spy}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -69,7 +58,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
 import scala.concurrent.duration.{Duration, SECONDS}
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 
 class EntityServiceSpec
     extends AnyFlatSpec
@@ -137,25 +126,12 @@ class EntityServiceSpec
 
     override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
 
-    val workspaceSettingRepository = new WorkspaceSettingRepository(dataSource)
-    val spyWorkspaceSettingRepository = spy(workspaceSettingRepository)
-
-    doReturn(Future.successful(Some(CompactDataTablesSetting(CompactDataTablesConfig(enabled = true)))))
-      .when(spyWorkspaceSettingRepository)
-      .getWorkspaceSettingOfType(
-        ArgumentMatchers.any[UUID](),
-        ArgumentMatchers.eq(WorkspaceSettingTypes.CompactDataTables)
-      )
-
     val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
       EntityManager.defaultEntityManager(
         dataSource,
-        spyWorkspaceSettingRepository,
-        testConf.getBoolean("entityStatisticsCache.enabled"),
-        testConf.getDuration("entities.queryTimeout"),
         workbenchMetricBaseName
       ),
       7 // <-- specifically chosen to be lower than the number of samples in "workspace" within testData
@@ -496,171 +472,6 @@ class EntityServiceSpec
 
     // metadata should be the same before and after
     metadataAfter shouldBe metadataBefore
-  }
-
-  // all following tests can use the same exemplar data, no need to re-create it for each unit test
-  withTestDataServices { services =>
-    // helper methods for these tests
-    val workspaceId = UUID.randomUUID()
-    val entityRecordProto = EntityRecord(1, "my-name", "my-type", workspaceId, 1, false, None)
-    val entityAttributeRecordProto =
-      EntityAttributeRecord(1, 1, "default", "attrname", None, None, None, None, None, None, None, false, None)
-
-    "EntityService.gatherEntities" should "handle empty list" in {
-      val input = Source.empty[EntityAndAttributesResult]
-      val actual =
-        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
-
-      assertResult(0, "actual result should be empty")(actual.size)
-    }
-
-    it should "handle single-entity list" in {
-      val input = Source.fromIterator[EntityAndAttributesResult](() =>
-        Seq(
-          EntityAndAttributesResult(
-            entityRecordProto,
-            Option(entityAttributeRecordProto.copy(name = "first", valueString = Option("foo"))),
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto,
-            Option(entityAttributeRecordProto.copy(name = "second", valueString = Option("bar"))),
-            None
-          )
-        ).iterator
-      )
-
-      val actual =
-        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
-
-      assertResult(
-        Seq(
-          Entity("my-name",
-                 "my-type",
-                 Map(AttributeName.withDefaultNS("first") -> AttributeString("foo"),
-                     AttributeName.withDefaultNS("second") -> AttributeString("bar")
-                 )
-          )
-        ),
-        "actual result should have one entity"
-      )(actual)
-    }
-
-    it should "handle multiple-entity list" in {
-      val input = Source.fromIterator[EntityAndAttributesResult](() =>
-        Seq(
-          EntityAndAttributesResult(
-            entityRecordProto,
-            Option(entityAttributeRecordProto.copy(name = "first", valueString = Option("foo"))),
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto,
-            Option(entityAttributeRecordProto.copy(name = "second", valueEntityRef = Option(999))),
-            Option(entityRecordProto.copy(id = 999, entityType = "referenced-type", name = "referenced-entity"))
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto.copy(id = 2, name = "entity-two"),
-            Option(entityAttributeRecordProto.copy(name = "first", valueString = Option("baz"))),
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto.copy(id = 3, name = "entity-three"),
-            Option(entityAttributeRecordProto.copy(name = "more", valueNumber = Option(34))),
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto.copy(id = 3, name = "entity-three"),
-            Option(entityAttributeRecordProto.copy(name = "moremore", valueEntityRef = Option(999))),
-            Option(entityRecordProto.copy(id = 999, entityType = "referenced-type", name = "referenced-entity"))
-          )
-        ).iterator
-      )
-
-      val actual =
-        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
-
-      assertResult(
-        Seq(
-          Entity(
-            "my-name",
-            "my-type",
-            Map(
-              AttributeName.withDefaultNS("first") -> AttributeString("foo"),
-              AttributeName.withDefaultNS("second") -> AttributeEntityReference("referenced-type", "referenced-entity")
-            )
-          ),
-          Entity("entity-two", "my-type", Map(AttributeName.withDefaultNS("first") -> AttributeString("baz"))),
-          Entity(
-            "entity-three",
-            "my-type",
-            Map(
-              AttributeName.withDefaultNS("more") -> AttributeNumber(34),
-              AttributeName.withDefaultNS("moremore") -> AttributeEntityReference("referenced-type",
-                                                                                  "referenced-entity"
-              )
-            )
-          )
-        ),
-        "actual result should have three entities"
-      )(actual)
-    }
-
-    it should "handle an entity with no attributes" in {
-      // entity "entity-two" has no attrs
-      val input = Source.fromIterator[EntityAndAttributesResult](() =>
-        Seq(
-          EntityAndAttributesResult(
-            entityRecordProto,
-            Option(entityAttributeRecordProto.copy(name = "first", valueString = Option("foo"))),
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto,
-            Option(entityAttributeRecordProto.copy(name = "second", valueString = Option("bar"))),
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto.copy(id = 2, name = "entity-two"),
-            None,
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto.copy(id = 3, name = "entity-three"),
-            Option(entityAttributeRecordProto.copy(name = "more", valueNumber = Option(34))),
-            None
-          ),
-          EntityAndAttributesResult(
-            entityRecordProto.copy(id = 3, name = "entity-three"),
-            Option(entityAttributeRecordProto.copy(name = "moremore", valueNumber = Option(45))),
-            None
-          )
-        ).iterator
-      )
-
-      val actual =
-        EntityStreamingUtils.gatherEntities(services.entityService.dataSource, input).runWith(Sink.seq).futureValue
-
-      assertResult(
-        Seq(
-          Entity("my-name",
-                 "my-type",
-                 Map(AttributeName.withDefaultNS("first") -> AttributeString("foo"),
-                     AttributeName.withDefaultNS("second") -> AttributeString("bar")
-                 )
-          ),
-          Entity("entity-two", "my-type", Map.empty),
-          Entity("entity-three",
-                 "my-type",
-                 Map(AttributeName.withDefaultNS("more") -> AttributeNumber(34),
-                     AttributeName.withDefaultNS("moremore") -> AttributeNumber(45)
-                 )
-          )
-        ),
-        "actual result should have three entities"
-      )(actual)
-    }
-
   }
 
 }

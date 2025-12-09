@@ -97,7 +97,7 @@ object UserService {
     /** helper: does the project exist in Google, as far as Rawls can see? */
     def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId) =
       gcsDAO.getGoogleProject(projectId) transform {
-        case Success(_) => Success(true)
+        case Success(_)                                                                            => Success(true)
         case Failure(e: HttpResponseException) if e.getStatusCode == 404 || e.getStatusCode == 403 =>
           Success(
             false
@@ -156,7 +156,7 @@ class UserService(
     op: => Future[T]
   ): Future[T] =
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, ctx).flatMap {
-      case true => op
+      case true  => op
       case false =>
         Future.failed(
           new RawlsExceptionWithErrorReport(
@@ -175,7 +175,7 @@ class UserService(
                      ctx
       )
       .flatMap {
-        case true => op
+        case true  => op
         case false =>
           Future.failed(
             new RawlsExceptionWithErrorReport(
@@ -461,7 +461,7 @@ class UserService(
               ) =>
             Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
           case Some(_) => None
-          case None =>
+          case None    =>
             throw new RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} could not be found")
             )
@@ -472,7 +472,7 @@ class UserService(
   private def getLegacyBillingPolicies(samRole: ProjectRole): Seq[SamResourcePolicyName] =
     samRole match {
       case ProjectRoles.Owner => Seq(SamBillingProjectPolicyNames.owner)
-      case ProjectRoles.User =>
+      case ProjectRoles.User  =>
         Seq(SamBillingProjectPolicyNames.workspaceCreator, SamBillingProjectPolicyNames.canComputeUser)
     }
   private def getV2BillingPolicy(samRole: ProjectRole): SamResourcePolicyName =
@@ -722,7 +722,7 @@ class UserService(
         // Even if the project's status is 'Creating' and could possibly still have a perimeter added to it, we throw an exception to avoid a race condition
         _ <- billingProject.status match {
           case CreationStatuses.Ready => Future.successful(())
-          case status =>
+          case status                 =>
             Future.failed(
               new RawlsExceptionWithErrorReport(
                 ErrorReport(StatusCodes.BadRequest,
@@ -737,7 +737,7 @@ class UserService(
 
         googleProjectNumber <- billingProject.googleProjectNumber match {
           case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
-          case None =>
+          case None                              =>
             gcsDAO
               .getGoogleProject(billingProject.googleProjectId)
               .map(googleProject => gcsDAO.getGoogleProjectNumber(googleProject))

@@ -2,12 +2,11 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.StatusCodes
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.Source
 import com.typesafe.scalalogging.LazyLogging
-import io.opentelemetry.api.common.AttributeKey
+import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{
   EntityProvider,
@@ -15,18 +14,9 @@ import org.broadinstitute.dsde.rawls.entities.base.{
   ExpressionEvaluationSupport,
   ExpressionValidator
 }
-import org.broadinstitute.dsde.rawls.entities.exceptions.{
-  DataEntityException,
-  DeleteEntitiesConflictException,
-  DeleteEntitiesOfTypeConflictException
-}
-import org.broadinstitute.dsde.rawls.entities.{EntityRequestArguments, EntityStreamingUtils}
-import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{
-  Attributable,
-  AttributeEntityReference,
   AttributeName,
   AttributeRename,
   AttributeUpdateOperations,
@@ -39,347 +29,69 @@ import org.broadinstitute.dsde.rawls.model.{
   EntityQueryResultMetadata,
   EntityTypeMetadata,
   EntityTypeRename,
-  ErrorReport,
   RawlsRequestContext,
   SubmissionValidationEntityInputs,
-  SubmissionValidationValue,
   Workspace
 }
-import org.broadinstitute.dsde.rawls.util.TracingUtils._
-import org.broadinstitute.dsde.rawls.util.{
-  AttributeOperationListModes,
-  AttributeSupport,
-  AttributeUpdateOperationException,
-  CollectionUtils,
-  EntitySupport
-}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import slick.jdbc.TransactionIsolation.ReadCommitted
-import slick.jdbc.{ResultSetConcurrency, ResultSetType}
+import org.broadinstitute.dsde.rawls.util.AttributeSupport
 
 import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
  * Terra default entity provider, powered by Rawls and Cloud SQL
  */
 class LocalEntityProvider(requestArguments: EntityRequestArguments,
                           implicit protected val dataSource: SlickDataSource,
-                          cacheEnabled: Boolean,
-                          queryTimeout: Duration,
-                          override val workbenchMetricBaseName: String
-)(implicit protected val executionContext: ExecutionContext, actorSystem: ActorSystem)
+                          _cacheEnabled: Boolean,
+                          _queryTimeout: Duration,
+                          val workbenchMetricBaseName: String
+)(implicit protected val executionContext: ExecutionContext, _actorSystem: ActorSystem)
     extends EntityProvider
     with LazyLogging
-    with EntitySupport
     with AttributeSupport
-    with ExpressionEvaluationSupport
-    with EntityStatisticsCacheSupport {
-
-  import dataSource.dataAccess.driver.api._
+    with ExpressionEvaluationSupport {
 
   override val entityStoreId: Option[String] = None
 
-  override val workspaceContext = requestArguments.workspace
-
-  final private val queryTimeoutSeconds: Int = queryTimeout.getSeconds.toInt
-
   override def entityTypeMetadata(useCache: Boolean,
                                   parentContext: RawlsRequestContext
-  ): Future[Map[String, EntityTypeMetadata]] =
-    // start performance tracing
-    traceFutureWithParent("LocalEntityProvider.entityTypeMetadata", parentContext) { localContext =>
-      setTraceSpanAttribute(localContext,
-                            AttributeKey.stringKey("workspace"),
-                            workspaceContext.toWorkspaceName.toString
-      )
-      setTraceSpanAttribute(localContext, AttributeKey.booleanKey("useCache"), java.lang.Boolean.valueOf(useCache))
-      setTraceSpanAttribute(localContext,
-                            AttributeKey.booleanKey("cacheEnabled"),
-                            java.lang.Boolean.valueOf(cacheEnabled)
-      )
+  ): Future[Map[String, EntityTypeMetadata]] = ???
 
-      // start transaction
-      dataSource.inTransaction(ReadCommitted) { dataAccess =>
-        if (!useCache || !cacheEnabled) {
-          if (!cacheEnabled) {
-            logger.info(
-              s"entity statistics cache: miss (cache disabled at system level) [${workspaceContext.workspaceIdAsUUID}]"
-            )
-          } else if (!useCache) {
-            logger.info(
-              s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]"
-            )
-          }
-          // retrieve metadata, bypassing cache
-          calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
-        } else {
-          // system and request both have cache enabled. Check for existence and staleness of cache
-          cacheStaleness(dataAccess, localContext).flatMap {
-            case None =>
-              // cache does not exist - return uncached
-              logger.info(
-                s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]"
-              )
-              calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
-            case Some(0) =>
-              // cache is up to date - return cached
-              logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
-              calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, localContext)
-            case Some(stalenessSeconds) =>
-              // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
-              cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
-                if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
-                  setTraceSpanAttribute(localContext,
-                                        AttributeKey.booleanKey("alwaysCacheTypeCountsFeatureFlag"),
-                                        java.lang.Boolean.valueOf(flags.alwaysCacheTypeCounts)
-                  )
-                  setTraceSpanAttribute(localContext,
-                                        AttributeKey.booleanKey("alwaysCacheAttributesFeatureFlag"),
-                                        java.lang.Boolean.valueOf(flags.alwaysCacheAttributes)
-                  )
-                  logger.info(
-                    s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                  )
-                } else {
-                  logger.info(
-                    s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]"
-                  )
-                  // and opportunistically save
-                }
-                calculateMetadataResponse(dataAccess,
-                                          countsFromCache = flags.alwaysCacheTypeCounts,
-                                          attributesFromCache = flags.alwaysCacheAttributes,
-                                          localContext
-                )
-              } // end feature-flags lookup
-          } // end staleness lookup
-        } // end if useCache/cacheEnabled check
-      } // end transaction
-    } // end root trace
-
-  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] =
-    dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-      traceDBIOWithParent("getEntity", parentContext) { _ =>
-        dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name)
-      } flatMap {
-        case Some(_) =>
-          DBIO.failed(
-            new RawlsExceptionWithErrorReport(
-              errorReport =
-                ErrorReport(StatusCodes.Conflict,
-                            s"${entity.entityType} ${entity.name} already exists in ${workspaceContext.toWorkspaceName}"
-                )
-            )
-          )
-        case None =>
-          traceDBIOWithParent("saveEntity", parentContext)(_ => dataAccess.entityQuery.save(workspaceContext, entity))
-      }
-    }
+  override def createEntity(entity: Entity, parentContext: RawlsRequestContext): Future[Entity] = ???
 
   // EntityApiServiceSpec has good test coverage for this api
-  override def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int] =
-    dataSource.inTransaction { dataAccess =>
-      val entRefs = pointers.map(_.toAttributeEntityReference)
-      // withAllEntityRefs throws exception if some entities not found; passes through if all ok
-      traceDBIOWithParent("LocalEntityProvider.deleteEntities", parentContext) { localContext =>
-        setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
-        setTraceSpanAttribute(localContext, AttributeKey.longKey("numEntities"), java.lang.Long.valueOf(entRefs.length))
-        withAllEntityRefs(workspaceContext, dataAccess, entRefs, localContext) { _ =>
-          traceDBIOWithParent("entityQuery.getAllReferringEntities", localContext)(innerSpan =>
-            dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap {
-              referringEntities =>
-                if (referringEntities != entRefs.toSet)
-                  throw new DeleteEntitiesConflictException(referringEntities)
-                else {
-                  traceDBIOWithParent("entityQuery.hide", innerSpan)(_ =>
-                    dataAccess.entityQuery
-                      .hide(workspaceContext, entRefs)
-                      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
-                  )
-                }
-            }
-          )
-        }
-      }
-    }
+  override def deleteEntities(pointers: Seq[EntityPointer], parentContext: RawlsRequestContext): Future[Int] = ???
 
-  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] =
-    dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("LocalEntityProvider.deleteEntitiesOfType", parentContext) { localContext =>
-        setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
-        setTraceSpanAttribute(localContext, AttributeKey.stringKey("entityType"), entityType)
-
-        dataAccess.entityQuery.countReferringEntitiesForType(workspaceContext, entityType) flatMap {
-          referringEntitiesCount =>
-            if (referringEntitiesCount != 0)
-              throw new DeleteEntitiesOfTypeConflictException(referringEntitiesCount)
-            else {
-              dataAccess.entityQuery
-                .hideType(workspaceContext, entityType)
-                .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
-            }
-        }
-      }
-    }
+  override def deleteEntitiesOfType(entityType: String, parentContext: RawlsRequestContext): Future[Int] = ???
 
   override def deleteEntityAttributes(entityType: EntityName,
                                       attributeNames: Set[AttributeName],
                                       parentContext: RawlsRequestContext
-  ): Future[Unit] =
-    dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("deleteEntityAttributes", parentContext) { _ =>
-        dataAccess
-          .entityAttributeShardQuery(workspaceContext)
-          .deleteAttributes(workspaceContext, entityType, attributeNames)
-      } flatMap {
-        case Vector(0) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names.")
-          )
-        case _ => DBIO.successful(())
-      }
-
-    }
+  ): Future[Unit] = ???
 
   override def evaluateExpression(entityType: EntityName,
                                   entityName: EntityName,
                                   expression: EntityName,
                                   parentContext: RawlsRequestContext
-  ): Future[Seq[AttributeValue]] =
-    dataSource.inTransaction(ReadCommitted) { dataAccess =>
-      traceDBIOWithParent("withSingleEntityRec", parentContext) { _ =>
-        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          traceDBIOWithParent("withNewExpressionEvaluator", parentContext) { _ =>
-            ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-              traceDBIOWithParent("evalFinalAttribute", parentContext) { _ =>
-                evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
-                  // parsing failure
-                  case Failure(regret) =>
-                    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
-                  case Success(valuesByEntity) =>
-                    if (valuesByEntity.size != 1) {
-                      // wrong number of entities?!
-                      throw new RawlsException(
-                        s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead"
-                      )
-                    } else {
-                      assert(valuesByEntity.head._1 == entityName)
-                      valuesByEntity.head match {
-                        case (_, Success(result)) => result.toSeq
-                        case (_, Failure(regret)) =>
-                          throw new RawlsExceptionWithErrorReport(
-                            errorReport = ErrorReport(
-                              StatusCodes.BadRequest,
-                              "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}",
-                              ErrorReport(regret)
-                            )
-                          )
-                      }
-                    }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+  ): Future[Seq[AttributeValue]] = ???
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
                                    gatherInputsResult: GatherInputsResult,
                                    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
-  ): Future[LazyList[SubmissionValidationEntityInputs]] =
-    dataSource.inTransaction(ReadCommitted) { dataAccess =>
-      withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
-        // Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-        evaluateExpressionsInternal(workspaceContext,
-                                    gatherInputsResult.processableInputs,
-                                    jobEntityRecs,
-                                    dataAccess
-        ) map { valuesByEntity =>
-          createSubmissionValidationEntityInputs(valuesByEntity)
-        }
-      }
-    }
+  ): Future[LazyList[SubmissionValidationEntityInputs]] = ???
 
-  override def expressionValidator: ExpressionValidator = new ExpressionValidator
-
-  protected[local] def evaluateExpressionsInternal(workspaceContext: Workspace,
-                                                   inputs: Set[MethodInput],
-                                                   entities: Option[Seq[EntityRecord]],
-                                                   dataAccess: DataAccess
-  )(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
-    import dataAccess.driver.api._
-
-    val entityNames = entities match {
-      case Some(recs) => recs.map(_.name)
-      case None       => Seq("")
-    }
-
-    if (inputs.isEmpty) {
-      // no inputs to evaluate = just return an empty map back!
-      DBIO.successful(entityNames.map(_ -> Seq.empty[SubmissionValidationValue]).toMap)
-    } else {
-      ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
-        // Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
-        val resultsByInput = inputs.toSeq.map { input =>
-          evaluator.evalFinalAttribute(workspaceContext, input.expression, Option(input)).asTry.map {
-            tryAttribsByEntity =>
-              val validationValuesByEntity: Seq[(EntityName, SubmissionValidationValue)] = tryAttribsByEntity match {
-                case Failure(regret) =>
-                  // The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
-                  entityNames
-                    .map((_, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.getName)))
-                case Success(attributeMap) =>
-                  convertToSubmissionValidationValues(attributeMap, input)
-              }
-              validationValuesByEntity
-          }
-        }
-
-        // Flip the list of DBIO monads into one on the outside that we can map across and then group by entity.
-        DBIO.sequence(resultsByInput) map { results =>
-          CollectionUtils.groupByTuples(results.flatten)
-        }
-      }
-    }
-  }
+  override def expressionValidator: ExpressionValidator = ???
 
   override def getEntity(entityType: String, entityName: String, parentContext: RawlsRequestContext): Future[Entity] =
-    dataSource.inTransaction(ReadCommitted) { dataAccess =>
-      traceDBIOWithParent("withEntity", parentContext) { _ =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          DBIO.successful(entity)
-        }
-      }
-    }
+    ???
 
   /*
    * Queries the db for a stream of entity attributes.
    */
-  private def listEntitiesDbSource(workspaceContext: Workspace,
-                                   entityType: String
-  ): Source[EntityAndAttributesResult, NotUsed] = {
-    // note: ReadCommitted transaction isolation level; forward-only/read-only stream.
-    val allAttrsStream = dataSource.dataAccess.entityQuery
-      .streamActiveEntityAttributesOfType(workspaceContext, entityType)
-      .transactionally
-      .withTransactionIsolation(ReadCommitted)
-      .withStatementParameters(rsType = ResultSetType.ForwardOnly,
-                               rsConcurrency = ResultSetConcurrency.ReadOnly,
-                               fetchSize = dataSource.dataAccess.fetchSize
-      )
-
-    // translate the Slick stream to a Source
-    Source.fromPublisher(dataSource.database.stream(allAttrsStream))
-  }
-
-  override def listEntities(entityType: String): Source[Entity, NotUsed] = {
-    val dbSource = listEntitiesDbSource(workspaceContext, entityType)
-    EntityStreamingUtils.gatherEntities(dataSource, dbSource)
-  }
+  override def listEntities(entityType: String): Source[Entity, NotUsed] = ???
 
   /**
     * Returns the components needed to stream a EntityQueryResponse to an end user in response to the entityQuery API.
@@ -395,114 +107,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def queryEntitiesSource(entityType: String,
                                    query: EntityQuery,
                                    parentContext: RawlsRequestContext = requestArguments.ctx
-  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = {
-    // look for a columnFilter that specifies the primary key for this entityType;
-    // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
-    val nameFilter: Option[String] = query.columnFilter match {
-      case Some(colFilter)
-          if colFilter.attributeName == AttributeName.withDefaultNS(
-            entityType + Attributable.entityIdAttributeSuffix
-          ) =>
-        Option(colFilter.term)
-      case _ => None
-    }
-
-    setTraceSpanAttribute(parentContext,
-                          AttributeKey.booleanKey("isFilterByName"),
-                          java.lang.Boolean.valueOf(nameFilter.isDefined)
-    )
-    // if filtering by name, retrieve that entity directly, else do the full query:
-    nameFilter match {
-      case Some(entityName) =>
-        dataSource.inTransaction(ReadCommitted) { dataAccess =>
-          dataAccess.entityQuery.loadSingleEntityForPage(workspaceContext, entityType, entityName, query)
-        } map { case (unfilteredCount, filteredCount, entity) =>
-          val pageCount = if (entity.nonEmpty) 1 else 0
-          val entitySource = if (entity.nonEmpty) Source.single(entity.head) else Source.empty
-
-          val metadata: EntityQueryResultMetadata =
-            EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
-          (metadata, entitySource)
-        }
-
-      case _ =>
-        traceFutureWithParent("loadEntityPage", parentContext) { childContext =>
-          setTraceSpanAttribute(childContext, AttributeKey.longKey("pageSize"), java.lang.Long.valueOf(query.pageSize))
-          setTraceSpanAttribute(childContext, AttributeKey.longKey("page"), java.lang.Long.valueOf(query.page))
-          setTraceSpanAttribute(childContext, AttributeKey.stringKey("filterTerms"), query.filterTerms.getOrElse(""))
-          setTraceSpanAttribute(childContext, AttributeKey.stringKey("sortField"), query.sortField)
-          setTraceSpanAttribute(childContext, AttributeKey.stringKey("sortDirection"), query.sortDirection.toString)
-
-          // query for the fully-materialized metadata and for the streaming result set, return the two of these
-          // as a tuple
-          for {
-            metadata <- queryForMetadata(entityType, query, childContext)
-            entitySource = queryForResultSource(entityType, query, childContext)
-          } yield (metadata, entitySource)
-        }
-    }
-  }
-
-  /**
-    * generates the metadata (pagination, etc) or the incoming query.
-    * Called by queryEntitiesSource.
-    *
-    * @param entityType the type of entities to query for metadata
-    * @param query criteria for filtering and paginating the result set
-    * @param parentContext tracing context into which this method will add traces
-    * @return the query result metadata
-    */
-  private def queryForMetadata(entityType: String,
-                               query: EntityQuery,
-                               parentContext: RawlsRequestContext
-  ): Future[EntityQueryResultMetadata] =
-    dataSource.inTransaction(ReadCommitted) { dataAccess =>
-      for {
-        (unfilteredCount, filteredCount) <- dataAccess.entityQuery.loadEntityPageCounts(workspaceContext,
-                                                                                        entityType,
-                                                                                        query,
-                                                                                        parentContext
-        )
-      } yield {
-        val pageCount: Int = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-        if (filteredCount > 0 && query.page > pageCount) {
-          throw new DataEntityException(
-            code = StatusCodes.BadRequest,
-            message = s"requested page ${query.page} is greater than the number of pages $pageCount"
-          )
-        }
-
-        EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount)
-      }
-    }
-
-  /**
-   * generates a Source[Entity, _] representing the individual Entity results for the incoming query.
-    * Called by queryEntitiesSource.
-   *
-   * @param entityType the type of entities to return in the result set
-   * @param query criteria for filtering and paginating the result set
-   * @param parentContext tracing context into which this method will add traces
-   * @return a streaming Source of the query results
-   */
-  private def queryForResultSource(entityType: String,
-                                   query: EntityQuery,
-                                   parentContext: RawlsRequestContext
-  ): Source[Entity, _] = {
-    val allAttrsStream =
-      dataSource.dataAccess.entityQuery
-        .loadEntityPageSource(workspaceContext, entityType, query, parentContext)
-        .transactionally
-        .withTransactionIsolation(ReadCommitted)
-        .withStatementParameters(rsType = ResultSetType.ForwardOnly,
-                                 rsConcurrency = ResultSetConcurrency.ReadOnly,
-                                 fetchSize = dataSource.dataAccess.fetchSize
-        )
-    val dbSource: Source[EntityAndAttributesResult, NotUsed] =
-      Source.fromPublisher(dataSource.database.stream(allAttrsStream))
-
-    EntityStreamingUtils.gatherEntities(dataSource, dbSource)
-  }
+  ): Future[(EntityQueryResultMetadata, Source[Entity, _])] = ???
 
   /* as of this writing, only used in tests. This queryEntities method materializes the entire result set of
    *  entities and is therefore memory-hungry. Runtime code should not use this and should call queryEntitiesSource
@@ -512,136 +117,26 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
   override def queryEntities(entityType: String,
                              query: EntityQuery,
                              parentContext: RawlsRequestContext = requestArguments.ctx
-  ): Future[EntityQueryResponse] =
-    queryEntitiesSource(entityType, query, parentContext) flatMap { case (entityQueryResultMetadata, entitySource) =>
-      implicit val actorSystem: ActorSystem = ActorSystem()
-      entitySource.runWith(Sink.seq) map { entities =>
-        EntityQueryResponse(query, entityQueryResultMetadata, entities)
-      }
-    }
-
-  private def batchUpdateEntitiesImpl(
-    updateStream: Source[EntityUpdateDefinition, _],
-    upsert: Boolean,
-    parentContext: RawlsRequestContext
-  ): Future[Int] =
-    // immediately materialize the updateStream so existing code can work with a Seq
-    updateStream
-      .runWith(Sink.seq)
-      .flatMap { entityUpdates =>
-        val namesToCheck = for {
-          update <- entityUpdates
-          operation <- update.operations
-        } yield operation.name
-
-        traceFutureWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", parentContext) { localContext =>
-          setTraceSpanAttribute(localContext, AttributeKey.stringKey("workspaceId"), workspaceContext.workspaceId)
-          setTraceSpanAttribute(localContext, AttributeKey.booleanKey("upsert"), java.lang.Boolean.valueOf(upsert))
-          setTraceSpanAttribute(localContext,
-                                AttributeKey.longKey("entityUpdatesCount"),
-                                java.lang.Long.valueOf(entityUpdates.length)
-          )
-          setTraceSpanAttribute(localContext,
-                                AttributeKey.longKey("entityOperationsCount"),
-                                java.lang.Long.valueOf(entityUpdates.map(_.operations.length).sum)
-          )
-
-          withAttributeNamespaceCheck(namesToCheck) {
-            dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-              val updateTrialsAction = traceDBIOWithParent("getActiveEntities", localContext)(_ =>
-                dataAccess.entityQuery.getActiveEntities(
-                  workspaceContext,
-                  entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))
-                )
-              ) map { entities =>
-                val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
-                entityUpdates.map { entityUpdate =>
-                  entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
-                    case Some(e) =>
-                      Try(applyOperationsToEntity(e, entityUpdate.operations, AttributeOperationListModes.Strict))
-                    case None =>
-                      if (upsert) {
-                        Try(
-                          applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty),
-                                                  entityUpdate.operations,
-                                                  AttributeOperationListModes.Strict
-                          )
-                        )
-                      } else {
-                        Failure(new RuntimeException("Entity does not exist"))
-                      }
-                  })
-                }
-              }
-
-              val saveAction = updateTrialsAction flatMap { updateTrials =>
-                val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
-                  ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
-                }
-                if (errorReports.nonEmpty) {
-                  DBIO.failed(
-                    new RawlsExceptionWithErrorReport(
-                      ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)
-                    )
-                  )
-                } else {
-                  val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
-
-                  traceDBIOWithParent("saveAction", localContext) { subContext =>
-                    dataAccess.entityQuery
-                      .save(workspaceContext, t, subContext.toTracingContext)
-                      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeoutSeconds))
-                  }
-                }
-              }
-
-              saveAction
-            } recover {
-              case icve: java.sql.SQLIntegrityConstraintViolationException =>
-                val userMessage =
-                  s"Database error occurred. Check if you are uploading entity names that differ only in case " +
-                    s"from pre-existing entities."
-                throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, icve))
-              case bue: java.sql.BatchUpdateException =>
-                val maybeCaseIssue = bue.getMessage.startsWith("Duplicate entry")
-                val userMessage = if (maybeCaseIssue) {
-                  s"Database error occurred. Check if you are uploading entity names that differ only in case " +
-                    s"from pre-existing entities."
-                } else {
-                  s"Database error occurred. Underlying error message: ${bue.getMessage}"
-                }
-                throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, bue))
-            }
-          }
-        }
-      }
-      .map(writeResults => writeResults.size)
+  ): Future[EntityQueryResponse] = ???
 
   override def batchUpdateEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Int] =
-    batchUpdateEntitiesImpl(entityUpdates, upsert = false, parentContext)
+  ): Future[Int] = ???
 
   override def batchUpsertEntities(entityUpdates: Source[EntityUpdateDefinition, _],
                                    parentContext: RawlsRequestContext
-  ): Future[Int] =
-    batchUpdateEntitiesImpl(entityUpdates, upsert = true, parentContext)
+  ): Future[Int] = ???
 
   override def saveWorkflowOutputEntities(
     dataAccess: DataAccess,
     workspace: Workspace,
     updatedEntities: Seq[Entity]
-  ): ReadWriteAction[Int] =
-    dataAccess.entityQuery
-      .save(workspace, updatedEntities)
-      .withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout.toSeconds.toInt))
-      .map(_.size)
+  ): ReadWriteAction[Int] = ???
 
   override def listWorkflowEntities(dataAccess: DataAccess,
                                     workspace: Workspace,
                                     entityIds: Seq[Long]
-  ): ReadAction[Map[Long, Entity]] =
-    dataAccess.entityQuery.getEntities(workspace.workspaceIdAsUUID, entityIds).map(_.toMap)
+  ): ReadAction[Map[Long, Entity]] = ???
 
   override def copyEntities(sourceWorkspaceContext: Workspace,
                             destWorkspaceContext: Workspace,
@@ -649,182 +144,34 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments,
                             entityNames: Seq[String],
                             linkExistingEntities: Boolean,
                             parentContext: RawlsRequestContext
-  ): Future[EntityCopyResponse] =
-    traceFutureWithParent("checkAndCopyEntities", parentContext)(_ =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext,
-                                                    destWorkspaceContext,
-                                                    entityType,
-                                                    entityNames,
-                                                    linkExistingEntities,
-                                                    parentContext
-        )
-      }
-    )
+  ): Future[EntityCopyResponse] = ???
 
   override def clone(sourceWorkspaceContext: Workspace,
                      destWorkspaceContext: Workspace,
                      parentContext: RawlsRequestContext
-  ): WriteAction[(Int, Int)] =
-    dataSource.dataAccess.entityQuery
-      .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID)
+  ): WriteAction[(Int, Int)] = ???
 
   override def renameAttribute(entityType: EntityName,
                                oldAttributeName: AttributeName,
                                attributeRenameRequest: AttributeRename,
                                parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    def validateNewAttributeName(dataAccess: DataAccess,
-                                 workspaceContext: Workspace,
-                                 entityType: String,
-                                 attributeName: AttributeName
-    ): ReadAction[Boolean] =
-      dataAccess
-        .entityAttributeShardQuery(workspaceContext)
-        .doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
-        case Some(false) => false
-        case Some(true) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport =
-              ErrorReport(StatusCodes.Conflict,
-                          s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"
-              )
-          )
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(
-              StatusCodes.InternalServerError,
-              s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"
-            )
-          )
-      }
-
-    def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean =
-      rowsUpdated match {
-        case 0 =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.NotFound,
-                                      s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"
-            )
-          )
-        case _ => true
-      }
-
-    dataSource.inTransaction { dataAccess =>
-      val newAttributeName = attributeRenameRequest.newAttributeName
-      for {
-        _ <- traceDBIOWithParent("validateNewAttributeName", parentContext) { _ =>
-          validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
-        }
-        rowsUpdated <- traceDBIOWithParent("renameAttribute", parentContext) { _ =>
-          dataAccess
-            .entityAttributeShardQuery(workspaceContext)
-            .renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
-        }
-        _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
-      } yield rowsUpdated
-    }
-  }
+  ): Future[Int] = ???
 
   override def renameEntity(entityType: EntityName,
                             entityName: EntityName,
                             newName: EntityName,
                             parentContext: RawlsRequestContext
-  ): Future[Int] =
-    dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("withEntity", parentContext) { s =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          traceDBIOWithParent("checkNameConflict getEntity", s) { _ =>
-            dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName)
-          } flatMap {
-            case None =>
-              traceDBIOWithParent("renameEntity", s) { _ =>
-                dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
-              }
-            case Some(_) =>
-              throw new RawlsExceptionWithErrorReport(
-                errorReport =
-                  ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
-              )
-          }
-        }
-      }
-    }
+  ): Future[Int] = ???
 
   override def renameEntityType(oldName: EntityName,
                                 renameInfo: EntityTypeRename,
                                 parentContext: RawlsRequestContext
-  ): Future[Int] = {
-    def validateExistingType(dataAccess: DataAccess,
-                             workspaceContext: Workspace,
-                             oldName: String
-    ): ReadAction[Boolean] =
-      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) map {
-        case Some(true) => true
-        case Some(false) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.NotFound, s"Can't find entity type ${oldName}")
-          )
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                      s"Unexpected error; could not determine existence of entity type ${oldName}"
-            )
-          )
-      }
-
-    def validateNewType(dataAccess: DataAccess, workspaceContext: Workspace, newName: String): ReadAction[Boolean] =
-      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) map {
-        case Some(true) =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type")
-          )
-        case Some(false) => false
-        case None =>
-          throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                      s"Unexpected error; could not determine existence of entity type ${newName}"
-            )
-          )
-      }
-
-    dataSource.inTransaction { dataAccess =>
-      for {
-        _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
-        _ <- validateExistingType(dataAccess, workspaceContext, oldName)
-        renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
-      } yield renameResult
-    }
-  }
+  ): Future[Int] = ???
 
   override def updateEntity(entityType: EntityName,
                             entityName: EntityName,
                             operations: Seq[AttributeUpdateOperations.AttributeUpdateOperation],
                             parentContext: RawlsRequestContext
-  ): Future[Entity] =
-    dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-      traceDBIOWithParent("withEntity", parentContext) { s =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          val updateAction = Try {
-            val updatedEntity = applyOperationsToEntity(entity, operations, AttributeOperationListModes.Strict)
-            traceDBIOWithParent("saveEntity", s)(_ => dataAccess.entityQuery.save(workspaceContext, updatedEntity))
-          } match {
-            case Success(result) => result
-            case Failure(e: AttributeUpdateOperationException) =>
-              DBIO.failed(
-                new RawlsExceptionWithErrorReport(
-                  errorReport = ErrorReport(
-                    StatusCodes.BadRequest,
-                    s"Unable to update entity ${entityType}/${entityName} in ${workspaceContext.toWorkspaceName}",
-                    ErrorReport(e)
-                  )
-                )
-              )
-            case Failure(regrets) => DBIO.failed(regrets)
-          }
-          updateAction
-        }
-      }
-    }
+  ): Future[Entity] = ???
 
 }

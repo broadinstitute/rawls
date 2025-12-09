@@ -392,7 +392,7 @@ trait WorkflowComponent {
 
     private def loadWorkflowEntity(rec: WorkflowRecord): Option[ReadAction[AttributeEntityReference]] =
       (rec.workflowEntityId, rec.externalEntityId) match {
-        case (Some(entityId), _) => Option(submissionQuery.loadEntity(entityId))
+        case (Some(entityId), _)   => Option(submissionQuery.loadEntity(entityId))
         case (_, Some(externalId)) =>
           Option(uniqueResult[SubmissionRecord](submissionQuery.findById(rec.submissionId)).map { subOpt =>
             val entityRefOpt = for {

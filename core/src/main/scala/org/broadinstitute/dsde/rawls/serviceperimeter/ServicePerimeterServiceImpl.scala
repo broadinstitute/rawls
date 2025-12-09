@@ -180,7 +180,7 @@ object ServicePerimeterServiceImpl {
                          ctx
           )
           .flatMap {
-            case true => Future.successful(())
+            case true  => Future.successful(())
             case false =>
               Future.failed(
                 new ServicePerimeterAccessException(

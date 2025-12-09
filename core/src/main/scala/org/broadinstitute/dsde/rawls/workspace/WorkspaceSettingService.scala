@@ -35,7 +35,6 @@ import org.broadinstitute.dsde.rawls.model.{
 import org.broadinstitute.dsde.rawls.util.WorkspaceSupport
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import java.time.Duration
@@ -48,8 +47,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                               val workspaceRepository: WorkspaceRepository,
                               gcsDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              googleStorageService: GoogleStorageService[IO],
-                              entityService: EntityService
+                              googleStorageService: GoogleStorageService[IO]
 )(implicit protected val executionContext: ExecutionContext, ioRuntime: IORuntime)
     extends WorkspaceSupport
     with LazyLogging {
@@ -98,7 +96,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
             rules.flatMap { rule =>
               val actionValidation = rule.action.actionType match {
                 case actionType if actionType.equals("Delete") => None
-                case actionType =>
+                case actionType                                =>
                   Some(validationErrorReport(setting.settingType, s"unsupported lifecycle action $actionType"))
               }
               val ageValidation = rule.conditions.age.collect {
@@ -129,7 +127,7 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
                 )
               case _ => None
             }
-          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_)) => None
+          case GcpBucketRequesterPaysSetting(GcpBucketRequesterPaysConfig(_))               => None
           case GcpLogBucketRetentionSetting(GcpLogBucketRetentionConfig(retentionDuration)) =>
             retentionDuration match {
               case duration if duration < 1.days.toDays || duration > 3650.days.toDays =>
@@ -305,18 +303,6 @@ class WorkspaceSettingService(protected val ctx: RawlsRequestContext,
         case _ =>
           Future.successful(())
       }
-    } else if (performMigration.isEmpty || performMigration.contains(true)) { // default to true
-      // If compact data tables setting is enabled and a migration is requested, we need to migrate the entity attributes.
-      Future {
-        entityService
-          .quicksilverMigration(workspaceName = workspaceName, updateWorkspaceSettings = false)
-          .map(_ => ())
-          .recover { case e: Exception =>
-            throw new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.InternalServerError, s"Quicksilver migration failed: ${e.getMessage}")
-            )
-          }
-      }.flatten
     } else {
       // no action necessary; no migration was requested
       Future.successful(())

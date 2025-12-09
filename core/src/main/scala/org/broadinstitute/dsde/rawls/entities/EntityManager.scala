@@ -6,15 +6,10 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.{AuditLoggingEntityProvider, EntityProvider, EntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.compact.{CompactEntityProvider, CompactEntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.model.WorkspaceSettingTypes.CompactDataTables
-import org.broadinstitute.dsde.rawls.model.{CloudPlatform, CompactDataTablesSetting, ErrorReport, WorkspaceType}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceSettingRepository
+import org.broadinstitute.dsde.rawls.model.{CloudPlatform, ErrorReport, WorkspaceType}
 
-import java.time.Duration
 import scala.concurrent.{ExecutionContext, Future}
-import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success}
 
 /**
@@ -26,7 +21,6 @@ import scala.util.{Failure, Success}
  *    we create a new EntityProvider instance for each request.
  *
  *    Subclasses are:
- *      - LocalEntityProvider: the default. Legacy Rawls/CloudSQL implementation.
  *      - CompactEntityProvider: "Quicksilver" data tables, using JSON features in CloudSQL
  *
  * EntityProviderBuilder:
@@ -40,13 +34,10 @@ import scala.util.{Failure, Success}
  *    be used to satisfy the request, and using that builder to create and return a provider instance.
  *
  */
-class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]],
-                    workspaceSettingRepository: WorkspaceSettingRepository,
-                    metricsPrefix: String
-) {
+class EntityManager(providerBuilder: EntityProviderBuilder[CompactEntityProvider], metricsPrefix: String) {
 
   /**
-    * Returns the appropriate EntityProvider to use for the current request.
+    * Returns the CompactEntityProvider to use for the current request.
     * @param requestArguments description of the request
     * @return the provider
     */
@@ -59,80 +50,31 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
         s"This API is disabled for ${CloudPlatform.AZURE} workspaces. Contact support for alternatives."
       )
     }
-
-    // If the workspace has the CompactDataTables setting enabled and no pending CompactDataTables Settings,
-    // use CompactEntityProvider; else use LocalEntityProvider.
-    val compactDataTables = workspaceSettingRepository
-      .hasPendingSettings(
-        requestArguments.workspace.workspaceIdAsUUID,
-        CompactDataTables
-      )
-      .flatMap { hasPending =>
-        if (hasPending) {
-          Future.failed(
-            new DataEntityException(
-              s"CompactDataTable migration is in progress for workspace ${requestArguments.workspace.toWorkspaceName}. Access is temporarily disabled."
-            )
-          )
-        } else {
-          workspaceSettingRepository
-            .getWorkspaceSettingOfType(
-              requestArguments.workspace.workspaceIdAsUUID,
-              CompactDataTables
-            )
-            .map {
-              case Some(qs: CompactDataTablesSetting) if qs.config.enabled => true
-              case _                                                       => false
-            }
-        }
-      }
-    val targetTagFuture = compactDataTables map {
-      case true  => typeTag[CompactEntityProvider]
-      case false => typeTag[LocalEntityProvider]
+    val entityProvider = providerBuilder.build(requestArguments) match {
+      case Success(provider) =>
+        // Wrap the provider with AuditLoggingEntityProvider
+        new AuditLoggingEntityProvider(provider, requestArguments, metricsPrefix)
+      case Failure(regrets: DataEntityException) =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage))
+      case Failure(ex: Throwable) =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex.getMessage))
     }
-
-    targetTagFuture map { targetTag =>
-      providerBuilders.find(_.builds == targetTag) match {
-        case None =>
-          throw new DataEntityException(
-            s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}"
-          )
-        case Some(builder) =>
-          builder.build(requestArguments) match {
-            case Success(provider) =>
-              // Wrap the provider with AuditLoggingEntityProvider
-              new AuditLoggingEntityProvider(provider, requestArguments, metricsPrefix)
-            case Failure(regrets: DataEntityException) =>
-              throw new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage))
-            case Failure(ex: Throwable) =>
-              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex.getMessage))
-          }
-      }
-    }
+    Future.successful(entityProvider)
   }
 }
 
 object EntityManager {
-  def defaultEntityManager(dataSource: SlickDataSource,
-                           workspaceSettingRepository: WorkspaceSettingRepository,
-                           cacheEnabled: Boolean,
-                           queryTimeout: Duration,
-                           metricsPrefix: String
-  )(implicit ec: ExecutionContext, system: ActorSystem): EntityManager = {
-    // create the EntityManager along with its associated provider-builders. Since entities are only accessed
+  def defaultEntityManager(dataSource: SlickDataSource, metricsPrefix: String)(implicit
+    ec: ExecutionContext,
+    system: ActorSystem
+  ): EntityManager = {
+    // create the EntityManager along with its associated compact entity provider-builder. Since entities are only accessed
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
-    val defaultEntityProviderBuilder =
-      new LocalEntityProviderBuilder(dataSource,
-                                     cacheEnabled,
-                                     queryTimeout,
-                                     metricsPrefix
-      ) // implicit executionContext, system
     val compactEntityProviderBuilder = new CompactEntityProviderBuilder(dataSource, metricsPrefix)
 
     new EntityManager(
-      Set(defaultEntityProviderBuilder, compactEntityProviderBuilder),
-      workspaceSettingRepository,
+      compactEntityProviderBuilder,
       metricsPrefix
     )
   }

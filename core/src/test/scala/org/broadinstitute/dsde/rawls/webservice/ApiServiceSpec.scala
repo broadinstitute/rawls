@@ -276,15 +276,11 @@ trait ApiServiceSpec
           new WorkspaceRepository(slickDataSource),
           gcsDAO,
           samDAO,
-          mock[GoogleStorageService[IO]],
-          entityServiceConstructor(ctx)
+          mock[GoogleStorageService[IO]]
         )
 
     val entityManager = EntityManager.defaultEntityManager(
       dataSource,
-      new WorkspaceSettingRepository(dataSource),
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )
 

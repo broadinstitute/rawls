@@ -258,7 +258,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         workspacesToUpdate.setErrorMessage(errorMessage) *>
           (errorMessage match {
             case Some(_) => workspacesToUpdate.setState(WorkspaceState.UpdateFailed)
-            case None =>
+            case None    =>
               DBIO.seq(
                 workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount),
                 workspacesToUpdate.setState(WorkspaceState.Ready)

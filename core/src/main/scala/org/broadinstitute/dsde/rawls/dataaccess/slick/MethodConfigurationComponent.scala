@@ -202,7 +202,7 @@ trait MethodConfigurationComponent {
         uniqueResult[MethodConfigurationRecord](
           findActiveByName(workspaceContext.workspaceIdAsUUID, methodConfigurationNamespace, methodConfigurationName)
         ) flatMap {
-          case None => DBIO.successful(false)
+          case None                  => DBIO.successful(false)
           case Some(methodConfigRec) =>
             {
               hideMethodConfigurationAction(methodConfigRec.id, methodConfigurationName)
@@ -279,14 +279,14 @@ trait MethodConfigurationComponent {
       uniqueResult[MethodConfigurationRecord](
         findActiveByName(workspaceId, methodConfigNamespace, methodConfigName)
       ) flatMap {
-        case None => DBIO.successful(None)
+        case None                  => DBIO.successful(None)
         case Some(methodConfigRec) =>
           loadMethodConfiguration(methodConfigRec) map (Some(_))
       }
 
     def loadMethodConfigurationById(id: Long): ReadAction[Option[MethodConfiguration]] =
       uniqueResult[MethodConfigurationRecord](findById(id)) flatMap {
-        case None => DBIO.successful(None)
+        case None                  => DBIO.successful(None)
         case Some(methodConfigRec) =>
           loadMethodConfiguration(methodConfigRec) map (Some(_))
       }

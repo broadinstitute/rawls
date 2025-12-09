@@ -2304,63 +2304,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       )
   }
 
-  class LocalEntityProviderTestData() extends TestData {
-    val workspaceName = WorkspaceName("namespace", "workspace-with-cache")
-    val wsAttrs = Map(AttributeName.withDefaultNS("description") -> AttributeString("a description"))
-    val creationTime = currentTime()
-    val workspace = Workspace(
-      workspaceName.namespace,
-      workspaceName.name,
-      UUID.randomUUID().toString,
-      "aBucket",
-      Some("workflow-collection"),
-      creationTime,
-      creationTime,
-      "testUser",
-      wsAttrs
-    )
-
-    val participant1 = Entity(
-      "participant1",
-      "participant",
-      Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1"),
-          AttributeName.withDefaultNS("attr2") -> AttributeString("value2")
-      )
-    )
-    val sample1 = Entity(
-      "sample1",
-      "sample",
-      Map(AttributeName.withDefaultNS("attr5") -> AttributeString("value5"),
-          AttributeName.withDefaultNS("attr6") -> AttributeString("value6")
-      )
-    )
-
-    val workspaceEntities = Seq(participant1, sample1)
-
-    val workspaceAttrNameCacheEntries = workspaceEntities.groupBy(_.entityType).map { case (entityType, entities) =>
-      entityType -> entities.flatMap(_.attributes.keys)
-    }
-
-    val workspaceEntityTypeCacheEntries = workspaceEntities.groupBy(_.entityType).view.mapValues(_.length).toMap
-
-    override def save() =
-      DBIO.seq(
-        workspaceQuery.createOrUpdate(workspace),
-        withWorkspaceContext(workspace) { context =>
-          DBIO.seq(
-            // note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return
-            entityQuery.save(context, participant1),
-            entityAttributeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceAttrNameCacheEntries),
-            entityTypeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceEntityTypeCacheEntries)
-          )
-        }
-      )
-
-  }
-
   /* This test data should remain constant! Changing this data set will likely break
    * many of the tests that rely on it. */
-  class ConstantTestData(useCompact: Boolean = true) extends TestData {
+  class ConstantTestData extends TestData {
     // setup workspace objects
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(
@@ -2703,14 +2649,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
-                                                                 allEntities,
-                                                                 true
-              )
-            } else {
-              entityQuery.save(context, allEntities)
-            },
+            compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                               allEntities,
+                                                               true
+            ),
             saveAllMCs(context),
             submissionQuery.create(context, submissionNoWorkflows),
             submissionQuery.create(context, submission1),
@@ -2733,10 +2675,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   val testData = new DefaultTestData()
   val legacyTestData = new DefaultTestData(false)
-  val constantData = new ConstantTestData(false)
   val compactConstantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
-  val localEntityProviderTestData = new LocalEntityProviderTestData()
   val protectedWorkspaceTestData = new ProtectedWorkspaceTestData()
 
   def withDefaultTestDatabase[T](testCode: => T): T =
@@ -2748,20 +2688,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def withLegacyDefaultTestDatabase[T](testCode: => T): T =
     withCustomTestDatabaseInternal(legacyTestData)(testCode)
 
-  def withLegacyDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
-    withCustomTestDatabaseInternal(legacyTestData)(testCode(slickDataSource))
-
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))
 
   def withProtectedWorkspaceTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(protectedWorkspaceTestData)(testCode(slickDataSource))
-
-  def withLocalEntityProviderTestDatabase[T](testCode: SlickDataSource => T): T =
-    withCustomTestDatabaseInternal(localEntityProviderTestData)(testCode(slickDataSource))
-
-  def withConstantTestDatabase[T](testCode: => T): T =
-    withCustomTestDatabaseInternal(constantData)(testCode)
 
   def withCompactConstantTestDatabase[T](testCode: => T): T =
     withCustomTestDatabaseInternal(compactConstantData)(testCode)

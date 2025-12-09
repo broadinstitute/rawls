@@ -14,7 +14,7 @@ object SpendReportUtils {
   def getCurrency(currencies: Seq[String]): Currency =
     currencies.distinct match {
       case head :: List() => Currency.getInstance(head)
-      case head :: tail =>
+      case head :: tail   =>
         throw RawlsExceptionWithErrorReport(
           StatusCodes.InternalServerError,
           s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"

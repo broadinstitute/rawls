@@ -36,7 +36,7 @@ import scala.concurrent.Future
 trait AttributeSupport {
 
   // note: success is indicated by  Map.empty
-  def attributeNamespaceCheck(attributeNames: Iterable[AttributeName]): Map[String, String] = {
+  private def attributeNamespaceCheck(attributeNames: Iterable[AttributeName]): Map[String, String] = {
     val namespaces = attributeNames.map(_.namespace).toSet
 
     // no one can modify attributes with invalid namespaces
@@ -121,7 +121,7 @@ trait AttributeSupport {
                   startingAttributes
                 case newMember: AttributeEntityReference =>
                   startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
-                case newMember: AttributeValue =>
+                case _: AttributeValue =>
                   throw new AttributeUpdateOperationException("Cannot add non-reference to list of references.")
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }

@@ -528,12 +528,16 @@ paths:
           in: query
           description: how many workspaces to return at a time
           required: false
-          default: 100
+          schema:
+            type: integer
+            default: 100
         - name: offset
           in: query
           description: The number of items to skip before starting to collect the result
           required: false
-          default: 0
+          schema:
+            type: integer
+            default: 0
       responses:
         200:
           description: Success
@@ -2134,50 +2138,6 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: renameEntityAttribute
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/quicksilverMigration:
-    post:
-      tags:
-        - entities
-      summary: DO NOT USE. Migrates legacy data entities to compact data entities.
-      description: |
-        Compact data entities are not fully supported at this time. Calling this API
-        will cause you to lose access to all of your data tables. This is not reversible.
-        This API may be changed at any time, without warning.
-      operationId: quicksilver_migration
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: cleanup
-          in: query
-          description: |
-            Should this API fully delete all unnecessary data after the migration?
-            Setting this to true can greatly increase the execution time of this API.
-          schema:
-            type: boolean
-            default: false
-        - name: sortBufferSize
-          in: query
-          description: |
-            What value the MySQL sort_buffer_size should be set to during this migration. Default is 88388608L bytes (8M).
-          schema:
-            type: integer
-            format: int64
-            default: 88388608
-      requestBody:
-        description: Consent to execute
-        content:
-          text/plain:
-            schema:
-              description: Enter your consent for executing this API.
-              type: string
-        required: true
-      responses:
-        200:
-          description: Migration complete.
-          content: { }
-        204:
-          description: No migration performed.
-          content: { }
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
     get:
       tags:
@@ -4031,12 +3991,16 @@ paths:
           in: query
           description: how many google projects to return at a time
           required: false
-          default: 100
+          schema:
+            type: integer
+            default: 100
         - name: offset
           in: query
           description: The number of items to skip before starting to collect the result
           required: false
-          default: 0
+          schema:
+            type: integer
+            default: 0
       responses:
         200:
           description: Successful Request

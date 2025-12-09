@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
+    <!-- Delete all rows, via TRUNCATE, from the ENTITY_ATTRIBUTE_xx_xx tables.
+            This offers immediate benefit to any code still using these tables
+            as well as optimizing MySQL w/r/t the foreign keys from these tables
+            back to ENTITY.
+         We are truncating the tables instead of dropping them to allow us time
+            to safely delete the code that still uses these tables.
+     -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="truncate_entity_attributes">
+        <sql>
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_00_03;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_04_07;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_08_0b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_0c_0f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_10_13;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_14_17;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_18_1b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_1c_1f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_20_23;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_24_27;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_28_2b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_2c_2f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_30_33;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_34_37;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_38_3b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_3c_3f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_40_43;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_44_47;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_48_4b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_4c_4f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_50_53;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_54_57;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_58_5b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_5c_5f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_60_63;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_64_67;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_68_6b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_6c_6f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_70_73;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_74_77;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_78_7b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_7c_7f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_80_83;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_84_87;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_88_8b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_8c_8f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_90_93;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_94_97;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_98_9b;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_9c_9f;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_a0_a3;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_a4_a7;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_a8_ab;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_ac_af;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_b0_b3;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_b4_b7;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_b8_bb;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_bc_bf;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_c0_c3;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_c4_c7;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_c8_cb;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_cc_cf;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_d0_d3;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_d4_d7;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_d8_db;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_dc_df;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_e0_e3;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_e4_e7;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_e8_eb;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_ec_ef;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_f0_f3;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_f4_f7;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_f8_fb;
+            TRUNCATE TABLE ENTITY_ATTRIBUTE_fc_ff;
+        </sql>
+    </changeSet>
+</databaseChangeLog>

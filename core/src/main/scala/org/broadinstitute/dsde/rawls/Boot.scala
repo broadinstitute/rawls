@@ -326,9 +326,6 @@ object Boot extends IOApp with LazyLogging {
       // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(
         slickDataSource,
-        new WorkspaceSettingRepository(slickDataSource),
-        appConfigManager.conf.getBoolean("entityStatisticsCache.enabled"),
-        entityQueryTimeout,
         metricsPrefix
       )
 
@@ -377,8 +374,7 @@ object Boot extends IOApp with LazyLogging {
                                       workspaceRepository,
                                       gcsDAO,
                                       samDAO,
-                                      appDependencies.googleStorageService,
-                                      entityServiceConstructor(ctx)
+                                      appDependencies.googleStorageService
           )(implicitly, IORuntime.global)
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
@@ -665,7 +661,7 @@ object Boot extends IOApp with LazyLogging {
 
     val maybeTracerProvider = conf.getBooleanOption("opencensus-scala.trace.exporters.stackdriver.enabled").flatMap {
       case false => None
-      case true =>
+      case true  =>
         val traceProviderBuilder = SdkTracerProvider.builder
         val projectId = conf.getString("opencensus-scala.trace.exporters.stackdriver.project-id")
         val googleTraceExporter =

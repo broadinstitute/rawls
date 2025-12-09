@@ -141,7 +141,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem)
       )
     )
     runAndWait(dbquery) match {
-      case None => fail("did not find WorkflowRecord with workflowExternalIdWithExecutionKey")
+      case None      => fail("did not find WorkflowRecord with workflowExternalIdWithExecutionKey")
       case Some(rec) =>
         assertResult(instanceKeyForTests) {
           val execInstance = cluster invokePrivate getMember(rec)

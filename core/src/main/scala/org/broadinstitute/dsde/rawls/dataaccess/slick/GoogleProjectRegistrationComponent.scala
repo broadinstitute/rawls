@@ -67,7 +67,7 @@ trait GoogleProjectRegistrationComponent {
 
     def findById(id: GoogleProjectId): ReadAction[Option[GoogleProjectRegistration]] =
       uniqueResult[GoogleProjectRegistrationRecord](withId(id.value)) flatMap {
-        case None => DBIO.successful(None)
+        case None                      => DBIO.successful(None)
         case Some(googleProjectRegRec) =>
           DBIO.successful(Option(GoogleProjectRegistrationRecord.toGoogleProjectRegistration(googleProjectRegRec)))
       }

@@ -61,7 +61,7 @@ trait GooglePubSubDAO {
     op: (scala.collection.immutable.Seq[String]) => Future[AckStatus]
   ): Future[HandledStatus] =
     pullMessages(subscriptionName, maxMessages) flatMap {
-      case Seq() => Future.successful(NoMessage)
+      case Seq()    => Future.successful(NoMessage)
       case messages =>
         op(messages.map(msg => msg.contents)) flatMap {
           case MessageAcknowledged    => acknowledgeMessages(subscriptionName, messages).map(_ => MessageHandled)

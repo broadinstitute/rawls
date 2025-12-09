@@ -543,7 +543,7 @@ trait WorkspaceComponent {
 
         workspaceIds.map { wsId =>
           val (lastFailedDate, lastSuccessDate) = submissionDatesByWorkspaceByStatus.get(wsId) match {
-            case None => (None, None)
+            case None                => (None, None)
             case Some(datesByStatus) =>
               (datesByStatus.getOrElse(WorkflowStatuses.Failed.toString, None),
                datesByStatus.getOrElse(WorkflowStatuses.Succeeded.toString, None)

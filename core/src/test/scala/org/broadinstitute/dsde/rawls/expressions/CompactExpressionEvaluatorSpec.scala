@@ -183,11 +183,12 @@ class CompactExpressionEvaluatorSpec
   }
 
   it should "error on invalid expressions" in
-    List("blah", "invalid.exp.").foreach { input =>
-      intercept[RawlsExceptionWithErrorReport] {
-        compactExpressionEvaluator.parseLookups(input)
+    List("blah", "invalid.exp.", """""str"""", """this."foo"""", """that."foo"""", """unquoted""", """foo"bar"""")
+      .foreach { input =>
+        intercept[RawlsExceptionWithErrorReport] {
+          compactExpressionEvaluator.parseLookups(input)
+        }
       }
-    }
 
   // Many test cases are taken from LocalEntityProviderSpec
   behavior of "evaluateExpressions"
@@ -1290,6 +1291,23 @@ class CompactExpressionEvaluatorSpec
 
   }
 
+  it should "fail if entity doesn't exist" in withConfigData {
+    when(
+      mockQueries.getEntity(any(), any(), any())
+    ).thenReturn(DBIO.successful(None))
+
+    val context = ExpressionEvaluationContext(Some("Sample"), Some("nonexistent"), None, Some("Sample"))
+    val gatherInputsResult = methodConfigResolver.gatherInputs(userInfo, configGood, littleWdl).get
+
+    val future = compactExpressionEvaluator
+      .evaluateExpressions(workspace.workspaceIdAsUUID, context, gatherInputsResult)
+
+    whenReady(future.failed) { ex =>
+      ex shouldBe a[RawlsExceptionWithErrorReport]
+      ex.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.message should include("not found")
+    }
+  }
+
   behavior of "evaluateExpression"
 
   it should "return attribute values for a simple attribute" in withConfigData {
@@ -1651,6 +1669,53 @@ class CompactExpressionEvaluatorSpec
     result2 should contain theSameElementsAs Seq(
       (expression1, Map(sampleGood.name -> Success(Seq(AttributeString("sampleGood"))))),
       (expression2, Map(sampleGood.name -> Success(Seq(AttributeString("sampleGood")))))
+    )
+
+  }
+
+  it should "identify the entity type" in withConfigData {
+    val expression1 = "this.entityType"
+    val expression2 = "this.samples.entityType"
+    val queryPlan1 = QueryPlan(List(), Map(expression1 -> Set("entityType")))
+    val queryPlan2 = QueryPlan(List("samples"), Map(expression2 -> Set("entityType")))
+
+    when(
+      mockQueries.getEntity(any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(Some(sampleSet2AsCER))
+      )
+
+    when(
+      mockQueries.queryRelatedRecordsWithRelationChain(any(), any(), any(), any(), any())
+    )
+      .thenReturn(
+        DBIO.successful(
+          Map(sampleSet2.name -> Seq(sampleGoodAsCER, sampleGood2AsCER))
+        )
+      )
+
+    val result = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", sampleSet2.name, "sampleset", queryPlan1)
+    )
+
+    result should contain theSameElementsAs Seq(
+      (expression1, Map(sampleSet2.name -> Success(Seq(AttributeString(sampleSet2.entityType)))))
+    )
+
+    val result2 = runAndWait(
+      compactExpressionEvaluator
+        .executeQueryPlan(workspace.workspaceIdAsUUID, "sampleset", sampleSet2.name, "sampleset", queryPlan2)
+    )
+    result2 should contain theSameElementsAs Seq(
+      (expression2,
+       Map(
+         sampleSet2.name -> Success(
+           Seq(AttributeString(sampleGood.entityType), AttributeString(sampleGood2.entityType))
+         )
+       )
+      )
     )
 
   }

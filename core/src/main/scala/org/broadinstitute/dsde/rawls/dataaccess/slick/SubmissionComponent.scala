@@ -366,7 +366,7 @@ trait SubmissionComponent {
      */
     def loadSubmission(submissionId: UUID): ReadAction[Option[Submission]] =
       uniqueResult[SubmissionRecord](findById(submissionId)) flatMap {
-        case None => DBIO.successful(None)
+        case None                => DBIO.successful(None)
         case Some(submissionRec) =>
           for {
             config <- methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)

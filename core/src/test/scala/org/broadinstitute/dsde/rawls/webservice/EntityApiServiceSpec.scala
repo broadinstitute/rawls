@@ -56,9 +56,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       )
     override val entityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      spyWorkspaceSettingRepository,
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )(executionContext, system)
 
@@ -70,8 +67,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           new WorkspaceRepository(slickDataSource),
           gcsDAO,
           samDAO,
-          mock[GoogleStorageService[IO]],
-          entityServiceConstructor(ctx)
+          mock[GoogleStorageService[IO]]
         )(executionContext, global)
 
     override val entityServiceConstructor: RawlsRequestContext => EntityService =
@@ -120,9 +116,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
     override val entityManager = EntityManager.defaultEntityManager(
       slickDataSource,
-      mockWorkspaceSettingRepository,
-      testConf.getBoolean("entityStatisticsCache.enabled"),
-      testConf.getDuration("entities.queryTimeout"),
       workbenchMetricBaseName
     )(executionContext, system)
 

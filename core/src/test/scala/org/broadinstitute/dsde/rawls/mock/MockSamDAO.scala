@@ -474,7 +474,7 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     resourcePolicies
       .filter(_.policy.memberEmails.contains(WorkbenchEmail(ctx.userInfo.userEmail.value)))
       .toSeq match {
-      case Seq() => None
+      case Seq()               => None
       case policiesForResource =>
         Option(
           policiesForResource

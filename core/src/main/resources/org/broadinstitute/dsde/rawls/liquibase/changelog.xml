@@ -151,4 +151,8 @@
     <include file="changesets/20251009_quicksilver_for_empty_workspaces.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20251015_workspace_settings_index.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20251015_entity_indexing.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20251023_truncate_entity_attributes.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20251029_drop_all_attribute_values.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20251205_quicksilver_corrections.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

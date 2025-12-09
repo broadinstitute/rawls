@@ -29,11 +29,11 @@ import slick.jdbc._
 import slick.sql.SqlStreamingAction
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ErrorReport
-
 import spray.json._
 
 import scala.concurrent.ExecutionContext
 import scala.language.postfixOps
+import scala.util.{Failure, Success, Try}
 
 trait CompactEntityComponent extends LazyLogging {
   this: DriverComponent =>
@@ -43,10 +43,10 @@ trait CompactEntityComponent extends LazyLogging {
 }
 
 class CompactEntityQuery(driverComponent: DriverComponent)
-    extends CompactEntityMigration
-    with CompactEntityKeysCache
+    extends CompactEntityKeysCache
     with RawSqlQuery
-    with CompactEntitySerialization {
+    with CompactEntitySerialization
+    with CompactEntityCorrection {
   override val driver = driverComponent.driver
   import driverComponent.uniqueResult
 
@@ -1218,6 +1218,17 @@ class CompactEntityQuery(driverComponent: DriverComponent)
        */
     }
 
+  /** get the current value of the sort_buffer_size setting */
+  def getSortBufferSetting: ReadAction[Long] =
+    sql"""SELECT @@sort_buffer_size;""".as[Long].head
+
+  /** set MySQL's sort_buffer_size setting to a given value.
+   * default 262144 = 256k
+   * 8M = 8,388,608
+   */
+  def setSessionSortBuffer(bufferSize: Long) =
+    sql"""SET SESSION sort_buffer_size = $bufferSize;""".asUpdate
+
   // ====================================================================================================
   //  entity query helpers
   //      methods in this section are used for building entity query functions
@@ -1333,8 +1344,24 @@ class CompactEntityQuery(driverComponent: DriverComponent)
   }
 
   private def columnFilterCondition(columnFilter: EntityColumnFilter) =
-    // CAST, JSON_UNQUOTE and JSON_EXTRACT are used to handle strings and numbers and do a case insensitive comparison
-    sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
+    // Can the filter term be parsed as a number?
+    Try(columnFilter.term.toDouble) match {
+      case Failure(_) =>
+        sql" and CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}"
+      case Success(dbl) =>
+        // The user-supplied filter term is a number. If the attribute in the database is also a number, compare
+        // number-to-number in the WHERE clause. If the attribute in the database is anything else, treat both the
+        // attribute and the filter term as strings and compare those.
+        sql""" and (
+          (
+            JSON_TYPE(e.attributes -> ${slickAttributePath(columnFilter.attributeName)}) in ('INTEGER', 'DOUBLE')
+            AND
+            e.attributes -> ${slickAttributePath(columnFilter.attributeName)} = $dbl
+          )
+          OR
+          CAST(e.attributes ->> ${slickAttributePath(columnFilter.attributeName)} AS CHAR) = ${columnFilter.term}
+        )"""
+    }
 
   private def orderBy(entityQuery: EntityQuery): SQLActionBuilder =
     concatSqlActions(

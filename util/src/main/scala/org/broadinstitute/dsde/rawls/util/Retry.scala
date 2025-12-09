@@ -126,10 +126,10 @@ object Retry extends LazyLogging {
 
   def retry[T](remainingBackOffIntervals: Seq[FiniteDuration])(tryOp: => Try[T]): Try[T] =
     tryOp match {
-      case Success(x) => Success(x)
+      case Success(x)  => Success(x)
       case Failure(ex) =>
         remainingBackOffIntervals match {
-          case Nil => Failure(ex)
+          case Nil    => Failure(ex)
           case h :: t =>
             logger.info(s"Retrying: ${remainingBackOffIntervals.size} retries remaining, retrying in $h")
             Thread sleep h.toMillis
