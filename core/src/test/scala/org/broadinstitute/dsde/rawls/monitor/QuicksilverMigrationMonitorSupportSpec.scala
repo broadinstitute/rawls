@@ -167,7 +167,7 @@ class QuicksilverMigrationMonitorSupportSpec
         AttributeEntityReference("type", "name2")
       )
     )
-    val actual = compareAttrs(current, correction)
+    val actual = compareAttrs(current, correction, hint = "irrelevant")
     actual shouldBe AttributeCorrectionStatus.TypeDifferent
   }
 
@@ -220,6 +220,7 @@ class QuicksilverMigrationMonitorSupportSpec
     AttributeCorrectionStatus.Intersect -> EntityCorrectionStatus.Intersect,
     AttributeCorrectionStatus.Different -> EntityCorrectionStatus.Different,
     AttributeCorrectionStatus.NothingInCommon -> EntityCorrectionStatus.NothingInCommon,
+    AttributeCorrectionStatus.NotAList -> EntityCorrectionStatus.NotAList,
     AttributeCorrectionStatus.TypeDifferent -> EntityCorrectionStatus.TypeDifferent
   )
 
