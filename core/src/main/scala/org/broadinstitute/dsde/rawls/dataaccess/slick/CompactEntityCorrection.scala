@@ -73,21 +73,24 @@ trait CompactEntityCorrection {
   /** upsert ATTRIBUTE_CORRECTIONS statuses */
   def updateAttributeStatuses(correctionId: Long,
                               statuses: Map[AttributeName, AttributeCorrectionStatusType]
-  ): ReadWriteAction[Int] = {
-    val startSql =
-      sql"""insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
+  ): ReadWriteAction[Int] =
+    if (statuses.isEmpty) {
+      DBIO.successful(0)
+    } else {
+
+      val startSql =
+        sql"""insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
           values """
 
-    val valuesSql = reduceSqlActionsWithDelim(
-      statuses.map { case (attrName, status) =>
-        sql"""($correctionId, ${attrName.namespace}, ${attrName.name}, ${status.toString})"""
-      }.toSeq,
-      sql","
-    )
+      val valuesSql = reduceSqlActionsWithDelim(
+        statuses.map { case (attrName, status) =>
+          sql"""($correctionId, ${attrName.namespace}, ${attrName.name}, ${status.toString})"""
+        }.toSeq,
+        sql","
+      )
 
-    val endSql = sql""" as newvalues on duplicate key update status = newvalues.status;"""
+      val endSql = sql""" as newvalues on duplicate key update status = newvalues.status;"""
 
-    concatSqlActions(startSql, valuesSql, endSql).asUpdate
-
-  }
+      concatSqlActions(startSql, valuesSql, endSql).asUpdate
+    }
 }
