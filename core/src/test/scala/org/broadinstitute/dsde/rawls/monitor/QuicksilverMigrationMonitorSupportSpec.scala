@@ -220,6 +220,7 @@ class QuicksilverMigrationMonitorSupportSpec
     AttributeCorrectionStatus.Intersect -> EntityCorrectionStatus.Intersect,
     AttributeCorrectionStatus.Different -> EntityCorrectionStatus.Different,
     AttributeCorrectionStatus.NothingInCommon -> EntityCorrectionStatus.NothingInCommon,
+    AttributeCorrectionStatus.NotAList -> EntityCorrectionStatus.NotAList,
     AttributeCorrectionStatus.TypeDifferent -> EntityCorrectionStatus.TypeDifferent
   )
 

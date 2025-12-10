@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor
 
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.EntityCorrection
 import org.broadinstitute.dsde.rawls.model.{
   Attribute,
@@ -15,15 +16,15 @@ import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrec
 
 object AttributeCorrectionStatus extends Enumeration {
   type AttributeCorrectionStatusType = Value
-  val Correct, Reordered, Intersect, Different, NothingInCommon, TypeDifferent = Value
+  val Correct, Reordered, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
 }
 
 object EntityCorrectionStatus extends Enumeration {
   type EntityCorrectionStatusType = Value
-  val CurrentGone, Correct, Correctable, Mixed, Intersect, Different, NothingInCommon, TypeDifferent = Value
+  val CurrentGone, Correct, Correctable, Mixed, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
 }
 
-trait QuicksilverMigrationMonitorSupport {
+trait QuicksilverMigrationMonitorSupport extends LazyLogging {
 
   def compareEntities(current: Option[Entity],
                       correction: EntityCorrection
@@ -52,15 +53,20 @@ trait QuicksilverMigrationMonitorSupport {
 
   def compareAttrs(current: Attribute, correction: Attribute): AttributeCorrectionStatusType =
     (current, correction) match {
-      // current attribute is not the same type as correction attribute
-      case _ if current.getClass != correction.getClass =>
-        AttributeCorrectionStatus.TypeDifferent
-      case (x: AttributeValueList, y: AttributeValueList)                     => compareLists(x, y)
+      // when the correction is a value list
+      case (x: AttributeValueList, y: AttributeValueList) => compareLists(x, y)
+      case (_, _: AttributeValueList)                     => AttributeCorrectionStatus.TypeDifferent
+      // when the correction is an entity-reference list
       case (x: AttributeEntityReferenceList, y: AttributeEntityReferenceList) => compareLists(x, y)
-      case _                                                                  =>
-        throw new Exception(
-          s"unexpected classes found! current: ${current.getClass.getName}; correction: ${correction.getClass.getName}"
+      case (_, _: AttributeEntityReferenceList)                               => AttributeCorrectionStatus.TypeDifferent
+      // when the correction is something else, which should never happen but
+      // in reality we've seen it does happen
+      case _ =>
+        logger.warn(
+          s"unexpected attribute class found! current: ${current.getClass.getName}; correction: ${correction.getClass.getName}"
         )
+        AttributeCorrectionStatus.NotAList
+
     }
 
   def compareLists(current: AttributeValueList, correction: AttributeValueList): AttributeCorrectionStatusType =
@@ -128,6 +134,8 @@ trait QuicksilverMigrationMonitorSupport {
       EntityCorrectionStatus.Intersect
     } else if (attrStatuses == Set(AttributeCorrectionStatus.NothingInCommon)) {
       EntityCorrectionStatus.NothingInCommon
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.NotAList)) {
+      EntityCorrectionStatus.NotAList
     } else if (attrStatuses == Set(AttributeCorrectionStatus.TypeDifferent)) {
       EntityCorrectionStatus.TypeDifferent
     } else {
