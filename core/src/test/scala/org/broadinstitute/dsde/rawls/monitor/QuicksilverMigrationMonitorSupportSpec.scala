@@ -167,7 +167,7 @@ class QuicksilverMigrationMonitorSupportSpec
         AttributeEntityReference("type", "name2")
       )
     )
-    val actual = compareAttrs(current, correction)
+    val actual = compareAttrs(current, correction, hint = "irrelevant")
     actual shouldBe AttributeCorrectionStatus.TypeDifferent
   }
 

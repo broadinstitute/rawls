@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.EntityCorrection
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{
   Attribute,
   AttributeEntityReference,
@@ -43,7 +44,16 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
           currentValue match {
             // current attribute does not exist
             case None               => None
-            case Some(currentValue) => Some((attributeName, compareAttrs(currentValue, correctionValue)))
+            case Some(currentValue) =>
+              Some(
+                (attributeName,
+                 compareAttrs(currentValue,
+                              correctionValue,
+                              hint =
+                                s"${correction.entityType}/${correction.entityName}/${toDelimitedName(attributeName)}"
+                 )
+                )
+              )
           }
       }
       // determine overall entity status from attribute statuses
@@ -51,7 +61,7 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
       (entityStatus, attrComparisons)
   }
 
-  def compareAttrs(current: Attribute, correction: Attribute): AttributeCorrectionStatusType =
+  def compareAttrs(current: Attribute, correction: Attribute, hint: String): AttributeCorrectionStatusType =
     (current, correction) match {
       // when the correction is a value list
       case (x: AttributeValueList, y: AttributeValueList) => compareLists(x, y)
@@ -63,7 +73,7 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
       // in reality we've seen it does happen
       case _ =>
         logger.warn(
-          s"unexpected attribute class found! current: ${current.getClass.getName}; correction: ${correction.getClass.getName}"
+          s"unexpected attribute class found in $hint - current: ${current.getClass.getName}; correction: ${correction.getClass.getName}"
         )
         AttributeCorrectionStatus.NotAList
 
