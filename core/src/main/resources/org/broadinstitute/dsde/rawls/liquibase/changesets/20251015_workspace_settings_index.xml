@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
+    <changeSet logicalFilePath="dummy" author="davidan" id="workspace_settings_index">
+        <createIndex tableName="WORKSPACE_SETTINGS" indexName="idx_ws_type_status">
+            <column name="WORKSPACE_ID" />
+            <column name="SETTING_TYPE" />
+            <column name="STATUS" />
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>
