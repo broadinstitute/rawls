@@ -53,7 +53,7 @@ trait CompactEntityCorrection {
     sql"""select id, workspace_id, entity_type, name, attributes
           from ENTITY_CORRECTIONS
           where status = 'OUTSTANDING'
-          order by workspace_id, entity_type, name
+          order by id
           limit $batchSize
          """
       .as[EntityCorrectionRecord]
