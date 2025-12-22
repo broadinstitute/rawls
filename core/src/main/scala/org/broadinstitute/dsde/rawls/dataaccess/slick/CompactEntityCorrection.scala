@@ -44,16 +44,31 @@ trait CompactEntityCorrection {
   implicit val getEntityCorrectionRecord: GetResult[EntityCorrectionRecord] =
     GetResult(r => EntityCorrectionRecord(r.<<, r.<<, r.<<, r.<<, r.<<))
 
+  val CORRECTION_SQL =
+    """
+       from ATTRIBUTE_CORRECTIONS ac
+            join ENTITY_CORRECTIONS ec on ac.correction_id = ec.id
+            join WORKSPACE_SETTINGS ws on ec.workspace_id = ws.WORKSPACE_ID
+            join WORKSPACE w on ec.workspace_id = w.id
+          where ac.status = 'Reordered'
+	        and ws.SETTING_TYPE = 'CompactDataTables'
+	        and ws.STATUS = 'Applied'
+            and w.last_modified <= ws.LAST_UPDATED
+      """
+
   /** count the outstanding corrections */
   def countOutstandingCorrections: ReadAction[Int] =
-    sql"""select count(1) from ENTITY_CORRECTIONS where status = 'OUTSTANDING'""".as[Int].head
+    sql"""select count(1)
+          #$CORRECTION_SQL
+         """.as[Int].head
+  // 9,616,714
 
-  /** retrieve the next N corrections from ENTITY_CORRECTIONS */
+  /**
+   * retrieve the next N corrections from ENTITY_CORRECTIONS:
+   * */
   def getNextCorrectionBatch(batchSize: Int): ReadAction[List[EntityCorrection]] =
-    sql"""select id, workspace_id, entity_type, name, attributes
-          from ENTITY_CORRECTIONS
-          where status = 'OUTSTANDING'
-          order by id
+    sql"""select ec.id, ec.workspace_id, ec.entity_type, ec.name, ec.attributes
+          #$CORRECTION_SQL
           limit $batchSize
          """
       .as[EntityCorrectionRecord]

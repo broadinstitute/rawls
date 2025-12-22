@@ -17,12 +17,13 @@ import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrec
 
 object AttributeCorrectionStatus extends Enumeration {
   type AttributeCorrectionStatusType = Value
-  val Correct, Reordered, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
+  val Correct, Corrected, Reordered, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
 }
 
 object EntityCorrectionStatus extends Enumeration {
   type EntityCorrectionStatusType = Value
-  val CurrentGone, Correct, Correctable, Mixed, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
+  val CurrentGone, Correct, Correctable, Corrected, Mixed, Intersect, Different, NothingInCommon, NotAList,
+    TypeDifferent = Value
 }
 
 trait QuicksilverMigrationMonitorSupport extends LazyLogging {
@@ -138,6 +139,8 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
       EntityCorrectionStatus.Correct
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Reordered)) {
       EntityCorrectionStatus.Correctable
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.Corrected)) {
+      EntityCorrectionStatus.Corrected
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Different)) {
       EntityCorrectionStatus.Different
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Intersect)) {

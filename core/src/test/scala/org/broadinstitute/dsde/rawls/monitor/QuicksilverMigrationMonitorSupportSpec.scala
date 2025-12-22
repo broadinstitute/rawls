@@ -217,6 +217,7 @@ class QuicksilverMigrationMonitorSupportSpec
   val consistentCases = Map(
     AttributeCorrectionStatus.Correct -> EntityCorrectionStatus.Correct,
     AttributeCorrectionStatus.Reordered -> EntityCorrectionStatus.Correctable,
+    AttributeCorrectionStatus.Corrected -> EntityCorrectionStatus.Corrected,
     AttributeCorrectionStatus.Intersect -> EntityCorrectionStatus.Intersect,
     AttributeCorrectionStatus.Different -> EntityCorrectionStatus.Different,
     AttributeCorrectionStatus.NothingInCommon -> EntityCorrectionStatus.NothingInCommon,
