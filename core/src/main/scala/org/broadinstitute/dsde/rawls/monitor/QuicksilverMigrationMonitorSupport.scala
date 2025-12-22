@@ -22,8 +22,9 @@ object AttributeCorrectionStatus extends Enumeration {
 
 object EntityCorrectionStatus extends Enumeration {
   type EntityCorrectionStatusType = Value
-  val CurrentGone, Correct, Correctable, Corrected, Mixed, Intersect, Different, NothingInCommon, NotAList,
-    TypeDifferent = Value
+  val CurrentGone, Correct, CorrectModified, Correctable, CorrectableModified, Corrected, Mixed, MixedModified,
+    Intersect, IntersectModified, Different, DifferentModified, NothingInCommon, NothingInCommonModified, NotAList,
+    NotAListModified, TypeDifferent, TypeDifferentModified = Value
 }
 
 trait QuicksilverMigrationMonitorSupport extends LazyLogging {

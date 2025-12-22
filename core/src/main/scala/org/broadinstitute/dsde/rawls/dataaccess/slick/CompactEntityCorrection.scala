@@ -51,6 +51,7 @@ trait CompactEntityCorrection {
             join WORKSPACE_SETTINGS ws on ec.workspace_id = ws.WORKSPACE_ID
             join WORKSPACE w on ec.workspace_id = w.id
           where ac.status = 'Reordered'
+            and ec.status in ('Correctable', 'Mixed')
 	        and ws.SETTING_TYPE = 'CompactDataTables'
 	        and ws.STATUS = 'Applied'
             and w.last_modified <= ws.LAST_UPDATED
@@ -108,6 +109,19 @@ trait CompactEntityCorrection {
 
       concatSqlActions(startSql, valuesSql, endSql).asUpdate
     }
+
+  def updateWorkspaceGone(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""update ENTITY_CORRECTIONS
+          set status = 'CurrentGone'
+          where workspace_id = $workspaceId
+      """.asUpdate
+
+  def updateWorkspaceModified(workspaceId: UUID): ReadWriteAction[Int] =
+    sql"""update ENTITY_CORRECTIONS
+          set status = status || 'Modified'
+          where workspace_id = $workspaceId
+          and status not like '%Modified'
+      """.asUpdate
 
   def checkWorkspaceLastModified(workspaceId: UUID): ReadAction[Option[Boolean]] =
     sql"""

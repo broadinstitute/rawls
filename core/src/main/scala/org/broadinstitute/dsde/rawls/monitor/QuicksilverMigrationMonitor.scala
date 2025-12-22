@@ -209,16 +209,26 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
           DBIO.successful(None)
         }
 
-      // TODO CTM-256: if isWorkspaceModifiedAfterMigration is None, the workspace doesn't exist;
+      // if isWorkspaceModifiedAfterMigration is None, the workspace doesn't exist;
       //     mark all corrections as "the workspace is gone"
+      _ <-
+        if (isWorkspaceModifiedAfterMigration.isEmpty) {
+          dataAccess.compactEntityQuery.updateWorkspaceGone(workspaceId)
+        } else {
+          DBIO.successful(0)
+        }
 
-      // TODO CTM-256: if isWorkspaceModifiedAfterMigration contains true, the workspace has been
+      // if isWorkspaceModifiedAfterMigration contains true, the workspace has been
       //     modified since it was migrated to Quicksilver;
-      //     mark all corrections as "the workspace is modified"
-
-      // TODO CTM-256: if isWorkflowRunAfterMigration contains true, the workspace has run a workflow
+      // if isWorkflowRunAfterMigration contains true, the workspace has run a workflow
       //     since it was migrated to Quicksilver;
-      //     mark all corrections as "the workspace is modified"
+      // in either case, mark all corrections as "the workspace is modified"
+      _ <-
+        if (isWorkspaceModifiedAfterMigration.contains(true) || isWorkflowRunAfterMigration.contains(true)) {
+          dataAccess.compactEntityQuery.updateWorkspaceModified(workspaceId)
+        } else {
+          DBIO.successful(0)
+        }
 
     } yield isWorkflowRunAfterMigration.contains(true) || isWorkspaceModifiedAfterMigration.contains(true)
 
