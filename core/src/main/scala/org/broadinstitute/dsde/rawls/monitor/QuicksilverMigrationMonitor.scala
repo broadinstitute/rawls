@@ -137,36 +137,51 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
 
     val dbFuture = dataSource.inTransaction { dataAccess =>
       // loop over each workspace represented in this batch of corrections
-      val dbActions = groupedCorrections.flatMap { case (_, workspaceCorrections) =>
-        // TODO CTM-256: re-verify workspace has not been modified since its migration
-        // TODO CTM-256: verify workspace has not run a workflow since its migration
-        // loop over each corrected entity in this workspace
-        workspaceCorrections.map { correction =>
-          for {
-            // retrieve the corresponding current entity from ENTITY
-            currentEntity <- dataAccess.compactEntityQuery.getEntity(correction.workspaceId,
-                                                                     correction.entityType,
-                                                                     correction.entityName
-            )
-            // compare the corrected entity to the current entity
-            (entityStatus, attributeStatusMap) = compareEntities(currentEntity.map(_.toEntity), correction)
-            // write the corrections back to the current entity
-            (numWrites, updatedEntityStatus, updatedAttrStatusMap) <- persistCorrectedEntity(dataAccess,
-                                                                                             correction,
-                                                                                             currentEntity,
-                                                                                             entityStatus,
-                                                                                             attributeStatusMap
-            )
-            // persist the analysis/correction result
-            _ <- persistAnalysisResult(dataAccess, correction, updatedEntityStatus, updatedAttrStatusMap)
-          } yield numWrites
-        }
+      val dbActions = groupedCorrections.map { case (workspaceId, workspaceCorrections) =>
+        for {
+
+          // re-verify workspace has not been modified since its migration.
+          // we have to do this again even though getNextCorrectionBatch checked it already;
+          // we do it again inside this db transaction to avoid any race conditions
+          isWorkspaceModified <- checkWorkspaceModified(dataAccess, workspaceId)
+
+          correctionAttempts =
+            if (isWorkspaceModified) {
+              // if the workspace has been modified since the migration, do nothing
+              List()
+            } else {
+              // loop over each corrected entity in this workspace
+              workspaceCorrections.map { correction =>
+                for {
+                  // retrieve the corresponding current entity from ENTITY
+                  currentEntity <- dataAccess.compactEntityQuery.getEntity(correction.workspaceId,
+                                                                           correction.entityType,
+                                                                           correction.entityName
+                  )
+                  // compare the corrected entity to the current entity
+                  (entityStatus, attributeStatusMap) = compareEntities(currentEntity.map(_.toEntity), correction)
+                  // write the corrections back to the current entity
+                  (numWrites, updatedEntityStatus, updatedAttrStatusMap) <- persistCorrectedEntity(dataAccess,
+                                                                                                   correction,
+                                                                                                   currentEntity,
+                                                                                                   entityStatus,
+                                                                                                   attributeStatusMap
+                  )
+                  // persist the analysis/correction result
+                  _ <- persistAnalysisResult(dataAccess, correction, updatedEntityStatus, updatedAttrStatusMap)
+                } yield numWrites
+              }
+
+            }
+          attemptResult <- DBIO.sequence(correctionAttempts)
+
+        } yield attemptResult
       }
       DBIO.sequence(dbActions)
     }
 
     dbFuture.map { counts =>
-      val rowsUpdated = counts.sum
+      val rowsUpdated = counts.flatten.sum
       logger.info(
         f"($iteration%,d/$expectedIterations%,d): processed batch of ${deduplicatedCorrections.size} corrections with $rowsUpdated attributes corrected."
       )
@@ -176,6 +191,36 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
       throw t
     }
   }
+
+  private def checkWorkspaceModified(dataAccess: DataAccess, workspaceId: UUID): ReadWriteAction[Boolean] =
+    for {
+      // re-verify workspace has not been modified since its migration.
+      // we have to do this again even though getNextCorrectionBatch checked it already;
+      // we do it again inside this db transaction to avoid any race conditions
+      isWorkspaceModifiedAfterMigration <- dataAccess.compactEntityQuery.checkWorkspaceLastModified(workspaceId)
+
+      // verify workspace has not run a workflow since its migration;
+      // only check this if the last-modified check above returned false (if it returned true or None,
+      // this workflow check is redundant)
+      isWorkflowRunAfterMigration <-
+        if (isWorkspaceModifiedAfterMigration.contains(false)) {
+          dataAccess.compactEntityQuery.checkWorkspaceLastWorkflowRun(workspaceId)
+        } else {
+          DBIO.successful(None)
+        }
+
+      // TODO CTM-256: if isWorkspaceModifiedAfterMigration is None, the workspace doesn't exist;
+      //     mark all corrections as "the workspace is gone"
+
+      // TODO CTM-256: if isWorkspaceModifiedAfterMigration contains true, the workspace has been
+      //     modified since it was migrated to Quicksilver;
+      //     mark all corrections as "the workspace is modified"
+
+      // TODO CTM-256: if isWorkflowRunAfterMigration contains true, the workspace has run a workflow
+      //     since it was migrated to Quicksilver;
+      //     mark all corrections as "the workspace is modified"
+
+    } yield isWorkflowRunAfterMigration.contains(true) || isWorkspaceModifiedAfterMigration.contains(true)
 
   private def persistCorrectedEntity(dataAccess: DataAccess,
                                      correction: EntityCorrection,

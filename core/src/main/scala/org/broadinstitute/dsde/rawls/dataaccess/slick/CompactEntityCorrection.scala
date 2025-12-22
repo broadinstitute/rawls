@@ -108,4 +108,30 @@ trait CompactEntityCorrection {
 
       concatSqlActions(startSql, valuesSql, endSql).asUpdate
     }
+
+  def checkWorkspaceLastModified(workspaceId: UUID): ReadAction[Option[Boolean]] =
+    sql"""
+         select (w.last_modified > ws.LAST_UPDATED)
+         from WORKSPACE w, WORKSPACE_SETTINGS ws
+         where w.id = ws.WORKSPACE_ID
+         and w.id = $workspaceId
+         and ws.SETTING_TYPE = 'CompactDataTables'
+         and ws.STATUS = 'Applied'
+         """.as[Boolean].headOption
+
+  def checkWorkspaceLastWorkflowRun(workspaceId: UUID): ReadAction[Option[Boolean]] =
+    sql"""
+         with LAST_WORKFLOW as (
+           select s.WORKSPACE_ID as workspace_id, max(wf.status_last_changed) as workflow_last_run
+           from WORKFLOW wf, SUBMISSION s
+           where wf.SUBMISSION_ID = s.ID
+           and s.WORKSPACE_ID = $workspaceId
+           group by s.WORKSPACE_ID
+         )
+         select (lw.workflow_last_run > ws.LAST_UPDATED)
+         from WORKSPACE w left outer join LAST_WORKFLOW lw
+           on w.id = lw.workspace_id
+         where w.id = $workspaceId
+         """.as[Boolean].headOption
+
 }
