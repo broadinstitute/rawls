@@ -177,7 +177,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
@@ -224,7 +224,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
@@ -279,7 +279,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
@@ -393,13 +393,13 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     // update workflows to be more recent
     runAndWait(sql"""
                      update WORKFLOW
-                     set status_last_changed = DATE_ADD(now(), INTERVAL 2 SECOND)
+                     set status_last_changed = DATE_ADD(now(), INTERVAL 5 SECOND)
                      where SUBMISSION_ID in (
                       select ID
                        from SUBMISSION
