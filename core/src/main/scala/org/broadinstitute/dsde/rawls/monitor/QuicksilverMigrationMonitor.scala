@@ -119,6 +119,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
   /**
    * Compare this batch of corrections to the current entities.
    */
+  // TODO CTM-256: unit tests
   private def processBatch(corrections: List[EntityCorrection],
                            iteration: Int,
                            expectedIterations: Int
@@ -192,6 +193,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
     }
   }
 
+  // TODO CTM-256: unit tests
   private def checkWorkspaceModified(dataAccess: DataAccess, workspaceId: UUID): ReadWriteAction[Boolean] =
     for {
       // re-verify workspace has not been modified since its migration.
@@ -232,6 +234,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
 
     } yield isWorkflowRunAfterMigration.contains(true) || isWorkspaceModifiedAfterMigration.contains(true)
 
+  // TODO CTM-256: unit tests
   private def persistCorrectedEntity(dataAccess: DataAccess,
                                      correction: EntityCorrection,
                                      currentEntityOption: Option[CompactEntityRecord],

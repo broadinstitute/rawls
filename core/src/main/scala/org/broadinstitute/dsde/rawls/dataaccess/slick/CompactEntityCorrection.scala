@@ -118,7 +118,7 @@ trait CompactEntityCorrection {
 
   def updateWorkspaceModified(workspaceId: UUID): ReadWriteAction[Int] =
     sql"""update ENTITY_CORRECTIONS
-          set status = status || 'Modified'
+          set status = CONCAT(status, 'Modified')
           where workspace_id = $workspaceId
           and status not like '%Modified'
       """.asUpdate
@@ -143,9 +143,12 @@ trait CompactEntityCorrection {
            group by s.WORKSPACE_ID
          )
          select (lw.workflow_last_run > ws.LAST_UPDATED)
-         from WORKSPACE w left outer join LAST_WORKFLOW lw
-           on w.id = lw.workspace_id
+         from WORKSPACE w
+          join WORKSPACE_SETTINGS ws on w.id = ws.WORKSPACE_ID
+          left outer join LAST_WORKFLOW lw on w.id = lw.workspace_id
          where w.id = $workspaceId
+          and ws.SETTING_TYPE = 'CompactDataTables'
+          and ws.STATUS = 'Applied'
          """.as[Boolean].headOption
 
 }
