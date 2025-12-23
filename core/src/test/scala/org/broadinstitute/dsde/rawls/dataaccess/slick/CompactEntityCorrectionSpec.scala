@@ -4,7 +4,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import java.util.UUID
 
-class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatchers with BeforeAndAfterEach {
+class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   import driver.api._
   // for raw sql queries
@@ -14,12 +14,6 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
   private val wsid = minimalTestData.workspace.workspaceIdAsUUID
   private val ws2id = minimalTestData.workspace2.workspaceIdAsUUID
   private val q = compactEntityQuery
-
-  // clean up corrections tables after each test
-  override protected def afterEach(): Unit = {
-    runAndWait(sql"delete from ATTRIBUTE_CORRECTIONS".asUpdate)
-    runAndWait(sql"delete from ENTITY_CORRECTIONS".asUpdate)
-  }
 
   behavior of "countOutstandingCorrections()"
 

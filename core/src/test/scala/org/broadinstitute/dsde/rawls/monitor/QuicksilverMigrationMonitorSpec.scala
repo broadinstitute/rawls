@@ -28,7 +28,6 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
     with AnyFlatSpecLike
     with Matchers
     with TestDriverComponent
-    with BeforeAndAfterEach
     with BeforeAndAfterAll
     with Eventually {
 
@@ -46,12 +45,6 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
     super.afterAll()
-  }
-
-  // clean up corrections tables after each test
-  override protected def afterEach(): Unit = {
-    runAndWait(sql"delete from ATTRIBUTE_CORRECTIONS".asUpdate)
-    runAndWait(sql"delete from ENTITY_CORRECTIONS".asUpdate)
   }
 
   // define fixture entities, some of which will need to be corrected
