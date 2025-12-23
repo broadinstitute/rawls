@@ -51,7 +51,7 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val actual = runAndWait(q.countOutstandingCorrections)
@@ -137,7 +137,7 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val actual = runAndWait(q.getNextCorrectionBatch(20))
@@ -183,7 +183,7 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val actual = runAndWait(q.getNextCorrectionBatch(1))
@@ -315,7 +315,7 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
       // insert workspace setting
       runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
       val actual = runAndWait(q.checkWorkspaceLastModified(wsid))
@@ -336,13 +336,13 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     // update workflows to be more recent
     runAndWait(sql"""
                      update WORKFLOW
-                     set status_last_changed = DATE_ADD(now(), INTERVAL 2 SECOND)
+                     set status_last_changed = DATE_ADD(now(), INTERVAL 5 SECOND)
                      where SUBMISSION_ID in (
                       select ID
                        from SUBMISSION
@@ -361,7 +361,7 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val actual = runAndWait(q.checkWorkspaceLastWorkflowRun(testWsid))
@@ -375,7 +375,7 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     // insert workspace setting
     runAndWait(sql"""
             insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', now())
+            values ($testWsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
     val actual = runAndWait(q.checkWorkspaceLastWorkflowRun(testWsid))
