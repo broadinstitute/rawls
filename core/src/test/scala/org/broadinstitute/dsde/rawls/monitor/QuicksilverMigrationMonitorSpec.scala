@@ -20,6 +20,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
+import java.util.UUID
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -196,6 +197,21 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
       actual should contain theSameElementsAs Set(correctedSample1, correctedSample2, correctedSet)
     }
 
+    // assert ATTRIBUTE_CORRECTIONS has updated statuses. Note this uses allElementsOf, not theSameElementsAs,
+    // because the monitor will insert an additional attribute for "scalarString" which is not a list.
+    val actualStatuses = runAndWait(sql"""
+            select correction_id, namespace, name, status
+            from ATTRIBUTE_CORRECTIONS
+        """.as[(Int, String, String, String)]).toSeq
+
+    actualStatuses should contain allElementsOf Seq(
+      (111, "default", "reorderedNums", "Corrected"),
+      (111, "default", "okNums", "Correct"),
+      (111, "pfb", "reorderedStrings", "Corrected"),
+      (222, "default", "reorderedSamples", "Corrected"),
+      (222, "default", "okSamples", "Correct")
+    )
+
   }
 
   it should "only write to current entities that have corrections" in withMinimalTestDatabase { _ =>
@@ -242,6 +258,17 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
           .map(_.toEntity)
       actual should contain theSameElementsAs Set(currentSample1, currentSample2, correctedSet)
     }
+
+    // assert ATTRIBUTE_CORRECTIONS has updated statuses.
+    val actualStatuses = runAndWait(sql"""
+            select correction_id, namespace, name, status
+            from ATTRIBUTE_CORRECTIONS
+        """.as[(Int, String, String, String)]).toSeq
+
+    actualStatuses should contain theSameElementsAs Seq(
+      (333, "default", "reorderedSamples", "Corrected"),
+      (333, "default", "okSamples", "Correct")
+    )
 
   }
 
@@ -299,6 +326,21 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
         .map(_.toEntity)
     actual should contain theSameElementsAs currentEntities
 
+    // assert ATTRIBUTE_CORRECTIONS has not changed any statuses. Note this uses allElementsOf, not theSameElementsAs,
+    // because the monitor will insert an additional attribute for "scalarString" which is not a list.
+    val actualStatuses = runAndWait(sql"""
+            select correction_id, namespace, name, status
+            from ATTRIBUTE_CORRECTIONS
+        """.as[(Int, String, String, String)]).toSeq
+
+    actualStatuses should contain allElementsOf Seq(
+      (444, "default", "reorderedNums", "Reordered"),
+      (444, "default", "okNums", "Correct"),
+      (444, "pfb", "reorderedStrings", "Reordered"),
+      (555, "default", "reorderedSamples", "Reordered"),
+      (555, "default", "okSamples", "Correct")
+    )
+
   }
 
   it should "apply no corrections if the workspace has been modified since migration" in withMinimalTestDatabase { _ =>
@@ -354,7 +396,6 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
       runAndWait(q.getEntities(wsid, currentEntities.map(_.toPointer).toSet))
         .map(_.toEntity)
     actual should contain theSameElementsAs currentEntities
-
   }
 
   it should "apply no corrections if the workspace has run a workflow since migration" in withDefaultTestDatabase {
@@ -423,6 +464,17 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
       runAndWait(q.getEntities(testWsid, currentEntities.map(_.toPointer).toSet))
         .map(_.toEntity)
     actual should contain theSameElementsAs currentEntities
+
+    // assert ENTITY_CORRECTIONS has "*Modified" statuses.
+    val actualStatuses = runAndWait(sql"""
+            select id, status
+            from ENTITY_CORRECTIONS
+        """.as[(Int, String)]).toSeq
+
+    actualStatuses should contain theSameElementsAs Seq(
+      (999, "MixedModified"),
+      (100, "MixedModified")
+    )
 
   }
 
