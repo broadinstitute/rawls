@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   EntityCorrection,
   ReadWriteAction
 }
-import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.model.AttributeName
 import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
 import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrectionStatusType
@@ -119,10 +118,9 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
   /**
    * Compare this batch of corrections to the current entities.
    */
-  // TODO CTM-256: unit tests
   private def processBatch(corrections: List[EntityCorrection],
-                           iteration: Int,
-                           expectedIterations: Int
+                           iteration: Int, // for logging only
+                           expectedIterations: Int // for logging only
   ): Future[QuicksilverMonitorMessage] = {
     logger.debug(s"processing batch of ${corrections.size} corrections ...")
 
@@ -193,7 +191,6 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
     }
   }
 
-  // TODO CTM-256: unit tests
   private def checkWorkspaceModified(dataAccess: DataAccess, workspaceId: UUID): ReadWriteAction[Boolean] =
     for {
       // re-verify workspace has not been modified since its migration.
