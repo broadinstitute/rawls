@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
+    <!--
+        Add a "consent" column to the ENTITY_CORRECTIONS and ATTRIBUTE_CORRECTIONS tables.
+        This will allow manual and granular control over which corrections to process, based
+        on user feedback.
+     -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="quicksilver_entity_corrections_consent">
+        <addColumn tableName="ENTITY_CORRECTIONS">
+            <column name="consent" type="varchar(254)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+        <createIndex indexName="idx_entity_corrections_consent" tableName="ENTITY_CORRECTIONS" unique="false">
+            <column name="consent"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="quicksilver_attribute_corrections_consent">
+        <addColumn tableName="ATTRIBUTE_CORRECTIONS">
+            <column name="consent" type="varchar(254)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+        <createIndex indexName="idx_attribute_corrections_consent" tableName="ATTRIBUTE_CORRECTIONS" unique="false">
+            <column name="consent"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

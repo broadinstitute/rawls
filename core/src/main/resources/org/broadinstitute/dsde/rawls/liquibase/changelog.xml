@@ -155,5 +155,6 @@
     <include file="changesets/20251029_drop_all_attribute_values.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20251205_quicksilver_corrections.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20260109_quicksilver_corrections_history.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20260112_quicksilver_corrections_consent.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
