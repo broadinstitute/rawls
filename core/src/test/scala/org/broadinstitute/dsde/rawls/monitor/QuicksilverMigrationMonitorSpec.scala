@@ -478,4 +478,83 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
   }
 
+  it should "save the uncorrected entity attributes before correcting" in withMinimalTestDatabase { _ =>
+    // create entities, some of which need to be corrected
+    runAndWait(q.batchWriteEntities(wsid, currentEntities, insertOnly = true))
+
+    // insert to ENTITY_CORRECTIONS
+    runAndWait(sql"""
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       values
+        (111, $wsid, ${correctedSample1.entityType}, ${correctedSample1.name}, ${CompactEntitySerialization
+        .toSql(
+          correctedSample1.attributes
+        )
+        .compactPrint}, 'Mixed'),
+        (222, $wsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
+        .toSql(
+          correctedSet.attributes
+        )
+        .compactPrint}, 'Mixed')
+           """.asUpdate)
+
+    // insert to ATTRIBUTE_CORRECTIONS
+    runAndWait(sql"""
+       insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
+       values
+        (111, 'default', 'reorderedNums', 'Reordered'),
+        (111, 'default', 'okNums', 'Correct'),
+        (111, 'pfb', 'reorderedStrings', 'Reordered'),
+        (222, 'default', 'reorderedSamples', 'Reordered'),
+        (222, 'default', 'okSamples', 'Correct')
+           """.asUpdate)
+
+    // insert workspace setting
+    runAndWait(sql"""
+            insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
+        """.asUpdate)
+
+    val monitorConfig = QuicksilverMigrationMonitorConfig(
+      startupDelay = 100 milliseconds,
+      pollInterval = 100 milliseconds,
+      batchTimeout = 2 seconds,
+      batchSize = 20,
+      dryRun = false
+    )
+    system.actorOf(QuicksilverMigrationMonitor.props(monitorConfig, slickDataSource))
+
+    eventually[Unit](timeout = timeout(Span(10, Seconds))) {
+      val actual =
+        runAndWait(q.getEntities(wsid, currentEntities.map(_.toPointer).toSet))
+          .map(_.toEntity)
+      actual should contain theSameElementsAs Set(correctedSample1, correctedSample2, correctedSet)
+    }
+
+    // assert the original entities were backed up
+    val backedUpEntities = runAndWait(sql"""
+        select entity_type, name, corrected_at, history
+        from ENTITY_CORRECTIONS
+        """.as[(String, String, java.sql.Timestamp, Option[String])])
+
+    backedUpEntities foreach { case (entityType, name, correctedAt, history) =>
+      // history should be populated
+      history should not be empty
+      // correction date should be within the last 10 seconds (generous!)
+      val datediff = (java.time.Instant.now().toEpochMilli - correctedAt.toInstant.toEpochMilli).toInt
+      datediff should be > 0
+      datediff should be < 10 * 1000
+      // reconstitute the historical entity
+      val historicalEntity = Entity(name, entityType, CompactEntitySerialization.fromSql(history))
+      // find it within our original entities
+      val foundEntities =
+        currentEntities.filter(e => e.name == historicalEntity.name && e.entityType == historicalEntity.entityType)
+      foundEntities should have size 1
+      // compare
+      historicalEntity shouldBe foundEntities.head
+
+    }
+
+  }
+
 }

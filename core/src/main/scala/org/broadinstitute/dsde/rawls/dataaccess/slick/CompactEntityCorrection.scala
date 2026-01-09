@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.compact.CompactEntitySerialization
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeName
+import org.broadinstitute.dsde.rawls.model.{AttributeName, Entity}
 import org.broadinstitute.dsde.rawls.monitor.AttributeCorrectionStatus.AttributeCorrectionStatusType
 import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrectionStatusType
 import slick.jdbc.GetResult
@@ -109,6 +109,14 @@ trait CompactEntityCorrection {
 
       concatSqlActions(startSql, valuesSql, endSql).asUpdate
     }
+
+  def saveUncorrectedEntity(workspaceId: UUID, uncorrectedEntity: Entity): ReadWriteAction[Int] =
+    sql"""update ENTITY_CORRECTIONS
+          set corrected_at = ${java.sql.Timestamp.from(java.time.Instant.now())},
+              history = ${CompactEntitySerialization.toSql(uncorrectedEntity.attributes).compactPrint}
+          where workspace_id = $workspaceId
+            and entity_type = ${uncorrectedEntity.entityType}
+            and name = ${uncorrectedEntity.name}""".asUpdate
 
   def updateWorkspaceGone(workspaceId: UUID): ReadWriteAction[Int] =
     sql"""update ENTITY_CORRECTIONS

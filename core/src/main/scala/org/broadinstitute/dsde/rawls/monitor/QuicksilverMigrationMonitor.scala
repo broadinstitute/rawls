@@ -231,7 +231,6 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
 
     } yield isWorkflowRunAfterMigration.contains(true) || isWorkspaceModifiedAfterMigration.contains(true)
 
-  // TODO CTM-256: unit tests
   private def persistCorrectedEntity(dataAccess: DataAccess,
                                      correction: EntityCorrection,
                                      currentEntityOption: Option[CompactEntityRecord],
@@ -258,6 +257,8 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
           val entityToSave = currentEntity.copy(attributes = currentEntity.attributes ++ correctedAttrs)
 
           for {
+            // back up the original entity
+            _ <- dataAccess.compactEntityQuery.saveUncorrectedEntity(correction.workspaceId, currentEntity)
             // Rewrite the original entity to include the reordered result, then persist as corrected
             saveResult <-
               dataAccess.compactEntityQuery.batchWriteEntities(workspaceId = correction.workspaceId,
