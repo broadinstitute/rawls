@@ -80,7 +80,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
 
   /** wait for the startupDelay, start the actor doing work */
   private def startAll() = {
-    logger.info("starting ...")
+    logger.info(s"pausing ${config.startupDelay.toString()} to allow graceful startup ...")
     context.system.scheduler.scheduleOnce(config.startupDelay, self, CountOutstanding)
   }
 
@@ -90,6 +90,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
     dataSource.inTransaction { dataAccess =>
       dataAccess.compactEntityQuery.countOutstandingCorrections map { count =>
         val expectedIterations = Math.ceil(count / config.batchSize).toInt
+        logger.info(s"... found $count corrections to consider")
         NextBatch(1, expectedIterations)
       }
     }
@@ -147,6 +148,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
           correctionAttempts =
             if (isWorkspaceModified) {
               // if the workspace has been modified since the migration, do nothing
+              logger.info(s"workspace $workspaceId has been modified since migration; skipping")
               List()
             } else {
               // loop over each corrected entity in this workspace
@@ -166,6 +168,9 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
                                                                                                    entityStatus,
                                                                                                    attributeStatusMap
                   )
+                  _ = logger.info(
+                    s"${correction.workspaceId}/${correction.entityType}/${correction.entityName}: $updatedEntityStatus with $updatedAttrStatusMap"
+                  )
                   // persist the analysis/correction result
                   _ <- persistAnalysisResult(dataAccess, correction, updatedEntityStatus, updatedAttrStatusMap)
                 } yield numWrites
@@ -182,7 +187,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
     dbFuture.map { counts =>
       val rowsUpdated = counts.flatten.sum
       logger.info(
-        f"($iteration%,d/$expectedIterations%,d): processed batch of ${deduplicatedCorrections.size} corrections with $rowsUpdated attributes corrected."
+        f"($iteration%,d/$expectedIterations%,d): processed batch of ${deduplicatedCorrections.size} corrections with $rowsUpdated rows affected."
       )
       NextBatch(iteration + 1, expectedIterations)
     } recover { case t: Throwable =>
@@ -243,8 +248,8 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
     } else {
       currentEntityOption match {
         case None =>
-          // if the current entity is gone, just return
-          DBIO.successful(0, entityStatus, attributeStatusMap)
+          // if the current entity is gone, just return, with an updated entity status
+          DBIO.successful(0, EntityCorrectionStatus.CurrentGone, attributeStatusMap)
         case Some(currentEntityRecord) =>
           // find the correctable attributes
           val correctableAttrNames = attributeStatusMap.filter(_._2 == AttributeCorrectionStatus.Reordered).keySet

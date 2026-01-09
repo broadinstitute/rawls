@@ -136,6 +136,8 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
 
     if (attrStatuses.isEmpty) {
       EntityCorrectionStatus.Correct
+    } else if (attrStatuses.contains(AttributeCorrectionStatus.Corrected)) {
+      EntityCorrectionStatus.Corrected
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Correct)) {
       EntityCorrectionStatus.Correct
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Reordered)) {
