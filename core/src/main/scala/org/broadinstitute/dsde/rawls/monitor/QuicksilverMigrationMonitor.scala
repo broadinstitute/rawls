@@ -25,10 +25,12 @@ object QuicksilverMigrationMonitor {
 
   // config
   final case class QuicksilverMigrationMonitorConfig(startupDelay: FiniteDuration,
+                                                     completionInterval: FiniteDuration,
                                                      pollInterval: FiniteDuration,
                                                      batchTimeout: Timeout,
                                                      batchSize: Int,
-                                                     dryRun: Boolean = true
+                                                     dryRun: Boolean = true,
+                                                     continueWhenDone: Boolean = false
   )
 
   // actor messages
@@ -68,8 +70,14 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
     case NextBatch(iteration: Int, expectedIterations: Int) => nextBatch(iteration, expectedIterations) pipeTo self
     case ProcessBatch(corrections: List[EntityCorrection], iteration: Int, expectedIterations: Int) =>
       processBatch(corrections, iteration, expectedIterations) pipeTo self
-    case AllDone => self ! PoisonPill
-    case x       =>
+    case AllDone =>
+      if (config.continueWhenDone) {
+        logger.info(s"pausing ${config.completionInterval.toString()} before checking for updated corrections ...")
+        context.system.scheduler.scheduleOnce(config.startupDelay, self, CountOutstanding)
+      } else {
+        self ! PoisonPill
+      }
+    case x =>
       logger.error(s"Unexpected message: ${x.getClass.getName}: $x")
       self ! PoisonPill
   }

@@ -183,6 +183,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
       startupDelay = 100 milliseconds,
+      completionInterval = 2 hours,
       pollInterval = 100 milliseconds,
       batchTimeout = 2 seconds,
       batchSize = 20,
@@ -245,6 +246,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
       startupDelay = 100 milliseconds,
+      completionInterval = 2 hours,
       pollInterval = 100 milliseconds,
       batchTimeout = 2 seconds,
       batchSize = 20,
@@ -311,6 +313,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
       startupDelay = 100 milliseconds,
+      completionInterval = 2 hours,
       pollInterval = 100 milliseconds,
       batchTimeout = 2 seconds,
       batchSize = 20,
@@ -382,6 +385,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
       startupDelay = 100 milliseconds,
+      completionInterval = 2 hours,
       pollInterval = 100 milliseconds,
       batchTimeout = 2 seconds,
       batchSize = 20,
@@ -450,6 +454,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
       startupDelay = 100 milliseconds,
+      completionInterval = 2 hours,
       pollInterval = 100 milliseconds,
       batchTimeout = 2 seconds,
       batchSize = 20,
@@ -517,6 +522,7 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     val monitorConfig = QuicksilverMigrationMonitorConfig(
       startupDelay = 100 milliseconds,
+      completionInterval = 2 hours,
       pollInterval = 100 milliseconds,
       batchTimeout = 2 seconds,
       batchSize = 20,

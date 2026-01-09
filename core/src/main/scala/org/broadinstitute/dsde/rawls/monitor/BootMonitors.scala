@@ -386,10 +386,12 @@ object BootMonitors extends LazyLogging {
     // create Quicksilver migration config
     val quicksilverMigrationMonitorConfig = QuicksilverMigrationMonitorConfig(
       startupDelay = conf.getDuration("startupDelay").toScala,
+      completionInterval = conf.getDuration("completionInterval").toScala,
       pollInterval = conf.getDuration("pollInterval").toScala,
       batchTimeout = conf.getDuration("batchTimeout").toScala,
       batchSize = conf.getInt("batchSize"),
-      dryRun = conf.getBoolean("dryRun")
+      dryRun = conf.getBoolean("dryRun"),
+      continueWhenDone = conf.getBoolean("continueWhenDone")
     )
     // start Quicksilver migration monitor
     system.actorOf(
