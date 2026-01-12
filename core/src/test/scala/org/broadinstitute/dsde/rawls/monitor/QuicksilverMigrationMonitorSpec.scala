@@ -150,18 +150,18 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
         (111, $wsid, ${correctedSample1.entityType}, ${correctedSample1.name}, ${CompactEntitySerialization
         .toSql(
           correctedSample1.attributes
         )
-        .compactPrint}, 'Mixed'),
+        .compactPrint}, 'Mixed', 'Phase1'),
         (222, $wsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
         .toSql(
           correctedSet.attributes
         )
-        .compactPrint}, 'Mixed')
+        .compactPrint}, 'Mixed', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -221,13 +221,13 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
         (333, $wsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
         .toSql(
           correctedSet.attributes
         )
-        .compactPrint}, 'Mixed')
+        .compactPrint}, 'Mixed', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -280,18 +280,18 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
         (444, $wsid, ${correctedSample1.entityType}, ${correctedSample1.name}, ${CompactEntitySerialization
         .toSql(
           correctedSample1.attributes
         )
-        .compactPrint}, 'Mixed'),
+        .compactPrint}, 'Mixed', 'Phase1'),
         (555, $wsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
         .toSql(
           correctedSet.attributes
         )
-        .compactPrint}, 'Mixed')
+        .compactPrint}, 'Mixed', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -352,18 +352,18 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
         (777, $wsid, ${correctedSample1.entityType}, ${correctedSample1.name}, ${CompactEntitySerialization
         .toSql(
           correctedSample1.attributes
         )
-        .compactPrint}, 'Mixed'),
+        .compactPrint}, 'Mixed', 'Phase1'),
         (888, $wsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
         .toSql(
           correctedSet.attributes
         )
-        .compactPrint}, 'Mixed')
+        .compactPrint}, 'Mixed', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -410,18 +410,18 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
         (999, $testWsid, ${correctedSample1.entityType}, ${correctedSample1.name}, ${CompactEntitySerialization
         .toSql(
           correctedSample1.attributes
         )
-        .compactPrint}, 'Mixed'),
+        .compactPrint}, 'Mixed', 'Phase1'),
         (100, $testWsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
         .toSql(
           correctedSet.attributes
         )
-        .compactPrint}, 'Mixed')
+        .compactPrint}, 'Mixed', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -489,18 +489,18 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
 
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
         (111, $wsid, ${correctedSample1.entityType}, ${correctedSample1.name}, ${CompactEntitySerialization
         .toSql(
           correctedSample1.attributes
         )
-        .compactPrint}, 'Mixed'),
+        .compactPrint}, 'Mixed', 'Phase1'),
         (222, $wsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
         .toSql(
           correctedSet.attributes
         )
-        .compactPrint}, 'Mixed')
+        .compactPrint}, 'Mixed', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -560,6 +560,77 @@ class QuicksilverMigrationMonitorSpec(_system: ActorSystem)
       historicalEntity shouldBe foundEntities.head
 
     }
+
+  }
+
+  it should "only apply corrections to Phase1 corrections" in withMinimalTestDatabase { _ =>
+    // create entities, some of which need to be corrected
+    runAndWait(q.batchWriteEntities(wsid, currentEntities, insertOnly = true))
+
+    // insert to ENTITY_CORRECTIONS
+    runAndWait(sql"""
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
+       values
+        (111, $wsid, ${correctedSample1.entityType}, ${correctedSample1.name}, ${CompactEntitySerialization
+        .toSql(
+          correctedSample1.attributes
+        )
+        .compactPrint}, 'Mixed', 'Phase1'),
+        (222, $wsid, ${correctedSet.entityType}, ${correctedSet.name}, ${CompactEntitySerialization
+        .toSql(
+          correctedSet.attributes
+        )
+        .compactPrint}, 'Mixed', null)
+           """.asUpdate)
+
+    // insert to ATTRIBUTE_CORRECTIONS
+    runAndWait(sql"""
+       insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
+       values
+        (111, 'default', 'reorderedNums', 'Reordered'),
+        (111, 'default', 'okNums', 'Correct'),
+        (111, 'pfb', 'reorderedStrings', 'Reordered'),
+        (222, 'default', 'reorderedSamples', 'Reordered'),
+        (222, 'default', 'okSamples', 'Correct')
+           """.asUpdate)
+
+    // insert workspace setting
+    runAndWait(sql"""
+            insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
+        """.asUpdate)
+
+    val monitorConfig = QuicksilverMigrationMonitorConfig(
+      startupDelay = 100 milliseconds,
+      completionInterval = 2 hours,
+      pollInterval = 100 milliseconds,
+      batchTimeout = 2 seconds,
+      batchSize = 20,
+      dryRun = false
+    )
+    system.actorOf(QuicksilverMigrationMonitor.props(monitorConfig, slickDataSource))
+
+    eventually[Unit](timeout = timeout(Span(10, Seconds))) {
+      val actual =
+        runAndWait(q.getEntities(wsid, currentEntities.map(_.toPointer).toSet))
+          .map(_.toEntity)
+      actual should contain theSameElementsAs Set(correctedSample1, correctedSample2, currentSet)
+    }
+
+    // assert ATTRIBUTE_CORRECTIONS has updated statuses. Note this uses allElementsOf, not theSameElementsAs,
+    // because the monitor will insert an additional attribute for "scalarString" which is not a list.
+    val actualStatuses = runAndWait(sql"""
+            select correction_id, namespace, name, status
+            from ATTRIBUTE_CORRECTIONS
+        """.as[(Int, String, String, String)]).toSeq
+
+    actualStatuses should contain allElementsOf Seq(
+      (111, "default", "reorderedNums", "Corrected"),
+      (111, "default", "okNums", "Correct"),
+      (111, "pfb", "reorderedStrings", "Corrected"),
+      (222, "default", "reorderedSamples", "Reordered"),
+      (222, "default", "okSamples", "Correct")
+    )
 
   }
 

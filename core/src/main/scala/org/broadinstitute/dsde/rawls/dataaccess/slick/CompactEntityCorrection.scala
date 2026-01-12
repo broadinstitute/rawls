@@ -52,6 +52,7 @@ trait CompactEntityCorrection {
             join WORKSPACE w on ec.workspace_id = w.id
           where ac.status = 'Reordered'
             and ec.status in ('Correctable', 'Mixed')
+            and ec.consent = 'Phase1'
 	        and ws.SETTING_TYPE = 'CompactDataTables'
 	        and ws.STATUS = 'Applied'
             and w.last_modified <= ws.LAST_UPDATED
