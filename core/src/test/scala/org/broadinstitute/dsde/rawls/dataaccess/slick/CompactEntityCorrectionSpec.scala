@@ -20,12 +20,12 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
   it should "count outstanding corrections" in withMinimalTestDatabase { _ =>
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -62,12 +62,12 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
   it should "not count any corrections if workspace has been modified since migration" in withMinimalTestDatabase { _ =>
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -106,12 +106,12 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
   it should "get the next correction batch" in withMinimalTestDatabase { _ =>
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -152,12 +152,12 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
   it should "respect the batch size argument" in withMinimalTestDatabase { _ =>
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -194,16 +194,57 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     )
   }
 
+  it should "only retrieve Phase1 corrections" in withMinimalTestDatabase { _ =>
+    // insert to ENTITY_CORRECTIONS
+    runAndWait(sql"""
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
+       values
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', null),
+        (222, $wsid, 'type2', 'name2', '{}', 'Correctable', null),
+        (333, $wsid, 'type3', 'name3', '{}', 'Correctable', 'Phase1'),
+        (444, $wsid, 'type4', 'name4', '{}', 'Correctable', null)
+           """.asUpdate)
+
+    // insert to ATTRIBUTE_CORRECTIONS
+    runAndWait(sql"""
+       insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
+       values
+        (111, 'default', 'attr1', 'Reordered'),
+        (222, 'default', 'attr1', 'Reordered'),
+        (222, 'pfb', 'attr1', 'Reordered'),
+        (333, 'default', 'attr1', 'Reordered'),
+        (333, 'pfb', 'attr1', 'Reordered'),
+        (333, 'default', 'attr2', 'Reordered'),
+        (444, 'default', 'attr1', 'Reordered'),
+        (444, 'pfb', 'attr1', 'Reordered'),
+        (444, 'default', 'attr2', 'Reordered'),
+        (444, 'pfb', 'attr2', 'Reordered')
+           """.asUpdate)
+
+    // insert workspace setting
+    runAndWait(sql"""
+            insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
+            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
+        """.asUpdate)
+
+    val actual = runAndWait(q.getNextCorrectionBatch(1))
+
+    actual should have size 1
+    actual shouldBe List(
+      EntityCorrection(333, wsid, "type3", "name3", Map())
+    )
+  }
+
   it should "not retrieve any corrections for batch if workspace has been modified since migration" in withMinimalTestDatabase {
     _ =>
       // insert to ENTITY_CORRECTIONS
       runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status)
+       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
            """.asUpdate)
 
       // insert to ATTRIBUTE_CORRECTIONS
