@@ -73,7 +73,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
     case AllDone =>
       if (config.continueWhenDone) {
         logger.info(s"pausing ${config.completionInterval.toString()} before checking for updated corrections ...")
-        context.system.scheduler.scheduleOnce(config.startupDelay, self, CountOutstanding)
+        context.system.scheduler.scheduleOnce(config.completionInterval, self, CountOutstanding)
       } else {
         self ! PoisonPill
       }
