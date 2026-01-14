@@ -194,7 +194,7 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     )
   }
 
-  it should "only retrieve Phase1 corrections" in withMinimalTestDatabase { _ =>
+  it should "retrieve both Phase1 and Phase2 (null) corrections" in withMinimalTestDatabase { _ =>
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
        insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
@@ -227,11 +227,14 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
             values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', DATE_ADD(now(), INTERVAL 2 SECOND))
         """.asUpdate)
 
-    val actual = runAndWait(q.getNextCorrectionBatch(1))
+    val actual = runAndWait(q.getNextCorrectionBatch(20))
 
-    actual should have size 1
-    actual shouldBe List(
-      EntityCorrection(333, wsid, "type3", "name3", Map())
+    actual should have size 10
+    actual.toSet shouldBe Set(
+      EntityCorrection(111, wsid, "type1", "name1", Map()),
+      EntityCorrection(222, wsid, "type2", "name2", Map()),
+      EntityCorrection(333, wsid, "type3", "name3", Map()),
+      EntityCorrection(444, wsid, "type4", "name4", Map())
     )
   }
 
