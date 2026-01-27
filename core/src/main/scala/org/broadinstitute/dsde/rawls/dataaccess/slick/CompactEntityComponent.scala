@@ -732,9 +732,10 @@ class CompactEntityQuery(driverComponent: DriverComponent)
             .sequence(groupedEntities.map { case (groupKey, pointers) =>
               getEntities(workspaceId, pointers.toSet).map { entities =>
                 val nextPointers = entities.flatMap { entityRecord =>
+                  // to preserve legacy behavior, references are de-duplicated via .distinct
                   entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation)) match {
                     case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
-                    case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
+                    case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer).distinct
                     case _                                        => Seq.empty[EntityPointer]
                   }
                 }
