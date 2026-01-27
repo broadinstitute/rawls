@@ -1367,6 +1367,94 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     }
   }
 
+  it should "return duplicate values if a set contains duplicate references" in withMinimalTestDatabase { _ =>
+    // define two participants, with an "index" attribute
+    val participants = Seq(
+      Entity(s"participant_1", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(1))),
+      Entity(s"participant_2", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(2)))
+    )
+
+    // define a participant set containing duplicate references to those participants
+    val ref1 = AttributeEntityReference("participant", "participant_1")
+    val ref2 = AttributeEntityReference("participant", "participant_2")
+    val participantSet = Entity("the-set",
+                                "participant_set",
+                                Map(
+                                  AttributeName.withDefaultNS("participants") -> AttributeEntityReferenceList(
+                                    Seq(ref1, ref1, ref1, ref2, ref2, ref2, ref2)
+                                  )
+                                )
+    )
+
+    // save participants
+    runAndWait(
+      compactEntityQuery.batchWriteEntities(minimalTestData.workspace.workspaceIdAsUUID,
+                                            participants,
+                                            insertOnly = false
+      )
+    )
+    // save participant set
+    runAndWait(
+      compactEntityQuery.batchWriteEntities(minimalTestData.workspace.workspaceIdAsUUID,
+                                            Seq(participantSet),
+                                            insertOnly = false
+      )
+    )
+
+    // get provider
+    val provider = defaultProvider()
+
+    // set up arguments for expression evaluation
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Option("participant_set"), Option("the-set"), None, Option("participant_set"))
+    val toolInputParameter = new ToolInputParameter()
+      .name("my-input-name")
+      .valueType(
+        new ValueType().typeName(ValueType.TypeNameEnum.ARRAY).arrayType(new ValueType().typeName(TypeNameEnum.INT))
+      )
+    val processableInputs = Set(MethodInput(toolInputParameter, "this.participants.index"))
+    val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+    // evaluate "this.participants.index" against the participant set
+    val submissionValidationEntityInputsList =
+      Await
+        .result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()), atMost)
+        .toList
+    submissionValidationEntityInputsList.size shouldBe 1
+
+    // basic validation of the expression-evaluation result
+    val entityInputs = submissionValidationEntityInputsList.head
+    entityInputs.entityName shouldBe "the-set"
+    entityInputs.inputResolutions.size shouldBe 1
+    entityInputs.inputResolutions.head.error shouldBe empty
+    entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+
+    val resolvedValue = entityInputs.inputResolutions.head.value
+    resolvedValue should not be empty
+    resolvedValue.get shouldBe a[AttributeValueList]
+
+    val actual = resolvedValue.get.asInstanceOf[AttributeValueList]
+    val expected = AttributeValueList(
+      Seq(AttributeNumber(1),
+          AttributeNumber(1),
+          AttributeNumber(1),
+          AttributeNumber(2),
+          AttributeNumber(2),
+          AttributeNumber(2),
+          AttributeNumber(2)
+      )
+    )
+
+    // did expression-evaluation return the correct attribute values, in _any_ order?
+    withClue("evaluated expression should contain the same elements, in any order") {
+      actual.list should contain theSameElementsAs expected.list
+    }
+    // did expression-evaluation return the correct attribute values, in the same order as the set members?
+    withClue("evaluated expression should contain the same elements, in the same order") {
+      actual.list should contain theSameElementsInOrderAs expected.list
+    }
+  }
+
   // ====================================================================================================
   //  helper methods
   // ====================================================================================================
