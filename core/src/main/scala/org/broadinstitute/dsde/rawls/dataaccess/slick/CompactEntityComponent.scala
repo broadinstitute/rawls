@@ -733,11 +733,12 @@ class CompactEntityQuery(driverComponent: DriverComponent)
               getEntities(workspaceId, pointers).map { entities =>
                 val nextPointers = entities.flatMap { entityRecord =>
                   entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation)) match {
-                    case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
+                    case Some(rel: AttributeEntityReference) => Seq(rel.toPointer)
+                    // TODO CTM-330: here, set entities are in the correct order.
                     case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
                     case _                                        => Seq.empty[EntityPointer]
                   }
-                }.toSet
+                }.toSet // TODO CTM-330: here, the set entities are changed from a Seq to a Set, and lose their order.
                 groupKey -> nextPointers
               }
             }.toSeq)
