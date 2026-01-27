@@ -1367,23 +1367,28 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
     }
   }
 
-  it should "return duplicate values if a set contains duplicate references" in withMinimalTestDatabase { _ =>
+  it should "de-duplicate values if a set contains duplicate references" in withMinimalTestDatabase { _ =>
     // define two participants, with an "index" attribute
     val participants = Seq(
       Entity(s"participant_1", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(1))),
-      Entity(s"participant_2", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(2)))
+      Entity(s"participant_2", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(2))),
+      Entity(s"participant_3", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(3))),
+      Entity(s"participant_4", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(4)))
     )
 
     // define a participant set containing duplicate references to those participants
     val ref1 = AttributeEntityReference("participant", "participant_1")
     val ref2 = AttributeEntityReference("participant", "participant_2")
-    val participantSet = Entity("the-set",
-                                "participant_set",
-                                Map(
-                                  AttributeName.withDefaultNS("participants") -> AttributeEntityReferenceList(
-                                    Seq(ref1, ref1, ref1, ref2, ref2, ref2, ref2)
-                                  )
-                                )
+    val ref3 = AttributeEntityReference("participant", "participant_3")
+    val ref4 = AttributeEntityReference("participant", "participant_4")
+    val participantSet = Entity(
+      "the-set",
+      "participant_set",
+      Map(
+        AttributeName.withDefaultNS("participants") -> AttributeEntityReferenceList(
+          Seq(ref1, ref2, ref1, ref3, ref2, ref4, ref2, ref3, ref1, ref4)
+        )
+      )
     )
 
     // save participants
@@ -1435,14 +1440,7 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
 
     val actual = resolvedValue.get.asInstanceOf[AttributeValueList]
     val expected = AttributeValueList(
-      Seq(AttributeNumber(1),
-          AttributeNumber(1),
-          AttributeNumber(1),
-          AttributeNumber(2),
-          AttributeNumber(2),
-          AttributeNumber(2),
-          AttributeNumber(2)
-      )
+      Seq(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3), AttributeNumber(4))
     )
 
     // did expression-evaluation return the correct attribute values, in _any_ order?
