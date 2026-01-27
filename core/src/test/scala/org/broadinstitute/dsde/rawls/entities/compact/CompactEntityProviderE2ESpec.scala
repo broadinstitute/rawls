@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.scaladsl.{Sink, Source}
+import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
@@ -27,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeNumber,
   AttributeRename,
   AttributeString,
+  AttributeValueList,
   Entity,
   EntityPointer,
   RawlsRequestContext,
@@ -1286,6 +1288,83 @@ class CompactEntityProviderE2ESpec extends TestDriverComponentWithFlatSpecAndMat
         actualException.errorReport.message should include("expects an entity of type")
     }
 
+  }
+
+  it should "return set-entity values in the set's order" in withMinimalTestDatabase { _ =>
+    // define how many set members this test should use
+    val range = Range(0, 100)
+    // define that many participants, with an "index" attribute
+    val participants = range.map { idx =>
+      Entity(s"participant_$idx", "participant", Map(AttributeName.withDefaultNS("index") -> AttributeNumber(idx)))
+    }
+    // define a participant set containing all participants
+    val participantSet = Entity("the-set",
+                                "participant_set",
+                                Map(
+                                  AttributeName.withDefaultNS("participants") -> AttributeEntityReferenceList(
+                                    participants.map(_.toReference)
+                                  )
+                                )
+    )
+
+    // save participants
+    runAndWait(
+      compactEntityQuery.batchWriteEntities(minimalTestData.workspace.workspaceIdAsUUID,
+                                            participants,
+                                            insertOnly = false
+      )
+    )
+    // save participant set
+    runAndWait(
+      compactEntityQuery.batchWriteEntities(minimalTestData.workspace.workspaceIdAsUUID,
+                                            Seq(participantSet),
+                                            insertOnly = false
+      )
+    )
+
+    // get provider
+    val provider = defaultProvider()
+
+    // set up arguments for expression evaluation
+    val expressionEvaluationContext =
+      ExpressionEvaluationContext(Option("participant_set"), Option("the-set"), None, Option("participant_set"))
+    val toolInputParameter = new ToolInputParameter()
+      .name("my-input-name")
+      .valueType(
+        new ValueType().typeName(ValueType.TypeNameEnum.ARRAY).arrayType(new ValueType().typeName(TypeNameEnum.INT))
+      )
+    val processableInputs = Set(MethodInput(toolInputParameter, "this.participants.index"))
+    val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+    // evaluate "this.participants.index" against the participant set
+    val submissionValidationEntityInputsList =
+      Await
+        .result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()), atMost)
+        .toList
+    submissionValidationEntityInputsList.size shouldBe 1
+
+    // basic validation of the expression-evaluation result
+    val entityInputs = submissionValidationEntityInputsList.head
+    entityInputs.entityName shouldBe "the-set"
+    entityInputs.inputResolutions.size shouldBe 1
+    entityInputs.inputResolutions.head.error shouldBe empty
+    entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+
+    val resolvedValue = entityInputs.inputResolutions.head.value
+    resolvedValue should not be empty
+    resolvedValue.get shouldBe a[AttributeValueList]
+
+    val actual = resolvedValue.get.asInstanceOf[AttributeValueList]
+    val expected = AttributeValueList(range.map(idx => AttributeNumber(idx)))
+
+    // did expression-evaluation return the correct attribute values, in _any_ order?
+    withClue("evaluated expression should contain the same elements, in any order") {
+      actual.list should contain theSameElementsAs expected.list
+    }
+    // did expression-evaluation return the correct attribute values, in the same order as the set members?
+    withClue("evaluated expression should contain the same elements, in the same order") {
+      actual.list should contain theSameElementsInOrderAs expected.list
+    }
   }
 
   // ====================================================================================================
