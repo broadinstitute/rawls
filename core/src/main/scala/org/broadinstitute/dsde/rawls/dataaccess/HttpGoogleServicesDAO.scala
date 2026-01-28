@@ -471,7 +471,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       // Hence split it by `/` and get last element of array to get the zone
       // the filter is due to new AI zones in these regions are not accepted by GCP Batch
       // so we exlude them explicitly, see CTM-343
-      zonesAsResourceUrls.map(_.split("/").last).filterNot(zone => zone.matches(""".*-(ai\w*)$"""))
+      zonesAsResourceUrls.map(_.split("/").last).filterNot(zone => zone.matches(".*-ai.*$"))
     } { case e =>
       throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
                                  s"project `${googleProject.value}`.",
