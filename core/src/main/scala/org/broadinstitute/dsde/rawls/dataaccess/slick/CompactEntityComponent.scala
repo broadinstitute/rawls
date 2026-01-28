@@ -712,40 +712,41 @@ class CompactEntityQuery(driverComponent: DriverComponent)
       DBIO.successful(Map.empty[String, Seq[CompactEntityRecord]])
     } else {
       val initialPointer = EntityPointer(startingEntityType, startingEntityName)
-      val initialGrouped: Map[String, Set[EntityPointer]] =
+      val initialGrouped: Map[String, Seq[EntityPointer]] =
         if (startingEntityType == rootEntityType)
-          Map(startingEntityName -> Set(initialPointer))
+          Map(startingEntityName -> Seq(initialPointer))
         else
-          Map("" -> Set(initialPointer))
+          Map("" -> Seq(initialPointer))
 
       def traverseGroups(
-        groupedEntities: Map[String, Set[EntityPointer]],
+        groupedEntities: Map[String, Seq[EntityPointer]],
         currentEntityType: String,
         remainingChain: Seq[String],
         grouped: Boolean
-      ): ReadAction[Map[String, Set[EntityPointer]]] =
+      ): ReadAction[Map[String, Seq[EntityPointer]]] =
         if (remainingChain.isEmpty) DBIO.successful(groupedEntities)
         else {
           val relation = remainingChain.head
           // For each group, get all referenced entities for this relation
           val nextGroupsF = DBIO
             .sequence(groupedEntities.map { case (groupKey, pointers) =>
-              getEntities(workspaceId, pointers).map { entities =>
+              getEntities(workspaceId, pointers.toSet).map { entities =>
                 val nextPointers = entities.flatMap { entityRecord =>
+                  // to preserve legacy behavior, references are de-duplicated via .distinct
                   entityRecord.toEntity.attributes.get(AttributeName.fromDelimitedName(relation)) match {
                     case Some(rel: AttributeEntityReference)      => Seq(rel.toPointer)
-                    case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer)
+                    case Some(rels: AttributeEntityReferenceList) => rels.list.map(_.toPointer).distinct
                     case _                                        => Seq.empty[EntityPointer]
                   }
-                }.toSet
+                }
                 groupKey -> nextPointers
               }
             }.toSeq)
             .map(_.toMap)
 
           nextGroupsF.flatMap { nextGroups =>
-            val allNextPointers = nextGroups.values.flatten.toSet
-            if (allNextPointers.map(_.entityType).size > 1) {
+            val allNextPointers = nextGroups.values.flatten.toSeq
+            if (allNextPointers.map(_.entityType).distinct.size > 1) {
               DBIO.failed(
                 new RawlsExceptionWithErrorReport(
                   ErrorReport(
