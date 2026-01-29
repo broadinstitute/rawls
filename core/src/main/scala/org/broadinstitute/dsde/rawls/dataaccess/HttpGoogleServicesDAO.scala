@@ -468,8 +468,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       val zonesAsResourceUrls = executeGoogleRequest(getter).getZones.asScala.toList
       // `getZones()` returns the zones as resource urls of form `https://www.googleapis.com/compute/v1/projects/project_id/zones/us-central1-b",
       // Hence split it by `/` and get last element of array to get the zone
-      // the filter is because AI zones in these regions are not accepted by GCP Batch,
-      // so we exclude them explicitly, see CTM-343
+      // the filter is because AI zones are not accepted by GCP Batch, so we exclude them explicitly (see CTM-343)
       zonesAsResourceUrls.map(_.split("/").last).filterNot(zone => zone.matches(".*-ai.*$"))
     } { case e =>
       throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
