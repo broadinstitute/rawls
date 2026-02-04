@@ -46,15 +46,9 @@ trait CompactEntityCorrection {
 
   val CORRECTION_SQL =
     """
-       from ATTRIBUTE_CORRECTIONS ac
-            join ENTITY_CORRECTIONS ec on ac.correction_id = ec.id
-            join WORKSPACE_SETTINGS ws on ec.workspace_id = ws.WORKSPACE_ID
-            join WORKSPACE w on ec.workspace_id = w.id
-          where ac.status = 'Reordered'
-            and ec.status in ('Correctable', 'Mixed')
-	        and ws.SETTING_TYPE = 'CompactDataTables'
-	        and ws.STATUS = 'Applied'
-            and w.last_modified <= ws.LAST_UPDATED
+       from ENTITY_CORRECTIONS ec
+          where ec.status in ('Correctable', 'Mixed')
+	        and ec.consent = 'Yes'
       """
 
   /** count the outstanding corrections */
