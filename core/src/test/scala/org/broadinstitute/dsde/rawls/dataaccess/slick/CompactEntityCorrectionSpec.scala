@@ -22,10 +22,10 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     runAndWait(sql"""
        insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Yes'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Yes'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Yes'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Yes')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -59,48 +59,6 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     actual shouldBe 2
   }
 
-  it should "not count any corrections if workspace has been modified since migration" in withMinimalTestDatabase { _ =>
-    // insert to ENTITY_CORRECTIONS
-    runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
-       values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
-           """.asUpdate)
-
-    // insert to ATTRIBUTE_CORRECTIONS
-    runAndWait(sql"""
-       insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
-       values
-        -- parent correction is Correctable; this should get counted
-        (111, 'default', 'attr1', 'Reordered'),
-        -- parent correction is Different; these should NOT be counted
-        (222, 'default', 'attr1', 'Different'),
-        (222, 'pfb', 'attr1', 'Reordered'),
-        -- parent correction is Mixed; only the Reordered attr should get counted
-        (333, 'default', 'attr1', 'Reordered'),
-        (333, 'pfb', 'attr1', 'Different'),
-        (333, 'default', 'attr2', 'TypeDifferent'),
-        -- parent correction is CorrectableModified; none should get counted
-        (444, 'default', 'attr1', 'Reordered'),
-        (444, 'pfb', 'attr1', 'Reordered'),
-        (444, 'default', 'attr2', 'Reordered'),
-        (444, 'pfb', 'attr2', 'Reordered')
-           """.asUpdate)
-
-    // insert workspace setting, using a last-updated date in the past
-    runAndWait(sql"""
-            insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', '1977-01-21')
-        """.asUpdate)
-
-    val actual = runAndWait(q.countOutstandingCorrections)
-
-    actual shouldBe 0
-  }
-
   behavior of "getNextCorrectionBatch()"
 
   it should "get the next correction batch" in withMinimalTestDatabase { _ =>
@@ -108,10 +66,10 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     runAndWait(sql"""
        insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Yes'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Yes'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Yes'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Yes')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -154,10 +112,10 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     runAndWait(sql"""
        insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
+        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Yes'),
+        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Yes'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Yes'),
+        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Yes')
            """.asUpdate)
 
     // insert to ATTRIBUTE_CORRECTIONS
@@ -194,14 +152,14 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
     )
   }
 
-  it should "retrieve both Phase1 and Phase2 (null) corrections" in withMinimalTestDatabase { _ =>
+  it should "retrieve only consent='Yes' corrections" in withMinimalTestDatabase { _ =>
     // insert to ENTITY_CORRECTIONS
     runAndWait(sql"""
        insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
        values
         (111, $wsid, 'type1', 'name1', '{}', 'Correctable', null),
         (222, $wsid, 'type2', 'name2', '{}', 'Correctable', null),
-        (333, $wsid, 'type3', 'name3', '{}', 'Correctable', 'Phase1'),
+        (333, $wsid, 'type3', 'name3', '{}', 'Correctable', 'Yes'),
         (444, $wsid, 'type4', 'name4', '{}', 'Correctable', null)
            """.asUpdate)
 
@@ -229,56 +187,10 @@ class CompactEntityCorrectionSpec extends TestDriverComponentWithFlatSpecAndMatc
 
     val actual = runAndWait(q.getNextCorrectionBatch(20))
 
-    actual should have size 10
+    actual should have size 1
     actual.toSet shouldBe Set(
-      EntityCorrection(111, wsid, "type1", "name1", Map()),
-      EntityCorrection(222, wsid, "type2", "name2", Map()),
-      EntityCorrection(333, wsid, "type3", "name3", Map()),
-      EntityCorrection(444, wsid, "type4", "name4", Map())
+      EntityCorrection(333, wsid, "type3", "name3", Map())
     )
-  }
-
-  it should "not retrieve any corrections for batch if workspace has been modified since migration" in withMinimalTestDatabase {
-    _ =>
-      // insert to ENTITY_CORRECTIONS
-      runAndWait(sql"""
-       insert into ENTITY_CORRECTIONS(id, workspace_id, entity_type, name, attributes, status, consent)
-       values
-        (111, $wsid, 'type1', 'name1', '{}', 'Correctable', 'Phase1'),
-        (222, $wsid, 'type2', 'name2', '{}', 'Different', 'Phase1'),
-        (333, $wsid, 'type3', 'name3', '{}', 'Mixed', 'Phase1'),
-        (444, $wsid, 'type4', 'name4', '{}', 'CorrectableModified', 'Phase1')
-           """.asUpdate)
-
-      // insert to ATTRIBUTE_CORRECTIONS
-      runAndWait(sql"""
-       insert into ATTRIBUTE_CORRECTIONS(correction_id, namespace, name, status)
-       values
-        -- parent correction is Correctable; this should get counted
-        (111, 'default', 'attr1', 'Reordered'),
-        -- parent correction is Different; these should NOT be counted
-        (222, 'default', 'attr1', 'Different'),
-        (222, 'pfb', 'attr1', 'Reordered'),
-        -- parent correction is Mixed; only the Reordered attr should get counted
-        (333, 'default', 'attr1', 'Reordered'),
-        (333, 'pfb', 'attr1', 'Different'),
-        (333, 'default', 'attr2', 'TypeDifferent'),
-        -- parent correction is CorrectableModified; none should get counted
-        (444, 'default', 'attr1', 'Reordered'),
-        (444, 'pfb', 'attr1', 'Reordered'),
-        (444, 'default', 'attr2', 'Reordered'),
-        (444, 'pfb', 'attr2', 'Reordered')
-           """.asUpdate)
-
-      // insert workspace setting, using a last-updated date in the past
-      runAndWait(sql"""
-            insert into WORKSPACE_SETTINGS(WORKSPACE_ID, SETTING_TYPE, STATUS, CONFIG, USER_ID, LAST_UPDATED)
-            values ($wsid, 'CompactDataTables', 'Applied', '{}', 'fake-user', '1977-01-21')
-        """.asUpdate)
-
-      val actual = runAndWait(q.getNextCorrectionBatch(20))
-
-      actual shouldBe empty
   }
 
   behavior of "updateWorkspaceGone()"
