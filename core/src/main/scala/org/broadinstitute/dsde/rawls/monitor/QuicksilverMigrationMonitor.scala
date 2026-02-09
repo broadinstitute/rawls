@@ -148,10 +148,7 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
       val dbActions = groupedCorrections.map { case (workspaceId, workspaceCorrections) =>
         for {
 
-          // re-verify workspace has not been modified since its migration.
-          // we have to do this again even though getNextCorrectionBatch checked it already;
-          // we do it again inside this db transaction to avoid any race conditions
-          isWorkspaceModified <- checkWorkspaceModified(dataAccess, workspaceId)
+          isWorkspaceModified <- DBIO.successful(false)
 
           correctionAttempts =
             if (isWorkspaceModified) {
@@ -203,46 +200,6 @@ private class QuicksilverMigrationMonitor(config: QuicksilverMigrationMonitorCon
       throw t
     }
   }
-
-  private def checkWorkspaceModified(dataAccess: DataAccess, workspaceId: UUID): ReadWriteAction[Boolean] =
-    for {
-      // re-verify workspace has not been modified since its migration.
-      // we have to do this again even though getNextCorrectionBatch checked it already;
-      // we do it again inside this db transaction to avoid any race conditions
-      isWorkspaceModifiedAfterMigration <- dataAccess.compactEntityQuery.checkWorkspaceLastModified(workspaceId)
-
-      // verify workspace has not run a workflow since its migration;
-      // only check this if the last-modified check above returned false (if it returned true or None,
-      // this workflow check is redundant)
-      isWorkflowRunAfterMigration <-
-        if (isWorkspaceModifiedAfterMigration.contains(false)) {
-          dataAccess.compactEntityQuery.checkWorkspaceLastWorkflowRun(workspaceId)
-        } else {
-          DBIO.successful(None)
-        }
-
-      // if isWorkspaceModifiedAfterMigration is None, the workspace doesn't exist;
-      //     mark all corrections as "the workspace is gone"
-      _ <-
-        if (isWorkspaceModifiedAfterMigration.isEmpty) {
-          dataAccess.compactEntityQuery.updateWorkspaceGone(workspaceId)
-        } else {
-          DBIO.successful(0)
-        }
-
-      // if isWorkspaceModifiedAfterMigration contains true, the workspace has been
-      //     modified since it was migrated to Quicksilver;
-      // if isWorkflowRunAfterMigration contains true, the workspace has run a workflow
-      //     since it was migrated to Quicksilver;
-      // in either case, mark all corrections as "the workspace is modified"
-      _ <-
-        if (isWorkspaceModifiedAfterMigration.contains(true) || isWorkflowRunAfterMigration.contains(true)) {
-          dataAccess.compactEntityQuery.updateWorkspaceModified(workspaceId)
-        } else {
-          DBIO.successful(0)
-        }
-
-    } yield isWorkflowRunAfterMigration.contains(true) || isWorkspaceModifiedAfterMigration.contains(true)
 
   private def persistCorrectedEntity(dataAccess: DataAccess,
                                      correction: EntityCorrection,
