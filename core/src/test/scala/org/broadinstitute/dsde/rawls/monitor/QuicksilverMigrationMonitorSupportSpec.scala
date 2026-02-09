@@ -236,10 +236,19 @@ class QuicksilverMigrationMonitorSupportSpec
     }
   }
 
-  it should s"return Mixed when attributes have multiple statuses" in {
+  it should s"return MixedButNotCorrectable when attributes have multiple statuses but none are Reordered" in {
     val statusMap = Map(
       AttributeName.withDefaultNS("foo") -> AttributeCorrectionStatus.Correct,
       AttributeName.withLibraryNS("bar") -> AttributeCorrectionStatus.Different
+    )
+    val actual = calculateEntityStatus(statusMap)
+    actual shouldBe EntityCorrectionStatus.MixedButNotCorrectable
+  }
+
+  it should s"return Mixed when attributes have multiple statuses and some are Reordered" in {
+    val statusMap = Map(
+      AttributeName.withDefaultNS("foo") -> AttributeCorrectionStatus.Correct,
+      AttributeName.withLibraryNS("bar") -> AttributeCorrectionStatus.Reordered
     )
     val actual = calculateEntityStatus(statusMap)
     actual shouldBe EntityCorrectionStatus.Mixed

@@ -22,9 +22,9 @@ object AttributeCorrectionStatus extends Enumeration {
 
 object EntityCorrectionStatus extends Enumeration {
   type EntityCorrectionStatusType = Value
-  val CurrentGone, Correct, CorrectModified, Correctable, CorrectableModified, Corrected, Mixed, MixedModified,
-    Intersect, IntersectModified, Different, DifferentModified, NothingInCommon, NothingInCommonModified, NotAList,
-    NotAListModified, TypeDifferent, TypeDifferentModified = Value
+  val CurrentGone, Correct, CorrectModified, Correctable, CorrectableModified, Corrected, Mixed, MixedButNotCorrectable,
+    MixedModified, Intersect, IntersectModified, Different, DifferentModified, NothingInCommon, NothingInCommonModified,
+    NotAList, NotAListModified, TypeDifferent, TypeDifferentModified = Value
 }
 
 trait QuicksilverMigrationMonitorSupport extends LazyLogging {
@@ -154,8 +154,10 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
       EntityCorrectionStatus.NotAList
     } else if (attrStatuses == Set(AttributeCorrectionStatus.TypeDifferent)) {
       EntityCorrectionStatus.TypeDifferent
-    } else {
+    } else if (attrStatuses.contains(AttributeCorrectionStatus.Reordered)) {
       EntityCorrectionStatus.Mixed
+    } else {
+      EntityCorrectionStatus.MixedButNotCorrectable
     }
 
   }
