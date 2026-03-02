@@ -174,9 +174,6 @@ object BootMonitors extends LazyLogging {
       )
 
       startFastPassMonitor(system, appConfigManager.conf, slickDataSource, googleIamDAO, googleStorageDAO)
-
-      // Quicksilver correction monitor
-      launchQuicksilverCorrections(system, appConfigManager.conf, slickDataSource)
     }
 
     val cloneWorkspaceFileTransferMonitorConfigRoot =
