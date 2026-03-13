@@ -34,7 +34,8 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
     )
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
-    val response = mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo, "test-google-project")
+    val response =
+      mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo, "test-google-project")
     assertResult("https://signed-url.com/file?key=123") {
       Await.result(response, 1 minute)
     }
@@ -45,7 +46,10 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
     val resolveFailure = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo, "test-google-project"), 1 minute)
+      Await.result(
+        mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo, "test-google-project"),
+        1 minute
+      )
     }
     assertResult(Some(StatusCodes.BadRequest)) {
       resolveFailure.errorReport.statusCode
