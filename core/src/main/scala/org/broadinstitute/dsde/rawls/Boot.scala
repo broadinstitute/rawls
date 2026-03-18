@@ -22,7 +22,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.`export`.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.samplers.Sampler
 import io.opentelemetry.sdk.{resources, OpenTelemetrySdk}
-import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
+import io.opentelemetry.semconv.ServiceAttributes
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
@@ -652,8 +652,8 @@ object Boot extends IOApp with LazyLogging {
     val maybeVersion = Option(getClass.getPackage.getImplementationVersion)
     val resourceBuilder =
       resources.Resource.getDefault.toBuilder
-        .put(ResourceAttributes.SERVICE_NAME, "rawls")
-    maybeVersion.foreach(version => resourceBuilder.put(ResourceAttributes.SERVICE_VERSION, version))
+        .put(ServiceAttributes.SERVICE_NAME, "rawls")
+    maybeVersion.foreach(version => resourceBuilder.put(ServiceAttributes.SERVICE_VERSION, version))
     val resource = HostResource
       .get()
       .merge(ContainerResource.get())
