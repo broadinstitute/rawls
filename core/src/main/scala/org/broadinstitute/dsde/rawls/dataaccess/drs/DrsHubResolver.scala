@@ -34,7 +34,7 @@ class DrsHubResolver(drsHubUrl: String)(implicit
   val httpClientUtils: HttpClientUtilsStandard = HttpClientUtilsStandard()
 
   private def resolveDrs(drsUrl: String, userInfo: UserInfo, googleProject: String): Future[DrsHubMinimalResponse] = {
-    val requestObj = DrsHubRequest(drsUrl, DrsHubRequestFieldsKey, Some(googleProject))
+    val requestObj = DrsHubRequest(drsUrl, DrsHubRequestFieldsKey, googleProject)
     Marshal(requestObj).to[RequestEntity] flatMap { entity =>
       retry[DrsHubMinimalResponse](when5xx) { () =>
         executeRequestWithToken[DrsHubMinimalResponse](userInfo.accessToken)(

@@ -2,7 +2,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.drs
 
 import spray.json.RootJsonFormat
 
-case class DrsHubRequest(url: String, fields: Array[String], userProject: Option[String])
+// CTM-380: userProject (workspace Google project) is always sent to DRSHub so it can
+// bill DRS access costs to the correct project.
+case class DrsHubRequest(url: String, fields: Array[String], userProject: String)
 
 case class DrsHubAccessUrl(url: Option[String], headers: Option[Map[String, String]])
 case class DrsHubMinimalResponse(accessUrl: Option[DrsHubAccessUrl])
