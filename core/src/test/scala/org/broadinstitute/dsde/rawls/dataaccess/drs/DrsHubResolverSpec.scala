@@ -20,7 +20,7 @@ import scala.language.postfixOps
 class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with AnyFlatSpecLike {
   implicit val executionContext: ExecutionContextExecutor = ExecutionContext.global
 
-  val mockDrsHubResolver = spy(new DrsHubResolver("foo@bar.com"))
+  val mockDrsHubResolver = spy(new DrsHubResolver("https://drshub.example.com"))
   val mockUserInfo = mock[UserInfo](RETURNS_SMART_NULLS)
 
   when(mockUserInfo.accessToken).thenReturn(OAuth2BearerToken("access_token"))
@@ -34,7 +34,8 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
     )
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
-    val response = mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
+    val response =
+      mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo, "test-google-project")
     assertResult("https://signed-url.com/file?key=123") {
       Await.result(response, 1 minute)
     }
@@ -45,7 +46,10 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
     val resolveFailure = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo), 1 minute)
+      Await.result(
+        mockDrsHubResolver.drsSignedUrl("drs://drs-provider.com/v1_foo_bar", mockUserInfo, "test-google-project"),
+        1 minute
+      )
     }
     assertResult(Some(StatusCodes.BadRequest)) {
       resolveFailure.errorReport.statusCode

@@ -497,9 +497,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   it should "fail if any URIs fail to resolve" in withDefaultTestDatabase {
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.dosSignedUrl))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo], any[String]))
       .thenReturn(
         Future.failed(
           new RawlsExceptionWithErrorReport(errorReport =
@@ -997,13 +997,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   "resolveDrsSignedUrls" should "only resolve once per provider" in withDefaultTestDatabase {
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.dosSignedUrl))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.drsSignedUrl1))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.drsUrlTDR2))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.drsCompactSignedUrl))
 
     val data = testData
@@ -1016,7 +1016,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val result = Await.result(
       workflowSubmission.validateDrsProviderAccess(
         Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, DrsTestVals.drsUrlTDR2, DrsTestVals.drsCompactUrl),
-        userInfo
+        userInfo,
+        "test-google-project"
       ),
       Duration.Inf
     )
@@ -1029,11 +1030,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   it should "error on unparseable URIs" in withDefaultTestDatabase {
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.dosUrl), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.dosSignedUrl))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.drsSignedUrl1))
-    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo]))
+    when(mockDrsResolver.drsSignedUrl(mockitoEq(DrsTestVals.drsCompactUrl), any[UserInfo], any[String]))
       .thenReturn(Future.successful(DrsTestVals.drsCompactSignedUrl))
 
     val data = testData
@@ -1047,7 +1048,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
       Await.result(
         workflowSubmission.validateDrsProviderAccess(
           Set(DrsTestVals.dosUrl, DrsTestVals.drsUrlTDR1, "not a valid uri", DrsTestVals.drsCompactUrl),
-          userInfo
+          userInfo,
+          "test-google-project"
         ),
         Duration.Inf
       )

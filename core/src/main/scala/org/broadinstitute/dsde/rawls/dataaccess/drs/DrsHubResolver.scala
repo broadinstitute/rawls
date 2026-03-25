@@ -33,8 +33,8 @@ class DrsHubResolver(drsHubUrl: String)(implicit
   val http: HttpExt = Http(system)
   val httpClientUtils: HttpClientUtilsStandard = HttpClientUtilsStandard()
 
-  private def resolveDrs(drsUrl: String, userInfo: UserInfo): Future[DrsHubMinimalResponse] = {
-    val requestObj = DrsHubRequest(drsUrl, DrsHubRequestFieldsKey)
+  private def resolveDrs(drsUrl: String, userInfo: UserInfo, googleProject: String): Future[DrsHubMinimalResponse] = {
+    val requestObj = DrsHubRequest(drsUrl, DrsHubRequestFieldsKey, googleProject)
     Marshal(requestObj).to[RequestEntity] flatMap { entity =>
       retry[DrsHubMinimalResponse](when5xx) { () =>
         executeRequestWithToken[DrsHubMinimalResponse](userInfo.accessToken)(
@@ -44,8 +44,8 @@ class DrsHubResolver(drsHubUrl: String)(implicit
     }
   }
 
-  override def drsSignedUrl(drsUrl: String, userInfo: UserInfo): Future[String] =
-    resolveDrs(drsUrl, userInfo).map { resp =>
+  override def drsSignedUrl(drsUrl: String, userInfo: UserInfo, googleProject: String): Future[String] =
+    resolveDrs(drsUrl, userInfo, googleProject).map { resp =>
       resp.accessUrl match {
         case Some(DrsHubAccessUrl(Some(url), _)) =>
           url
