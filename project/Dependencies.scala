@@ -70,7 +70,7 @@ object Dependencies {
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val fs2Reactive: ModuleID =     "co.fs2"                        %% "fs2-reactive-streams" % "3.6.1" // 3.7.0 has possibly-breaking changes
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.21"
-  val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "9.0"
+  val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "8.1"
   val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
