@@ -63,7 +63,6 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.6"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.20.1"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.14.0"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.5"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.27.1"
@@ -159,7 +158,10 @@ object Dependencies {
     // override commons-codec to address a non-CVE warning from DefectDojo
     "commons-codec"                 % "commons-codec"         % "1.20.0",
     // override cats-parse to address conflicting dependency versions for scala-uri
-    "org.typelevel" %% "cats-parse" % "1.1.0"
+    "org.typelevel" %% "cats-parse" % "1.1.0",
+    // override tools.jackson.core pulled in by logstash-logback-encoder 9.0
+    "tools.jackson.core" % "jackson-core"     % "3.1.0",
+    "tools.jackson.core" % "jackson-databind" % "3.1.0"
   )
 
   val extraOpenTelemetryDependencies = Seq(
@@ -214,9 +216,7 @@ object Dependencies {
   )
 
   val modelDependencies = Seq(
-    // I am not certain why I need jackson-core here but IntelliJ is confused without it and tests don't run
     workbenchModel,
-    jacksonCore,
     akkaHttpSprayJson,
     akkaHttp,
     akkaStream,
