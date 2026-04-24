@@ -111,9 +111,10 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val returnedWorkspace = Await.result(service.getWorkspaceById(workspaceId), Duration.Inf)
     returnedWorkspace shouldEqual WorkspaceAdminResponse(
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace,
-                                               Some(authDomainGroups.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet),
-                                               false
+      WorkspaceDetails.fromWorkspaceAndOptions(
+        workspace,
+        Some(authDomainGroups.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet),
+        false
       ),
       List.empty
     )
