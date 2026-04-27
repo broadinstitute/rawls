@@ -189,9 +189,14 @@ class WorkspaceAdminService(
         )
       workspaceOpt <- workspaceRepository.getWorkspaceByGoogleProject(googleProjectId)
       workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(googleProjectId.toString))
+      authDomains <- samDAO.admin.adminGetResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
       settings <- workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
-    } yield WorkspaceAdminResponse(WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
-                                   settings
+    } yield WorkspaceAdminResponse(
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace,
+                                               Some(authDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet),
+                                               useAttributes = false
+      ),
+      settings
     )
 
   // moved out of WorkspaceSupport because the only usage was in this file,
