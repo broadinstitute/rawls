@@ -288,6 +288,11 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                                                     action: SamResourceAction,
                                                     ctx: RawlsRequestContext
     ): Future[Boolean] = Future.successful(false)
+
+    override def adminGetResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                                            resourceId: String,
+                                            ctx: RawlsRequestContext
+    ): Future[Seq[String]] = Future.successful(Seq.empty)
   }
 
   override def setPolicyPublic(resourceTypeName: SamResourceTypeName,

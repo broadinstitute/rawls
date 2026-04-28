@@ -745,6 +745,17 @@ class HttpSamDAO(baseSamServiceURL: String,
 
       callback.future.map(_.booleanValue())
     }
+
+    override def adminGetResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                                            resourceId: String,
+                                            ctx: RawlsRequestContext
+    ): Future[Seq[String]] = retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[util.List[String]]("adminGetResourceAuthDomain")
+
+      adminApi(ctx).adminGetResourceAuthDomainAsync(resourceTypeName.value, resourceId, callback)
+
+      callback.future.map(_.asScala.toSeq)
+    }
   }
 
   override def getStatus(): Future[SubsystemStatus] = {

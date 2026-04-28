@@ -211,6 +211,11 @@ trait SamAdminDAO {
                                          action: SamResourceAction,
                                          ctx: RawlsRequestContext
   ): Future[Boolean]
+
+  def adminGetResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                                 resourceId: String,
+                                 ctx: RawlsRequestContext
+  ): Future[Seq[String]]
 }
 
 object SamDAO {
