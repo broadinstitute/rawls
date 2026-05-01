@@ -6,6 +6,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamAdminDAO,
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   GoogleProjectId,
+  ManagedGroupRef,
+  RawlsGroupName,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -73,8 +75,9 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     Map.empty
   )
 
-  "getWorkspaceById" should "return the workspace with its settings if the user is an admin" in {
+  "getWorkspaceById" should "return the workspace with its settings and auth domains if the user is an admin" in {
     val workspaceId = workspace.workspaceIdAsUUID
+    val authDomainGroups = Seq("group1", "group2")
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspace(workspaceId)).thenReturn(Future.successful(Option(workspace)))
@@ -90,6 +93,13 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
         ArgumentMatchers.any()
       )
     ).thenReturn(Future.successful(true))
+    when(
+      samAdminDAO.adminGetResourceAuthDomain(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspaceId.toString),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(authDomainGroups))
     val samDAO = mock[SamDAO]
     when(samDAO.admin).thenReturn(samAdminDAO)
 
@@ -101,7 +111,11 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val returnedWorkspace = Await.result(service.getWorkspaceById(workspaceId), Duration.Inf)
     returnedWorkspace shouldEqual WorkspaceAdminResponse(
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, false),
+      WorkspaceDetails.fromWorkspaceAndOptions(
+        workspace,
+        Some(authDomainGroups.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet),
+        false
+      ),
       List.empty
     )
   }
@@ -151,9 +165,10 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
     }
   }
 
-  "getWorkspaceByGoogleProjectId" should "return the workspace with its settings if the user is an admin" in {
+  "getWorkspaceByGoogleProjectId" should "return the workspace with its settings and auth domains if the user is an admin" in {
     val workspaceId = workspace.workspaceIdAsUUID
     val googleProjectId = workspace.googleProjectId
+    val authDomainGroups = Seq("group1", "group2")
 
     val workspaceRepository = mock[WorkspaceRepository]
     when(workspaceRepository.getWorkspaceByGoogleProject(googleProjectId))
@@ -170,6 +185,13 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
         ArgumentMatchers.any()
       )
     ).thenReturn(Future.successful(true))
+    when(
+      samAdminDAO.adminGetResourceAuthDomain(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(workspace.workspaceId),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(authDomainGroups))
     val samDAO = mock[SamDAO]
     when(samDAO.admin).thenReturn(samAdminDAO)
 
@@ -181,7 +203,11 @@ class WorkspaceAdminServiceUnitTests extends AnyFlatSpec with MockitoTestUtils {
 
     val returnedWorkspace = Await.result(service.getWorkspaceByGoogleProjectId(googleProjectId), Duration.Inf)
     returnedWorkspace shouldEqual WorkspaceAdminResponse(
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, false),
+      WorkspaceDetails.fromWorkspaceAndOptions(
+        workspace,
+        Some(authDomainGroups.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet),
+        false
+      ),
       List.empty
     )
   }

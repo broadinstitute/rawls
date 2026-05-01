@@ -17,12 +17,14 @@ import org.broadinstitute.dsde.rawls.monitor.EntityCorrectionStatus.EntityCorrec
 
 object AttributeCorrectionStatus extends Enumeration {
   type AttributeCorrectionStatusType = Value
-  val Correct, Reordered, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
+  val Correct, Corrected, Reordered, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
 }
 
 object EntityCorrectionStatus extends Enumeration {
   type EntityCorrectionStatusType = Value
-  val CurrentGone, Correct, Correctable, Mixed, Intersect, Different, NothingInCommon, NotAList, TypeDifferent = Value
+  val CurrentGone, Correct, CorrectModified, Correctable, CorrectableModified, Corrected, Mixed, MixedButNotCorrectable,
+    MixedModified, Intersect, IntersectModified, Different, DifferentModified, NothingInCommon, NothingInCommonModified,
+    NotAList, NotAListModified, TypeDifferent, TypeDifferentModified = Value
 }
 
 trait QuicksilverMigrationMonitorSupport extends LazyLogging {
@@ -132,12 +134,21 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
   ): EntityCorrectionStatusType = {
     val attrStatuses = attributeStatuses.values.toSet
 
+    // when no attributes exist, use Correct; there is nothing that could be corrected
     if (attrStatuses.isEmpty) {
       EntityCorrectionStatus.Correct
+
+      // if any attribute was corrected, mark the entity as Corrected
+    } else if (attrStatuses.contains(AttributeCorrectionStatus.Corrected)) {
+      EntityCorrectionStatus.Corrected
+
+      // handle cases where all attributes have the same status
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Correct)) {
       EntityCorrectionStatus.Correct
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Reordered)) {
       EntityCorrectionStatus.Correctable
+    } else if (attrStatuses == Set(AttributeCorrectionStatus.Corrected)) {
+      EntityCorrectionStatus.Corrected
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Different)) {
       EntityCorrectionStatus.Different
     } else if (attrStatuses == Set(AttributeCorrectionStatus.Intersect)) {
@@ -148,8 +159,20 @@ trait QuicksilverMigrationMonitorSupport extends LazyLogging {
       EntityCorrectionStatus.NotAList
     } else if (attrStatuses == Set(AttributeCorrectionStatus.TypeDifferent)) {
       EntityCorrectionStatus.TypeDifferent
-    } else {
+
+      // single-status sets were handled above. Now handle cases where attributes
+      // have multiple cases.
+      //
+      // if any attribute is correctable (e.g. "Reordered"), mark the entity as Mixed.
+      // Mixed entities will get processed by the correction monitor.
+    } else if (attrStatuses.contains(AttributeCorrectionStatus.Reordered)) {
       EntityCorrectionStatus.Mixed
+
+      // We have multiple attribute statuses, but none of them is "Reordered".
+      // Mark the entity as MixedButNotCorrectable, which will not be processed by
+      // the correction monitor.
+    } else {
+      EntityCorrectionStatus.MixedButNotCorrectable
     }
 
   }

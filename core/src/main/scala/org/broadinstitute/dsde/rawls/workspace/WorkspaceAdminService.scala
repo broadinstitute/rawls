@@ -11,6 +11,8 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   ErrorReportSource,
   GoogleProjectId,
+  ManagedGroupRef,
+  RawlsGroupName,
   RawlsRequestContext,
   SamResourceTypeAdminActions,
   SamResourceTypeName,
@@ -105,9 +107,13 @@ class WorkspaceAdminService(
         )
       workspaceOpt <- workspaceRepository.getWorkspace(workspaceId)
       workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(workspaceId.toString))
+      authDomains <- samDAO.admin.adminGetResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId.toString, ctx)
       settings <- workspaceSettingRepository.getWorkspaceSettings(workspaceId)
     } yield WorkspaceAdminResponse(
-      WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace,
+                                               Some(authDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet),
+                                               useAttributes = false
+      ),
       settings
     )
 
@@ -183,9 +189,14 @@ class WorkspaceAdminService(
         )
       workspaceOpt <- workspaceRepository.getWorkspaceByGoogleProject(googleProjectId)
       workspace = workspaceOpt.getOrElse(throw NoSuchWorkspaceException(googleProjectId.toString))
+      authDomains <- samDAO.admin.adminGetResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
       settings <- workspaceSettingRepository.getWorkspaceSettings(workspace.workspaceIdAsUUID)
-    } yield WorkspaceAdminResponse(WorkspaceDetails.fromWorkspaceAndOptions(workspace, None, useAttributes = false),
-                                   settings
+    } yield WorkspaceAdminResponse(
+      WorkspaceDetails.fromWorkspaceAndOptions(workspace,
+                                               Some(authDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet),
+                                               useAttributes = false
+      ),
+      settings
     )
 
   // moved out of WorkspaceSupport because the only usage was in this file,

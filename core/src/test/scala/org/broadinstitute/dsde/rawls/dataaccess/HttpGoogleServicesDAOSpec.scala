@@ -6,13 +6,18 @@ import akka.stream.ActorMaterializer
 import cats.effect.IO
 import com.google.api.Metric
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
+import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.json.gson.GsonFactory
+import com.google.api.services.compute.Compute
+import com.google.api.services.compute.model.Region
 import com.google.cloud.monitoring.v3.MetricServiceClient.ListTimeSeriesPagedResponse
 import com.google.cloud.storage.{Cors, HttpMethod, StorageClass}
 import com.google.monitoring.v3.{Point, TimeInterval, TimeSeries, TypedValue}
 import com.google.protobuf.Timestamp
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
+import org.broadinstitute.dsde.rawls.google.GoogleUtilities
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.model.{
   BucketMetric,
   GoogleProjectId,
@@ -26,7 +31,7 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito.{times, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -273,5 +278,48 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
       BucketMetric("REGIONAL", "soft-deleted-object", 5432)
     )
     response.metrics.toSet shouldBe expectedMetrics
+  }
+  it should "not return zones ending with -ai* in getComputeZonesForRegion" in {
+    val mockCompute = mock[Compute]
+    val mockRegions = mock[Compute#Regions]
+    val mockGet = mock[Compute#Regions#Get]
+    val mockRegion = mock[Region]
+
+    val zones = java.util.Arrays.asList(
+      "https://www.googleapis.com/compute/v1/projects/project/zones/us-central1-a",
+      "https://www.googleapis.com/compute/v1/projects/project/zones/us-central1-b",
+      "https://www.googleapis.com/compute/v1/projects/project/zones/us-central-ai1a"
+    )
+
+    when(mockCompute.regions()).thenReturn(mockRegions)
+    when(mockRegions.get(anyString(), anyString())).thenReturn(mockGet)
+    when(mockGet.execute()).thenReturn(mockRegion)
+    when(mockRegion.getZones).thenReturn(zones)
+
+    val googleServicesDAO = new MockHttpGoogleServicesDAO(
+      GoogleClientSecrets.load(GsonFactory.getDefaultInstance, new StringReader("{}")),
+      "fakeClientEmail",
+      "fakeSubEmail",
+      "fakePemFile",
+      "fakeAppsDomain",
+      "fakeGroupPrefix",
+      "fakeAppName",
+      "fakeServiceProject",
+      "fakeBillingPemEmail",
+      "fakeBillingPemFile",
+      "fakeBillingEmail",
+      "fakeBillingGroupEmail",
+      "fakeCredentialsJson",
+      "fakeResourceBufferJsonFile"
+    ) {
+      override def getComputeManager(credential: com.google.api.client.auth.oauth2.Credential): Compute = mockCompute
+      override def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T], logRequest: Boolean)(implicit
+        counters: GoogleCounters
+      ): T = mockRegion.asInstanceOf[T]
+    }
+
+    val result = await(googleServicesDAO.getComputeZonesForRegion(GoogleProjectId("project"), "us-central1"))
+    result should contain allOf ("us-central1-a", "us-central1-b")
+    result should not contain "us-central-ai1a"
   }
 }

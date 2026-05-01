@@ -366,7 +366,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case err: JsValue  => AttributeString(err.toString)
     }
 
-  def validateDrsProviderAccess(drsUris: Set[String], userInfo: UserInfo)(implicit
+  def validateDrsProviderAccess(drsUris: Set[String], userInfo: UserInfo, googleProject: String)(implicit
     executionContext: ExecutionContext
   ): Future[Set[String]] = {
 
@@ -382,7 +382,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     Future
       .traverse(urisToParse) { drsUri =>
-        drsResolver.drsSignedUrl(drsUri, userInfo)
+        drsResolver.drsSignedUrl(drsUri, userInfo, googleProject)
       }
       .map { urls =>
         logger.debug(s"resolveDrsSignedUrls found ${urls.size} urls for ${drsUris.size} DRS URIs")
@@ -506,7 +506,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
         workflowBatchFuture
-      _ <- validateDrsProviderAccess(dosUris, petUserInfo)
+      _ <- validateDrsProviderAccess(dosUris, petUserInfo, workspaceRec.googleProjectId)
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs,
                                                                       wdl,
