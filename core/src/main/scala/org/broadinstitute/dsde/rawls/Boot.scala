@@ -233,8 +233,6 @@ object Boot extends IOApp with LazyLogging {
       val notificationDAO =
         NotificationDAOFactory.createNotificationDAO(appConfigManager, notificationPubSubDAO)
 
-      val drsResolver = DrsResolverFactory.createDrsResolver(appConfigManager)
-
       val servicePerimeterService =
         ServicePerimeterServiceFactory.createServicePerimeter(appConfigManager, slickDataSource, gcsDAO)
 
@@ -545,7 +543,6 @@ object Boot extends IOApp with LazyLogging {
           workspaceRepository,
           appDependencies.googleStorageService,
           methodRepoDAO,
-          drsResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,

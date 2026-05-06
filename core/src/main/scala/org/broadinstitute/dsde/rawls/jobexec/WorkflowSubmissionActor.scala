@@ -4,9 +4,7 @@ import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import com.typesafe.scalalogging.LazyLogging
-import io.lemonlabs.uri.Uri
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.{BardService, RawlsInstrumented}
@@ -30,7 +28,6 @@ object WorkflowSubmissionActor {
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
-            dosResolver: DrsResolver,
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             processInterval: FiniteDuration,
@@ -54,7 +51,6 @@ object WorkflowSubmissionActor {
         methodRepoDAO,
         googleServicesDAO,
         samDAO,
-        dosResolver,
         executionServiceCluster,
         batchSize,
         processInterval,
@@ -89,7 +85,6 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              val drsResolver: DrsResolver,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val processInterval: FiniteDuration,
@@ -145,7 +140,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val methodRepoDAO: MethodRepoDAO
   val googleServicesDAO: GoogleServicesDAO
   val samDAO: SamDAO
-  val drsResolver: DrsResolver
   val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val maxActiveWorkflowsTotal: Int
@@ -366,47 +360,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case err: JsValue  => AttributeString(err.toString)
     }
 
-  def validateDrsProviderAccess(drsUris: Set[String], userInfo: UserInfo, googleProject: String)(implicit
-    executionContext: ExecutionContext
-  ): Future[Set[String]] = {
-
-    val urisByProvider: Map[Option[String], List[String]] = drsUris.toList.groupBy(DrsResolver.getProvider)
-
-    if (urisByProvider.contains(None)) {
-      throw new RawlsExceptionWithErrorReport(errorReport =
-        ErrorReport(StatusCodes.BadRequest, s"Unable to parse URIs: ${urisByProvider(None)}")
-      )
-    }
-
-    val urisToParse = urisByProvider.values.map(_.head).toList
-
-    Future
-      .traverse(urisToParse) { drsUri =>
-        drsResolver.drsSignedUrl(drsUri, userInfo, googleProject)
-      }
-      .map { urls =>
-        logger.debug(s"resolveDrsSignedUrls found ${urls.size} urls for ${drsUris.size} DRS URIs")
-        urls.toSet
-      }
-  }
-
-  private def collectDosUris(workflowBatch: Seq[Workflow]): Set[String] = {
-    val dosUris = for {
-      workflow <- workflowBatch
-      inputResolutions <- workflow.inputResolutions
-      attribute <- inputResolutions.value.toSeq // toSeq makes the for comp work
-      dosAttributeValue <- attribute match {
-        case AttributeString(s) if s.matches(DrsResolver.dosDrsUriPattern) => Seq(s)
-        case AttributeValueList(valueList)                                 =>
-          valueList.collect {
-            case AttributeString(s) if s.value.matches(DrsResolver.dosDrsUriPattern) => s
-          }
-        case _ => Seq.empty
-      }
-    } yield dosAttributeValue
-    dosUris.toSet
-  }
-
   // submit the batch of workflows with the given ids
   def submitWorkflowBatch(
     batch: WorkflowBatch
@@ -494,19 +447,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
 
       // yield the things we're going to submit to Cromwell
-      val dosUris = collectDosUris(workflowBatch)
-      logger.debug(
-        s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}. First 20 are: ${dosUris
-            .take(20)}"
-      )
-      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig)
+      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, petUserInfo, methodConfig)
     }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo, methodConfig) <-
+      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, petUserInfo, methodConfig) <-
         workflowBatchFuture
-      _ <- validateDrsProviderAccess(dosUris, petUserInfo, workspaceRec.googleProjectId)
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs,
                                                                       wdl,
