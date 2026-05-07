@@ -9,7 +9,6 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class RequesterPaysSetupServiceImpl(dataSource: SlickDataSource,
                                     val googleServicesDAO: GoogleServicesDAO,
-                                    val bondApiDAO: BondApiDAO,
                                     val requesterPaysRole: String
 )(implicit executionContext: ExecutionContext)
     extends RequesterPaysSetupService {

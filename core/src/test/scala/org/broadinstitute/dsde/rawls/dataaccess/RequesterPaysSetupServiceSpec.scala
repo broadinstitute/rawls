@@ -19,9 +19,8 @@ class RequesterPaysSetupServiceSpec
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Seconds)))
 
   private def setupServices(dataSource: SlickDataSource) = {
-    val mockBondApiDAO = mock[BondApiDAO](RETURNS_SMART_NULLS)
     val gcsDAO = new MockGoogleServicesDAO("foo")
-    new RequesterPaysSetupServiceImpl(dataSource, gcsDAO, mockBondApiDAO, "rp/role")
+    new RequesterPaysSetupServiceImpl(dataSource, gcsDAO, "rp/role")
   }
 
   private def withMinimalTestDatabaseAndServices[T](testCode: RequesterPaysSetupServiceImpl => T): T =
