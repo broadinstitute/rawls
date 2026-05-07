@@ -978,26 +978,6 @@ class WorkspaceServiceSpec
 
   behavior of "deleteWorkspace"
 
-  it should "delete a workspace with linked bond service account" in withTestDataServices { services =>
-    // check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
-    // add a bond sa link
-    Await.result(
-      services.requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, testData.workspaceNoSubmissions),
-      Duration.Inf
-    )
-
-    // delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
-
-    // check that the workspace has been deleted
-    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
-
-  }
-
   it should "delete a workspace with no submissions" in withTestDataServices { services =>
     // check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {

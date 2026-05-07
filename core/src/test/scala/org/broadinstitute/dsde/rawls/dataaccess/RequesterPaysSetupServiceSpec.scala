@@ -54,30 +54,6 @@ class RequesterPaysSetupServiceSpec
     service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
   }
 
-  "grantRequesterPaysToLinkedSAs" should "link" in withMinimalTestDatabaseAndServices { service =>
-    val expectedEmail = BondServiceAccountEmail("bondSA")
-
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo))
-      .thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
-
-    service.googleServicesDAO
-      .asInstanceOf[MockGoogleServicesDAO]
-      .policies
-      .get(minimalTestData.workspace.googleProjectId) shouldBe None
-    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
-    service.googleServicesDAO
-      .asInstanceOf[MockGoogleServicesDAO]
-      .policies
-      .get(minimalTestData.workspace.googleProjectId) shouldBe Some(
-      Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email))
-    )
-
-    // second call should not fail
-    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
-  }
-
   "revokeUserFromWorkspace" should "unlink" in withMinimalTestDatabaseAndServices { service =>
     val expectedEmail = BondServiceAccountEmail("bondSA")
 

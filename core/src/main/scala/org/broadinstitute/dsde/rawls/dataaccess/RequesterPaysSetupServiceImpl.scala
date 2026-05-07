@@ -24,22 +24,6 @@ class RequesterPaysSetupServiceImpl(dataSource: SlickDataSource,
       email
     }
 
-  def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, workspace: Workspace): Future[List[BondServiceAccountEmail]] =
-    for {
-      emails <- getBondProviderServiceAccountEmails(userInfo)
-      _ <- googleServicesDAO.addPolicyBindings(workspace.googleProjectId,
-                                               Map(requesterPaysRole -> emails.toSet.map {
-                                                 mail: BondServiceAccountEmail => "serviceAccount:" + mail.client_email
-                                               })
-      )
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName,
-                                                                userInfo.userEmail,
-                                                                emails.toSet
-        )
-      }
-    } yield emails
-
   def revokeUserFromWorkspace(userEmail: RawlsUserEmail, workspace: Workspace): Future[Seq[BondServiceAccountEmail]] =
     for {
       emails <- dataSource.inTransaction { dataAccess =>
