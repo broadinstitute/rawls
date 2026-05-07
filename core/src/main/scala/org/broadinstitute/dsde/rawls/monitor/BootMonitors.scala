@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.coordination.{
   UncoordinatedDataSourceAccess
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
@@ -64,7 +63,6 @@ object BootMonitors extends LazyLogging {
                    workspaceRepository: WorkspaceRepository,
                    googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
-                   drsResolver: DrsResolver,
                    entityService: RawlsRequestContext => EntityService,
                    workspaceService: RawlsRequestContext => WorkspaceService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
@@ -119,7 +117,6 @@ object BootMonitors extends LazyLogging {
         gcsDAO,
         samDAO,
         methodRepoDAO,
-        drsResolver,
         shardedExecutionServiceCluster,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
@@ -274,7 +271,6 @@ object BootMonitors extends LazyLogging {
                                             gcsDAO: GoogleServicesDAO,
                                             samDAO: SamDAO,
                                             methodRepoDAO: MethodRepoDAO,
-                                            drsResolver: DrsResolver,
                                             shardedExecutionServiceCluster: ExecutionServiceCluster,
                                             maxActiveWorkflowsTotal: Int,
                                             maxActiveWorkflowsPerUser: Int,
@@ -294,7 +290,6 @@ object BootMonitors extends LazyLogging {
           methodRepoDAO,
           gcsDAO,
           samDAO,
-          drsResolver,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
           util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
