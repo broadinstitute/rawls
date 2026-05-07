@@ -29,31 +29,6 @@ class RequesterPaysSetupServiceSpec
       testCode(setupServices(dataSource))
     }
 
-  "getBondProviderServiceAccountEmails" should "get emails" in withMinimalTestDatabaseAndServices { service =>
-    val expectedEmail = BondServiceAccountEmail("bondSA")
-
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo))
-      .thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
-
-    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List(expectedEmail)
-  }
-
-  it should "get empty list when no providers" in withMinimalTestDatabaseAndServices { service =>
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List.empty))
-
-    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
-  }
-
-  it should "get empty list when no linked accounts" in withMinimalTestDatabaseAndServices { service =>
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(None))
-
-    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
-  }
-
   "revokeUserFromWorkspace" should "unlink" in withMinimalTestDatabaseAndServices { service =>
     val expectedEmail = BondServiceAccountEmail("bondSA")
 

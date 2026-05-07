@@ -14,16 +14,6 @@ class RequesterPaysSetupServiceImpl(dataSource: SlickDataSource,
 )(implicit executionContext: ExecutionContext)
     extends RequesterPaysSetupService {
 
-  def getBondProviderServiceAccountEmails(userInfo: UserInfo): Future[List[BondServiceAccountEmail]] =
-    for {
-      bondProviderList <- bondApiDAO.getBondProviders()
-      bondResponses <- Future.traverse(bondProviderList) { provider =>
-        bondApiDAO.getServiceAccountKey(provider, userInfo)
-      }
-    } yield bondResponses collect { case Some(BondResponseData(email)) =>
-      email
-    }
-
   def revokeUserFromWorkspace(userEmail: RawlsUserEmail, workspace: Workspace): Future[Seq[BondServiceAccountEmail]] =
     for {
       emails <- dataSource.inTransaction { dataAccess =>
