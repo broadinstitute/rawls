@@ -242,26 +242,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
             workspaceServiceConstructor(ctx).sendChangeNotifications(WorkspaceName(namespace, name))
           }
         }
-      } ~
-      path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") {
-        (workspaceNamespace, workspaceName) =>
-          put {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
-                .map(_ => StatusCodes.NoContent)
-            }
-          }
-      } ~
-      path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") {
-        (workspaceNamespace, workspaceName) =>
-          put {
-            complete {
-              workspaceServiceConstructor(ctx)
-                .disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
-                .map(_ => StatusCodes.NoContent)
-            }
-          }
       }
   }
 
