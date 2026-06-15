@@ -166,8 +166,12 @@ object Dependencies {
     "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
     "org.bouncycastle" % "bcpkix-jdk18on" % "1.84",
     "org.bouncycastle" % "bcutil-jdk18on" % "1.84",
-    // override netty-codec-http to address CVE-2026-42587 (requires >= 4.1.133.Final)
-    "io.netty" % "netty-codec-http" % "4.1.133.Final"
+    // override netty-codec* to address CVE-2026-42587 (requires >= 4.1.133.Final)
+    "io.netty" % "netty-codec"       % "4.1.133.Final",
+    "io.netty" % "netty-codec-dns"   % "4.1.133.Final",
+    "io.netty" % "netty-codec-http"  % "4.1.133.Final",
+    "io.netty" % "netty-codec-http2" % "4.1.133.Final",
+    "io.netty" % "netty-codec-socks" % "4.1.133.Final"
   )
 
   val extraOpenTelemetryDependencies = Seq(
