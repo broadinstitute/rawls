@@ -16,9 +16,6 @@ object Dependencies {
   val excludeAkkaActor =        ExclusionRule(organization = "com.typesafe.akka", name = "akka-actor_2.12")
   val excludeAkkaStream =       ExclusionRule(organization = "com.typesafe.akka", name = "akka-stream_2.12")
 
-  val excludePostgresql =       ExclusionRule("org.postgresql", "postgresql")
-  val excludeSnakeyaml =        ExclusionRule("org.yaml", "snakeyaml")
-
   val akkaActor: ModuleID =             "com.typesafe.akka" %% "akka-actor"               % akkaV
   val akkaActorTyped: ModuleID =        "com.typesafe.akka" %% "akka-actor-typed"         % akkaV
   val akkaStream: ModuleID =            "com.typesafe.akka" %% "akka-stream"              % akkaV
@@ -115,20 +112,24 @@ object Dependencies {
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
 
-  // Rawls uses only a handful of TCL items, so exclude most of it
-  def excludeSpringBoot = ExclusionRule("org.springframework.boot")
-  def excludeSpringAop = ExclusionRule("org.springframework.spring-aop")
-  def excludeSpringData = ExclusionRule("org.springframework.data")
-  def excludeSpringRetry = ExclusionRule("org.springframework.retry")
-  def excludeSpringFramework = ExclusionRule("org.springframework")
-  def excludeOpenCensus = ExclusionRule("io.opencensus")
-  def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
-  def excludeBroadWorkbench = ExclusionRule("org.broadinstitute.dsde.workbench")
   def excludeSlf4j = ExclusionRule("org.slf4j")
-  def excludeStairwayAzure = ExclusionRule("bio.terra", "stairway-azure")
-  def excludeStairwayGcp = ExclusionRule("bio.terra", "stairway-gcp")
-  // "Terra Common Lib" Exclusions:
-  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeSpringRetry, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j, excludeStairwayAzure, excludeStairwayGcp)
+
+  // Rawls uses only a handful of TCL items, so exclude most of it (CTM-548)
+  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(
+    excludeSlf4j,
+    ExclusionRule("bio.terra", "stairway-azure"),
+    ExclusionRule("bio.terra", "stairway-gcp"),
+    ExclusionRule("com.google.code.findbugs"),
+    ExclusionRule("io.opencensus"),
+    ExclusionRule("org.broadinstitute.dsde.workbench"),
+    ExclusionRule("org.postgresql", "postgresql"),
+    ExclusionRule("org.springframework"),
+    ExclusionRule("org.springframework.boot"),
+    ExclusionRule("org.springframework.data"),
+    ExclusionRule("org.springframework.retry"),
+    ExclusionRule("org.springframework.spring-aop"),
+    ExclusionRule("org.yaml", "snakeyaml")
+  )
 
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-client" % "2.382.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.153-SNAPSHOT")
