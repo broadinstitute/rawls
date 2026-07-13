@@ -16,9 +16,6 @@ object Dependencies {
   val excludeAkkaActor =        ExclusionRule(organization = "com.typesafe.akka", name = "akka-actor_2.12")
   val excludeAkkaStream =       ExclusionRule(organization = "com.typesafe.akka", name = "akka-stream_2.12")
 
-  val excludePostgresql =       ExclusionRule("org.postgresql", "postgresql")
-  val excludeSnakeyaml =        ExclusionRule("org.yaml", "snakeyaml")
-
   val akkaActor: ModuleID =             "com.typesafe.akka" %% "akka-actor"               % akkaV
   val akkaActorTyped: ModuleID =        "com.typesafe.akka" %% "akka-actor-typed"         % akkaV
   val akkaStream: ModuleID =            "com.typesafe.akka" %% "akka-stream"              % akkaV
@@ -112,22 +109,27 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "1.15.0"
 
-  val azureIdentity: ModuleID = "com.azure" % "azure-identity" % "1.18.1"
-  val azureCoreManagement: ModuleID = "com.azure" % "azure-core-management" % "1.19.2"
-
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
 
-  def excludeSpringBoot = ExclusionRule("org.springframework.boot")
-  def excludeSpringAop = ExclusionRule("org.springframework.spring-aop")
-  def excludeSpringData = ExclusionRule("org.springframework.data")
-  def excludeSpringFramework = ExclusionRule("org.springframework")
-  def excludeOpenCensus = ExclusionRule("io.opencensus")
-  def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
-  def excludeBroadWorkbench = ExclusionRule("org.broadinstitute.dsde.workbench")
   def excludeSlf4j = ExclusionRule("org.slf4j")
-  // "Terra Common Lib" Exclusions:
-  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
+
+  // Rawls uses only a handful of TCL items, so exclude most of it (CTM-548)
+  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(
+    excludeSlf4j,
+    ExclusionRule("bio.terra", "stairway-azure"),
+    ExclusionRule("bio.terra", "stairway-gcp"),
+    ExclusionRule("com.google.code.findbugs"),
+    ExclusionRule("io.opencensus"),
+    ExclusionRule("org.broadinstitute.dsde.workbench"),
+    ExclusionRule("org.postgresql", "postgresql"),
+    ExclusionRule("org.springframework"),
+    ExclusionRule("org.springframework.boot"),
+    ExclusionRule("org.springframework.data"),
+    ExclusionRule("org.springframework.retry"),
+    ExclusionRule("org.springframework.spring-aop"),
+    ExclusionRule("org.yaml", "snakeyaml")
+  )
 
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-client" % "2.382.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.153-SNAPSHOT")
@@ -165,13 +167,14 @@ object Dependencies {
     // override bouncycastle to address CVE-2026-5598 (requires >= 1.84)
     "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
     "org.bouncycastle" % "bcpkix-jdk18on" % "1.84",
-    "org.bouncycastle" % "bcutil-jdk18on" % "1.84",
-    // override netty-codec* to address CVE-2026-42587 (requires >= 4.1.133.Final)
-    "io.netty" % "netty-codec"       % "4.1.133.Final",
-    "io.netty" % "netty-codec-dns"   % "4.1.133.Final",
-    "io.netty" % "netty-codec-http"  % "4.1.133.Final",
-    "io.netty" % "netty-codec-http2" % "4.1.133.Final",
-    "io.netty" % "netty-codec-socks" % "4.1.133.Final"
+    "org.bouncycastle" % "bcutil-jdk18on" % "1.84"
+  )
+
+  // Defense-in-depth org exclusions of unused deps that were transitively pulled
+  // in by ≥1 direct dependency, such as TCL or workbench-google. (CTM-548)
+  val excludedTransitiveDependencies = Seq(
+    ExclusionRule(organization = "com.azure"),
+    ExclusionRule(organization = "software.amazon.awssdk")
   )
 
   val extraOpenTelemetryDependencies = Seq(
@@ -281,8 +284,6 @@ object Dependencies {
     jakartaWsRs,
     openApiParser,
     jerseyJnhConnector,
-    azureIdentity,
-    azureCoreManagement,
     policyService,
     logstashLogback,
     janino
