@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.credentials
 
 import com.google.auth.oauth2.ServiceAccountCredentials
-import org.broadinstitute.dsde.rawls.config.{AzureIdentityConfig, RawlsConfigManager}
+import org.broadinstitute.dsde.rawls.config.RawlsConfigManager
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
@@ -29,6 +29,6 @@ object RawlsCredential {
           )
         }
         new GoogleRawlsCredential(saCredential.get.createScoped("openid", "email", "profile"))
-      case _ => new AzureRawlsCredential(AzureIdentityConfig(configManager.conf.getConfig("azureIdentity")))
+      case _ => throw new UnsupportedOperationException("Azure credentials are unsupported")
     }
 }
