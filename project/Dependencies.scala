@@ -115,16 +115,20 @@ object Dependencies {
   def excludeOpenTelemetry = ExclusionRule("io.opentelemetry.instrumentation")
   def clientLibExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeOpenTelemetry)
 
+  // Rawls uses only a handful of TCL items, so exclude most of it
   def excludeSpringBoot = ExclusionRule("org.springframework.boot")
   def excludeSpringAop = ExclusionRule("org.springframework.spring-aop")
   def excludeSpringData = ExclusionRule("org.springframework.data")
+  def excludeSpringRetry = ExclusionRule("org.springframework.retry")
   def excludeSpringFramework = ExclusionRule("org.springframework")
   def excludeOpenCensus = ExclusionRule("io.opencensus")
   def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
   def excludeBroadWorkbench = ExclusionRule("org.broadinstitute.dsde.workbench")
   def excludeSlf4j = ExclusionRule("org.slf4j")
+  def excludeStairwayAzure = ExclusionRule("bio.terra", "stairway-azure")
+  def excludeStairwayGcp = ExclusionRule("bio.terra", "stairway-gcp")
   // "Terra Common Lib" Exclusions:
-  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
+  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeSpringRetry, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j, excludeStairwayAzure, excludeStairwayGcp)
 
   val dataRepo = clientLibExclusions("bio.terra" % "datarepo-client" % "2.382.0-SNAPSHOT")
   val resourceBufferService = clientLibExclusions("bio.terra" % "terra-resource-buffer-client" % "0.198.153-SNAPSHOT")
@@ -165,12 +169,12 @@ object Dependencies {
     "org.bouncycastle" % "bcutil-jdk18on" % "1.84"
   )
 
-  // `terra-common-lib` pulls in some Azure and AWS dependencies. All usage of Azure deps is
-  // now cleaned up in Rawls, so exclude them entirely. Once all apps get this treatment,
-  // they can be dropped from TCL itself. (CTM-548)
+  // Defense-in-depth org exclusions of unused deps that were transitively pulled
+  // in by ≥1 direct dependency, such as TCL or workbench-google. (CTM-548)
   val excludedTransitiveDependencies = Seq(
     ExclusionRule(organization = "com.azure"),
-    ExclusionRule(organization = "software.amazon.awssdk")
+    ExclusionRule(organization = "software.amazon.awssdk"),
+    ExclusionRule(organization = "io.kubernetes")
   )
 
   val extraOpenTelemetryDependencies = Seq(
