@@ -93,6 +93,7 @@ object Settings {
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
     scalaVersion  := scala213,
     dependencyOverrides ++= transitiveDependencyOverrides,
+    excludeDependencies ++= excludedTransitiveDependencies,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )
 
