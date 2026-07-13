@@ -174,8 +174,7 @@ object Dependencies {
   // in by ≥1 direct dependency, such as TCL or workbench-google. (CTM-548)
   val excludedTransitiveDependencies = Seq(
     ExclusionRule(organization = "com.azure"),
-    ExclusionRule(organization = "software.amazon.awssdk"),
-    ExclusionRule(organization = "io.kubernetes")
+    ExclusionRule(organization = "software.amazon.awssdk")
   )
 
   val extraOpenTelemetryDependencies = Seq(
