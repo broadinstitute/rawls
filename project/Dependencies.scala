@@ -82,12 +82,12 @@ object Dependencies {
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.11"
   val janino: ModuleID = "org.codehaus.janino" % "janino" % "3.1.12" // For if-else logic in logging config
 
-  val workbenchLibsHash = "adcc4d4"
+  val workbenchLibsHash = "fccb671"
 
   val workbenchModelV  = s"0.21-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.36-${workbenchLibsHash}"
   val workbenchNotificationsV = s"2.1-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.42-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.43-${workbenchLibsHash}"
   val workbenchOauth2V = s"0.11-${workbenchLibsHash}"
   val workbenchOpenTelemetryV = s"0.10-$workbenchLibsHash"
 
