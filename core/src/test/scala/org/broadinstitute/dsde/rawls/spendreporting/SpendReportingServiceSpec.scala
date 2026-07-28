@@ -287,7 +287,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   ): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
     val job = mock[Job]
-    when(job.getQueryResults(any())).thenReturn(createTableResult(data))
+    when(job.getQueryResults()).thenReturn(createTableResult(data))
     when(job.getStatistics).thenReturn(stats)
     when(job.waitFor()).thenReturn(job)
     when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
@@ -658,11 +658,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                        table2: List[Map[String, String]]
   ): OngoingStubbing[IO[Job]] = {
     val job1 = mock[Job]
-    when(job1.getQueryResults(any())).thenReturn(createTableResult(table1))
+    when(job1.getQueryResults()).thenReturn(createTableResult(table1))
     when(job1.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
     when(job1.waitFor()).thenReturn(job1)
     val job2 = mock[Job]
-    when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
+    when(job2.getQueryResults()).thenReturn(createTableResult(table2))
     when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
     when(job2.waitFor()).thenReturn(job2)
     when(bigQueryService.runJob(any(), any()))
@@ -949,7 +949,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val data = List[Map[String, String]]()
     val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
     val job = mock[Job]
-    when(job.getQueryResults(any())).thenReturn(createTableResult(data))
+    when(job.getQueryResults()).thenReturn(createTableResult(data))
     when(job.getStatistics).thenReturn(stats)
     when(job.waitFor()).thenReturn(job)
     when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
@@ -1038,7 +1038,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
     val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
     val job = mock[Job]
-    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getQueryResults()).thenReturn(createTableResult(table))
     when(job.getStatistics).thenReturn(stats)
     when(job.waitFor()).thenReturn(job)
     when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
@@ -1125,7 +1125,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
     val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
     val job = mock[Job]
-    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getQueryResults()).thenReturn(createTableResult(table))
     when(job.getStatistics).thenReturn(stats)
     when(job.waitFor()).thenReturn(job)
     when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
@@ -1207,7 +1207,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
     val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
     val job = mock[Job]
-    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getQueryResults()).thenReturn(createTableResult(table))
     when(job.getStatistics).thenReturn(stats)
     when(job.waitFor()).thenReturn(job)
     when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
@@ -1934,7 +1934,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
     val job = mock[Job]
-    when(job.getQueryResults(any())).thenReturn(createTableResult(table))
+    when(job.getQueryResults()).thenReturn(createTableResult(table))
     when(job.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
     when(job.waitFor()).thenReturn(job)
     when(bigQueryService.runJob(any(), any()))
@@ -2000,7 +2000,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
     val job2 = mock[Job]
-    when(job2.getQueryResults(any())).thenReturn(createTableResult(table2))
+    when(job2.getQueryResults()).thenReturn(createTableResult(table2))
     when(job2.getStatistics).thenReturn(mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS))
     when(job2.waitFor()).thenReturn(job2)
     when(bigQueryService.runJob(any(), any())).thenReturn(IO(job2))
