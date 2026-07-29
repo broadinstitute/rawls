@@ -29,8 +29,8 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.credentials.RawlsCredential
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
-import org.typelevel.log4cats.slf4j.Slf4jLogger
-import org.typelevel.log4cats.{Logger, StructuredLogger}
+import org.typelevel.log4cats.slf4j.{Slf4jFactory, Slf4jLogger}
+import org.typelevel.log4cats.{Logger, LoggerFactory, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -609,9 +609,10 @@ object Boot extends IOApp with LazyLogging {
     val oidcConfig = config.getConfig("oidc")
 
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
+    implicit val loggerFactory: LoggerFactory[F] = Slf4jFactory.create[F]
     for {
       googleStorage <- GoogleStorageServiceFactory.createGoogleStorageService(appConfigManager)
-      googleServiceHttp <- GoogleServiceHttpFactory.createGoogleServiceHttp(appConfigManager, executionContext)
+      googleServiceHttp <- GoogleServiceHttpFactory.createGoogleServiceHttp(appConfigManager)
       topicAdmin <- GoogleTopicAdminFactory.createGoogleTopicAdmin(appConfigManager)
       bqServiceFactory = GoogleBigQueryServiceFactory.createGoogleBigQueryServiceFactory(
         appConfigManager

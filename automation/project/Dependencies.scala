@@ -8,11 +8,11 @@ object Dependencies {
   val jacksonV      = "2.20.1"
   val jacksonAnnotationsV = "2.20"
 
-  val workbenchLibsHash = "80e4b8d"
-  val serviceTestV = s"5.0-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.33-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.36-${workbenchLibsHash}"
-  val workbenchModelV  = s"0.20-${workbenchLibsHash}"
+  val workbenchLibsHash = "fccb671"
+  val serviceTestV = s"6.2-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.36-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.43-${workbenchLibsHash}"
+  val workbenchModelV  = s"0.21-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.8-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
