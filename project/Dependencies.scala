@@ -79,7 +79,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "9.7.0" exclude("com.google.protobuf", "protobuf-java")
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.33.0"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
-  val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.11"
+  val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.12"
   val janino: ModuleID = "org.codehaus.janino" % "janino" % "3.1.12" // For if-else logic in logging config
 
   val workbenchLibsHash = "76e472e"
