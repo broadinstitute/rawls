@@ -158,7 +158,7 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     // override commons-codec to address a non-CVE warning from DefectDojo
-    "commons-codec"                 % "commons-codec"         % "1.20.0",
+    "commons-codec"                 % "commons-codec"         % "1.22.1",
     // override cats-parse to address conflicting dependency versions for scala-uri
     "org.typelevel" %% "cats-parse" % "1.1.0",
     // override tools.jackson.core pulled in by logstash-logback-encoder 9.0
