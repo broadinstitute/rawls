@@ -2,7 +2,7 @@ addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.4.1")
 
 addSbtPlugin("org.scoverage" % "sbt-scoverage" % "2.4.2")
 
-addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.6")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.2")
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
