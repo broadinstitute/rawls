@@ -9,36 +9,9 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class RequesterPaysSetupServiceImpl(dataSource: SlickDataSource,
                                     val googleServicesDAO: GoogleServicesDAO,
-                                    val bondApiDAO: BondApiDAO,
                                     val requesterPaysRole: String
 )(implicit executionContext: ExecutionContext)
     extends RequesterPaysSetupService {
-
-  def getBondProviderServiceAccountEmails(userInfo: UserInfo): Future[List[BondServiceAccountEmail]] =
-    for {
-      bondProviderList <- bondApiDAO.getBondProviders()
-      bondResponses <- Future.traverse(bondProviderList) { provider =>
-        bondApiDAO.getServiceAccountKey(provider, userInfo)
-      }
-    } yield bondResponses collect { case Some(BondResponseData(email)) =>
-      email
-    }
-
-  def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, workspace: Workspace): Future[List[BondServiceAccountEmail]] =
-    for {
-      emails <- getBondProviderServiceAccountEmails(userInfo)
-      _ <- googleServicesDAO.addPolicyBindings(workspace.googleProjectId,
-                                               Map(requesterPaysRole -> emails.toSet.map {
-                                                 mail: BondServiceAccountEmail => "serviceAccount:" + mail.client_email
-                                               })
-      )
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName,
-                                                                userInfo.userEmail,
-                                                                emails.toSet
-        )
-      }
-    } yield emails
 
   def revokeUserFromWorkspace(userEmail: RawlsUserEmail, workspace: Workspace): Future[Seq[BondServiceAccountEmail]] =
     for {

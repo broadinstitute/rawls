@@ -249,9 +249,8 @@ class WorkspaceServiceSpec
       "us-central1"
     )
 
-    val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
-      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, requesterPaysRole = "requesterPaysRole")
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactoryImpl = MockBigQueryServiceFactory.ioFactory()
 
@@ -978,26 +977,6 @@ class WorkspaceServiceSpec
 
   behavior of "deleteWorkspace"
 
-  it should "delete a workspace with linked bond service account" in withTestDataServices { services =>
-    // check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
-    // add a bond sa link
-    Await.result(
-      services.requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, testData.workspaceNoSubmissions),
-      Duration.Inf
-    )
-
-    // delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
-
-    // check that the workspace has been deleted
-    runAndWait(workspaceQuery.findByName(testData.wsName3)) shouldBe None
-
-  }
-
   it should "delete a workspace with no submissions" in withTestDataServices { services =>
     // check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
@@ -1519,124 +1498,6 @@ class WorkspaceServiceSpec
           services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set.empty
         }
     }
-
-  behavior of "RequesterPays"
-
-  it should "return Unit when adding linked service accounts to workspace" in withTestDataServices { services =>
-    withWorkspaceContext(testData.workspace) { _ =>
-      val rqComplete: Unit =
-        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
-                     Duration.Inf
-        )
-      assertResult(()) {
-        rqComplete
-      }
-    }
-  }
-
-  it should "return a 404 ErrorReport when adding linked service accounts to workspace which does not exist" in withTestDataServices {
-    services =>
-      withWorkspaceContext(testData.workspace) { _ =>
-        val error = intercept[RawlsExceptionWithErrorReport] {
-          Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(
-                         testData.workspace.toWorkspaceName.copy(name = "DNE")
-                       ),
-                       Duration.Inf
-          )
-        }
-        assertResult(Some(StatusCodes.NotFound)) {
-          error.errorReport.statusCode
-        }
-      }
-  }
-
-  it should "return a 404 ErrorReport when adding linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(
-    RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))
-  ) { services =>
-    populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { _ =>
-      val error = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
-                     Duration.Inf
-        )
-      }
-      assertResult(Some(StatusCodes.NotFound)) {
-        error.errorReport.statusCode
-      }
-    }
-  }
-
-  it should "return a 403 Error Report when adding add linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(
-    testData.userReader
-  ) { services =>
-    populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { _ =>
-      val error = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
-                     Duration.Inf
-        )
-      }
-      assertResult(Some(StatusCodes.Forbidden)) {
-        error.errorReport.statusCode
-      }
-    }
-  }
-
-  it should "return Unit when removing linked service accounts from workspace" in withTestDataServices { services =>
-    withWorkspaceContext(testData.workspace) { _ =>
-      val rqComplete: Unit =
-        Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
-                     Duration.Inf
-        )
-      assertResult(()) {
-        rqComplete
-      }
-    }
-  }
-
-  it should "return Unit when removing linked service accounts from workspace which does not exist" in withTestDataServices {
-    services =>
-      withWorkspaceContext(testData.workspace) { _ =>
-        val rqComplete: Unit = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(
-                                              testData.workspace.toWorkspaceName.copy(name = "DNE")
-                                            ),
-                                            Duration.Inf
-        )
-        assertResult(()) {
-          rqComplete
-        }
-      }
-  }
-
-  it should "return Unit when removing linked service accounts from workspace with no access" in withTestDataServicesCustomSamAndUser(
-    RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))
-  ) { services =>
-    populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { _ =>
-      val rqComplete: Unit =
-        Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
-                     Duration.Inf
-        )
-      assertResult(()) {
-        rqComplete
-      }
-    }
-  }
-
-  it should "return Unit when removing linked service accounts from workspace with read access" in withTestDataServicesCustomSamAndUser(
-    testData.userReader
-  ) { services =>
-    populateWorkspacePolicies(services)
-    withWorkspaceContext(testData.workspace) { _ =>
-      val rqComplete: Unit =
-        Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName),
-                     Duration.Inf
-        )
-      assertResult(()) {
-        rqComplete
-      }
-    }
-  }
 
   "createWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
