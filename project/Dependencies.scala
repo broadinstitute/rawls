@@ -162,7 +162,7 @@ object Dependencies {
     // override cats-parse to address conflicting dependency versions for scala-uri
     "org.typelevel" %% "cats-parse" % "1.1.0",
     // override tools.jackson.core pulled in by logstash-logback-encoder 9.0
-    "tools.jackson.core" % "jackson-core"     % "3.2.1",
+    "tools.jackson.core" % "jackson-core"     % "3.2.4",
     "tools.jackson.core" % "jackson-databind" % "3.2.1",
     // override bouncycastle to address CVE-2026-5598 (requires >= 1.84)
     "org.bouncycastle" % "bcprov-jdk18on" % "1.85",
