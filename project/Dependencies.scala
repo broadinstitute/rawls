@@ -82,13 +82,13 @@ object Dependencies {
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.11"
   val janino: ModuleID = "org.codehaus.janino" % "janino" % "3.1.12" // For if-else logic in logging config
 
-  val workbenchLibsHash = "21b215b"
+  val workbenchLibsHash = "b3c715c"
 
   val workbenchModelV  = s"0.21-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.36-${workbenchLibsHash}"
   val workbenchNotificationsV = s"2.1-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.43-${workbenchLibsHash}"
-  val workbenchOauth2V = s"0.11-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.44-${workbenchLibsHash}"
+  val workbenchOauth2V = s"0.12-${workbenchLibsHash}"
   val workbenchOpenTelemetryV = s"0.10-$workbenchLibsHash"
 
   def excludeWorkbenchGoogle = ExclusionRule("org.broadinstitute.dsde.workbench", "workbench-google_2.13")
