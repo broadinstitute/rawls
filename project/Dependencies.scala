@@ -70,7 +70,7 @@ object Dependencies {
   val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "9.0"
   val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
-  val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
+  val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-5"          % "3.2.12.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.15.0" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.21.0"
