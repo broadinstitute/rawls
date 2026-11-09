@@ -4,7 +4,14 @@
          you may want to comment out this line during your development efforts. -->
     <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
 
-    <if condition='!isDefined("RAWLS_LOG_APPENDER")'>
+    <!-- Default RAWLS_LOG_APPENDER to the JSON "console" appender when it is not set as a
+         system property or environment variable. Uses logback's native property conditions
+         (no Janino). The <condition> element must come immediately BEFORE its <if>, not inside
+         it: logback evaluates it first and the following <if> consumes the result. -->
+    <condition class="ch.qos.logback.core.boolex.IsPropertyNullCondition">
+        <key>RAWLS_LOG_APPENDER</key>
+    </condition>
+    <if>
         <then>
             <variable name="RAWLS_LOG_APPENDER" value="console" />
         </then>

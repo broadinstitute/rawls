@@ -62,11 +62,11 @@ object Dependencies {
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.6"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.14.0"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.5"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.27.1"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "8.63.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.52"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.13.0"
   val fs2Reactive: ModuleID =     "co.fs2"                        %% "fs2-reactive-streams" % "3.6.1" // 3.7.0 has possibly-breaking changes
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.5.21"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.6.6"
   val logstashLogback: ModuleID = "net.logstash.logback"          % "logstash-logback-encoder" % "9.0"
   val scalaUri: ModuleID =        "com.indoorvivants"                  %% "scala-uri"            % "4.2.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.19" % "test"
@@ -80,7 +80,6 @@ object Dependencies {
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.33.0"
   val jakartaWsRs: ModuleID =     "jakarta.ws.rs"                 % "jakarta.ws.rs-api"     % "4.0.0"
   val jerseyJnhConnector: ModuleID = "org.glassfish.jersey.connectors" % "jersey-jnh-connector" % "3.1.11"
-  val janino: ModuleID = "org.codehaus.janino" % "janino" % "3.1.12" // For if-else logic in logging config
 
   val workbenchLibsHash = "b3c715c"
 
@@ -285,8 +284,7 @@ object Dependencies {
     openApiParser,
     jerseyJnhConnector,
     policyService,
-    logstashLogback,
-    janino
+    logstashLogback
   )
 
   val pact4sV = "0.10.0"
