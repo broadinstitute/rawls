@@ -19,64 +19,14 @@ class RequesterPaysSetupServiceSpec
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Seconds)))
 
   private def setupServices(dataSource: SlickDataSource) = {
-    val mockBondApiDAO = mock[BondApiDAO](RETURNS_SMART_NULLS)
     val gcsDAO = new MockGoogleServicesDAO("foo")
-    new RequesterPaysSetupServiceImpl(dataSource, gcsDAO, mockBondApiDAO, "rp/role")
+    new RequesterPaysSetupServiceImpl(dataSource, gcsDAO, "rp/role")
   }
 
   private def withMinimalTestDatabaseAndServices[T](testCode: RequesterPaysSetupServiceImpl => T): T =
     withMinimalTestDatabase { dataSource =>
       testCode(setupServices(dataSource))
     }
-
-  "getBondProviderServiceAccountEmails" should "get emails" in withMinimalTestDatabaseAndServices { service =>
-    val expectedEmail = BondServiceAccountEmail("bondSA")
-
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo))
-      .thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
-
-    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List(expectedEmail)
-  }
-
-  it should "get empty list when no providers" in withMinimalTestDatabaseAndServices { service =>
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List.empty))
-
-    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
-  }
-
-  it should "get empty list when no linked accounts" in withMinimalTestDatabaseAndServices { service =>
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(None))
-
-    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
-  }
-
-  "grantRequesterPaysToLinkedSAs" should "link" in withMinimalTestDatabaseAndServices { service =>
-    val expectedEmail = BondServiceAccountEmail("bondSA")
-
-    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo))
-      .thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
-
-    service.googleServicesDAO
-      .asInstanceOf[MockGoogleServicesDAO]
-      .policies
-      .get(minimalTestData.workspace.googleProjectId) shouldBe None
-    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
-    service.googleServicesDAO
-      .asInstanceOf[MockGoogleServicesDAO]
-      .policies
-      .get(minimalTestData.workspace.googleProjectId) shouldBe Some(
-      Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email))
-    )
-
-    // second call should not fail
-    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
-  }
 
   "revokeUserFromWorkspace" should "unlink" in withMinimalTestDatabaseAndServices { service =>
     val expectedEmail = BondServiceAccountEmail("bondSA")

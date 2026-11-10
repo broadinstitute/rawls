@@ -624,36 +624,4 @@ class WorkspaceApiServiceSpec
 
     verify(workspaceService).sendChangeNotifications(workspaceName)
   }
-
-  it should "call enableRequesterPaysForLinkedSAs for the workspace" in {
-    val workspaceService = mock[WorkspaceService]
-    val workspaceName = testData.workspace.toWorkspaceName
-    when(workspaceService.enableRequesterPaysForLinkedSAs(workspaceName)).thenReturn(Future.successful())
-    val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService
-    )
-    Put(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/enableRequesterPaysForLinkedServiceAccounts") ~>
-      service.testRoutes ~>
-      check {
-        status shouldBe StatusCodes.NoContent
-      }
-
-    verify(workspaceService).enableRequesterPaysForLinkedSAs(workspaceName)
-  }
-
-  it should "call disableRequesterPaysForLinkedSAs on the workspace" in {
-    val workspaceService = mock[WorkspaceService]
-    val workspaceName = testData.workspace.toWorkspaceName
-    when(workspaceService.disableRequesterPaysForLinkedSAs(workspaceName)).thenReturn(Future.successful())
-    val service = new MockApiService(
-      workspaceServiceConstructor = _ => workspaceService
-    )
-    Put(s"/workspaces/${workspaceName.namespace}/${workspaceName.name}/disableRequesterPaysForLinkedServiceAccounts") ~>
-      service.testRoutes ~>
-      check {
-        status shouldBe StatusCodes.NoContent
-      }
-
-    verify(workspaceService).disableRequesterPaysForLinkedSAs(workspaceName)
-  }
 }

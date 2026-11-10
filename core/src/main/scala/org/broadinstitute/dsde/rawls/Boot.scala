@@ -309,13 +309,10 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(appConfigManager)
 
-      val bondApiDAO: BondApiDAO = BondApiDAOFactory.createBondApiDAO(appConfigManager)
-
       val requesterPaysSetupService: RequesterPaysSetupService =
         RequesterPaysSetupServiceFactory.createRequesterPaysSetup(appConfigManager,
                                                                   slickDataSource,
                                                                   gcsDAO,
-                                                                  bondApiDAO,
                                                                   requesterPaysRole
         )
 

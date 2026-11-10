@@ -513,9 +513,8 @@ class SubmissionSpec(_system: ActorSystem)
         "us-central1"
       )
 
-      val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
       val requesterPaysSetupService =
-        new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+        new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, requesterPaysRole = "requesterPaysRole")
 
       val leonardoService = mock[LeonardoService](RETURNS_SMART_NULLS)
       val entityManager = EntityManager.defaultEntityManager(
