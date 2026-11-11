@@ -159,6 +159,8 @@ object SpendReportingService {
         row.get("compute_credits").getDoubleValue.toFloat,
         row.get("other_cost").getDoubleValue.toFloat,
         row.get("other_credits").getDoubleValue.toFloat,
+        Some(row.get("egress_cost").getDoubleValue.toFloat),
+        Some(row.get("egress_credits").getDoubleValue.toFloat),
         names
       )
       val total_cost = BigDecimal(spendReportingForDateRange.cost)
@@ -309,6 +311,7 @@ class SpendReportingService(
                        |    currency,
                        |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
                        |    CASE
+                       |      WHEN ${TerraSpendCategories.egressSkuCondition} THEN 'Egress'
                        |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
                        |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
                        |      ELSE 'Other'
@@ -340,10 +343,12 @@ class SpendReportingService(
        |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
        |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
        |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
+       |  SUM(CASE WHEN spend_category = 'Egress' THEN category_cost ELSE 0 END) AS egress_cost,
        |  currency,
        |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
        |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
        |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
+       |  SUM(CASE WHEN spend_category = 'Egress' THEN credits ELSE 0 END) AS egress_credits,
        |FROM
        |  spend_categories
        |GROUP BY
