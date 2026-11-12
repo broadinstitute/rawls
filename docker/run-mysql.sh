@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 MYSQL_IMAGE=mysql
-MYSQL_VERSION=8.0.36
+MYSQL_VERSION=8.4.11
 start() {
 
 
