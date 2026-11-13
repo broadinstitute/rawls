@@ -85,7 +85,10 @@ object SpendReportingAggregationKeys {
     override val bigQueryAlias: String = "googleProjectId"
   }
   case object Category extends SpendReportingAggregationKey {
-    override val bigQueryField: String = "service.description"
+    // Egress is identified by SKU rather than by service, so egress line items are reported as the
+    // synthetic service "Egress" (see TerraSpendCategories.categorize); everything else keeps its service name.
+    override val bigQueryField: String =
+      s"CASE WHEN ${TerraSpendCategories.egressSkuCondition} THEN '${TerraSpendCategories.Egress}' ELSE service.description END"
     override val bigQueryAlias: String = "service"
   }
 }
@@ -101,11 +104,25 @@ object TerraSpendCategories {
     case "storage"                 => Storage
     case "compute"                 => Compute
     case "other"                   => Other
+    case "egress"                  => Egress
     case "workspaceinfrastructure" => WorkspaceInfrastructure
     case _                         => throw new RawlsException(s"invalid TerraSpendCategory [${name}]")
   }
 
+  /**
+    * SKU description patterns (lower-case, SQL LIKE syntax) that identify network egress line items in the
+    * GCP billing export, e.g. "Network Internet Egress from Americas to Americas",
+    * "Download Worldwide Destinations (excluding Asia & Australia)" (Cloud Storage egress) and
+    * "Network Inter Region Data Transfer Out from Americas to EMEA".
+    */
+  val egressSkuPatterns: Seq[String] = Seq("%egress%", "download %", "%data transfer out%")
+
+  /** BigQuery boolean expression that is true when a billing export row is an egress charge. */
+  val egressSkuCondition: String =
+    egressSkuPatterns.map(pattern => s"LOWER(sku.description) LIKE '$pattern'").mkString("(", " OR ", ")")
+
   def categorize(service: String): TerraSpendCategory = service.toLowerCase.replace(" ", "") match {
+    case "egress"           => Egress
     case "cloudstorage"     => Storage
     case "computeengine"    => Compute
     case "kubernetesengine" => Compute
@@ -116,6 +133,7 @@ object TerraSpendCategories {
   case object Storage extends TerraSpendCategory
   case object Compute extends TerraSpendCategory
   case object Other extends TerraSpendCategory
+  case object Egress extends TerraSpendCategory
 }
 
 class SpendReportingJsonSupport extends JsonSupport {

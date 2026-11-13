@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.30.xsd">
+    <changeSet logicalFilePath="dummy" author="ekoon" id="add_egress_to_WORKSPACE_SPEND_REPORT">
+        <addColumn tableName="WORKSPACE_SPEND_REPORT">
+            <column name="TOTAL_EGRESS" type="NUMBER(10,2)">
+                <constraints nullable="true" />
+            </column>
+            <column name="EGRESS_CREDITS" type="NUMBER(10,2)">
+                <constraints nullable="true" />
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

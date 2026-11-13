@@ -22,6 +22,21 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     TerraSpendCategories.withName("Other") shouldBe TerraSpendCategories.Other
     TerraSpendCategories.withName("workspaceinfrastructure") shouldBe TerraSpendCategories.WorkspaceInfrastructure
     TerraSpendCategories.withName("WorkspaceInfrastructure") shouldBe TerraSpendCategories.WorkspaceInfrastructure
+    TerraSpendCategories.withName("egress") shouldBe TerraSpendCategories.Egress
+    TerraSpendCategories.withName("Egress") shouldBe TerraSpendCategories.Egress
+  }
+
+  it should "categorize the synthetic Egress service as Egress" in {
+    TerraSpendCategories.categorize("Egress") shouldBe TerraSpendCategories.Egress
+    TerraSpendCategories.categorize("Cloud Storage") shouldBe TerraSpendCategories.Storage
+    TerraSpendCategories.categorize("Compute Engine") shouldBe TerraSpendCategories.Compute
+    TerraSpendCategories.categorize("Cloud DNS") shouldBe TerraSpendCategories.Other
+  }
+
+  it should "build a BigQuery condition matching egress SKU descriptions" in {
+    TerraSpendCategories.egressSkuCondition shouldBe
+      "(LOWER(sku.description) LIKE '%egress%' OR LOWER(sku.description) LIKE 'download %' OR " +
+      "LOWER(sku.description) LIKE '%data transfer out%')"
   }
 
   it should "throw exception in case of invalid string representation of a category" in {

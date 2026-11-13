@@ -26,7 +26,9 @@ case class WorkspaceSpendReportRecord(
   otherSpend: Option[Float],
   computeCredits: Option[Float],
   storageCredits: Option[Float],
-  otherCredits: Option[Float]
+  otherCredits: Option[Float],
+  totalEgress: Option[Float],
+  egressCredits: Option[Float]
 )
 
 object WorkspaceSpendReportRecord {
@@ -44,7 +46,9 @@ object WorkspaceSpendReportRecord {
       workspaceSpendReport.otherSpend,
       workspaceSpendReport.computeCredits,
       workspaceSpendReport.storageCredits,
-      workspaceSpendReport.otherCredits
+      workspaceSpendReport.otherCredits,
+      workspaceSpendReport.totalEgress,
+      workspaceSpendReport.egressCredits
     )
 
   def toWorkspaceSpendReport(record: WorkspaceSpendReportRecord): WorkspaceSpendReport =
@@ -60,7 +64,9 @@ object WorkspaceSpendReportRecord {
       record.otherSpend,
       record.computeCredits,
       record.storageCredits,
-      record.otherCredits
+      record.otherCredits,
+      record.totalEgress,
+      record.egressCredits
     )
 
   def fromSpendReportingResults(spendReportingResults: SpendReportingResults): Seq[WorkspaceSpendReport] = {
@@ -87,6 +93,7 @@ object WorkspaceSpendReportRecord {
         val (totalStorage, storageCredits) = getCategoryCost(TerraSpendCategories.Storage)
         val (totalCompute, computeCredits) = getCategoryCost(TerraSpendCategories.Compute)
         val (otherSpend, otherCredits) = getCategoryCost(TerraSpendCategories.Other)
+        val (totalEgress, egressCredits) = getCategoryCost(TerraSpendCategories.Egress)
 
         WorkspaceSpendReport.newWorkspaceSpendReport(
           spendData.googleProjectId.get.value,
@@ -99,7 +106,9 @@ object WorkspaceSpendReportRecord {
           otherSpend,
           computeCredits,
           storageCredits,
-          otherCredits
+          otherCredits,
+          totalEgress,
+          egressCredits
         )
       }
     }
@@ -115,6 +124,8 @@ object WorkspaceSpendReportRecord {
                                computeCredits: Float,
                                otherSpend: Float,
                                otherCredits: Float,
+                               totalEgress: Option[Float],
+                               egressCredits: Option[Float],
                                projectNames: Map[GoogleProjectId, WorkspaceName]
   ): SpendReportingForDateRange = {
     val currencyCode = Currency.getInstance(currency)
@@ -145,10 +156,19 @@ object WorkspaceSpendReportRecord {
         currencyCode.toString,
         category = Option(TerraSpendCategories.Compute)
       )
-    )
-    val cost: Option[Float] = Option(Seq(totalCompute, totalStorage, otherSpend).sum)
+    ) ++ totalEgress.map { egress =>
+      // Egress is omitted for cached reports that predate egress tracking, so clients can tell
+      // "no egress data" apart from "zero egress".
+      SpendReportingForDateRange(
+        SpendReportUtils.toBigDecimal(egress, currencyCode).toString,
+        SpendReportUtils.toBigDecimal(egressCredits.getOrElse(0.00f), currencyCode).toString,
+        currencyCode.toString,
+        category = Option(TerraSpendCategories.Egress)
+      )
+    }
+    val cost: Option[Float] = Option(Seq(totalCompute, totalStorage, otherSpend, totalEgress.getOrElse(0.00f)).sum)
     val credits: Option[Float] =
-      Option(Seq(computeCredits, storageCredits, otherCredits).sum)
+      Option(Seq(computeCredits, storageCredits, otherCredits, egressCredits.getOrElse(0.00f)).sum)
     val workspace_spend: BigDecimal = SpendReportUtils.toBigDecimal(cost.getOrElse(0.00f), currencyCode)
     val workspace_credits: BigDecimal = SpendReportUtils.toBigDecimal(credits.getOrElse(0.00f), currencyCode)
     SpendReportingForDateRange(
@@ -185,6 +205,8 @@ object WorkspaceSpendReportRecord {
         record.computeCredits.getOrElse(0.00f),
         record.otherSpend.getOrElse(0.00f),
         record.otherCredits.getOrElse(0.00f),
+        record.totalEgress,
+        record.egressCredits,
         projectNames
       )
 
@@ -235,6 +257,10 @@ trait WorkspaceSpendReportComponent {
 
     def otherCredits = column[Option[Float]]("OTHER_CREDITS", O.SqlType("NUMBER(10,2)"))
 
+    def totalEgress = column[Option[Float]]("TOTAL_EGRESS", O.SqlType("NUMBER(10,2)"))
+
+    def egressCredits = column[Option[Float]]("EGRESS_CREDITS", O.SqlType("NUMBER(10,2)"))
+
     def * = (id,
              googleProjectId,
              reportStartDate,
@@ -246,7 +272,9 @@ trait WorkspaceSpendReportComponent {
              otherSpend,
              computeCredits,
              storageCredits,
-             otherCredits
+             otherCredits,
+             totalEgress,
+             egressCredits
     ) <> ((WorkspaceSpendReportRecord.apply _).tupled, WorkspaceSpendReportRecord.unapply)
 
   }

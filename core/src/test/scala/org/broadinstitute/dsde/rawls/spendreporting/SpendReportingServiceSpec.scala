@@ -167,13 +167,23 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       val otherRowCost = 204.1025
       val computeRowCost = 50.20
       val storageRowCost = 2.5
+      val egressRowCost = 7.256
+      val egressRowCostRounded: String = BigDecimal(egressRowCost).setScale(2, RoundingMode.HALF_EVEN).toString
       val otherRowCostRounded: String = BigDecimal(otherRowCost).setScale(2, RoundingMode.HALF_EVEN).toString
       val computeRowCostRounded: String = BigDecimal(computeRowCost).setScale(2, RoundingMode.HALF_EVEN).toString
       val storageRowCostRounded: String = BigDecimal(storageRowCost).setScale(2, RoundingMode.HALF_EVEN).toString
       val totalCostRounded: String =
-        BigDecimal(otherRowCost + computeRowCost + storageRowCost).setScale(2, RoundingMode.HALF_EVEN).toString
+        BigDecimal(otherRowCost + computeRowCost + storageRowCost + egressRowCost)
+          .setScale(2, RoundingMode.HALF_EVEN)
+          .toString
 
       val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$egressRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Egress"
+        ),
         Map(
           "cost" -> s"$otherRowCost",
           "credits" -> "0.0",
@@ -366,8 +376,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       categoryAggregation,
       expectedCompute = TestData.Category.computeRowCostRounded,
       expectedStorage = TestData.Category.storageRowCostRounded,
-      expectedOther = TestData.Category.otherRowCostRounded
+      expectedOther = TestData.Category.otherRowCostRounded,
+      expectedEgress = Some(TestData.Category.egressRowCostRounded)
     )
+    categoryAggregation.spendData.flatMap(_.category) should contain(TerraSpendCategories.Egress)
   }
 
   it should "should return only summary data if aggregation keys are omitted" in {
@@ -432,7 +444,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     aggregation: SpendReportingAggregation,
     expectedCompute: String,
     expectedStorage: String,
-    expectedOther: String
+    expectedOther: String,
+    expectedEgress: Option[String] = None
   ): Unit =
     aggregation.spendData.foreach { spendDataForCategory =>
       val category = spendDataForCategory.category.getOrElse(fail("results not parsed correctly"))
@@ -444,6 +457,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           spendDataForCategory.cost shouldBe expectedStorage
         } else if (category.equals(TerraSpendCategories.Other)) {
           spendDataForCategory.cost shouldBe expectedOther
+        } else if (category.equals(TerraSpendCategories.Egress) && expectedEgress.isDefined) {
+          spendDataForCategory.cost shouldBe expectedEgress.get
         } else {
           fail(s"unexpected category found in spend results - $spendDataForCategory")
         }
@@ -544,7 +559,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "project_name" -> "terra-billing-project1",
         "storage_credits" -> s"$credits1",
         "compute_credits" -> "0.0",
-        "other_credits" -> "0.0"
+        "other_credits" -> "0.0",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       ),
       Map(
         "storage_cost" -> s"$storageCostWs2",
@@ -556,7 +573,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "currency" -> "USD",
         "compute_credits" -> s"$credits2",
         "storage_credits" -> "0.0",
-        "other_credits" -> "0.0"
+        "other_credits" -> "0.0",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       ),
       Map(
         "storage_cost" -> "0.0",
@@ -567,6 +586,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "total_cost" -> s"$totalCostWs3",
         "currency" -> "USD",
         "other_credits" -> s"$credits3",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0",
         "compute_credits" -> "0.0",
         "storage_credits" -> "0.0"
       )
@@ -637,9 +658,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   def verifyCategoricalSpendData(actualSpendData: Seq[SpendReportingForDateRange],
                                  expectedCompute: BigDecimal,
                                  expectedStorage: BigDecimal,
-                                 expectedOther: BigDecimal
+                                 expectedOther: BigDecimal,
+                                 expectedEgress: BigDecimal = BigDecimal("0.00")
   ): Unit = {
-    actualSpendData.length shouldBe 3
+    // Egress is present for fresh BigQuery results and absent for cached reports that predate egress tracking
+    actualSpendData.count(_.category.exists(_ != TerraSpendCategories.Egress)) shouldBe 3
     actualSpendData.foreach { spendData =>
       spendData.category match {
         case Some(TerraSpendCategories.Other) =>
@@ -648,6 +671,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           spendData.cost shouldBe expectedCompute.toString
         case Some(TerraSpendCategories.Storage) =>
           spendData.cost shouldBe expectedStorage.toString
+        case Some(TerraSpendCategories.Egress) =>
+          spendData.cost shouldBe expectedEgress.toString
         case _ => fail("Unexpected category")
       }
     }
@@ -1498,6 +1523,73 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     result shouldBe expectedQuery
   }
 
+  it should "classify egress SKUs as the Egress category when aggregating by Category" in {
+    val service = new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[SamDAO],
+      spendReportingServiceConfig,
+      mockWorkspaceServiceConstructor,
+      mockWorkspaceSpendReportRepository
+    )
+    val result = service.getQuery(
+      Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(Category))),
+      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), Some("NonBroadTable"))
+    )
+    result should include(
+      ", CASE WHEN (LOWER(sku.description) LIKE '%egress%' OR LOWER(sku.description) LIKE 'download %' OR " +
+        "LOWER(sku.description) LIKE '%data transfer out%') THEN 'Egress' ELSE service.description END as service"
+    )
+    result should include("GROUP BY currency , googleProjectId, service")
+  }
+
+  "WorkspaceSpendReportRecord.toSpendReportAggregation" should "include egress in the category breakdown and totals" in {
+    val result = WorkspaceSpendReportRecord.toSpendReportAggregation(
+      "USD",
+      "egressProject",
+      None,
+      None,
+      totalStorage = 1.00f,
+      storageCredits = 0.00f,
+      totalCompute = 2.00f,
+      computeCredits = 0.00f,
+      otherSpend = 3.00f,
+      otherCredits = 0.00f,
+      totalEgress = Some(4.00f),
+      egressCredits = Some(-0.50f),
+      Map(GoogleProjectId("egressProject") -> WorkspaceName("ns", "ws"))
+    )
+
+    result.cost shouldBe "10.00"
+    result.credits shouldBe "-0.50"
+    val egress = result.subAggregation.get.spendData.find(_.category.contains(TerraSpendCategories.Egress)).get
+    egress.cost shouldBe "4.00"
+    egress.credits shouldBe "-0.50"
+  }
+
+  it should "omit the egress category for cached reports without egress data" in {
+    val result = WorkspaceSpendReportRecord.toSpendReportAggregation(
+      "USD",
+      "egressProject",
+      None,
+      None,
+      totalStorage = 1.00f,
+      storageCredits = 0.00f,
+      totalCompute = 2.00f,
+      computeCredits = 0.00f,
+      otherSpend = 3.00f,
+      otherCredits = 0.00f,
+      totalEgress = None,
+      egressCredits = None,
+      Map(GoogleProjectId("egressProject") -> WorkspaceName("ns", "ws"))
+    )
+
+    result.cost shouldBe "6.00"
+    result.subAggregation.get.spendData.flatMap(_.category) should not contain TerraSpendCategories.Egress
+  }
+
   "getAllUserWorkspaceQuery" should "generate a query for a billingProject with its workspace projects" in {
 
     val billingProjectSpendExport =
@@ -1529,6 +1621,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |    currency,
           |    SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
           |    CASE
+          |      WHEN (LOWER(sku.description) LIKE '%egress%' OR LOWER(sku.description) LIKE 'download %' OR LOWER(sku.description) LIKE '%data transfer out%') THEN 'Egress'
           |      WHEN service.description IN ('Cloud Storage') THEN 'Storage'
           |      WHEN service.description IN ('Compute Engine', 'Google Kubernetes Engine') THEN 'Compute'
           |      ELSE 'Other'
@@ -1551,10 +1644,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           |  SUM(CASE WHEN spend_category = 'Storage' THEN category_cost ELSE 0 END) AS storage_cost,
           |  SUM(CASE WHEN spend_category = 'Compute' THEN category_cost ELSE 0 END) AS compute_cost,
           |  SUM(CASE WHEN spend_category = 'Other' THEN category_cost ELSE 0 END) AS other_cost,
+          |  SUM(CASE WHEN spend_category = 'Egress' THEN category_cost ELSE 0 END) AS egress_cost,
           |  currency,
           |  SUM(CASE WHEN spend_category = 'Storage' THEN credits ELSE 0 END) AS storage_credits,
           |  SUM(CASE WHEN spend_category = 'Compute' THEN credits ELSE 0 END) AS compute_credits,
           |  SUM(CASE WHEN spend_category = 'Other' THEN credits ELSE 0 END) AS other_credits,
+          |  SUM(CASE WHEN spend_category = 'Egress' THEN credits ELSE 0 END) AS egress_credits,
           |FROM
           |  spend_categories
           |GROUP BY
@@ -1765,7 +1860,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "project_name" -> "terra-billing-project1",
         "storage_credits" -> s"$zero",
         "compute_credits" -> s"$zero",
-        "other_credits" -> s"$zero"
+        "other_credits" -> s"$zero",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       )
     )
     val table2: List[Map[String, String]] = List(
@@ -1779,7 +1876,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "currency" -> "USD",
         "storage_credits" -> s"$zero",
         "compute_credits" -> s"$zero",
-        "other_credits" -> s"$zero"
+        "other_credits" -> s"$zero",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       )
     )
 
@@ -1827,7 +1926,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "project_name" -> "terra-billing-project1",
         "storage_credits" -> s"$zero",
         "compute_credits" -> s"$zero",
-        "other_credits" -> s"$zero"
+        "other_credits" -> s"$zero",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       )
     )
     val table2: List[Map[String, String]] = List(
@@ -1841,7 +1942,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "currency" -> "USD",
         "storage_credits" -> s"$zero",
         "compute_credits" -> s"$zero",
-        "other_credits" -> s"$zero"
+        "other_credits" -> s"$zero",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       )
     )
     mockBigQueryJobs(bigQueryService, table1, table2)
@@ -1928,7 +2031,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "project_name" -> "terra-billing-project1",
         "storage_credits" -> s"$zero",
         "compute_credits" -> s"$zero",
-        "other_credits" -> s"$zero"
+        "other_credits" -> s"$zero",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       )
     )
 
@@ -1994,7 +2099,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         "currency" -> "USD",
         "storage_credits" -> s"$zero",
         "compute_credits" -> s"$zero",
-        "other_credits" -> s"$zero"
+        "other_credits" -> s"$zero",
+        "egress_cost" -> "0.0",
+        "egress_credits" -> "0.0"
       )
     )
 
@@ -2054,7 +2161,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       Option.empty,
       Option.empty,
       Option.empty,
-      Option.empty
+      Option.empty,
+      totalEgress = Option(0.0f),
+      egressCredits = Option(0.0f)
     )
     val spendReportingResults = WorkspaceSpendReportRecord.toSpendReportingResults(
       Seq(spendReport2),

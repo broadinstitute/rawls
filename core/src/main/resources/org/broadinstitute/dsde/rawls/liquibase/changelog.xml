@@ -156,5 +156,6 @@
     <include file="changesets/20251205_quicksilver_corrections.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20260109_quicksilver_corrections_history.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20260112_quicksilver_corrections_consent.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20261111_add_egress_to_workspace_spend_report.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

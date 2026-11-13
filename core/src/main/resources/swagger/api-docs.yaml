@@ -6147,8 +6147,9 @@ components:
           enum:
             - Storage
             - Compute
+            - Egress
             - Other
-          description: if present, Terra spend category that cost falls into
+          description: if present, Terra spend category that cost falls into. Egress is network egress, identified by SKU in the GCP billing export, and is not included in Storage or Compute.
         subAggregation:
           $ref: '#/components/schemas/SpendReportingAggregation'
     SpendReportConfiguration:
