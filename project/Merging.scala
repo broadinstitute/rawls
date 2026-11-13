@@ -20,6 +20,10 @@ object Merging {
     // [error]   Jar name = auto-value-1.10.4.jar, jar org = com.google.auto.value, entry target = META-INF/proguard/collect.pro
     // [error]   Jar name = guava-33.4.8-jre.jar, jar org = com.google.guava, entry target = META-INF/proguard/collect.pro
     case "META-INF/proguard/collect.pro" => MergeStrategy.first
+    // Same for base.pro since guava 33.7 (ProGuard rules only; not read at runtime):
+    // [error]   Jar name = auto-value-1.10.4.jar, jar org = com.google.auto.value, entry target = META-INF/proguard/base.pro
+    // [error]   Jar name = guava-33.7.2-jre.jar, jar org = com.google.guava, entry target = META-INF/proguard/base.pro
+    case "META-INF/proguard/base.pro" => MergeStrategy.first
     // For source bouncycastle files
     case x if x.contains("bouncycastle") => MergeStrategy.first
     // For the following error:

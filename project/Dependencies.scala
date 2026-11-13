@@ -173,7 +173,13 @@ object Dependencies {
   // in by ≥1 direct dependency, such as TCL or workbench-google. (CTM-548)
   val excludedTransitiveDependencies = Seq(
     ExclusionRule(organization = "com.azure"),
-    ExclusionRule(organization = "software.amazon.awssdk")
+    ExclusionRule(organization = "software.amazon.awssdk"),
+    // Keep OkHttp to one major version. Since 5.x the classes are in okhttp-jvm (pulled in through
+    // logging-interceptor by the Kubernetes client) and okhttp is an empty Gradle-metadata shell.
+    // Without this, 4.x okhttp from the Terra/Cromwell clients and OpenTelemetry stays on the
+    // classpath next to okhttp-jvm whenever nothing requests okhttp 5.x, and assembly fails on
+    // duplicate okhttp3/ classes.
+    ExclusionRule("com.squareup.okhttp3", "okhttp")
   )
 
   val extraOpenTelemetryDependencies = Seq(
