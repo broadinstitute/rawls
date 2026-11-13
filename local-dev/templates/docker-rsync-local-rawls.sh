@@ -108,7 +108,7 @@ start_server () {
 
     if [[ "$LOCAL_MYSQL" == 'true' ]]; then
         echo "Creating mysql..."
-	    docker run --network=fc-rawls --name rawls_mysql -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=rawls -v local-rawls-mysqlstore:/var/lib/mysql -d mysql/mysql-server:5.7 --character-set-server=utf8
+	    docker run --network=fc-rawls --name rawls_mysql -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=rawls -v local-rawls-mysqlstore:/var/lib/mysql -d mysql/mysql-server:8.4.11 --character-set-server=utf8
 
         sleep 5
     fi
