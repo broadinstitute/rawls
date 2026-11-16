@@ -2,7 +2,7 @@
 
 This document describes the architecture for submission requests with focus on evaluating expressions in Rawls, 
 specifically as implemented in the [`CompactExpressionEvaluator`](core/src/main/scala/org/broadinstitute/dsde/rawls/expressions/CompactExpressionEvaluator.scala), which is used by the `CompactEntityProvider`.  
-Legacy expression parsing done through the `LocalEntityProvider` is not discussed.
+Workspace expressions (`workspace.*`), which are evaluated separately by the `SlickExpressionEvaluator`, are not discussed.
 
 
 ## Submission Request Pipeline

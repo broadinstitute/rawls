@@ -32,7 +32,6 @@ import org.scalatest.Suite
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.sql.SQLTransactionRollbackException
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -102,33 +101,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R =
     Await.result(
       DbResource.dataSource.inTransactionWithAttrTempTable(
-        Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace)
+        Set(AttributeTempTableType.Workspace)
       )(_ => action.asInstanceOf[ReadWriteAction[R]]),
       duration
     )
-
-  protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(
-    actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]
-  ): R = {
-    val futures = (1 to count) map { i => retryConcurrentModificationException(actionGenerator(i)) }
-    Await.result(Future.sequence(futures), duration).head
-  }
-
-  private def retryConcurrentModificationException[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect]): Future[R] = {
-
-    import scala.language.existentials
-
-    val chain = (DbResource.dataSource.createEntityAttributeTempTable andThen action.map { x =>
-      Thread.sleep((Math.random() * 500).toLong); x
-    } andFinally DbResource.dataSource.dropEntityAttributeTempTable).withPinnedSession
-
-    DbResource.dataSource.database.run(chain).recoverWith {
-      case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)
-      case rollbackException: SQLTransactionRollbackException
-          if rollbackException.getMessage.contains("try restarting transaction") =>
-        retryConcurrentModificationException(action)
-    }
-  }
 
   import driver.api._
 
@@ -416,7 +392,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   // noinspection TypeAnnotation,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
-  class DefaultTestData(useCompact: Boolean = true) extends TestData {
+  class DefaultTestData extends TestData {
     // setup workspace objects
     val userProjectOwner = RawlsUser(
       UserInfo(RawlsUserEmail("project-owner-access"),
@@ -1685,58 +1661,31 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         saveAllWorkspacesAction,
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(
-                workspaceId = context.workspaceIdAsUUID,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                ),
-                true
-              )
-            } else {
-              entityQuery.save(
-                context,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                )
-              )
-            },
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
+              Seq(aliquot1,
+                  aliquot2,
+                  sample1,
+                  sample2,
+                  sample3,
+                  sample4,
+                  sample5,
+                  sample6,
+                  sample7,
+                  sample8,
+                  pair1,
+                  pair2,
+                  ps1,
+                  sset1,
+                  sset2,
+                  sset3,
+                  sset4,
+                  sset_empty,
+                  indiv1,
+                  indiv2
+              ),
+              true
+            ),
             methodConfigurationQuery.create(context, agoraMethodConfig),
             methodConfigurationQuery.create(context, agoraMethodConfigMaxWorkspaceAttributes),
             methodConfigurationQuery.create(context, agoraMethodConfigMaxEntityAttributes),
@@ -1781,26 +1730,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceWithRealm) { context =>
           DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
-                                                                 Seq(extraSample),
-                                                                 true
-              )
-            } else {
-              entityQuery.save(context, extraSample)
-            }
+            compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                               Seq(extraSample),
+                                                               true
+            )
           )
         },
         withWorkspaceContext(workspaceWithMultiGroupAD) { context =>
           DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
-                                                                 Seq(extraSample),
-                                                                 true
-              )
-            } else {
-              entityQuery.save(context, extraSample)
-            }
+            compactEntityRepository.queries.batchWriteEntities(workspaceId = context.workspaceIdAsUUID,
+                                                               Seq(extraSample),
+                                                               true
+            )
           )
         },
         withWorkspaceContext(workspaceNoSubmissions) { context =>
@@ -1810,366 +1751,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         },
         withWorkspaceContext(workspaceSuccessfulSubmission) { context =>
           DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(
-                workspaceId = context.workspaceIdAsUUID,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                ),
-                true
-              )
-            } else {
-              entityQuery.save(
-                context,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                )
-              )
-            },
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            methodConfigurationQuery.create(context, methodConfig2),
-            submissionQuery.create(context, submissionSuccessful1),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceFailedSubmission) { context =>
-          DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(
-                workspaceId = context.workspaceIdAsUUID,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                ),
-                true
-              )
-            } else {
-              entityQuery.save(
-                context,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                )
-              )
-            },
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionFailed),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceSubmittedSubmission) { context =>
-          DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(
-                workspaceId = context.workspaceIdAsUUID,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                ),
-                true
-              )
-            } else {
-              entityQuery.save(
-                context,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                )
-              )
-            },
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionSubmitted),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceTerminatedSubmissions) { context =>
-          DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(
-                workspaceId = context.workspaceIdAsUUID,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                ),
-                true
-              )
-            } else {
-              entityQuery.save(
-                context,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                )
-              )
-            },
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionAborted2),
-            submissionQuery.create(context, submissionSuccessful2),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceMixedSubmissions) { context =>
-          DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(
-                workspaceId = context.workspaceIdAsUUID,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                ),
-                true
-              )
-            } else {
-              entityQuery.save(
-                context,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                )
-              )
-            },
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, submissionAborted1),
-            submissionQuery.create(context, submissionMixed),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceInterleavedSubmissions) { context =>
-          DBIO.seq(
-            if (useCompact) {
-              compactEntityRepository.queries.batchWriteEntities(
-                workspaceId = context.workspaceIdAsUUID,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                ),
-                true
-              )
-            } else {
-              entityQuery.save(
-                context,
-                Seq(aliquot1,
-                    aliquot2,
-                    sample1,
-                    sample2,
-                    sample3,
-                    sample4,
-                    sample5,
-                    sample6,
-                    sample7,
-                    sample8,
-                    pair1,
-                    pair2,
-                    ps1,
-                    sset1,
-                    sset2,
-                    sset3,
-                    sset4,
-                    sset_empty,
-                    indiv1,
-                    indiv2
-                )
-              )
-            },
-            methodConfigurationQuery.create(context, agoraMethodConfig),
-            submissionQuery.create(context, outerSubmission),
-            submissionQuery.create(context, innerSubmission),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        },
-        withWorkspaceContext(workspaceWorkflowFailureMode) { context =>
-          DBIO.seq(
-            entityQuery.save(
-              context,
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
               Seq(aliquot1,
                   aliquot2,
                   sample1,
@@ -2190,7 +1773,204 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                   sset_empty,
                   indiv1,
                   indiv2
-              )
+              ),
+              true
+            ),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
+            methodConfigurationQuery.create(context, methodConfig2),
+            submissionQuery.create(context, submissionSuccessful1),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        },
+        withWorkspaceContext(workspaceFailedSubmission) { context =>
+          DBIO.seq(
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
+              Seq(aliquot1,
+                  aliquot2,
+                  sample1,
+                  sample2,
+                  sample3,
+                  sample4,
+                  sample5,
+                  sample6,
+                  sample7,
+                  sample8,
+                  pair1,
+                  pair2,
+                  ps1,
+                  sset1,
+                  sset2,
+                  sset3,
+                  sset4,
+                  sset_empty,
+                  indiv1,
+                  indiv2
+              ),
+              true
+            ),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
+            submissionQuery.create(context, submissionFailed),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        },
+        withWorkspaceContext(workspaceSubmittedSubmission) { context =>
+          DBIO.seq(
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
+              Seq(aliquot1,
+                  aliquot2,
+                  sample1,
+                  sample2,
+                  sample3,
+                  sample4,
+                  sample5,
+                  sample6,
+                  sample7,
+                  sample8,
+                  pair1,
+                  pair2,
+                  ps1,
+                  sset1,
+                  sset2,
+                  sset3,
+                  sset4,
+                  sset_empty,
+                  indiv1,
+                  indiv2
+              ),
+              true
+            ),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
+            submissionQuery.create(context, submissionSubmitted),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        },
+        withWorkspaceContext(workspaceTerminatedSubmissions) { context =>
+          DBIO.seq(
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
+              Seq(aliquot1,
+                  aliquot2,
+                  sample1,
+                  sample2,
+                  sample3,
+                  sample4,
+                  sample5,
+                  sample6,
+                  sample7,
+                  sample8,
+                  pair1,
+                  pair2,
+                  ps1,
+                  sset1,
+                  sset2,
+                  sset3,
+                  sset4,
+                  sset_empty,
+                  indiv1,
+                  indiv2
+              ),
+              true
+            ),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
+            submissionQuery.create(context, submissionAborted2),
+            submissionQuery.create(context, submissionSuccessful2),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        },
+        withWorkspaceContext(workspaceMixedSubmissions) { context =>
+          DBIO.seq(
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
+              Seq(aliquot1,
+                  aliquot2,
+                  sample1,
+                  sample2,
+                  sample3,
+                  sample4,
+                  sample5,
+                  sample6,
+                  sample7,
+                  sample8,
+                  pair1,
+                  pair2,
+                  ps1,
+                  sset1,
+                  sset2,
+                  sset3,
+                  sset4,
+                  sset_empty,
+                  indiv1,
+                  indiv2
+              ),
+              true
+            ),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
+            submissionQuery.create(context, submissionAborted1),
+            submissionQuery.create(context, submissionMixed),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        },
+        withWorkspaceContext(workspaceInterleavedSubmissions) { context =>
+          DBIO.seq(
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
+              Seq(aliquot1,
+                  aliquot2,
+                  sample1,
+                  sample2,
+                  sample3,
+                  sample4,
+                  sample5,
+                  sample6,
+                  sample7,
+                  sample8,
+                  pair1,
+                  pair2,
+                  ps1,
+                  sset1,
+                  sset2,
+                  sset3,
+                  sset4,
+                  sset_empty,
+                  indiv1,
+                  indiv2
+              ),
+              true
+            ),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
+            submissionQuery.create(context, outerSubmission),
+            submissionQuery.create(context, innerSubmission),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        },
+        withWorkspaceContext(workspaceWorkflowFailureMode) { context =>
+          DBIO.seq(
+            compactEntityRepository.queries.batchWriteEntities(
+              workspaceId = context.workspaceIdAsUUID,
+              Seq(aliquot1,
+                  aliquot2,
+                  sample1,
+                  sample2,
+                  sample3,
+                  sample4,
+                  sample5,
+                  sample6,
+                  sample7,
+                  sample8,
+                  pair1,
+                  pair2,
+                  ps1,
+                  sset1,
+                  sset2,
+                  sset3,
+                  sset4,
+                  sset_empty,
+                  indiv1,
+                  indiv2
+              ),
+              true
             ),
             methodConfigurationQuery.create(context, agoraMethodConfig),
             submissionQuery.create(context, submissionWorkflowFailureMode),
@@ -2674,7 +2454,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     withCustomTestDatabaseInternal(emptyData)(testCode(slickDataSource))
 
   val testData = new DefaultTestData()
-  val legacyTestData = new DefaultTestData(false)
   val compactConstantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
   val protectedWorkspaceTestData = new ProtectedWorkspaceTestData()
@@ -2684,9 +2463,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withDefaultTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
-
-  def withLegacyDefaultTestDatabase[T](testCode: => T): T =
-    withCustomTestDatabaseInternal(legacyTestData)(testCode)
 
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T =
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))

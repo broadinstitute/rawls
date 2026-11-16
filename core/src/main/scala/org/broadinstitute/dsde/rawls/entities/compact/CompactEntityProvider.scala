@@ -60,8 +60,7 @@ import scala.util.Try
 
 /**
   * Implementation logic for compact data tables. Compact data tables store all an entity's attributes in a
-  * single JSON packet within the database. Compare this to the implementation in LocalEntityProvider, which
-  * requires at least one row per attribute.
+  * single JSON packet within the database.
   *
   * @param executionContext scala concurrency context
   */

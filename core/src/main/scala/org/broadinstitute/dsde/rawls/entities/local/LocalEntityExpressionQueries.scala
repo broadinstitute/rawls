@@ -34,13 +34,6 @@ trait LocalEntityExpressionQueries {
   type PipelineStepQuery = Query[(Rep[String], EntityTable), (String, EntityRecord), Seq]
 
   object entityExpressionQuery {
-    // the root function starts the pipeline at some root entity type in the workspace
-    def entityRootQuery(context: LocalEntityExpressionContext): PipelineStepQuery =
-      for {
-        rootEntities <- exprEvalQuery if rootEntities.transactionId === context.transactionId
-        entity <- entityQuery if rootEntities.id === entity.id
-      } yield (entity.name, entity)
-
     // final func that gets an attribute off a workspace
     def workspaceAttributeFinalQuery(attrName: AttributeName)(context: LocalEntityExpressionContext,
                                                               shouldBeNone: Option[PipelineStepQuery]
@@ -255,33 +248,6 @@ trait LocalEntityExpressionQueries {
           DBIO.successful(
             context.rootEntityNames().map(_ -> Seq(AttributeString(Attributable.workspaceEntityType))).toMap
           )
-      }
-    }
-
-    // Takes a list of entities at the end of a pipeline and returns them in final format.
-    def entityFinalQuery(context: LocalEntityExpressionContext,
-                         queryPipeline: Option[PipelineStepQuery]
-    ): ReadAction[Map[String, Iterable[EntityRecord]]] =
-      queryPipeline.get.sortBy(_._2.name.asc).result.map(CollectionUtils.groupByTuples)
-
-    // Takes a list of entities at the end of a pipeline and returns them in final format.
-    def workspaceEntityFinalQuery(attrName: AttributeName)(context: LocalEntityExpressionContext,
-                                                           shouldBeNone: Option[PipelineStepQuery]
-    ): ReadAction[Map[String, Iterable[EntityRecord]]] = {
-      assert(shouldBeNone.isEmpty)
-
-      val query = for {
-        workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceIdAsUUID)
-        attribute <- workspaceAttributeQuery
-        if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === attrName.namespace
-        entity <- entityQuery if attribute.valueEntityRef === entity.id
-      } yield entity
-
-      // Return the value of the expression once for each entity we wanted to evaluate this expression against!
-      query.sortBy(_.name.asc).result map { resultEntities =>
-        (for {
-          entityName <- context.rootEntityNames()
-        } yield (entityName, resultEntities)).toMap
       }
     }
   }

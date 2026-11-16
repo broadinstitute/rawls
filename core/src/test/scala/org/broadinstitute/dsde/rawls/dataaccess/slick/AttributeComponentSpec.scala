@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceState, _}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
@@ -11,11 +10,6 @@ import org.mockito.Mockito._
 import spray.json.{JsObject, JsString}
 
 import java.util.UUID
-import java.util.concurrent.Executors
-import scala.collection.concurrent.TrieMap
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success}
 
 /**
  * Created by dvoet on 2/9/16.
@@ -1303,157 +1297,6 @@ class AttributeComponentSpec
     }
   }
 
-  List(8, 17, 32, 65, 128, 257) foreach { parallelism =>
-    it should s"handle $parallelism simultaneous writes to their own entity attribute temp tables" in withEmptyTestDatabase {
-
-      var threadIds: TrieMap[String, Long] = TrieMap.empty
-
-      // we test saving entities across two workspaces, which we'll call "odd" and "even"
-      val workspaceIdOdd: UUID = UUID.randomUUID()
-      val workspaceIdEven: UUID = UUID.randomUUID()
-
-      val workspaceOdd = Workspace("test_namespace",
-                                   "workspaceOdd",
-                                   workspaceIdOdd.toString,
-                                   "bucketname",
-                                   Some("workflow-collection"),
-                                   currentTime(),
-                                   currentTime(),
-                                   "me",
-                                   Map.empty,
-                                   false
-      )
-      val workspaceEven = Workspace("test_namespace",
-                                    "workspaceEven",
-                                    workspaceIdEven.toString,
-                                    "bucketname",
-                                    Some("workflow-collection"),
-                                    currentTime(),
-                                    currentTime(),
-                                    "me",
-                                    Map.empty,
-                                    false
-      )
-
-      def isOdd(i: Int) = i % 2 == 1
-      def isEven(i: Int) = !isOdd(i)
-
-      val entityType: String = "et"
-
-      def saveEntity(e: Entity): Future[Entity] =
-        DbResource.dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { d =>
-          val targetWorkspace =
-            if (isOdd(e.name.toInt))
-              workspaceOdd
-            else
-              workspaceEven
-          d.entityQuery.save(targetWorkspace, e)
-        }
-
-      // create the entities-to-be-saved
-      val entitiesToSave: Map[Int, Entity] = (1 to parallelism).map { idx =>
-        (idx,
-         Entity(
-           s"$idx",
-           entityType,
-           Map(
-             AttributeName.withDefaultNS("uuid") -> AttributeString(UUID.randomUUID().toString),
-             AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-             AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)
-           )
-         )
-        )
-      }.toMap
-      withClue(s"should have prepped $parallelism entities to save")(entitiesToSave.size shouldBe parallelism)
-
-      // save the workspaces
-      val savedWorkspaceOdd = runAndWait(workspaceQuery.createOrUpdate(workspaceOdd))
-      withClue("workspace (odd) should have saved")(savedWorkspaceOdd.workspaceId shouldBe (workspaceIdOdd.toString))
-      val savedWorkspaceEven = runAndWait(workspaceQuery.createOrUpdate(workspaceEven))
-      withClue("workspace (even) should have saved") {
-        savedWorkspaceEven.workspaceId shouldBe (workspaceIdEven.toString)
-      }
-
-      // in parallel, save entities to the workspace
-      // set up an execution context with $parallelism threads
-      // some futures will execute on the same threads but we ensure
-      // at least some parallelism and validate that in a later assert statement
-      implicit val executionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(parallelism))
-
-      val saveQueries = entitiesToSave.values map saveEntity
-      val parallelSaves = scala.concurrent.Future.traverse(saveQueries) { f =>
-        f.map {
-          f.map { entity =>
-            threadIds += (s"${entity.entityType}/${entity.name}" -> Thread.currentThread().getId)
-            entity
-          }
-          Success(_)
-        }.recover { case e => Failure(e) }(executionContext)
-      }
-      val saveAttempts = Await.result(parallelSaves, Duration.Inf)
-
-      val saveFailures = saveAttempts.collect { case Failure(ex) => ex }
-      val savedEntities = saveAttempts.collect { case Success(e) => e }
-
-      withClue("should not have any failures during save")(saveFailures shouldBe empty)
-      withClue(s"should have saved exactly $parallelism entities")(saveFailures shouldBe empty)
-
-      // query all entities for workspace (odd)
-      val actualEntitiesOdd = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(workspaceOdd, entityType))
-      // query all entities for workspace (even)
-      val actualEntitiesEven =
-        runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(workspaceEven, entityType))
-
-      // validate save counts entities
-      val expectedCountOdd = Math.ceil(parallelism.toDouble / 2d)
-      val expectedCountEven = Math.floor(parallelism.toDouble / 2d)
-      withClue(
-        s"should have saved exactly $expectedCountOdd and $expectedCountEven entities" +
-          s" to workspaces odd and even, respectively"
-      ) {
-        (actualEntitiesOdd.size, actualEntitiesEven.size) shouldBe (expectedCountOdd, expectedCountEven)
-      }
-
-      // validate individual entities (odd)
-      actualEntitiesOdd.foreach { actual =>
-        // name should be the index
-        val idx = actual.name.toInt
-        val expected = entitiesToSave
-          .get(idx)
-          .orElse(
-            fail(
-              s"an entity was saved with name $idx;" +
-                s" that name should not exist"
-            )
-          )
-        withClue(s"entity with name ${actual.name} should have saved to the odd workspace")(isOdd(actual.name.toInt))
-        withClue(s"actual entity did not match expected")(Option(actual) shouldBe expected)
-      }
-
-      // validate that the entity saves happened in parallel by looking for
-      // multiple unique thread ids
-      assert(threadIds.values.toSet.size > 1)
-
-      // validate individual entities (even)
-      actualEntitiesEven.foreach { actual =>
-        // name should be the index
-        val idx = actual.name.toInt
-        val expected = entitiesToSave
-          .get(idx)
-          .orElse(
-            fail(
-              s"an entity was saved with name $idx;" +
-                s" that name should not exist"
-            )
-          )
-        withClue(s"entity with name ${actual.name} should have saved to the even workspace") {
-          isEven(actual.name.toInt)
-        }
-        withClue(s"actual entity did not match expected")(Option(actual) shouldBe expected)
-      }
-    }
-  }
-
   it should "rewrite attributes" in withEmptyTestDatabase {
     def insertAndUpdateID(rec: WorkspaceAttributeRecord): WorkspaceAttributeRecord =
       rec.copy(id = runAndWait((workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += rec))
@@ -1727,81 +1570,37 @@ class AttributeComponentSpec
   }
 
   private def runWorkspaceSaveNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit =
-    withLegacyDefaultTestDatabase {
-      withWorkspaceContext(legacyTestData.workspace) { context =>
+    withDefaultTestDatabase {
+      withWorkspaceContext(testData.workspace) { context =>
         // Try to insert new attribute
         val inserts = Map(AttributeName.withDefaultNS("newWorkspaceAttribute") -> insertAttribute)
 
-        val expectedAfterInsertion = legacyTestData.workspace.attributes ++ inserts
+        val expectedAfterInsertion = testData.workspace.attributes ++ inserts
 
         runAndWait(
           workspaceQuery.createOrUpdate(
-            legacyTestData.workspace.copy(attributes = expectedAfterInsertion)
+            testData.workspace.copy(attributes = expectedAfterInsertion)
           )
         )
 
         val resultAfterInsert =
-          runAndWait(workspaceQuery.findById(legacyTestData.workspace.workspaceId)).head.attributes
+          runAndWait(workspaceQuery.findById(testData.workspace.workspaceId)).head.attributes
 
         assertSameElements(expectedAfterInsertion, resultAfterInsert)
 
         // Try to update the new attribute
         val updates: AttributeMap = Map(AttributeName.withDefaultNS("newWorkspaceAttribute") -> updateAttribute)
 
-        val expectedAfterUpdate = legacyTestData.workspace.attributes ++ updates
+        val expectedAfterUpdate = testData.workspace.attributes ++ updates
 
         runAndWait(
           workspaceQuery.createOrUpdate(
-            legacyTestData.workspace.copy(attributes = expectedAfterUpdate)
+            testData.workspace.copy(attributes = expectedAfterUpdate)
           )
         )
 
         val resultAfterUpdate =
-          runAndWait(workspaceQuery.findById(legacyTestData.workspace.workspaceId)).head.attributes
-
-        // check that the new attribute has been updated
-        assertSameElements(expectedAfterUpdate, resultAfterUpdate)
-      }
-    }
-
-  private def runEntitySaveNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit =
-    withLegacyDefaultTestDatabase {
-      withWorkspaceContext(legacyTestData.workspace) { context =>
-        // Try to insert new attribute
-        val inserts = Map(AttributeName.withDefaultNS("newEntityAttribute") -> insertAttribute)
-
-        val expectedAfterInsertion = legacyTestData.sample1.attributes ++ inserts
-
-        runAndWait(
-          entityQuery.save(
-            context,
-            // legacyTestData.sample1.copy(attributes = expectedAfterInsertion),
-            // We could just use the above... but why not instead use the wonderful constructor that uses
-            // (name: String, type: String) instead of (type: String, name:String) like the lookup methods.
-            // No. I did not spend a long time debugging after copy/paste/swapping the name and type by accident.
-            // Why do you ask?
-            Entity("sample1", "Sample", expectedAfterInsertion)
-          )
-        )
-
-        val resultAfterInsert = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
-
-        // check that the new attribute has been updated
-        assertSameElements(expectedAfterInsertion, resultAfterInsert)
-
-        // Try to update the new attribute
-        val updates: AttributeMap = Map(AttributeName.withDefaultNS("newEntityAttribute") -> updateAttribute)
-
-        val expectedAfterUpdate = legacyTestData.sample1.attributes ++ updates
-
-        runAndWait(
-          entityQuery.save(
-            context,
-            legacyTestData.sample1.copy(attributes = expectedAfterUpdate)
-          )
-        )
-
-        val resultAfterUpdate = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
+          runAndWait(workspaceQuery.findById(testData.workspace.workspaceId)).head.attributes
 
         // check that the new attribute has been updated
         assertSameElements(expectedAfterUpdate, resultAfterUpdate)
@@ -1811,8 +1610,7 @@ class AttributeComponentSpec
   private case class AttributeTestFunction(description: String, run: (Attribute, Attribute) => Unit)
 
   private val attributeTestFunctions = List(
-    AttributeTestFunction("workspaceQuery.createOrUpdate()", runWorkspaceSaveNewTest),
-    AttributeTestFunction("entityQuery.save()", runEntitySaveNewTest)
+    AttributeTestFunction("workspaceQuery.createOrUpdate()", runWorkspaceSaveNewTest)
   )
 
   private case class AttributeTestData(description: String, attribute: Attribute)
@@ -1870,10 +1668,28 @@ class AttributeComponentSpec
     }
   }
 
-  it should "skip inserts, updates, and deletes when rewriting entity attributes if nothing changed" in withEmptyTestDatabase {
-    // no need to save workspace or parent entity; this test should not write anything
-    val baseRec =
-      EntityAttributeRecord(0, 1, "default", "name1", Some("strValue"), None, None, None, None, None, None, false, None)
+  // workspaceAttributeQuery is a Scala object, whose final class Mockito cannot spy; this non-final equivalent can be spied
+  class SpyableWorkspaceAttributeQuery
+      extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_),
+                                                                                      WorkspaceAttributeRecord
+      )
+
+  it should "skip inserts, updates, and deletes when rewriting workspace attributes if nothing changed" in withEmptyTestDatabase {
+    // no need to save workspace; this test should not write anything
+    val baseRec = WorkspaceAttributeRecord(0,
+                                           workspaceId,
+                                           "default",
+                                           "name1",
+                                           Some("strValue"),
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           false,
+                                           None
+    )
 
     val existingAttributes = Seq(
       baseRec.copy(id = 1, name = "attr1", valueString = Some("value1")),
@@ -1881,19 +1697,19 @@ class AttributeComponentSpec
       baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true))
     )
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(new SpyableWorkspaceAttributeQuery)
 
     runAndWait(
       spiedAttrQuery.rewriteAttrsAction(existingAttributes,
                                         existingAttributes,
-                                        entityAttributeTempQuery.insertScratchAttributes
+                                        workspaceAttributeTempQuery.insertScratchAttributes
       )
     )
 
-    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
-    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val insertsCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
@@ -1908,28 +1724,23 @@ class AttributeComponentSpec
     assert(deletesCaptor.getValue.isEmpty, "deletes should be empty")
   }
 
-  it should "skip inserts and deletes when rewriting entity attributes if only updating" in withEmptyTestDatabase {
-    // save workspace
+  it should "skip inserts and deletes when rewriting workspace attributes if only updating" in withEmptyTestDatabase {
+    // save workspace to use as parent
     runAndWait(workspaceQuery.createOrUpdate(workspace))
-    // save entity to use as parent
-    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
-    // get id of saved entity
-    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
-    existingRecs should have size 1
 
-    val baseRec = EntityAttributeRecord(0,
-                                        existingRecs.head.id,
-                                        "default",
-                                        "name1",
-                                        Some("strValue"),
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        false,
-                                        None
+    val baseRec = WorkspaceAttributeRecord(0,
+                                           workspaceId,
+                                           "default",
+                                           "name1",
+                                           Some("strValue"),
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           false,
+                                           None
     )
 
     val existingAttributes = Seq(
@@ -1944,18 +1755,18 @@ class AttributeComponentSpec
 
     val attributesToSave = updates ++ existingAttributes.tail
 
-    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
-    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val insertsCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(new SpyableWorkspaceAttributeQuery)
 
     runAndWait(
       spiedAttrQuery.rewriteAttrsAction(attributesToSave,
                                         existingAttributes,
-                                        entityAttributeTempQuery.insertScratchAttributes
+                                        workspaceAttributeTempQuery.insertScratchAttributes
       )
     )
 
@@ -1971,28 +1782,23 @@ class AttributeComponentSpec
     assert(deletesCaptor.getValue.isEmpty, "deletes should be empty")
   }
 
-  it should "skip updates and deletes when rewriting entity attributes if only inserting" in withEmptyTestDatabase {
-    // save workspace
+  it should "skip updates and deletes when rewriting workspace attributes if only inserting" in withEmptyTestDatabase {
+    // save workspace to use as parent
     runAndWait(workspaceQuery.createOrUpdate(workspace))
-    // save entity to use as parent
-    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
-    // get id of saved entity
-    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
-    existingRecs should have size 1
 
-    val baseRec = EntityAttributeRecord(0,
-                                        existingRecs.head.id,
-                                        "default",
-                                        "name1",
-                                        Some("strValue"),
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        false,
-                                        None
+    val baseRec = WorkspaceAttributeRecord(0,
+                                           workspaceId,
+                                           "default",
+                                           "name1",
+                                           Some("strValue"),
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           false,
+                                           None
     )
 
     val existingAttributes = Seq(
@@ -2007,18 +1813,18 @@ class AttributeComponentSpec
 
     val attributesToSave = inserts ++ existingAttributes
 
-    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
-    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val insertsCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(new SpyableWorkspaceAttributeQuery)
 
     runAndWait(
       spiedAttrQuery.rewriteAttrsAction(attributesToSave,
                                         existingAttributes,
-                                        entityAttributeTempQuery.insertScratchAttributes
+                                        workspaceAttributeTempQuery.insertScratchAttributes
       )
     )
 
@@ -2034,28 +1840,23 @@ class AttributeComponentSpec
     assert(deletesCaptor.getValue.isEmpty, "deletes should be empty")
   }
 
-  it should "skip inserts and updates when rewriting entity attributes if only deleting" in withEmptyTestDatabase {
-    // save workspace
+  it should "skip inserts and updates when rewriting workspace attributes if only deleting" in withEmptyTestDatabase {
+    // save workspace to use as parent
     runAndWait(workspaceQuery.createOrUpdate(workspace))
-    // save entity to use as parent
-    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
-    // get id of saved entity
-    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
-    existingRecs should have size 1
 
-    val baseRec = EntityAttributeRecord(0,
-                                        existingRecs.head.id,
-                                        "default",
-                                        "name1",
-                                        Some("strValue"),
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        false,
-                                        None
+    val baseRec = WorkspaceAttributeRecord(0,
+                                           workspaceId,
+                                           "default",
+                                           "name1",
+                                           Some("strValue"),
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           false,
+                                           None
     )
 
     val existingAttributes = Seq(
@@ -2066,18 +1867,18 @@ class AttributeComponentSpec
 
     val attributesToSave = existingAttributes.tail // <-- attr1 should be deleted
 
-    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
-    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val insertsCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(new SpyableWorkspaceAttributeQuery)
 
     runAndWait(
       spiedAttrQuery.rewriteAttrsAction(attributesToSave,
                                         existingAttributes,
-                                        entityAttributeTempQuery.insertScratchAttributes
+                                        workspaceAttributeTempQuery.insertScratchAttributes
       )
     )
 
@@ -2093,28 +1894,23 @@ class AttributeComponentSpec
     withClue("should have one delete")(assertSameElements(Seq(1), deletesCaptor.getValue))
   }
 
-  it should "combine inserts, updates, and deletes when rewriting entity attributes" in withEmptyTestDatabase {
-    // save workspace
+  it should "combine inserts, updates, and deletes when rewriting workspace attributes" in withEmptyTestDatabase {
+    // save workspace to use as parent
     runAndWait(workspaceQuery.createOrUpdate(workspace))
-    // save entity to use as parent
-    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
-    // get id of saved entity
-    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
-    existingRecs should have size 1
 
-    val baseRec = EntityAttributeRecord(0,
-                                        existingRecs.head.id,
-                                        "default",
-                                        "name1",
-                                        Some("strValue"),
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                        false,
-                                        None
+    val baseRec = WorkspaceAttributeRecord(0,
+                                           workspaceId,
+                                           "default",
+                                           "name1",
+                                           Some("strValue"),
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           None,
+                                           false,
+                                           None
     )
 
     val existingAttributes = Seq(
@@ -2133,18 +1929,18 @@ class AttributeComponentSpec
 
     val attributesToSave = updates ++ inserts // <-- attr2 and attr3 should be deleted
 
-    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
-    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] =
-      ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val insertsCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[WorkspaceAttributeRecord]] =
+      ArgumentCaptor.forClass(classOf[Traversable[WorkspaceAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(new SpyableWorkspaceAttributeQuery)
 
     runAndWait(
       spiedAttrQuery.rewriteAttrsAction(attributesToSave,
                                         existingAttributes,
-                                        entityAttributeTempQuery.insertScratchAttributes
+                                        workspaceAttributeTempQuery.insertScratchAttributes
       )
     )
 

@@ -693,7 +693,9 @@ class SubmissionSpec(_system: ActorSystem)
       val newSubmissionReport =
         Await.result(submissionsService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
 
-      runAndWait(entityQuery.hide(testData.workspace, Seq(testData.pair1.toReference)))
+      runAndWait(
+        compactEntityRepository.queries.batchHide(testData.workspace.workspaceIdAsUUID, Seq(testData.pair1.toPointer))
+      )
 
       val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
       // not really necessary, failing to find the actor above will throw an exception and thus fail this test
@@ -706,7 +708,9 @@ class SubmissionSpec(_system: ActorSystem)
 
   it should "fail to submit when given an entity expression that evaluates to a deleted entity" in withSubmissionsServiceMockExecution {
     mockExecSvc => submissionsService =>
-      runAndWait(entityQuery.hide(testData.workspace, Seq(testData.pair1.toReference)))
+      runAndWait(
+        compactEntityRepository.queries.batchHide(testData.workspace.workspaceIdAsUUID, Seq(testData.pair1.toPointer))
+      )
 
       val submissionRq = SubmissionRequest(
         methodConfigurationNamespace = "dsde",

@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.leonardo.LeonardoService
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
+import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -400,7 +400,7 @@ class FastPassServiceSpec
 
     parentWorkspaceFastPassGrantsBefore should be(empty)
 
-    val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
+    val mockedProvider = mock[EntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
     doReturn(Future.successful(mockedProvider))
       .when(entityManager)
@@ -1080,7 +1080,7 @@ class FastPassServiceSpec
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    val mockedProvider = mock[LocalEntityProvider](RETURNS_SMART_NULLS)
+    val mockedProvider = mock[EntityProvider](RETURNS_SMART_NULLS)
     when(mockedProvider.clone(any(), any(), any())).thenReturn(DBIO.successful((1, 0)))
     doReturn(Future.successful(mockedProvider))
       .when(entityManager)

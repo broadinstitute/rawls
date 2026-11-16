@@ -19,7 +19,7 @@ object DataSource {
 }
 
 object AttributeTempTableType extends Enumeration {
-  val Workspace, Entity = Value
+  val Workspace = Value
 }
 
 class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext)
@@ -83,19 +83,13 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
         .withStatementParameters(rsConcurrency = concurrency.orNull) // the .withStatementParameters default is null
     )
 
-  def createEntityAttributeTempTable =
-    sql"""call createEntityAttributeTempTable()""".as[Boolean]
-
-  def dropEntityAttributeTempTable =
-    sql"""call dropEntityAttributeTempTable""".as[Boolean]
-
   def createWorkspaceAttributeTempTable =
     sql"""call createWorkspaceAttributeTempTable()""".as[Boolean]
 
   def dropWorkspaceAttributeTempTable =
     sql"""call dropWorkspaceAttributeTempTable""".as[Boolean]
 
-  // creates the ENTITY_ATTRIBUTE_TEMP, WORSKPACE_ATTRIBUTE_TEMP, or both as specified by tempTableTypes  for use by this transaction, executes the transaction
+  // creates the WORKSPACE_ATTRIBUTE_TEMP table if specified by tempTableTypes for use by this transaction, executes the transaction
   def inTransactionWithAttrTempTable[T](tempTableTypes: Set[AttributeTempTableType.Value])(
     f: (DataAccess) => ReadWriteAction[T],
     isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead
@@ -103,16 +97,12 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
 
     val callerAction = f(dataAccess).transactionally.withTransactionIsolation(isolationLevel)
 
-    val entityTemp = tempTableTypes.contains(AttributeTempTableType.Entity)
     val workspaceTemp = tempTableTypes.contains(AttributeTempTableType.Workspace)
 
     val callerActionWithTempTables = for {
-      _ <- if (entityTemp) dropEntityAttributeTempTable else DBIO.successful()
       _ <- if (workspaceTemp) dropWorkspaceAttributeTempTable else DBIO.successful()
-      _ <- if (entityTemp) createEntityAttributeTempTable else DBIO.successful()
       _ <- if (workspaceTemp) createWorkspaceAttributeTempTable else DBIO.successful()
       origResult <- callerAction.asTry
-      _ <- if (entityTemp) dropEntityAttributeTempTable else DBIO.successful()
       _ <- if (workspaceTemp) dropWorkspaceAttributeTempTable else DBIO.successful()
     } yield origResult match {
       case scala.util.Success(s)  => s
