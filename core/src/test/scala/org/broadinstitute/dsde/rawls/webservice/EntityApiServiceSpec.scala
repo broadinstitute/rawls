@@ -2604,11 +2604,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, Map.empty)
 
     val copyAliquot1 =
-      EntityCopyDefinition(sourceWorkspace,
-                           newWorkspace,
-                           testData.aliquot1.entityType,
-                           Seq(legacyTestData.aliquot1.name)
-      )
+      EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.aliquot1.entityType, Seq(testData.aliquot1.name))
     val copySample3 =
       EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
 
@@ -2781,17 +2777,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-//    Post(s"${testData.workspaceWithRealm.path}/entities", httpJson(z1)) ~>
-//      sealRoute(services.entityRoutes(userInfo = userInfo)) ~>
-//      check {
-//        assertResult(StatusCodes.Created) {
-//          status
-//        }
-//        assertResult(Some(z1)) {
-//          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspaceWithRealm), z1.entityType, z1.name))
-//        }
-//      }
-//
       // attempt to copy an entity to a workspace with the wrong Realm
       val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace,
                                                     name = "copy_add_realm",
