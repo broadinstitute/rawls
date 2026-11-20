@@ -1885,25 +1885,6 @@ class WorkspaceService(
       }
     } yield instructions.flatten
 
-  def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit] =
-    for {
-      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.compute)
-      _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(ctx.userInfo, workspace)
-    } yield {}
-
-  def disableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit] =
-    // note that this does not throw an error if the workspace does not exist
-    // the user may no longer have access to the workspace so we can't confirm it exists
-    // but the user does have the right to remove their linked SAs
-    for {
-      maybeWorkspace <- dataSource.inTransaction { dataaccess =>
-        dataaccess.workspaceQuery.findV2WorkspaceByName(workspaceName)
-      }
-      _ <- Future.traverse(maybeWorkspace.toList) { workspace =>
-        requesterPaysSetupService.revokeUserFromWorkspace(ctx.userInfo.userEmail, workspace)
-      }
-    } yield {}
-
   // helper methods
 
   private def createWorkflowCollectionForWorkspace(workspaceId: String,

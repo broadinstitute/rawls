@@ -261,9 +261,8 @@ trait ApiServiceSpec
       "us-central1"
     )
 
-    val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService =
-      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+      new RequesterPaysSetupServiceImpl(slickDataSource, gcsDAO, requesterPaysRole = "requesterPaysRole")
 
     override val workspaceSettingServiceConstructor: RawlsRequestContext => WorkspaceSettingService =
       ctx =>

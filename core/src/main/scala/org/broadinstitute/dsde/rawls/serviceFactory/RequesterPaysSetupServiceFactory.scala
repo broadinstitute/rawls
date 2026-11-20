@@ -11,12 +11,11 @@ object RequesterPaysSetupServiceFactory {
   def createRequesterPaysSetup(appConfigManager: RawlsConfigManager,
                                dataSource: SlickDataSource,
                                googleServicesDAO: GoogleServicesDAO,
-                               bondApiDAO: BondApiDAO,
                                requesterPaysRole: String
   )(implicit executionContext: ExecutionContext): RequesterPaysSetupService =
     appConfigManager.cloudProvider match {
       case Gcp =>
-        new RequesterPaysSetupServiceImpl(dataSource, googleServicesDAO, bondApiDAO, requesterPaysRole)
+        new RequesterPaysSetupServiceImpl(dataSource, googleServicesDAO, requesterPaysRole)
       case Azure =>
         newDisabledService[RequesterPaysSetupService]
     }
