@@ -13,7 +13,9 @@ object WorkspaceSpendReport {
                               otherSpend: Option[Float],
                               computeCredits: Option[Float],
                               storageCredits: Option[Float],
-                              otherCredits: Option[Float]
+                              otherCredits: Option[Float],
+                              totalEgress: Option[Float] = None,
+                              egressCredits: Option[Float] = None
   ) = WorkspaceSpendReport(
     -1L,
     googleProjectId,
@@ -26,7 +28,9 @@ object WorkspaceSpendReport {
     otherSpend,
     computeCredits,
     storageCredits,
-    otherCredits
+    otherCredits,
+    totalEgress,
+    egressCredits
   )
 
   def newEmptySpendReport(googleProjectId: String,
@@ -60,5 +64,7 @@ case class WorkspaceSpendReport(id: Long,
                                 otherSpend: Option[Float],
                                 computeCredits: Option[Float],
                                 storageCredits: Option[Float],
-                                otherCredits: Option[Float]
+                                otherCredits: Option[Float],
+                                totalEgress: Option[Float] = None,
+                                egressCredits: Option[Float] = None
 )
